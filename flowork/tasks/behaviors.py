@@ -66,19 +66,39 @@ class UserTaskBehavior(NodeBehavior):
         spec = self.spec
         assert isinstance(spec, UserTaskSpec)
         assert ctx.token is not None
-        participants = ctx.kernel.resolve_participants(ctx, spec)
-        if not participants:
+        from flowork.participants.resolver import ParticipantResolution
+
+        resolution: ParticipantResolution = ctx.kernel.resolve_participants(ctx, spec)
+        if not resolution.todo and not resolution.skipped:
             if spec.candidate_users or spec.candidate_groups:
-                return self._create_claimable_task(ctx, spec)
+                self._create_claimable_task(ctx, spec)
+                return
             raise NoParticipantError(
                 f"审批节点 {spec.code}（{spec.name or spec.code}）没有可用参与者"
             )
-        ctx.token.item_count = len(participants)
+        all_participants = resolution.todo + resolution.skipped
+        ctx.token.item_count = len(all_participants)
+        ctx.token.approve_count = len(resolution.skipped)  # 自动通过计入同意
         ctx.token_updated()
+        for user in resolution.skipped:
+            task = ctx.create_task(assignee=user)
+            ctx.kernel.archive_task(
+                ctx.session,
+                task,
+                outcome="auto_pass",
+                comment="参与者策略命中，自动通过",
+                actor="system",
+            )
         sequential = spec.multi_instance is not None and spec.multi_instance.mode == "sequential"
-        targets = [participants[0]] if sequential else participants
+        targets = [resolution.todo[0]] if sequential and resolution.todo else resolution.todo
         for assignee in targets:
             ctx.create_task(assignee=assignee)
+        # 全员自动通过时立即完成节点
+        if not resolution.todo:
+            from flowork.persistence.orm import TokenRow
+
+            _ = TokenRow
+            self._finish_now(ctx)
 
     def _create_claimable_task(self, ctx: RuntimeNodeContext, spec: UserTaskSpec) -> None:
         """无指定办理人但有候选人：生成可认领任务（assignee 置空 + 候选关联）。"""
@@ -124,11 +144,23 @@ class UserTaskBehavior(NodeBehavior):
         if spec.multi_instance is None or spec.multi_instance.mode != "sequential":
             return
         assert ctx.token is not None
-        participants = ctx.kernel.resolve_participants(ctx, spec)
+        from flowork.participants.resolver import ParticipantResolution
+
+        resolution: ParticipantResolution = ctx.kernel.resolve_participants(ctx, spec)
+        participants = resolution.todo + resolution.skipped
         already = set(ctx.kernel.handled_assignees(ctx.session, ctx.token.id))
         remaining = [p for p in participants if p not in already]
         if remaining and not self._exit_reached(ctx):
             ctx.create_task(assignee=remaining[0])
+
+    def _finish_now(self, ctx: RuntimeNodeContext) -> None:
+        """全员自动通过：节点立即完成（复用引擎完成路径）。"""
+        assert ctx.token is not None
+        ctx.kernel.finish_token(ctx.session, ctx.token, approval_exit="agree")
+        ctx.kernel.record_event("node_exited", {"activity_code": ctx.node.code}, ctx.instance.id)
+        node = ctx.kernel.definition_of(ctx.session, ctx.instance).node(ctx.node.code)
+        assert node is not None
+        ctx.kernel.route(ctx.session, ctx.instance, node, ctx.token)
 
     def _exit_reached(self, ctx: RuntimeNodeContext) -> bool:
         assert ctx.token is not None

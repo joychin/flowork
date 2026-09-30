@@ -311,11 +311,25 @@ class Kernel:
 
     # —— 参与者 / 已办 ——
 
-    def resolve_participants(self, ctx: RuntimeNodeContext, spec: UserTaskSpec) -> list[str]:
-        """参与者解析入口（M1 简化版；M4 替换为完整 ParticipantResolver）。"""
+    def resolve_participants(self, ctx: RuntimeNodeContext, spec: UserTaskSpec) -> Any:
+        """参与者解析入口：返回 ParticipantResolution（todo + skipped）。"""
+        from flowork.participants.resolver import (
+            ParticipantResolution,
+            fallback_when_empty,
+            resolve_with_delegation,
+        )
+
+        org = self.engine.config.org if self.engine else None
+        if org is not None:
+            resolution, _delegation = resolve_with_delegation(
+                ctx, spec, org, self.engine.config.participant_functions
+            )
+            if not resolution.todo and not resolution.skipped:
+                return fallback_when_empty(ctx, spec, org)
+            return resolution
         from flowork.participants.simple import resolve_simple
 
-        return resolve_simple(ctx, spec)
+        return ParticipantResolution(todo=resolve_simple(ctx, spec))
 
     def handled_assignees(self, session: Session, token_id: str) -> list[str]:
         """令牌下已实际办理过的人（排除被取消的任务）。"""

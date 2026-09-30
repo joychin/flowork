@@ -81,6 +81,11 @@ class UserTaskSpec(FlowNode):
     candidate_groups: list[str] = Field(default_factory=list)
     multi_instance: MultiInstance | None = None
     reject_target: str | None = None
+    # —— 参与者策略（M4）：命中者自动通过（auto_pass 历史并计入同意数）——
+    auto_pass_originator: bool = False
+    auto_pass_previous: bool = False
+    auto_pass_participated: bool = False
+    no_participant_policy: str = "raise"  # raise / to_admins
 
 
 class ServiceTaskSpec(FlowNode):

@@ -1,0 +1,14 @@
+users:
+  u_zhang: {manager: u_bob, department: d_eng, roles: [developer]}
+  u_bob: {manager: u_ceo, department: d_eng, roles: [eng_lead]}
+  u_ceo: {department: d_all, roles: [ceo]}
+  u_dave: {manager: u_bob, department: d_eng}
+  u_fin1: {manager: u_ceo, department: d_fin, roles: [finance]}
+  u_fin2: {manager: u_ceo, department: d_fin, roles: [finance]}
+departments:
+  d_eng: {head: u_bob, parent: d_all}
+  d_fin: {head: u_ceo, parent: d_all}
+  d_all: {head: u_ceo}
+delegations:
+  - {from: u_bob, to: u_dave, until: "2099-12-31"}
+admins: [u_admin]
