@@ -76,7 +76,7 @@ function PropsTab() {
           })}
         />
         <div className="panel-note">
-          条件挂在出边(BPMN 语义)。排他网关按条件取路,全部不满足走「默认」边。
+          条件挂在出边。条件分支按条件取路,全部不满足走「默认」边。
         </div>
       </div>
     )
@@ -168,7 +168,7 @@ function EdgeForm({ flow, onChange }: {
             {flow.is_default ? '是默认边' : '否'}
           </button>
         </div>
-        <div className="field-desc">排他/相容网关条件全不满足时走默认边;默认边不能再挂条件。</div>
+        <div className="field-desc">条件分支的条件全不满足时走默认边;默认边不能再挂条件。</div>
       </div>
 
       <div className="field">

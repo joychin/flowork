@@ -28,10 +28,10 @@ def spec02() -> dict:
 def test_node_kinds_builtin(client: TestClient) -> None:
     kinds = {item["kind"]: item for item in client.get("/api/node-kinds").json()}
     assert set(kinds) >= {"start", "end", "gateway", "user_task", "service_task", "cc_task"}
-    # gateway 调色板有三个网关变体
+    # 调色板两个分支变体（相容已移出，经属性面板仍可切换）
     palette = kinds["gateway"]["ui"]["palette"]
     assert [item["defaults"]["gateway_kind"] for item in palette] == [
-        "exclusive", "parallel", "inclusive",
+        "exclusive", "parallel",
     ]
     # schema 驱动表单：user_task 的 schema 含 multi_instance（$defs 解析）
     schema = kinds["user_task"]["schema"]

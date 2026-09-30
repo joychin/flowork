@@ -148,15 +148,14 @@ def register_builtin_nodes(registry: NodeRegistry) -> None:
         KIND_GATEWAY,
         GatewaySpec,
         ui={
-            "name": "网关",
-            "category": "网关",
+            "name": "条件分支",
+            "category": "分支",
             "shape": "diamond",
             "color": "#d97706",
             "icon": "gateway",
             "palette": [
-                {"label": "排他网关", "defaults": {"gateway_kind": "exclusive"}},
-                {"label": "并行网关", "defaults": {"gateway_kind": "parallel"}},
-                {"label": "相容网关", "defaults": {"gateway_kind": "inclusive"}},
+                {"label": "条件分支", "defaults": {"gateway_kind": "exclusive"}},
+                {"label": "并行分支(同时分合)", "defaults": {"gateway_kind": "parallel"}},
             ],
         },
     )

@@ -9,7 +9,7 @@ import type { JSONSchema } from '../types'
 /** 字段中文名(引擎 schema title 为英文时兜底) */
 const FIELD_LABELS: Record<string, string> = {
   name: '节点名称',
-  gateway_kind: '网关类型',
+  gateway_kind: '匹配方式',
   assignee: '审批人(单个)',
   assignees: '审批人(多个)',
   candidate_users: '候选用户',
@@ -36,9 +36,9 @@ const FIELD_LABELS: Record<string, string> = {
 }
 
 const ENUM_LABELS: Record<string, string> = {
-  exclusive: '排他(二选一)',
+  exclusive: '命中即走(按顺序取第一条)',
   parallel: '并行(全走)',
-  inclusive: '相容(按条件)',
+  inclusive: '命中的都走(高级)',
   notify: '仅催办通知',
   auto_approve: '自动通过',
   auto_reject: '自动驳回',
