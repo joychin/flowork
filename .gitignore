@@ -23,3 +23,5 @@ uv.lock.bak
 .vscode/
 .DS_Store
 *.bak-*
+designer.db-shm
+designer.db-wal
