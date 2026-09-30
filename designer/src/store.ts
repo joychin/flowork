@@ -179,6 +179,11 @@ export const useStore = create<Store>((set, get) => ({
     get().mutate((draft) => {
       draft.flows.push({ source, target })
     })
+    const after = get().spec?.flows ?? []
+    const unconditional = after.filter((f) => f.source === source && !f.condition && !f.is_default)
+    if (unconditional.length >= 2) {
+      get().showToast(`「${source}」的无条件出边已达 ${unconditional.length} 条：这些分支将同时进行`)
+    }
     set({ selection: { type: 'edge', id: edgeId(source, target) }, pendingConnect: null, rightTab: 'props' })
   },
 

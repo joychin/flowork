@@ -1,4 +1,4 @@
-/** React Flow 自定义节点(矩形/圆/菱形)+ 连线,样式与交互(点击连线)在这里挂 */
+/** React Flow 自定义节点(矩形/圆)+ 连线,样式与交互(点击连线)在这里挂 */
 
 import { Handle, Position, BaseEdge, EdgeText, getSmoothStepPath } from '@xyflow/react'
 import type { EdgeProps, NodeProps } from '@xyflow/react'
@@ -20,21 +20,28 @@ export function Icon({ name, size = 14 }: { name?: string; size?: number }) {
       return <svg {...common}><circle cx="8" cy="8" r="2.2" stroke="currentColor" strokeWidth="1.4" /><path d="M8 1.8v2M8 12.2v2M1.8 8h2M12.2 8h2M3.6 3.6l1.4 1.4M11 11l1.4 1.4M12.4 3.6 11 5M5 11l-1.4 1.4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>
     case 'box':
       return <svg {...common}><rect x="2.4" y="4.4" width="11.2" height="9" rx="1.4" stroke="currentColor" strokeWidth="1.4" /><path d="M2.4 7h11.2M6 2.4h4v2H6z" stroke="currentColor" strokeWidth="1.4" /></svg>
-    case 'gateway':
-      return <svg {...common}><rect x="3.2" y="3.2" width="9.6" height="9.6" rx="2" transform="rotate(45 8 8)" stroke="currentColor" strokeWidth="1.5" /><path d="m5.8 5.8 4.4 4.4m0-4.4-4.4 4.4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
+    case 'branch':
+      return <svg {...common}><path d="M2.5 4h5M2.5 12h5M7.5 4c2.8 0 3.6 2.2 4 4M7.5 12c2.8 0 3.6-2.2 4-4" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" /><circle cx="12.4" cy="8" r="1.3" fill="currentColor" /></svg>
     default:
       return null
   }
 }
 
-function GatewayMark({ kind }: { kind: string }) {
-  if (kind === 'parallel') {
-    return (
-      <svg width="16" height="16" viewBox="0 0 16 16"><path d="M8 2v12M2 8h12" stroke="#b45309" strokeWidth="2.2" strokeLinecap="round" /></svg>
-    )
-  }
+/** 条件分支节点的匹配方式徽章：命中即走 ? / 命中的都走 ≡ */
+function BranchModeBadge({ mode }: { mode: string | null }) {
+  const all = mode === 'all_match'
   return (
-    <svg width="15" height="15" viewBox="0 0 16 16"><path d="m3.5 3.5 9 9m0-9-9 9" stroke="#b45309" strokeWidth="2.2" strokeLinecap="round" /></svg>
+    <span
+      className="branch-badge"
+      title={all ? '命中的都走(条件为真的分支全部执行)' : '命中即走(按顺序取第一条为真的分支)'}
+      style={{
+        position: 'absolute', top: -8, right: -8, width: 18, height: 18, borderRadius: 9,
+        background: '#d97706', color: '#fff', fontSize: 11, fontWeight: 700,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}
+    >
+      {all ? '≡' : '?'}
+    </span>
   )
 }
 
@@ -105,6 +112,7 @@ export function RectNode({ data, selected }: NodeProps) {
     <div className={`fnode rect ${selected ? 'selected' : ''} ${d.pendingConnect ? 'connect-hint' : ''}`} style={{ borderColor: color }} onClick={onClick}>
       {handles(d, actions)}
       {issueBadge(d.issueLevel)}
+      {d.kind === 'branch' && <BranchModeBadge mode={d.routeMode} />}
       <span className="fnode-icon" style={{ background: `${color}1a`, color }}>
         <Icon name={d.meta?.ui?.icon} />
       </span>
@@ -126,23 +134,6 @@ export function CircleNode({ data, selected }: NodeProps) {
       {handles(d, actions)}
       <div className={`fnode circle ${selected ? 'selected' : ''} ${d.pendingConnect ? 'connect-hint' : ''}`} style={{ borderColor: color, background: `${color}1a`, color }}>
         <Icon name={d.meta?.ui?.icon} size={18} />
-        {issueBadge(d.issueLevel)}
-      </div>
-      <div className="fnode-circle-label">{d.name}</div>
-    </div>
-  )
-}
-
-export function DiamondNode({ data, selected }: NodeProps) {
-  const d = data as unknown as NodeData
-  const color = d.meta?.ui?.color ?? '#d97706'
-  const onClick = useNodeClick(d)
-  const actions = useNodeActions()
-  return (
-    <div className="fnode-circle-wrap" onClick={onClick}>
-      {handles(d, actions)}
-      <div className={`fnode diamond ${selected ? 'selected' : ''} ${d.pendingConnect ? 'connect-hint' : ''}`} style={{ borderColor: color }}>
-        <GatewayMark kind={d.gatewayKind ?? 'exclusive'} />
         {issueBadge(d.issueLevel)}
       </div>
       <div className="fnode-circle-label">{d.name}</div>
@@ -180,5 +171,5 @@ export function SmoothEdge(props: EdgeProps) {
   )
 }
 
-export const nodeTypes = { fk_rect: RectNode, fk_circle: CircleNode, fk_diamond: DiamondNode }
+export const nodeTypes = { fk_rect: RectNode, fk_circle: CircleNode }
 export const edgeTypes = { fk_smooth: SmoothEdge }

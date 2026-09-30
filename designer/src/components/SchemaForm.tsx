@@ -9,7 +9,8 @@ import type { JSONSchema } from '../types'
 /** 字段中文名(引擎 schema title 为英文时兜底) */
 const FIELD_LABELS: Record<string, string> = {
   name: '节点名称',
-  gateway_kind: '匹配方式',
+  route_mode: '匹配方式',
+  advance_policy: '开始条件',
   assignee: '审批人(单个)',
   assignees: '审批人(多个)',
   candidate_users: '候选用户',

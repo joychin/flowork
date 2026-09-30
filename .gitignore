@@ -22,3 +22,4 @@ uv.lock.bak
 .idea/
 .vscode/
 .DS_Store
+*.bak-*

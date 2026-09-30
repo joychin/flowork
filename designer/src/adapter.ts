@@ -6,7 +6,7 @@ export type NodeData = {
   code: string
   name: string
   kind: string
-  gatewayKind: string | null
+  routeMode: string | null
   meta: NodeKindMeta | undefined
   issueLevel: 'error' | 'warning' | null
   pendingConnect: boolean
@@ -15,7 +15,6 @@ export type NodeData = {
 const SIZE: Record<string, { w: number; h: number }> = {
   rect: { w: 164, h: 56 },
   circle: { w: 56, h: 56 },
-  diamond: { w: 64, h: 64 },
 }
 
 export const nodeSize = (meta?: NodeKindMeta) => SIZE[meta?.ui?.shape ?? 'rect']
@@ -83,7 +82,7 @@ export function toFlowElements(
         code: n.code,
         name: n.name || n.code,
         kind: n.kind,
-        gatewayKind: typeof n.gateway_kind === 'string' ? n.gateway_kind : null,
+        routeMode: typeof n.route_mode === 'string' ? n.route_mode : null,
         meta,
         issueLevel: nodeIssues.get(n.code) ?? null,
         pendingConnect: pendingConnect === n.code,

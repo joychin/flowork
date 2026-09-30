@@ -177,10 +177,10 @@ input, select, textarea { font-family: inherit; }
 .react-flow__node.dragging { cursor: grabbing; }
 .react-flow__node { animation: node-in 0.18s ease-out; }
 @keyframes node-in { from { opacity: 0; } }
-.fnode, .fnode.circle, .fnode.diamond { transition: box-shadow 0.15s, border-color 0.15s; }
+.fnode, .fnode.circle { transition: box-shadow 0.15s, border-color 0.15s; }
 .fnode:hover { box-shadow: 0 6px 18px rgba(15, 23, 42, 0.12); }
 .fnode.circle:hover { box-shadow: 0 4px 14px rgba(15, 23, 42, 0.14); }
-.fnode.diamond:hover { box-shadow: 0 4px 14px rgba(15, 23, 42, 0.14); }
+.fnode:hover { box-shadow: 0 4px 14px rgba(15, 23, 42, 0.14); }
 
 /* 端口:更大命中面积、悬停发光、拖线时合法目标高亮脉冲 */
 .react-flow__handle {
@@ -233,15 +233,6 @@ input, select, textarea { font-family: inherit; }
   position: absolute; left: 50%; bottom: -22px; transform: translateX(-50%);
   font-size: 11px; color: var(--sub); white-space: nowrap;
 }
-.fnode.diamond {
-  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) rotate(45deg);
-  width: 42px; height: 42px; border-radius: 8px; border: 1.8px solid var(--line);
-  display: flex; align-items: center; justify-content: center; cursor: pointer; background: #fff;
-  transition: box-shadow 0.15s, border-color 0.15s;
-}
-.fnode.diamond svg { transform: rotate(-45deg); }
-.fnode.diamond.selected { border-color: var(--brand) !important; box-shadow: 0 0 0 3px rgba(47, 107, 255, 0.16); }
-.fnode.diamond.connect-hint { border-style: dashed; }
 
 .node-badge {
   position: absolute; top: -7px; right: -7px; width: 16px; height: 16px; border-radius: 50%;

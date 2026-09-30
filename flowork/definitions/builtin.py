@@ -162,9 +162,9 @@ def register_builtin_nodes(registry: NodeRegistry) -> None:
         ui={
             "name": "条件分支",
             "category": "分支",
-            "shape": "diamond",
+            "shape": "rect",
             "color": "#d97706",
-            "icon": "gateway",
+            "icon": "branch",
             "palette": [
                 {"label": "条件分支", "defaults": {"route_mode": "first_match"}},
                 {"label": "条件分支(命中的都走)", "defaults": {"route_mode": "all_match"}},

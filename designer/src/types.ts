@@ -67,7 +67,7 @@ export type NodeKindMeta = {
   ui: {
     name?: string
     category?: string
-    shape?: 'rect' | 'circle' | 'diamond'
+    shape?: 'rect' | 'circle'
     color?: string
     icon?: string
     palette?: { label: string; defaults: Record<string, unknown> }[]
