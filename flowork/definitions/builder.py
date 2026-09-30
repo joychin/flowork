@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from flowork.definitions.builtin import KIND_GATEWAY, GatewayKind
+from flowork.definitions.builtin import KIND_BRANCH, RouteMode
 from flowork.definitions.definition import DefinitionStatus, ProcessDefinition
 from flowork.definitions.flow import FlowCondition, SequenceFlow
 from flowork.definitions.node import FlowNode, MultiInstance
@@ -90,10 +90,14 @@ class FlowBuilder:
     ) -> FlowBuilder:
         return self._add_node(code, "cc_task", name, {"recipients": recipients or [], **fields})
 
-    def gateway(
-        self, code: str, name: str = "", kind: GatewayKind = GatewayKind.EXCLUSIVE, **fields: Any
+    def branch(
+        self, code: str, name: str = "", *, route_mode: RouteMode = RouteMode.FIRST_MATCH, **fields: Any
     ) -> FlowBuilder:
-        return self._add_node(code, KIND_GATEWAY, name, {"gateway_kind": kind, **fields})
+        """条件分支节点：出边挂条件，route_mode 决定命中即走 / 命中的都走。
+
+        多条入边节点的汇聚语义用 ``advance_policy``（any/all）经 ``**fields`` 配置。
+        """
+        return self._add_node(code, KIND_BRANCH, name, {"route_mode": route_mode, **fields})
 
     def node(self, code: str, *, kind: str, name: str = "", **fields: Any) -> FlowBuilder:
         """自定义节点入口：kind 必须已在注册表注册。"""

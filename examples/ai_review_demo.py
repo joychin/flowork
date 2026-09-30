@@ -4,7 +4,7 @@
 1. ``AiReviewSpec`` / ``AiReviewBehavior`` 完全定义在引擎包之外；
 2. 经 ``NodeRegistry.register`` 注册后，模板即可引用 ``ai_review`` 节点（含校验与序列化）；
 3. 行为 ``on_enter`` 调用 mock 模型，产出结构化输出写入变量；
-4. 排他网关按置信度路由：高置信 → 直接通过；低置信 → 升级人工审批（HITL 模式）。
+4. 条件分支（命中即走）按置信度路由：高置信 → 直接通过；低置信 → 升级人工审批（HITL 模式）。
 
 运行：``python examples/ai_review_demo.py``
 """
@@ -78,7 +78,7 @@ def build_definition(registry: NodeRegistry | None = None) -> ProcessDefinition:
             prompt="评估该申请的合规风险",
             confidence_threshold=0.8,
         )
-        .gateway("route", name="按置信度分流")
+        .branch("route", name="按置信度分流")
         .user_task("human_review", name="人工复核（升级）", assignee="u_specialist")
         .end("done", name="完成")
         .connect("start", "review")
@@ -91,7 +91,7 @@ def build_definition(registry: NodeRegistry | None = None) -> ProcessDefinition:
 
 
 def run_scenario(registry: NodeRegistry, variables: dict[str, Any]) -> dict[str, Any]:
-    """执行一个场景：行为产出变量 → 网关条件求值 → 返回路由结果。"""
+    """执行一个场景：行为产出变量 → 分支条件求值 → 返回路由结果。"""
     definition = build_definition(registry)
     review_node = definition.node("review")
     assert review_node is not None
@@ -107,7 +107,7 @@ def run_scenario(registry: NodeRegistry, variables: dict[str, Any]) -> dict[str,
         for flow in outgoing
         if flow.condition is not None and evaluate_condition(flow.condition, ctx.variables)
     ]
-    if matched:  # 排他网关：条件边命中则不走默认边
+    if matched:  # 命中即走：条件边命中则不走默认边
         routed = [flow.target for flow in matched]
     else:
         routed = [f"{flow.target} (default)" for flow in outgoing if flow.is_default]

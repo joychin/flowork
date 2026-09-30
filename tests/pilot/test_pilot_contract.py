@@ -1,7 +1,8 @@
-"""试点场景：合同评审（相容网关多分支 / 或汇聚取消兄弟 / 驳回 / 版本演进快照隔离）。"""
+"""试点场景：合同评审（命中的都走多分支 / 任一到达即过并取消兄弟 / 驳回 / 版本演进快照隔离）。"""
 
 from __future__ import annotations
 
+from flowork.definitions.builtin import RouteMode
 from flowork.definitions.builder import FlowBuilder
 from flowork.engine.engine import ProcessEngine
 from tests.pilot.conftest import activities_of, complete_of, reject_of
@@ -102,11 +103,10 @@ def test_contract_version_snapshot_isolation(pilot: ProcessEngine):
         FlowBuilder("contract_review", "合同评审 v2")
         .start("start", "提交")
         .user_task("legal_review", "法务审查", assignee="u_fa1", reject_target="start")
-        .gateway("risk_route", "风险分流")
+        .branch("risk_route", "风险分流", route_mode=RouteMode.ALL_MATCH)
         .user_task("finance_review", "财务核价", assignee="u_cai1", reject_target="legal_review")
         .user_task("gm_review", "总经理终审", assignee="u_yang", reject_target="legal_review")
-        .gateway("join", "或汇聚")
-        .end("end", "完成")
+        .end("end", "完成", advance_policy="any")
         .connect("start", "legal_review")
         .connect("legal_review", "risk_route")
         .flow(
@@ -121,10 +121,9 @@ def test_contract_version_snapshot_isolation(pilot: ProcessEngine):
             "gm_review",
             condition=FlowCondition(groups=[[{"left": "urgent", "operator": "eq", "right": True}]]),
         )
-        .flow("risk_route", "join", default=True)
-        .connect("finance_review", "join")
-        .connect("gm_review", "join")
-        .connect("join", "end")
+        .flow("risk_route", "end", default=True)
+        .connect("finance_review", "end")
+        .connect("gm_review", "end")
         .build()
     )
     pilot.repository.save_definition(revised)

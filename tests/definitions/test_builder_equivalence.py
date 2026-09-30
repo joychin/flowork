@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from flowork.definitions.builder import FlowBuilder
-from flowork.definitions.builtin import GatewayKind
+from flowork.definitions.builtin import RouteMode
 from flowork.definitions.definition import load_definition_file
 from flowork.definitions.flow import FlowCondition
 from flowork.definitions.node import MultiInstance
@@ -32,7 +32,7 @@ def test_builder_matches_json_countersign_branch(registry, examples_dir):
         FlowBuilder("countersign_branch", "条件分支 + 会签（示例 02）")
         .start("start", "发起")
         .user_task("manager", "经理审批", assignee="u_manager")
-        .gateway("route", "按金额分流", kind=GatewayKind.EXCLUSIVE)
+        .branch("route", "按金额分流", route_mode=RouteMode.FIRST_MATCH)
         .user_task(
             "director",
             "总监会签",
@@ -41,7 +41,7 @@ def test_builder_matches_json_countersign_branch(registry, examples_dir):
             reject_target="manager",
         )
         .cc_task("notify", "结果传阅", recipients=["u_originator"])
-        .end("end", "结束")
+        .end("end", "结束", advance_policy="any")
         .connect("start", "manager")
         .connect("manager", "route")
         .flow("route", "director", condition=high_amount)

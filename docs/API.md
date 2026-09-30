@@ -26,7 +26,7 @@ engine.close()
 | `save_definition(definition) -> int` | 存草稿（同 code 版本自增），返回版本号 |
 | `publish(code, version=None) -> int` | 发布（强制校验；发布后内容不可变） |
 | `get_definition(code, version=None)` | 取已发布定义（默认最高版本） |
-| `validate(definition) -> list[ValidateIssue]` | 设计时校验（结构/可达性/网关/kind） |
+| `validate(definition) -> list[ValidateIssue]` | 设计时校验（结构/可达性/条件分支/开始条件/kind） |
 
 ## RuntimeService（实例）
 

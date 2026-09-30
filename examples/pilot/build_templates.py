@@ -13,7 +13,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from flowork.definitions.builder import FlowBuilder
-from flowork.definitions.builtin import GatewayKind
+from flowork.definitions.builtin import RouteMode
 from flowork.definitions.definition import dump_definition
 from flowork.definitions.flow import FlowCondition
 from flowork.definitions.node import MultiInstance
@@ -44,7 +44,7 @@ def expense_claim():
             assignee="manager()",
             reject_target="start",
         )
-        .gateway("amount_route", "金额分流", kind=GatewayKind.EXCLUSIVE)
+        .branch("amount_route", "金额分流", route_mode=RouteMode.FIRST_MATCH)
         .user_task(
             "finance_review",
             "财务会签",
@@ -53,10 +53,11 @@ def expense_claim():
                 mode="parallel", approve_exit=">=50%", disapprove_exit=">=1"
             ),
             reject_target="supervisor",
+            advance_policy="any",
         )
         .user_task("director_review", "总监审批", assignee="u_chen")
         .cc_task("legal_cc", "法务留档传阅", recipients=["u_fa1"])
-        .service_task("payment", "财务打款", action="make_payment")
+        .service_task("payment", "财务打款", action="make_payment", advance_policy="any")
         .end("end", "结束")
         .connect("start", "supervisor")
         .connect("supervisor", "amount_route")
@@ -89,7 +90,7 @@ def leave_request():
             auto_pass_originator=True,
             reject_target="start",
         )
-        .gateway("days_route", "天数分流", kind=GatewayKind.EXCLUSIVE)
+        .branch("days_route", "天数分流", route_mode=RouteMode.FIRST_MATCH)
         .user_task(
             "hr_sequential",
             "HR 串行会签",
@@ -100,7 +101,7 @@ def leave_request():
             reject_target="supervisor",
         )
         .user_task("hr_record", "HR 备案", assignee="u_hr1")
-        .cc_task("notify", "结果传阅发起人", recipients=["originator"])
+        .cc_task("notify", "结果传阅发起人", recipients=["originator"], advance_policy="any")
         .end("end", "结束")
         .connect("start", "supervisor")
         .connect("supervisor", "days_route")
@@ -127,19 +128,18 @@ def supplier_compliance():
 
 
 def purchase_order():
-    """采购：金额分流 + 并行法务/财务 + 与汇聚 + ≥50万 总经理与子流程。
+    """采购：金额分流 + 法务/财务同时进行（≥10万双条件扇出）+ ≥50万 总经理与子流程。
 
     - <10万：部门主管 → 结束
-    - 10万~50万：主管 →（法务核验 ‖ 财务核价）与汇聚 → 结束
-    - ≥50万：主管 → 并行 → 与汇聚 → 大额分流 → 总经理 → 供应商合规子流程(同步) → 打款 → 结束
+    - 10万~50万：主管 →（法务核验 ‖ 财务核价）等全部到齐 → 结束
+    - ≥50万：主管 → 并行 → 等全部到齐(big_route) → 大额分流 → 总经理 → 供应商合规子流程(同步) → 打款 → 结束
     - 财务核价节点配置超时自动通过（240 分钟）
     """
     return (
         FlowBuilder("purchase_order", "采购申请")
         .start("start", "提交")
         .user_task("dept_review", "部门主管审批", assignee="manager()", reject_target="start")
-        .gateway("amount_route", "金额分流", kind=GatewayKind.EXCLUSIVE)
-        .gateway("parallel", "法务/财务并行", kind=GatewayKind.PARALLEL)
+        .branch("amount_route", "金额分流", route_mode=RouteMode.ALL_MATCH)
         .user_task("legal_review", "法务核验", assignee="u_fa1")
         .user_task(
             "finance_pricing",
@@ -147,8 +147,7 @@ def purchase_order():
             assignee="u_cai1",
             reject_target="dept_review",
         )
-        .gateway("join", "与汇聚", kind=GatewayKind.PARALLEL)
-        .gateway("big_route", "大额分流", kind=GatewayKind.EXCLUSIVE)
+        .branch("big_route", "大额分流", route_mode=RouteMode.FIRST_MATCH, advance_policy="all")
         .user_task("gm_review", "总经理审批", assignee="u_yang")
         .call_activity(
             "supplier_check",
@@ -158,16 +157,14 @@ def purchase_order():
             output_mappings={"compliance": "compliance"},
         )
         .service_task("payment", "采购打款", action="make_payment")
-        .end("end", "结束")
+        .end("end", "结束", advance_policy="any")
         .connect("start", "dept_review")
         .connect("dept_review", "amount_route")
-        .flow("amount_route", "parallel", condition=cond("amount", "ge", 100000))
+        .flow("amount_route", "legal_review", condition=cond("amount", "ge", 100000))
+        .flow("amount_route", "finance_pricing", condition=cond("amount", "ge", 100000))
         .flow("amount_route", "end", default=True)
-        .connect("parallel", "legal_review")
-        .connect("parallel", "finance_pricing")
-        .connect("legal_review", "join")
-        .connect("finance_pricing", "join")
-        .connect("join", "big_route")
+        .connect("legal_review", "big_route")
+        .connect("finance_pricing", "big_route")
         .flow("big_route", "gm_review", condition=cond("amount", "ge", 500000))
         .flow("big_route", "end", default=True)
         .connect("gm_review", "supplier_check")
@@ -178,29 +175,27 @@ def purchase_order():
 
 
 def contract_review():
-    """合同评审：相容网关（多条件同时成立多走）+ 或汇聚（先到取消兄弟）。
+    """合同评审：命中的都走（多条件同时成立多走）+ 结束节点任一到达即过（先到取消兄弟）。
 
     - 法务必审；金额>10万 加财务核价；urgent==true 加总经理终审
-    - 或汇聚：任一分支到达即通过并取消其余在办分支
+    - 任一分支到达 end 即通过并取消其余在办分支
     - 任一审批节点驳回归法务重办
     """
     return (
         FlowBuilder("contract_review", "合同评审")
         .start("start", "提交")
         .user_task("legal_review", "法务审查", assignee="u_fa1", reject_target="start")
-        .gateway("risk_route", "风险分流", kind=GatewayKind.INCLUSIVE)
+        .branch("risk_route", "风险分流", route_mode=RouteMode.ALL_MATCH)
         .user_task("finance_review", "财务核价", assignee="u_cai1", reject_target="legal_review")
         .user_task("gm_review", "总经理终审", assignee="u_yang", reject_target="legal_review")
-        .gateway("join", "或汇聚", kind=GatewayKind.INCLUSIVE)
-        .end("end", "完成")
+        .end("end", "完成", advance_policy="any")
         .connect("start", "legal_review")
         .connect("legal_review", "risk_route")
         .flow("risk_route", "finance_review", condition=cond("amount", "gt", 100000))
         .flow("risk_route", "gm_review", condition=cond("urgent", "eq", True))
-        .flow("risk_route", "join", default=True)
-        .connect("finance_review", "join")
-        .connect("gm_review", "join")
-        .connect("join", "end")
+        .flow("risk_route", "end", default=True)
+        .connect("finance_review", "end")
+        .connect("gm_review", "end")
         .build()
     )
 

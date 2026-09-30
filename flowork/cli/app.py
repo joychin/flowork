@@ -9,7 +9,7 @@ from rich.console import Console
 from rich.table import Table
 
 from flowork.definitions.builder import FlowBuilder
-from flowork.definitions.builtin import GatewayKind
+from flowork.definitions.builtin import RouteMode
 from flowork.definitions.definition import load_definition_file
 from flowork.definitions.flow import FlowCondition
 from flowork.definitions.node import MultiInstance
@@ -34,7 +34,7 @@ def init(db: Path = typer.Option(Path("flowork.db"), help="SQLite 数据库文�
 
 @app.command()
 def validate(template: Path = typer.Argument(..., help="模板 JSON 文件路径")) -> None:
-    """校验流程模板（结构 / 可达性 / 网关 / kind 注册）。"""
+    """校验流程模板（结构 / 可达性 / 条件分支 / kind 注册）。"""
     registry = create_registry()
     definition = load_definition_file(template, registry)
     issues = validate_definition(definition, registry)
@@ -106,7 +106,7 @@ def demo_full() -> None:
 
     manager = take("u_manager")
     engine.task.complete(manager.id, actor="u_manager")
-    console.print("[bold]2. 分支[/bold] 金额>10000 → 排他网关进入总监会签")
+    console.print("[bold]2. 分支[/bold] 金额>10000 → 条件分支进入总监会签")
 
     alice = take("u_alice")
     engine.task.complete(alice.id, actor="u_alice", comment="同意")
@@ -153,7 +153,7 @@ def _publish_full_demo_flow(engine: ProcessEngine) -> None:
         FlowBuilder("full_demo", "全流程演示")
         .start("start", "发起")
         .user_task("manager", "经理审批", assignee="u_manager")
-        .gateway("route", "金额分流", kind=GatewayKind.EXCLUSIVE)
+        .branch("route", "金额分流", route_mode=RouteMode.FIRST_MATCH)
         .user_task(
             "director",
             "总监会签",

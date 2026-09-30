@@ -1,11 +1,11 @@
-"""M2 语义测试：网关（排他/并行/相容汇聚）、公式沙箱、串行会签、驳回回退、死循环。"""
+"""M2 语义测试：条件分支（命中即走/命中的都走）、同时进行与等齐、公式沙箱、串行会签、驳回回退、死循环。"""
 
 from __future__ import annotations
 
 import pytest
 
 from flowork.definitions.builder import FlowBuilder
-from flowork.definitions.builtin import GatewayKind
+from flowork.definitions.builtin import RouteMode
 from flowork.definitions.flow import FlowCondition
 from flowork.definitions.node import MultiInstance
 from flowork.engine.engine import ProcessEngine
@@ -50,16 +50,16 @@ def complete_of(engine: ProcessEngine, instance_id: str, assignee: str) -> None:
     engine.task.complete(task.id, actor=assignee)
 
 
-# —— 排他网关 ——
+# —— 条件分支（命中即走）——
 
 
-def test_exclusive_gateway_condition_branch(engine: ProcessEngine):
+def test_first_match_condition_branch(engine: ProcessEngine):
     """条件命中走条件边，未命中走默认边。"""
     definition = (
         FlowBuilder("ex")
         .start()
         .user_task("apply", assignee="u_user")
-        .gateway("route")
+        .branch("route")
         .user_task("high", assignee="u_boss")
         .user_task("low", assignee="u_clerk")
         .end()
@@ -83,11 +83,11 @@ def test_exclusive_gateway_condition_branch(engine: ProcessEngine):
     assert any(t.activity_code == "low" for t in engine.history.tokens(low))
 
 
-def test_exclusive_gateway_no_match_no_default_raises(engine: ProcessEngine):
+def test_first_match_no_match_no_default_raises(engine: ProcessEngine):
     definition = (
         FlowBuilder("ex2")
         .start()
-        .gateway("route")
+        .branch("route")
         .user_task("a", assignee="u_a")
         .user_task("b", assignee="u_b")
         .end()
@@ -103,26 +103,22 @@ def test_exclusive_gateway_no_match_no_default_raises(engine: ProcessEngine):
         engine.runtime.start_process("ex2", start_user="u_user", variables={"x": 99})
 
 
-# —— 并行网关：分支与汇聚 ——
+# —— 同时进行 + 等全部到齐 ——
 
 
 def test_parallel_split_and_join(engine: ProcessEngine):
-    """并行分支同时待办；与汇聚等两条都完成才继续。"""
+    """同时进行：多条无条件出边即并行；开始条件=all 等两条都完成才继续。"""
     definition = (
         FlowBuilder("par")
         .start()
-        .gateway("fork", kind=GatewayKind.PARALLEL)
         .user_task("hr", assignee="u_hr")
         .user_task("it", assignee="u_it")
-        .gateway("join", kind=GatewayKind.PARALLEL)
-        .user_task("final", assignee="u_boss")
+        .user_task("final", assignee="u_boss", advance_policy="all")
         .end()
-        .connect("start", "fork")
-        .connect("fork", "hr")
-        .connect("fork", "it")
-        .connect("hr", "join")
-        .connect("it", "join")
-        .connect("join", "final")
+        .connect("start", "hr")
+        .connect("start", "it")
+        .connect("hr", "final")
+        .connect("it", "final")
         .connect("final", "end")
         .build()
     )
@@ -130,83 +126,62 @@ def test_parallel_split_and_join(engine: ProcessEngine):
     instance_id = engine.runtime.start_process("par", start_user="u_user")
 
     tasks = {t.activity_code: t for t in engine.task.list_tasks(instance_id=instance_id)}
-    assert set(tasks) == {"hr", "it"}  # 并行分支
+    assert set(tasks) == {"hr", "it"}  # 同时进行（无需分流节点）
 
     engine.task.complete(tasks["hr"].id, actor="u_hr")
-    assert engine.task.list_tasks(instance_id=instance_id)[0].activity_code == "it"  # 汇聚未满足
+    assert [t.activity_code for t in engine.task.list_tasks(instance_id=instance_id)] == ["it"]  # 未到齐
     assert engine.runtime.get_instance(instance_id).state == "running"
+    final_tokens = [t for t in engine.history.tokens(instance_id) if t.activity_code == "final"]
+    assert final_tokens == []  # 推进门拦截：未建令牌
 
     it_task = engine.task.list_tasks(instance_id=instance_id, assignee="u_it")[0]
     result = engine.task.complete(it_task.id, actor="u_it")
-    assert [t.activity_code for t in result.next_tasks] == ["final"]  # 汇聚通过
+    assert [t.activity_code for t in result.next_tasks] == ["final"]  # 到齐放行
 
     complete_all(engine, instance_id, {"final": "u_boss"})
     assert engine.runtime.get_instance(instance_id).state == "completed"
-    join_tokens = [t for t in engine.history.tokens(instance_id) if t.activity_code == "join"]
-    assert len(join_tokens) == 2  # 两次到达；其一 FINISHED 其一被撤销
-    assert sum(1 for t in join_tokens if t.state == "finished") == 1
+    assert len([t for t in engine.history.tokens(instance_id) if t.activity_code == "final"]) == 1
 
 
-# —— 相容网关：或汇聚取消兄弟分支 ——
+# —— 命中的都走 + 任一到达即开始（竞速取消兄弟）——
 
 
-def test_inclusive_join_cancels_sibling_branch(engine: ProcessEngine):
-    """或汇聚：先到分支通过并取消仍在办的兄弟分支。"""
+def test_all_match_race_cancels_sibling_branch(engine: ProcessEngine):
+    """命中的都走：双臂同时激活；final 任一到达即开始并取消仍在办的兄弟分支。"""
     definition = (
         FlowBuilder("inc")
         .start()
         .user_task("apply", assignee="u_user")
-        .gateway("fork", kind=GatewayKind.INCLUSIVE)
+        .branch("fork", route_mode=RouteMode.ALL_MATCH)
         .user_task("fast", assignee="u_fast")
         .user_task("slow", assignee="u_slow")
-        .gateway("join", kind=GatewayKind.INCLUSIVE)
-        .user_task("final", assignee="u_boss")
+        .user_task("final", assignee="u_boss", advance_policy="any")
         .end()
         .connect("start", "apply")
         .connect("apply", "fork")
-        .flow("fork", "fast", condition=cond("x", "eq", 1))
-        .flow("fork", "slow", condition=cond("x", "eq", 2))
-        .flow("fork", "fast", default=True)
-        .connect("fast", "join")
-        .connect("slow", "join")
-        .connect("join", "final")
-        .connect("final", "end")
-        .build()
-    )
-    # 修正：默认边需指向独立节点，避免与条件边同目标重复
-    definition = (
-        FlowBuilder("inc")
-        .start()
-        .user_task("apply", assignee="u_user")
-        .gateway("fork", kind=GatewayKind.INCLUSIVE)
-        .user_task("fast", assignee="u_fast")
-        .user_task("slow", assignee="u_slow")
-        .user_task("fallback", assignee="u_fb")
-        .gateway("join", kind=GatewayKind.INCLUSIVE)
-        .user_task("final", assignee="u_boss")
-        .end()
-        .connect("start", "apply")
-        .connect("apply", "fork")
-        .flow("fork", "fast", condition=cond("x", "eq", 1))
-        .flow("fork", "slow", condition=cond("x", "eq", 2))
-        .flow("fork", "fallback", default=True)
-        .connect("fast", "join")
-        .connect("slow", "join")
-        .connect("fallback", "join")
-        .connect("join", "final")
+        .flow("fork", "fast", condition=cond("x", "ge", 1))
+        .flow("fork", "slow", condition=cond("x", "ge", 1))
+        .flow("fork", "end", default=True)
+        .connect("fast", "final")
+        .connect("slow", "final")
         .connect("final", "end")
         .build()
     )
     publish(engine, definition)
-    instance_id = engine.runtime.start_process("inc", start_user="u_user", variables={"x": 2})
+    instance_id = engine.runtime.start_process("inc", start_user="u_user", variables={"x": 1})
     complete_of(engine, instance_id, "u_user")
-    # x=2 → slow 分支
-    assert [t.activity_code for t in engine.task.list_tasks(instance_id=instance_id)] == ["slow"]
+    # 两个条件同时成立 → 双臂同时待办
+    assert {t.activity_code for t in engine.task.list_tasks(instance_id=instance_id)} == {"fast", "slow"}
+
     result = engine.task.complete(
-        engine.task.list_tasks(instance_id=instance_id, assignee="u_slow")[0].id, actor="u_slow"
+        engine.task.list_tasks(instance_id=instance_id, assignee="u_fast")[0].id, actor="u_fast"
     )
-    # 或汇聚：slow 到达即通过，final 已就绪；无残留分支
+    # final 任一到达即开始；仍在办的 slow 兄弟分支被取消
     assert [t.activity_code for t in result.next_tasks] == ["final"]
+    slow_token = next(t for t in engine.history.tokens(instance_id) if t.activity_code == "slow")
+    assert slow_token.state == "cancelled"
+    assert engine.task.list_tasks(instance_id=instance_id, assignee="u_slow") == []
+
     complete_all(engine, instance_id, {"final": "u_boss"})
     assert engine.runtime.get_instance(instance_id).state == "completed"
 
@@ -235,11 +210,11 @@ def test_formula_sandbox_rejects_dangerous():
         evaluate_formula("amount", {"amount": 5})  # 非布尔
 
 
-def test_formula_via_gateway(engine: ProcessEngine):
+def test_formula_via_branch(engine: ProcessEngine):
     definition = (
         FlowBuilder("fm")
         .start()
-        .gateway("route")
+        .branch("route")
         .user_task("big", assignee="u_boss")
         .user_task("small", assignee="u_clerk")
         .end()
@@ -261,7 +236,7 @@ def test_condition_error_wrapped(engine: ProcessEngine):
     definition = (
         FlowBuilder("cerr")
         .start()
-        .gateway("route")
+        .branch("route")
         .user_task("a", assignee="u_a")
         .end()
         .connect("start", "route")
@@ -418,7 +393,7 @@ def test_countersign_reject_by_one_vote(engine: ProcessEngine):
 
 
 def test_dead_loop_guard(engine: ProcessEngine):
-    """网关回边死循环：节点完成次数达上限后触发守卫。"""
+    """分支回边死循环：节点完成次数达上限后触发守卫。"""
     definition = (
         FlowBuilder("loop")
         .start()
@@ -426,7 +401,7 @@ def test_dead_loop_guard(engine: ProcessEngine):
             "again",
             assignee="u_loop",
         )
-        .gateway("route")
+        .branch("route")
         .end()
         .connect("start", "again")
         .connect("again", "route")

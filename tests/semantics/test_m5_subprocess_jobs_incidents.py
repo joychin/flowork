@@ -239,7 +239,7 @@ def test_job_retries_then_dead_letter(engine: ProcessEngine):
             assignee="u_x",
             timeout=TimeoutPolicy(due_minutes=10, strategy="auto_approve"),
         )
-        .gateway("route")
+        .branch("route")
         .end()
         .connect("start", "t")
         .connect("t", "route")

@@ -30,7 +30,7 @@ def test_builtin_kinds_registered():
         "service_task",
         "call_activity",
         "cc_task",
-        "gateway",
+        "branch",
     }
 
 

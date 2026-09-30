@@ -41,7 +41,7 @@ examples/          3 个模板 JSON + ai_review_demo.py
 3. **钩子/行为只观察与写变量，不得改变路由**；路由决策只属于引擎 + 条件求值。
 4. **TaskHistory（已办）只追加**，驳回复活 = 新任务 + cause_token_id。
 5. **所有操作带 actor 归因**（acted_by / acted_as_agent）。
-6. 单文件 ≤ 300 行；测试先行于实现（会签/驳回/汇聚等难块）。
+6. 单文件 ≤ 300 行；测试先行于实现（会签/驳回/推进门等难块）。
 7. 范围变化一律记入《本期建设边界》backlog 附录，不直接扩期。
 
 ## 设计文档（benchmark_refs/out/，只读）

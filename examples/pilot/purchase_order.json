@@ -33,7 +33,7 @@
     {
       "code": "amount_route",
       "name": "金额分流",
-      "kind": "gateway",
+      "kind": "branch",
       "hooks": {
         "on_enter": null,
         "on_exit": null,
@@ -41,20 +41,7 @@
         "on_fail": null
       },
       "properties": {},
-      "gateway_kind": "exclusive"
-    },
-    {
-      "code": "parallel",
-      "name": "法务/财务并行",
-      "kind": "gateway",
-      "hooks": {
-        "on_enter": null,
-        "on_exit": null,
-        "on_cancel": null,
-        "on_fail": null
-      },
-      "properties": {},
-      "gateway_kind": "parallel"
+      "route_mode": "all_match"
     },
     {
       "code": "legal_review",
@@ -84,22 +71,9 @@
       "reject_target": "dept_review"
     },
     {
-      "code": "join",
-      "name": "与汇聚",
-      "kind": "gateway",
-      "hooks": {
-        "on_enter": null,
-        "on_exit": null,
-        "on_cancel": null,
-        "on_fail": null
-      },
-      "properties": {},
-      "gateway_kind": "parallel"
-    },
-    {
       "code": "big_route",
       "name": "大额分流",
-      "kind": "gateway",
+      "kind": "branch",
       "hooks": {
         "on_enter": null,
         "on_exit": null,
@@ -107,7 +81,8 @@
         "on_fail": null
       },
       "properties": {},
-      "gateway_kind": "exclusive"
+      "advance_policy": "all",
+      "route_mode": "first_match"
     },
     {
       "code": "gm_review",
@@ -164,7 +139,8 @@
         "on_cancel": null,
         "on_fail": null
       },
-      "properties": {}
+      "properties": {},
+      "advance_policy": "any"
     }
   ],
   "flows": [
@@ -186,7 +162,15 @@
     },
     {
       "source": "amount_route",
-      "target": "parallel",
+      "target": "end",
+      "name": "",
+      "is_default": true,
+      "condition": null,
+      "on_take": null
+    },
+    {
+      "source": "amount_route",
+      "target": "legal_review",
       "name": "",
       "is_default": false,
       "condition": {
@@ -205,31 +189,26 @@
     },
     {
       "source": "amount_route",
-      "target": "end",
-      "name": "",
-      "is_default": true,
-      "condition": null,
-      "on_take": null
-    },
-    {
-      "source": "parallel",
-      "target": "legal_review",
-      "name": "",
-      "is_default": false,
-      "condition": null,
-      "on_take": null
-    },
-    {
-      "source": "parallel",
       "target": "finance_pricing",
       "name": "",
       "is_default": false,
-      "condition": null,
+      "condition": {
+        "groups": [
+          [
+            {
+              "left": "amount",
+              "operator": "ge",
+              "right": 100000
+            }
+          ]
+        ],
+        "formula": null
+      },
       "on_take": null
     },
     {
       "source": "legal_review",
-      "target": "join",
+      "target": "big_route",
       "name": "",
       "is_default": false,
       "condition": null,
@@ -237,14 +216,6 @@
     },
     {
       "source": "finance_pricing",
-      "target": "join",
-      "name": "",
-      "is_default": false,
-      "condition": null,
-      "on_take": null
-    },
-    {
-      "source": "join",
       "target": "big_route",
       "name": "",
       "is_default": false,

@@ -104,7 +104,7 @@ def test_purchase_subprocess_reject_to_originator(pilot: ProcessEngine):
 def test_purchase_subprocess_incident_recovery(pilot: ProcessEngine):
     """子流程内引擎错误 → 子挂起 → 修复 resume → 办结 → 父恢复。
 
-    构造：子流程 verify 完成时带 amount 走相容路由？——子模板无网关，
+    构造：子流程 verify 完成时带 amount 走条件路由？——子模板无分支，
     改为直接删除子的 end 节点定义不可行。这里用 move_token 修复走偏流程：
     正常构造错误的方式是把子实例令牌移走后继续，验证父流程不恢复直到子完成。
     """

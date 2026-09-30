@@ -1,4 +1,4 @@
-"""设计时校验器：结构 / 可达性 / 网关 / 参与者 / kind 注册。
+"""设计时校验器：结构 / 可达性 / 条件分支 / 开始条件 / 参与者 / kind 注册。
 
 不抛异常：返回 ``list[ValidateIssue]``，由调用方（CLI/发布服务）决定渲染与拦截；
 存在 ERROR 级问题时禁止发布（``assert_valid``）。
@@ -11,12 +11,12 @@ from enum import StrEnum
 from typing import TYPE_CHECKING
 
 from flowork.definitions.builtin import (
+    KIND_BRANCH,
     KIND_CC_TASK,
     KIND_END,
-    KIND_GATEWAY,
     KIND_START,
     KIND_USER_TASK,
-    GatewayKind,
+    RouteMode,
 )
 from flowork.definitions.flow import MAX_FORMULA_LENGTH
 from flowork.errors import DefinitionError
@@ -143,66 +143,81 @@ def validate_definition(
             if node.code not in reachable:
                 warning("structure.node.unreachable", "节点从 start 不可达", node=node.code)
 
-    # —— 网关规则 ——
+    # —— 条件分支规则 ——
     for node in definition.nodes:
-        if node.kind != KIND_GATEWAY:
+        if node.kind != KIND_BRANCH:
             continue
-        gateway_kind = getattr(node, "gateway_kind", GatewayKind.EXCLUSIVE)
+        route_mode = getattr(node, "route_mode", RouteMode.FIRST_MATCH)
         outgoing = definition.outgoing(node.code)
         defaults = [f for f in outgoing if f.is_default]
         conditional = [f for f in outgoing if f.condition is not None]
         if len(outgoing) < 2:
-            warning("gateway.single_outgoing", "网关出边少于 2 条，仅作透传", node=node.code)
-        if gateway_kind == GatewayKind.EXCLUSIVE:
-            if len(defaults) > 1:
-                error("gateway.default.duplicate", "排他网关最多一条默认边", node=node.code)
+            warning("branch.single_outgoing", "分支节点出边少于 2 条，仅作透传", node=node.code)
+        if len(defaults) > 1:
+            error("branch.default.duplicate", "分支节点最多一条默认边", node=node.code)
+        for flow in outgoing:
+            if flow.is_default and flow.condition is not None:
+                error(
+                    "branch.default.has_condition",
+                    "默认边不允许再挂条件",
+                    node=node.code,
+                    flow=flow.flow_code(),
+                )
+        if route_mode == RouteMode.FIRST_MATCH:
             if len(outgoing) > 1 and not defaults and len(conditional) < len(outgoing):
                 error(
-                    "gateway.exclusive.no_default",
-                    "排他网关存在无条件出边且未设置默认边（条件全不满足时无法路由）",
+                    "branch.first_match.no_default",
+                    "存在无条件出边且未设置默认边（条件全不满足时无法路由）",
                     node=node.code,
                 )
-            for flow in outgoing:
-                if flow.is_default and flow.condition is not None:
-                    error(
-                        "gateway.default.has_condition",
-                        "默认边不允许再挂条件",
-                        node=node.code,
-                        flow=flow.flow_code(),
-                    )
             if outgoing and not defaults and conditional and len(conditional) == len(outgoing):
                 warning(
-                    "gateway.exclusive.all_conditional",
-                    "排他网关出边全部带条件且无默认边：条件不互补时运行期将无法路由",
+                    "branch.first_match.all_conditional",
+                    "出边全部带条件且无默认边：条件不互补时运行期将无法路由",
                     node=node.code,
                 )
-        elif gateway_kind == GatewayKind.INCLUSIVE:
-            # 相容网关：条件边 + 可选默认边；无条件非默认边视为告警（恒真分支）
-            if len(defaults) > 1:
-                error("gateway.default.duplicate", "网关最多一条默认边", node=node.code)
+        else:  # ALL_MATCH：命中的都走
             for flow in outgoing:
                 if flow.condition is None and not flow.is_default:
                     warning(
-                        "gateway.inclusive.unconditional",
-                        "相容网关的无条件出边恒为真（等价并行分支）",
+                        "branch.all_match.unconditional",
+                        "无条件出边恒为真（等价并行分支，可考虑直接多条无条件出边）",
                         node=node.code,
                         flow=flow.flow_code(),
                     )
-        else:  # PARALLEL
-            if defaults:
-                error(
-                    "gateway.default.not_allowed",
-                    "并行网关不允许默认边（默认边仅用于排他/相容网关）",
-                    node=node.code,
-                )
-            for flow in outgoing:
-                if flow.condition is not None:
-                    error(
-                        "gateway.unconditional_only",
-                        "并行网关出边不允许挂条件",
-                        node=node.code,
-                        flow=flow.flow_code(),
-                    )
+
+    # —— 开始条件（advance_policy）规则 ——
+    for node in definition.nodes:
+        incoming = definition.incoming(node.code)
+        if len(incoming) < 2:
+            continue
+        policy = getattr(node, "advance_policy", None)
+        if policy is None:
+            warning(
+                "advance.missing",
+                "节点有多条入边但未设置开始条件（缺省按「任一到达即开始」执行）",
+                node=node.code,
+            )
+        elif policy == "all":
+            # 死锁风险：来源是「命中即走」分支的臂（恰好一臂激活，其余永不到达）
+            for source in {f.source for f in incoming}:
+                if not any(
+                    f.condition is not None or f.is_default for f in definition.incoming(source)
+                ):
+                    continue
+                for arrival in definition.incoming(source):
+                    upstream = nodes.get(arrival.source)
+                    if (
+                        upstream is not None
+                        and upstream.kind == KIND_BRANCH
+                        and getattr(upstream, "route_mode", "first_match") == RouteMode.FIRST_MATCH
+                    ):
+                        warning(
+                            "advance.all_conditional_arm",
+                            f"「全部到齐」与命中即走分支的臂（{source}）相连：未选中的臂永不到达，将死等",
+                            node=node.code,
+                        )
+                        break
 
     # —— 节点语义检查 ——
     for node in definition.nodes:
@@ -252,11 +267,11 @@ def validate_definition(
             )
         if not flow.is_default and not condition and definition.outgoing(flow.source):
             source_node = nodes.get(flow.source)
-            source_is_gateway = source_node is not None and source_node.kind == KIND_GATEWAY
-            if source_is_gateway:
+            source_is_branch = source_node is not None and source_node.kind == KIND_BRANCH
+            if source_is_branch:
                 warning(
-                    "condition.missing_on_gateway",
-                    "网关出边未挂条件（排他网关下仅默认边允许无条件）",
+                    "condition.missing_on_branch",
+                    "分支节点出边未挂条件（仅默认边允许无条件）",
                     flow=flow.flow_code(),
                 )
 

@@ -1,5 +1,5 @@
 """内置节点行为：Start / End / UserTask / ServiceTask / CallActivity / CcTask。
-（Gateway 行为在 M2 提供；本文件不含任何 if kind 分支——每 kind 一个类。）
+（分支行为在 engine/branch.py 提供；本文件不含任何 if kind 分支——每 kind 一个类。）
 """
 
 from __future__ import annotations
@@ -33,8 +33,8 @@ ORIGINATOR = "originator"
 
 def register_builtin_behaviors(registry: NodeRegistry) -> None:
     """把内置行为接入注册表（与自定义行为同一入口）。"""
-    from flowork.definitions.builtin import GatewaySpec
-    from flowork.engine.gateway import GatewayBehavior
+    from flowork.definitions.builtin import BranchSpec
+    from flowork.engine.branch import BranchBehavior
 
     registry.register("start", StartSpec, StartBehavior, replace=True)
     registry.register("end", EndSpec, EndBehavior, replace=True)
@@ -42,7 +42,7 @@ def register_builtin_behaviors(registry: NodeRegistry) -> None:
     registry.register("service_task", ServiceTaskSpec, ServiceTaskBehavior, replace=True)
     registry.register("call_activity", CallActivitySpec, CallActivityBehavior, replace=True)
     registry.register("cc_task", CcTaskSpec, CcTaskBehavior, replace=True)
-    registry.register("gateway", GatewaySpec, GatewayBehavior, replace=True)
+    registry.register("branch", BranchSpec, BranchBehavior, replace=True)
 
 
 class StartBehavior(NodeBehavior):

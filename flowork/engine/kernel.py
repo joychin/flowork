@@ -35,7 +35,7 @@ class EngineExecutionError(FloworkError):
 
 
 class RouteError(EngineExecutionError):
-    """路由无法确定（如排他网关条件全不满足且无默认边）。"""
+    """路由无法确定（如条件分支条件全不满足且无默认边）。"""
 
 
 class DeadLoopError(EngineExecutionError):
@@ -437,7 +437,56 @@ class Kernel:
         target = self._node(definition, flow.target)
         if target is None:
             raise RouteError(f"目标节点不存在：{flow.target}")
-        self.activate(session, instance, target, source_activity_code=flow.source)
+        self._advance(session, instance, target, flow, definition)
+
+    # —— 推进门（对齐 对标产品 checkCanBeActivited + handleActiviteActivity）——
+
+    def _advance(
+        self,
+        session: Session,
+        instance: ProcessInstanceRow,
+        node: FlowNode,
+        flow: SequenceFlow,
+        definition: ProcessDefinition,
+    ) -> None:
+        """边到达后的推进判定：any 任一到达即办（缺省）/ all 等全部到齐。
+
+        - all 未到齐：不激活、不建令牌（各来源已完成令牌即到达证据）；
+        - any 且节点已在办：吸收本次到达，不重复激活；
+        - any 放行后：取消仍未完成的兄弟分支（竞速收尾，防迟到到达）。
+        驳回/撤回/管理员等直调 ``activate`` 的路径不经此门。
+        """
+        sources = [f.source for f in definition.incoming(node.code)]
+        if len(sources) > 1:
+            if self._advance_policy_of(node) == "all":
+                settled = {
+                    token.activity_code
+                    for token in self.tokens(session, instance.id)
+                    if token.state
+                    in (TokenState.FINISHED.value, TokenState.CANCELLED.value, TokenState.REVOKED.value)
+                }
+                if not all(source in settled for source in sources):
+                    return  # 等待其余入边来源完成
+            else:
+                busy = any(
+                    token.activity_code == node.code
+                    for token in self.tokens(session, instance.id, states=(TokenState.UNFINISHED.value,))
+                )
+                if busy:
+                    return  # 吸收重复到达（节点已在办）
+                self._cancel_sibling_branches(session, instance, sources)
+        self.activate(session, instance, node, source_activity_code=flow.source)
+
+    def _advance_policy_of(self, node: FlowNode) -> str:
+        """节点开始条件（Spec 声明；cc_task 在其 Spec 上覆写恒 any）。缺省 any。"""
+        return getattr(node, "advance_policy", None) or "any"
+
+    def _cancel_sibling_branches(self, session: Session, instance: ProcessInstanceRow, sources: list[str]) -> None:
+        """任一到达即开始后，取消仍未完成的兄弟分支（避免僵尸分支与迟到到达）。"""
+        source_set = set(sources)
+        for token in self.tokens(session, instance.id, states=(TokenState.UNFINISHED.value,)):
+            if token.activity_code in source_set:
+                self.cancel_token(session, token)
 
     def _node(self, definition: ProcessDefinition, code: str) -> FlowNode | None:
         return definition.node(code)

@@ -91,14 +91,15 @@ class NodeBehavior:
         """本节点的任务提交后（UserTask 家族：串行会签推进等）。"""
 
     def get_outgoing(self, ctx: NodeContext) -> list[SequenceFlow]:
-        """路由出口（相容语义）：无条件边全走 + 条件真者走，默认边兜底。
+        """路由出口（命中的都走）：无条件边全走 + 条件真者走，默认边兜底。
 
-        排他语义（只走第一条真条件）由 GatewayBehavior(EXCLUSIVE) 覆写。
+        命中即走（只走第一条真条件）由 BranchBehavior(FIRST_MATCH) 覆写；
+        多条入边的等待/竞速由 kernel 推进门（advance_policy）决定，不经本钩子。
         """
         from flowork.engine.routing import select_outgoing
 
         definition = ctx.kernel.definition_of(ctx.session, ctx.instance)  # type: ignore[attr-defined]
-        return select_outgoing(definition.outgoing(ctx.node.code), dict(ctx.variables))
+        return select_outgoing(definition.outgoing(ctx.node.code), dict(ctx.variables), mode="all_match")
 
 
 class InMemoryNodeContext(NodeContext):

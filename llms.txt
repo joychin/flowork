@@ -1,6 +1,6 @@
 # flowork
 
-> 无头（headless）、可扩展的审批流程引擎。Token 令牌内核，BPMN 对齐命名，AI 友好三层设计。
+> 无头（headless）、可扩展的审批流程引擎。Token 令牌内核，用户词汇无「网关」（条件分支/同时进行/开始条件），AI 友好三层设计。
 > Python >= 3.11，SQLite 起步，pip 库 + CLI 交付。
 
 ## 仓库文档
@@ -26,4 +26,6 @@
 - flowork/definitions/definition.py: ProcessDefinition + JSON 编解码
 - flowork/runtime/registry.py: NodeRegistry / HandlerRegistry（扩展机制核心）
 - flowork/runtime/behavior.py: NodeBehavior 生命周期契约
+- flowork/engine/branch.py: 条件分支行为（first_match / all_match 路由）
+- flowork/engine/kernel.py: 推进门 _advance（advance_policy any/all，对齐 对标产品 preCondition）
 - flowork/definitions/validator.py: 设计时校验器

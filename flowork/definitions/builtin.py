@@ -1,7 +1,12 @@
 """内置节点类型：与自定义类型走同一注册机制（dogfooding，边界 G4）。
 
-内置 kind：start / end / user_task / service_task / call_activity / cc_task / gateway。
-M0 仅注册 Spec（Behavior 自 M1 起随引擎接入补齐）。
+内置 kind：start / end / user_task / service_task / call_activity / cc_task / branch。
+
+用户词汇（对齐现代工作流产品，无「网关」）：
+- 条件分支（branch）：出边挂条件，route_mode 决定匹配方式；
+- 同时进行：任意节点多条无条件出边即并行，无需专门节点；
+- 开始条件（advance_policy）：多条入边节点的推进策略 any/all，
+  汇聚语义在目标节点上，不在分支节点上（对齐 对标产品 preCondition）。
 """
 
 from __future__ import annotations
@@ -17,18 +22,18 @@ if TYPE_CHECKING:
     from flowork.runtime.registry import NodeRegistry
 
 __all__ = [
+    "KIND_BRANCH",
     "KIND_CALL_ACTIVITY",
     "KIND_CC_TASK",
     "KIND_END",
-    "KIND_GATEWAY",
     "KIND_SERVICE_TASK",
     "KIND_START",
     "KIND_USER_TASK",
+    "BranchSpec",
     "CallActivitySpec",
     "CcTaskSpec",
     "EndSpec",
-    "GatewayKind",
-    "GatewaySpec",
+    "RouteMode",
     "ServiceTaskSpec",
     "StartSpec",
     "UserTaskSpec",
@@ -41,19 +46,18 @@ KIND_USER_TASK: Literal["user_task"] = "user_task"
 KIND_SERVICE_TASK: Literal["service_task"] = "service_task"
 KIND_CALL_ACTIVITY: Literal["call_activity"] = "call_activity"
 KIND_CC_TASK: Literal["cc_task"] = "cc_task"
-KIND_GATEWAY: Literal["gateway"] = "gateway"
+KIND_BRANCH: Literal["branch"] = "branch"
 
 
-class GatewayKind(StrEnum):
-    """网关类型：EXCLUSIVE 排他（条件出边+默认边）/ PARALLEL 并行 / INCLUSIVE 相容。
+class RouteMode(StrEnum):
+    """条件分支的匹配方式（分支侧语义；汇聚侧见 FlowNode.advance_policy）。
 
-    汇聚语义由网关类型决定（EXCLUSIVE 单进即过、PARALLEL 等全到、
-    INCLUSIVE 等已激活分支到齐并取消其余）——取代 对标产品 的隐式 preCondition。
+    - FIRST_MATCH 命中即走：按出边顺序取第一条条件为真者；全不中走默认边。
+    - ALL_MATCH 命中的都走：条件为真的边全部激活（对标产品 原生语义）；皆空走默认边。
     """
 
-    EXCLUSIVE = "exclusive"
-    PARALLEL = "parallel"
-    INCLUSIVE = "inclusive"
+    FIRST_MATCH = "first_match"
+    ALL_MATCH = "all_match"
 
 
 class StartSpec(FlowNode):
@@ -64,9 +68,15 @@ class EndSpec(FlowNode):
     kind: Literal["end"] = KIND_END
 
 
-class GatewaySpec(FlowNode):
-    kind: Literal["gateway"] = KIND_GATEWAY
-    gateway_kind: GatewayKind = GatewayKind.EXCLUSIVE
+class BranchSpec(FlowNode):
+    """条件分支：纯路由锚点（无副作用），出边挂条件。
+
+    存在价值：决策落点（审计日志）、静态校验锚点、AI 安全操作对象。
+    并行分流不需要本节点——多条无条件出边即同时进行。
+    """
+
+    kind: Literal["branch"] = KIND_BRANCH
+    route_mode: RouteMode = RouteMode.FIRST_MATCH
 
 
 class UserTaskSpec(FlowNode):
@@ -112,6 +122,8 @@ class CcTaskSpec(FlowNode):
 
     kind: Literal["cc_task"] = KIND_CC_TASK
     recipients: list[str] = Field(default_factory=list)
+    # 传阅恒按 any 推进（对齐 对标产品 CIRCULATE 强制 ANY），多入边不等待
+    advance_policy: Literal["any", "all"] | None = "any"
 
 
 def register_builtin_nodes(registry: NodeRegistry) -> None:
@@ -145,8 +157,8 @@ def register_builtin_nodes(registry: NodeRegistry) -> None:
         },
     )
     registry.register(
-        KIND_GATEWAY,
-        GatewaySpec,
+        KIND_BRANCH,
+        BranchSpec,
         ui={
             "name": "条件分支",
             "category": "分支",
@@ -154,8 +166,8 @@ def register_builtin_nodes(registry: NodeRegistry) -> None:
             "color": "#d97706",
             "icon": "gateway",
             "palette": [
-                {"label": "条件分支", "defaults": {"gateway_kind": "exclusive"}},
-                {"label": "并行分支(同时分合)", "defaults": {"gateway_kind": "parallel"}},
+                {"label": "条件分支", "defaults": {"route_mode": "first_match"}},
+                {"label": "条件分支(命中的都走)", "defaults": {"route_mode": "all_match"}},
             ],
         },
     )

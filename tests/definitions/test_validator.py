@@ -84,13 +84,13 @@ def test_duplicate_node_code(registry):
     assert "node.code.duplicate" in error_rules(definition, registry)
 
 
-def test_exclusive_gateway_without_default(registry):
+def test_first_match_branch_without_default(registry):
     from flowork.definitions.flow import FlowCondition
 
     definition = (
         FlowBuilder("t")
         .start()
-        .gateway("g")
+        .branch("g")
         .user_task("a", assignee="u1")
         .user_task("b", assignee="u2")
         .end()
@@ -100,24 +100,23 @@ def test_exclusive_gateway_without_default(registry):
             "a",
             condition=FlowCondition(groups=[[{"left": "x", "operator": "eq", "right": 1}]]),
         )
-        .flow("g", "b")  # 无条件且无默认 → 排他网关无法路由
+        .flow("g", "b")  # 无条件且无默认 → 命中即走无法路由
         .connect("a", "end")
         .connect("b", "end")
         .build(registry)
     )
-    assert "gateway.exclusive.no_default" in error_rules(definition, registry)
+    assert "branch.first_match.no_default" in error_rules(definition, registry)
 
 
-def test_parallel_gateway_rejects_condition(registry):
-    from flowork.definitions.builtin import GatewayKind
+def test_advance_all_on_exclusive_arm_warns(registry):
     from flowork.definitions.flow import FlowCondition
 
     definition = (
         FlowBuilder("t")
         .start()
-        .gateway("g", kind=GatewayKind.PARALLEL)
+        .branch("g")
         .user_task("a", assignee="u1")
-        .user_task("b", assignee="u2")
+        .user_task("m", assignee="u2", advance_policy="all")
         .end()
         .connect("start", "g")
         .flow(
@@ -125,13 +124,15 @@ def test_parallel_gateway_rejects_condition(registry):
             "a",
             condition=FlowCondition(groups=[[{"left": "x", "operator": "eq", "right": 1}]]),
         )
-        .connect("g", "b")
-        .connect("a", "end")
-        .connect("b", "end")
+        .flow("g", "m", default=True)
+        .connect("a", "m")
+        .connect("m", "end")
         .build(registry)
     )
     rules = error_rules(definition, registry)
-    assert "gateway.unconditional_only" in rules
+    # 旧「并行网关无条件出边」规则随节点类型移除；改为开始条件死等告警
+    all_rules = {issue.rule for issue in validate_definition(definition, registry)}
+    assert "advance.all_conditional_arm" in all_rules
     assert "structure.node.unreachable" not in rules
 
 
@@ -155,7 +156,7 @@ def test_condition_groups_and_formula_both_set(registry):
     definition = (
         FlowBuilder("t")
         .start()
-        .gateway("g")
+        .branch("g")
         .end()
         .connect("start", "g")
         .flow(

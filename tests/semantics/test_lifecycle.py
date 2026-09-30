@@ -199,7 +199,7 @@ def test_engine_core_has_no_kind_branches():
     from pathlib import Path
 
     engine_dir = Path(__file__).parent.parent.parent / "flowork" / "engine"
-    kinds = "start|end|user_task|service_task|call_activity|cc_task|gateway"
+    kinds = "start|end|user_task|service_task|call_activity|cc_task|branch"
     pattern = re.compile(r'(==\s*"|!=\s*")(' + kinds + ')"')
     offenders = []
     for path in engine_dir.glob("*.py"):

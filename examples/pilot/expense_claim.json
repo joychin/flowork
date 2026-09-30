@@ -33,7 +33,7 @@
     {
       "code": "amount_route",
       "name": "金额分流",
-      "kind": "gateway",
+      "kind": "branch",
       "hooks": {
         "on_enter": null,
         "on_exit": null,
@@ -41,7 +41,7 @@
         "on_fail": null
       },
       "properties": {},
-      "gateway_kind": "exclusive"
+      "route_mode": "first_match"
     },
     {
       "code": "finance_review",
@@ -63,7 +63,8 @@
         "approve_exit": ">=50%",
         "disapprove_exit": ">=1"
       },
-      "reject_target": "supervisor"
+      "reject_target": "supervisor",
+      "advance_policy": "any"
     },
     {
       "code": "director_review",
@@ -104,7 +105,8 @@
         "on_fail": null
       },
       "properties": {},
-      "action": "make_payment"
+      "action": "make_payment",
+      "advance_policy": "any"
     },
     {
       "code": "end",

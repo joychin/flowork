@@ -34,7 +34,7 @@
     {
       "code": "days_route",
       "name": "天数分流",
-      "kind": "gateway",
+      "kind": "branch",
       "hooks": {
         "on_enter": null,
         "on_exit": null,
@@ -42,7 +42,7 @@
         "on_fail": null
       },
       "properties": {},
-      "gateway_kind": "exclusive"
+      "route_mode": "first_match"
     },
     {
       "code": "hr_sequential",
@@ -92,7 +92,8 @@
       "properties": {},
       "recipients": [
         "originator"
-      ]
+      ],
+      "advance_policy": "any"
     },
     {
       "code": "end",

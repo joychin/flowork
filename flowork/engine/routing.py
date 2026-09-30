@@ -1,10 +1,10 @@
-"""路由出口选择：节点出边的统一求值（基类=相容语义，排他网关特例）。
+"""路由出口选择：节点出边的统一求值（基类=命中的都走，命中即走为分支特例）。
 
-语义（对齐《节点抽象与扩展设计》四类出口，节点级）：
-- inclusive（默认，基类与 INCLUSIVE 网关）：无条件边全部激活 + 条件为真者激活；
-  两者皆空时走默认边（is_default）兜底。
-- exclusive（EXCLUSIVE 网关）：按声明顺序取第一条为真的条件边；全不中走默认边，
-  再不中把"非默认无条件边"视为兜底；仍无 → RouteError。
+语义（对齐 对标产品 四类出口，节点级）：
+- all_match（默认，基类与条件分支 route_mode=ALL_MATCH）：无条件边全部激活 +
+  条件为真者激活；两者皆空时走默认边（is_default）兜底。
+- first_match（条件分支 route_mode=FIRST_MATCH）：按声明顺序取第一条为真的条件边；
+  全不中走默认边，再不中把"非默认无条件边"视为兜底；仍无 → RouteError。
 """
 
 from __future__ import annotations
@@ -19,11 +19,11 @@ if TYPE_CHECKING:
 
 __all__ = ["select_outgoing"]
 
-Mode = Literal["inclusive", "exclusive"]
+Mode = Literal["all_match", "first_match"]
 
 
 def select_outgoing(
-    outgoing: list[SequenceFlow], variables: dict[str, Any], mode: Mode = "inclusive"
+    outgoing: list[SequenceFlow], variables: dict[str, Any], mode: Mode = "all_match"
 ) -> list[SequenceFlow]:
     """按模式计算应激活的出边集合。"""
     unconditional = [flow for flow in outgoing if flow.condition is None]
@@ -35,7 +35,7 @@ def select_outgoing(
         return unconditional if not defaults else list(unconditional)
 
     matched = _match_in_order(conditional, variables)
-    if mode == "exclusive":
+    if mode == "first_match":
         if matched:
             return matched[:1]
         if defaults:
@@ -43,9 +43,9 @@ def select_outgoing(
         fallback = [flow for flow in unconditional if not flow.is_default]
         if fallback:
             return fallback
-        raise RouteError("排他路由无匹配分支且未配置默认边")
+        raise RouteError("命中即走路由无匹配分支且未配置默认边")
 
-    # inclusive：无条件（非默认）+ 条件真者；皆空走默认边
+    # all_match：无条件（非默认）+ 条件真者；皆空走默认边
     plain = [flow for flow in unconditional if not flow.is_default]
     selected = plain + matched
     if selected:
