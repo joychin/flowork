@@ -1,0 +1,27 @@
+# flowork
+
+> 无头（headless）、可扩展的审批流程引擎。Token 令牌内核，BPMN 对齐命名，AI 友好三层设计。
+> Python >= 3.11，SQLite 起步，pip 库 + CLI 交付。
+
+## 仓库文档
+
+- [README.md](README.md): 项目简介、快速开始、扩展节点三步法
+- [AGENTS.md](AGENTS.md): 构建/测试命令、包结构地图、硬约束（改代码必读）
+- examples/: 3 个示例模板（串行审批 / 条件分支+会签 / 子流程）与 ai_review 自定义节点 demo
+
+## 设计文档（位于 ../../benchmark_refs/out/，按权威优先级）
+
+1. 本期建设边界.md：范围、排除清单、里程碑验收标准（冲突时以本文为准）
+2. Python流程引擎实施规划.md：里程碑排期与技术基线
+3. 命名规范.md：概念命名映射表与标识符风格（命名权威）
+4. 节点抽象与扩展设计.md：Spec/Behavior 分离、注册表、生命周期钩子
+5. AI友好设计.md：AI 参与流程 / MCP 操作引擎 / AGENTS.md 代码库友好
+6. 主流流程引擎借鉴分析.md：jBPM/Flowable/Camunda/Temporal 借鉴与不抄清单
+7. 流程引擎行为基准分析报告.md：对标产品 语义基准（clean-room 参考）
+
+## 关键入口
+
+- flowork/definitions/definition.py: ProcessDefinition + JSON 编解码
+- flowork/runtime/registry.py: NodeRegistry / HandlerRegistry（扩展机制核心）
+- flowork/runtime/behavior.py: NodeBehavior 生命周期契约
+- flowork/definitions/validator.py: 设计时校验器
