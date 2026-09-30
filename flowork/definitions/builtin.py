@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import Field
 
-from flowork.definitions.node import FlowNode, MultiInstance
+from flowork.definitions.node import FlowNode, MultiInstance, TimeoutPolicy
 
 if TYPE_CHECKING:
     from flowork.runtime.registry import NodeRegistry
@@ -86,6 +86,7 @@ class UserTaskSpec(FlowNode):
     auto_pass_previous: bool = False
     auto_pass_participated: bool = False
     no_participant_policy: str = "raise"  # raise / to_admins
+    timeout: TimeoutPolicy | None = None
 
 
 class ServiceTaskSpec(FlowNode):

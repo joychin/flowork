@@ -45,6 +45,9 @@ class ProcessEngine:
         self.runtime = RuntimeService(self)
         self.task = TaskService(self)
         self.history = HistoryService(self)
+        from flowork.jobs.scheduler import JobScheduler
+
+        self.jobs = JobScheduler(self)
 
     def execute(self, command: Callable[[CommandContext], T]) -> T:
         """经 Command 管线执行（拦截器：事务/乐观锁重试/事件落库/指标）。"""
@@ -52,13 +55,15 @@ class ProcessEngine:
 
     def kernel_for(self, ctx: CommandContext) -> Kernel:
         """为当前命令创建内核（事件写入命令缓冲，随事务落 outbox）。"""
-        return Kernel(
+        kernel = Kernel(
             config=self.config,
             registry=self.config.node_registry,
             handlers=self.handlers,
             events=ctx.events,
             engine=self,
         )
+        kernel.command_ctx = ctx
+        return kernel
 
     def register_handler(self, name: str, handler: Callable[..., None]) -> None:
         """注册声明式钩子/系统动作处理器（HandlerRegistry）。"""

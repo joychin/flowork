@@ -70,6 +70,7 @@ class Kernel:
         self.handlers = handlers
         self.engine = engine
         self.events = events  # 事件缓冲，由 HistoryInterceptor 统一落库
+        self.command_ctx: Any = None  # CommandContext（实例跟踪，引擎装配时绑定）
         self._definition_cache: dict[str, ProcessDefinition] = {}
 
     # —— 定义 ——
@@ -89,6 +90,8 @@ class Kernel:
 
     def record_event(self, name: str, payload: dict[str, Any], instance_id: str | None) -> None:
         self.events.append((name, payload, instance_id))
+        if instance_id and self.command_ctx is not None:
+            self.command_ctx.instances_touched.add(instance_id)
 
     # —— 令牌 ——
 
@@ -288,7 +291,7 @@ class Kernel:
     def complete_instance(
         self, session: Session, instance: ProcessInstanceRow, end_status: str
     ) -> None:
-        if instance.state == "running":
+        if instance.state in ("running", "suspended"):
             instance.state = end_status
             instance.finished_at = self.config.now()
             session.flush()
@@ -299,6 +302,9 @@ class Kernel:
                 {"end_status": end_status},
                 instance.id,
             )
+            from flowork.engine.subprocess_support import resume_parent_if_waiting
+
+            resume_parent_if_waiting(self, session, instance)
 
     def normal_flows(self, ctx: RuntimeNodeContext) -> list[SequenceFlow]:
         """默认路由出口：无条件且非默认的出边。"""

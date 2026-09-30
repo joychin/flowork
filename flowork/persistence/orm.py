@@ -178,3 +178,38 @@ class IdentityLinkRow(Base):
     user_id: Mapped[str] = mapped_column(String(64))
     link_type: Mapped[str] = mapped_column(String(16), default="candidate")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
+class JobRow(Base):
+    """定时/异步任务（timer / async / dead-letter 三级，含重试与退避）。"""
+
+    __tablename__ = "wf_job"
+    __table_args__ = (Index("ix_job_state_run_at", "state", "run_at"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    job_type: Mapped[str] = mapped_column(String(16), default="timer")
+    state: Mapped[str] = mapped_column(String(16), default="scheduled")
+    run_at: Mapped[datetime] = mapped_column(DateTime)
+    retry_count: Mapped[int] = mapped_column(Integer, default=0)
+    max_retries: Mapped[int] = mapped_column(Integer, default=3)
+    instance_id: Mapped[str] = mapped_column(String(36))
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    result_payload: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    last_error: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
+class IncidentRow(Base):
+    """流程事件（Incident）：需运维关注的异常，修复后实例恢复。"""
+
+    __tablename__ = "wf_incident"
+    __table_args__ = (Index("ix_incident_instance", "instance_id"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    instance_id: Mapped[str] = mapped_column(String(36))
+    message: Mapped[str] = mapped_column(Text)
+    error_class: Mapped[str] = mapped_column(String(100), default="")
+    state: Mapped[str] = mapped_column(String(16), default="open")  # open/resolved
+    resolution: Mapped[str] = mapped_column(Text, default="")  # resume/cancel
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

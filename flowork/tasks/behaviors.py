@@ -91,8 +91,9 @@ class UserTaskBehavior(NodeBehavior):
             )
         sequential = spec.multi_instance is not None and spec.multi_instance.mode == "sequential"
         targets = [resolution.todo[0]] if sequential and resolution.todo else resolution.todo
-        for assignee in targets:
-            ctx.create_task(assignee=assignee)
+        created = [ctx.create_task(assignee=assignee) for assignee in targets]
+        for task in created:
+            _schedule_timeout(ctx, spec, task.id)
         # 全员自动通过时立即完成节点
         if not resolution.todo:
             from flowork.persistence.orm import TokenRow
@@ -233,3 +234,30 @@ class CcTaskBehavior(NodeBehavior):
 
 class UnsupportedFlowError(FloworkError):
     """保留：M2 网关行为接管条件路由。"""
+
+
+def _schedule_timeout(ctx: RuntimeNodeContext, spec: UserTaskSpec, task_id: str) -> None:
+    """按节点超时配置创建 timer Job（到期由 JobScheduler.tick 执行策略）。"""
+    if spec.timeout is None:
+        return
+    import uuid
+    from datetime import timedelta
+
+    from flowork.persistence.orm import JobRow
+
+    run_at = ctx.kernel.config.now() + timedelta(minutes=spec.timeout.due_minutes)
+    ctx.session.add(
+        JobRow(
+            id=uuid.uuid4().hex,
+            job_type="timer",
+            state="scheduled",
+            run_at=run_at,
+            instance_id=ctx.instance.id,
+            payload={
+                "task_id": task_id,
+                "activity_code": spec.code,
+                "strategy": spec.timeout.strategy,
+                "due_minutes": spec.timeout.due_minutes,
+            },
+        )
+    )

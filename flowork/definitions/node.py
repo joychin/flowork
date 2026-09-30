@@ -49,6 +49,15 @@ class MultiInstance(BaseModel):
     disapprove_exit: str | None = None
 
 
+class TimeoutPolicy(BaseModel):
+    """超时策略：due_minutes 到期后执行 strategy（notify/auto_approve/auto_reject）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    due_minutes: int
+    strategy: str = "notify"
+
+
 class FlowNode(BaseModel):
     """所有流程节点定义的基类。
 

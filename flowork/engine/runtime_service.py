@@ -9,6 +9,7 @@ from flowork.engine.kernel import Kernel
 from flowork.engine.ops import CommandContext
 from flowork.errors import InstanceNotFoundError
 from flowork.events.domain import DomainEvent
+from flowork.persistence.orm import ProcessInstanceRow
 from flowork.runtime.lifecycle import TokenState
 from flowork.tasks.models import InstanceInfo
 
@@ -119,6 +120,116 @@ class RuntimeService:
             )
 
         self._engine.execute(_command)
+
+    # —— Incident（M5）——;
+
+    def _record_incident(self, instance_ids: list[str], error: Exception) -> None:
+        """引擎错误 → Incident 落库 + 实例挂起（独立命令）。"""
+
+        def _command(ctx: CommandContext) -> Any:
+            import uuid as _uuid
+
+            from flowork.persistence.orm import IncidentRow
+
+            kernel = self._engine.kernel_for(ctx)
+            for instance_id in instance_ids:
+                ctx.session.add(
+                    IncidentRow(
+                        id=_uuid.uuid4().hex,
+                        instance_id=instance_id,
+                        message=str(error),
+                        error_class=type(error).__name__,
+                    )
+                )
+                instance = ctx.session.get(ProcessInstanceRow, instance_id)
+                if instance is not None and instance.state == "running":
+                    instance.state = "suspended"
+                kernel.record_event(
+                    "incident_raised",
+                    {"message": str(error), "error_class": type(error).__name__},
+                    instance_id,
+                )
+
+        self._engine.execute(_command)
+
+    def list_incidents(self, instance_id: str | None = None) -> list[dict[str, Any]]:
+        """查询 Incident（open/resolved）。"""
+
+        def _command(ctx: CommandContext) -> Any:
+            from sqlalchemy import select
+
+            from flowork.persistence.orm import IncidentRow
+
+            stmt = select(IncidentRow).order_by(IncidentRow.created_at.desc())
+            if instance_id:
+                stmt = stmt.where(IncidentRow.instance_id == instance_id)
+            return [
+                {
+                    "id": row.id,
+                    "instance_id": row.instance_id,
+                    "message": row.message,
+                    "error_class": row.error_class,
+                    "state": row.state,
+                    "resolution": row.resolution,
+                }
+                for row in ctx.session.scalars(stmt)
+            ]
+
+        incidents: list[dict[str, Any]] = self._engine.execute(_command)
+        return incidents
+
+    def resolve_incident(
+        self, incident_id: str, action: str = "resume", actor: str = "admin"
+    ) -> None:
+        """修复 Incident：resume（恢复运行）/ cancel（取消实例）。"""
+
+        def _command(ctx: CommandContext) -> Any:
+            from flowork.persistence.orm import IncidentRow
+
+            incident = ctx.session.get(IncidentRow, incident_id)
+            if incident is None or incident.state != "open":
+                raise InstanceNotFoundError(f"Incident 不存在或已处理：{incident_id}")
+            if action == "resume":
+                instance = ctx.session.get(ProcessInstanceRow, incident.instance_id)
+                if instance is not None:
+                    instance.state = "running"
+            elif action == "cancel":
+                self.cancel_process(incident.instance_id, actor=actor, reason="incident:cancel")
+            else:
+                raise ValueError(f"未知修复动作：{action}（支持 resume/cancel）")
+            incident.state = "resolved"
+            incident.resolution = action
+
+        self._engine.execute(_command)
+
+    def move_token(self, token_id: str, target_activity: str, actor: str = "admin") -> str:
+        """管理员修复：把未完令牌直移到目标节点（返回新令牌 ID）。"""
+
+        def _command(ctx: CommandContext) -> Any:
+            from flowork.persistence.orm import TokenRow
+
+            token = ctx.session.get(TokenRow, token_id)
+            if token is None or token.state != "unfinished":
+                raise InstanceNotFoundError(f"令牌不存在或已完成：{token_id}")
+            instance = ctx.session.get(ProcessInstanceRow, token.instance_id)
+            assert instance is not None
+            kernel = self._engine.kernel_for(ctx)
+            definition = kernel.definition_of(ctx.session, instance)
+            target = definition.node(target_activity)
+            assert target is not None, f"目标节点不存在：{target_activity}"
+            kernel.cancel_token(ctx.session, token)
+            new_token = kernel.activate(
+                ctx.session, instance, target, source_activity_code=token.activity_code
+            )
+            kernel.record_event(
+                "token_moved_by_admin",
+                {"from": token.activity_code, "to": target_activity, "actor": actor},
+                instance.id,
+            )
+            return new_token.id
+
+        token_id_new: str = self._engine.execute(_command)
+        return token_id_new
 
     def get_instance(self, instance_id: str) -> InstanceInfo:
         def _command(ctx: CommandContext) -> Any:

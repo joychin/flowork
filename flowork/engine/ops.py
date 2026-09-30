@@ -12,6 +12,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, TypeVar
 
+from flowork.engine.kernel import EngineExecutionError
 from flowork.errors import FloworkError
 from flowork.events.domain import DomainEvent
 from flowork.persistence.orm import EventOutboxRow
@@ -34,11 +35,12 @@ class LockConflictError(FloworkError):
 
 @dataclass
 class CommandContext:
-    """一次命令的执行环境：会话 + 事件缓冲。"""
+    """一次命令的执行环境：会话 + 事件缓冲 + 触及的实例（Incident 归因）。"""
 
     engine: ProcessEngine
     session: Session
     events: list[tuple[str, dict[str, Any], str | None]] = field(default_factory=list)
+    instances_touched: set[str] = field(default_factory=set)
 
 
 def _flush_history(ctx: CommandContext) -> None:
@@ -61,6 +63,18 @@ def _flush_history(ctx: CommandContext) -> None:
     ctx.session.flush()
 
 
+def _record_incidents(
+    engine: ProcessEngine, ctx: CommandContext, error: EngineExecutionError
+) -> None:
+    """引擎执行错误 → 记录 Incident 并挂起实例（独立事务，失败不掩蔽原错误）。"""
+    if not ctx.instances_touched:
+        return
+    try:
+        engine.runtime._record_incident(list(ctx.instances_touched), error)
+    except Exception:
+        logger.exception("Incident 记录失败")
+
+
 def _run_once(engine: ProcessEngine, command: Callable[[CommandContext], T]) -> T:
     session = engine.session_factory()
     ctx = CommandContext(engine=engine, session=session, events=[])
@@ -70,6 +84,9 @@ def _run_once(engine: ProcessEngine, command: Callable[[CommandContext], T]) -> 
             result = command(ctx)
             _flush_history(ctx)
         return result
+    except EngineExecutionError as error:
+        _record_incidents(engine, ctx, error)  # 回滚后以独立事务记录 Incident
+        raise
     finally:
         session.close()
 

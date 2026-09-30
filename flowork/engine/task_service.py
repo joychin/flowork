@@ -143,6 +143,8 @@ class TaskService(TaskOpsMixin):
         if task.task_type == "assist":
             raise TaskNotAvailableError("协办任务请用 complete_assist 完成")
         instance = self._instance(ctx, task.instance_id)
+        if instance.state == "suspended":
+            raise TaskNotAvailableError("实例已挂起（Incident 待修复），不可办理")
         if task.assignee == "":
             raise TaskNotAvailableError("候选任务需先 claim 认领")
         if variables:
@@ -195,6 +197,8 @@ class TaskService(TaskOpsMixin):
         if task is None or task.state != "ready":
             raise TaskNotAvailableError(f"任务不可驳回（不存在或已处理）：{task_id}")
         instance = self._instance(ctx, task.instance_id)
+        if instance.state == "suspended":
+            raise TaskNotAvailableError("实例已挂起（Incident 待修复），不可驳回")
         if variables:
             instance.variables.update(variables)
         kernel = self._engine.kernel_for(ctx)
