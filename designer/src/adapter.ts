@@ -10,6 +10,18 @@ export type NodeData = {
   meta: NodeKindMeta | undefined
   issueLevel: 'error' | 'warning' | null
   pendingConnect: boolean
+  hit: boolean
+}
+
+/** dry-run 预演高亮:命中的节点与连线(由 store.dryRun 派生) */
+export type DryRunHit = { nodes: Set<string>; edges: Set<string> }
+
+export function hitFromSteps(steps: { node: string; via_source: string | null }[]): DryRunHit {
+  const nodes = new Set(steps.map((s) => s.node))
+  const edges = new Set(
+    steps.filter((s) => s.via_source).map((s) => edgeId(s.via_source!, s.node)),
+  )
+  return { nodes, edges }
 }
 
 const SIZE: Record<string, { w: number; h: number }> = {
@@ -59,6 +71,7 @@ export function toFlowElements(
   issues: ValidateIssue[],
   selected: { type: 'node' | 'edge'; id: string } | null,
   pendingConnect: string | null,
+  hit?: DryRunHit | null,
 ) {
   const nodeIssues = new Map<string, 'error' | 'warning'>()
   for (const issue of issues) {
@@ -86,6 +99,7 @@ export function toFlowElements(
         meta,
         issueLevel: nodeIssues.get(n.code) ?? null,
         pendingConnect: pendingConnect === n.code,
+        hit: hit?.nodes.has(n.code) ?? false,
       } satisfies NodeData,
       style: { width: size.w, height: size.h },
       draggable: true,
@@ -97,6 +111,7 @@ export function toFlowElements(
     const id = edgeId(f.source, f.target)
     const summary = conditionSummary(f)
     const isSelected = selected?.type === 'edge' && selected.id === id
+    const isHit = hit?.edges.has(id) ?? false
     return {
       id,
       source: f.source,
@@ -110,11 +125,28 @@ export function toFlowElements(
       labelShowBg: true,
       labelBgPadding: [6, 3] as [number, number],
       labelBgBorderRadius: 6,
-      labelBgStyle: { fill: isSelected ? '#2f6bff' : '#ffffff', fillOpacity: 0.95, stroke: isSelected ? '#2f6bff' : '#dbe3ef', strokeWidth: 1 },
-      labelStyle: { fill: isSelected ? '#ffffff' : '#475569', fontSize: 11, fontWeight: isSelected ? 600 : 400 },
-      style: { stroke: isSelected ? '#2f6bff' : '#9aa8bd', strokeWidth: isSelected ? 2.2 : 1.6 },
-      markerEnd: { type: 'arrowclosed' as const, width: 16, height: 16, color: isSelected ? '#2f6bff' : '#9aa8bd' },
-      data: { flow: f },
+      labelBgStyle: {
+        fill: isSelected ? '#2f6bff' : isHit ? '#16a34a' : '#ffffff',
+        fillOpacity: 0.95,
+        stroke: isSelected ? '#2f6bff' : isHit ? '#16a34a' : '#dbe3ef',
+        strokeWidth: 1,
+      },
+      labelStyle: {
+        fill: isSelected || isHit ? '#ffffff' : '#475569',
+        fontSize: 11,
+        fontWeight: isSelected || isHit ? 600 : 400,
+      },
+      style: {
+        stroke: isSelected ? '#2f6bff' : isHit ? '#16a34a' : '#9aa8bd',
+        strokeWidth: isSelected || isHit ? 2.2 : 1.6,
+      },
+      markerEnd: {
+        type: 'arrowclosed' as const,
+        width: 16,
+        height: 16,
+        color: isSelected ? '#2f6bff' : isHit ? '#16a34a' : '#9aa8bd',
+      },
+      data: { flow: f, hit: isHit },
     }
   })
 

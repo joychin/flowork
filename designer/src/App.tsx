@@ -8,6 +8,7 @@ import { Palette } from './components/Palette'
 import { Canvas } from './components/Canvas'
 import { RightPanel } from './components/RightPanel'
 import { PublishDialog } from './components/PublishDialog'
+import { DryRunDialog } from './components/DryRunDialog'
 
 function Toast() {
   const toast = useStore((s) => s.toast)
@@ -52,6 +53,7 @@ function Designer() {
         <RightPanel />
       </div>
       <PublishDialog />
+      <DryRunDialog />
     </div>
   )
 }

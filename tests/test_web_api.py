@@ -136,3 +136,149 @@ def test_seed_examples(tmp_path: Path) -> None:
         assert {"simple_approval", "countersign_branch", "call_activity_demo"} <= set(by_code)
         assert by_code["simple_approval"]["published_version"] == 1  # 首个示例自动发布
         assert by_code["countersign_branch"]["draft_version"] == 1
+
+
+# —— dry-run / 公式试算 / 语义 diff / 流程变量 ——
+
+
+def _branch_spec() -> dict:
+    return {
+        "code": "dryrun_demo",
+        "name": "预演示例",
+        "variables": [
+            {"name": "amount", "type": "number", "label": "金额", "sample": 20000},
+        ],
+        "nodes": [
+            {"code": "start", "name": "发起", "kind": "start"},
+            {"code": "branch", "name": "金额判断", "kind": "branch", "route_mode": "first_match"},
+            {"code": "big", "name": "大额审批", "kind": "user_task", "assignee": "u1"},
+            {"code": "small", "name": "小额审批", "kind": "user_task", "assignee": "u2"},
+            {"code": "end", "name": "结束", "kind": "end"},
+        ],
+        "flows": [
+            {"source": "start", "target": "branch"},
+            {
+                "source": "branch",
+                "target": "big",
+                "condition": {"groups": [[{"left": "amount", "operator": "gt", "right": 10000}]]},
+            },
+            {"source": "branch", "target": "small", "is_default": True},
+            {"source": "big", "target": "end"},
+            {"source": "small", "target": "end"},
+        ],
+    }
+
+
+def test_dry_run_first_match_and_default(client: TestClient) -> None:
+    spec = _branch_spec()
+
+    # 大额：命中 amount > 10000 的边
+    hit = client.post("/api/dry-run", json={"spec": spec, "variables": {"amount": 20000}}).json()
+    assert hit["ok"] is True
+    assert [step["node"] for step in hit["steps"]] == ["start", "branch", "big", "end"]
+    assert "命中即走" in hit["steps"][2]["via_reason"]
+
+    # 小额：条件不满足 → 默认边
+    miss = client.post("/api/dry-run", json={"spec": spec, "variables": {"amount": 100}}).json()
+    assert miss["ok"] is True
+    assert [step["node"] for step in miss["steps"]] == ["start", "branch", "small", "end"]
+    assert "默认边" in miss["steps"][2]["via_reason"]
+
+    # 未提供样例值：条件按不满足处理并告警
+    no_var = client.post("/api/dry-run", json={"spec": spec, "variables": {}}).json()
+    assert no_var["ok"] is True
+    assert any("amount" in w for w in no_var["warnings"])
+
+
+def test_dry_run_parallel_and_blocked(client: TestClient) -> None:
+    # 并行：start 两条无条件出边 → 两支都进路径
+    parallel = {
+        "code": "dryrun_parallel",
+        "name": "并行预演",
+        "nodes": [
+            {"code": "start", "name": "发起", "kind": "start"},
+            {"code": "a", "name": "左支", "kind": "user_task", "assignee": "u1"},
+            {"code": "b", "name": "右支", "kind": "user_task", "assignee": "u2"},
+            {"code": "end", "name": "结束", "kind": "end"},
+        ],
+        "flows": [
+            {"source": "start", "target": "a"},
+            {"source": "start", "target": "b"},
+            {"source": "a", "target": "end"},
+            {"source": "b", "target": "end"},
+        ],
+    }
+    result = client.post("/api/dry-run", json={"spec": parallel, "variables": {}}).json()
+    assert result["ok"] is True
+    assert [step["node"] for step in result["steps"]] == ["start", "a", "b", "end"]
+
+    # 阻断：分支条件不满足且无默认边 → blocked
+    spec = _branch_spec()
+    spec["flows"] = [f for f in spec["flows"] if f["target"] != "small"]
+    blocked = client.post("/api/dry-run", json={"spec": spec, "variables": {"amount": 100}}).json()
+    assert blocked["ok"] is False
+    assert any("无法路由" in b for b in blocked["blocked"])
+
+
+def test_formula_preview(client: TestClient) -> None:
+    ok = client.post(
+        "/api/formula/preview", json={"formula": "amount > 1000", "variables": {"amount": 2000}}
+    ).json()
+    assert ok == {"ok": True, "result": True}
+    bad = client.post(
+        "/api/formula/preview", json={"formula": "amount >", "variables": {"amount": 1}}
+    ).json()
+    assert bad["ok"] is False
+    assert "错误" in bad["error"]
+
+
+def test_diff_reports_changes(client: TestClient, spec02: dict) -> None:
+    client.put("/api/definitions/countersign_branch", json=spec02)
+    client.post("/api/definitions/countersign_branch/publish")
+
+    # 首次发布语义：从未发布过的 code
+    first = client.post("/api/definitions/fresh/diff", json=spec02).json()
+    assert first["first_publish"] is True and first["base_version"] is None
+
+    # 改名 + 改字段后的 diff
+    changed = json.loads(json.dumps(spec02))
+    changed["name"] = "改名后的流程"
+    for node in changed["nodes"]:
+        if node["kind"] == "user_task":
+            node["assignee"] = "u_changed"
+            break
+    url = "/api/definitions/countersign_branch/diff"
+    diff = client.post(url, json=changed).json()
+    assert diff["base_version"] == 1
+    assert diff["has_changes"] is True
+    details = " | ".join(c["detail"] for c in diff["changes"])
+    assert "流程名称" in details
+    assert "assignee" in details  # 变更条目按字段名报告
+
+    # 无差异
+    same = client.post("/api/definitions/countersign_branch/diff", json=spec02).json()
+    assert same["has_changes"] is False
+
+
+def test_variables_roundtrip_and_unknown_reference_warning(client: TestClient) -> None:
+    spec = _branch_spec()
+    saved = client.put("/api/definitions/dryrun_demo", json=spec)
+    assert saved.status_code == 200
+    got = client.get("/api/definitions/dryrun_demo").json()
+    assert got["spec"]["variables"][0]["name"] == "amount"
+
+    # 声明了变量、条件引用未声明变量 → 校验预警
+    warned = json.loads(json.dumps(spec))
+    warned["flows"][1]["condition"]["groups"] = [[{"left": "qty", "operator": "gt", "right": 5}]]
+    result = client.post("/api/validate", json=warned).json()
+    assert any(issue["rule"] == "condition.variable.unknown" for issue in result["issues"])
+
+    # 公式同样受检
+    warned_formula = json.loads(json.dumps(spec))
+    warned_formula["flows"][1]["condition"] = {"groups": [], "formula": "qty > 5"}
+    result_formula = client.post("/api/validate", json=warned_formula).json()
+    assert any(issue["rule"] == "condition.variable.unknown" for issue in result_formula["issues"])
+
+    # 全部引用都在声明内 → 无该预警
+    fine = client.post("/api/validate", json=spec).json()
+    assert not any(issue["rule"] == "condition.variable.unknown" for issue in fine["issues"])

@@ -2,7 +2,15 @@
 
 import { create } from 'zustand'
 import { api } from './api'
-import { edgeId, type DefinitionSummary, type NodeKindMeta, type Spec, type ValidateIssue } from './types'
+import {
+  edgeId,
+  type DefinitionSummary,
+  type DiffResult,
+  type DryRunResult,
+  type NodeKindMeta,
+  type Spec,
+  type ValidateIssue,
+} from './types'
 
 export type Selection = { type: 'node' | 'edge'; id: string } | null
 export type RightTab = 'props' | 'json' | 'issues'
@@ -29,6 +37,10 @@ type StoreState = {
   toast: string | null
   pendingConnect: string | null
   publishOpen: boolean
+  publishDiff: DiffResult | null
+  publishDiffLoading: boolean
+  dryRunOpen: boolean
+  dryRun: DryRunResult | null
   past: string[]
   future: string[]
 }
@@ -38,7 +50,10 @@ type StoreActions = {
   openDefinition: (code: string) => Promise<void>
   createDefinition: (code: string, name: string) => Promise<void>
   backToListing: () => void
-  mutate: (fn: (draft: Spec) => void, opts?: { history?: boolean; resave?: boolean }) => void
+  mutate: (
+    fn: (draft: Spec) => void,
+    opts?: { history?: boolean; resave?: boolean; keepDryRun?: boolean },
+  ) => void
   addNode: (kind: string, defaults: Record<string, unknown>, pos?: { x: number; y: number }) => void
   connect: (source: string, target: string) => void
   reconnectFlow: (oldSource: string, oldTarget: string, source: string, target: string) => void
@@ -52,6 +67,11 @@ type StoreActions = {
   saveNow: () => Promise<void>
   publish: () => Promise<void>
   setPublishOpen: (open: boolean) => void
+  loadPublishDiff: () => Promise<void>
+  openDryRun: () => void
+  closeDryRun: () => void
+  runDryRun: (variables: Record<string, unknown>) => Promise<boolean>
+  relayout: () => void
   undo: () => void
   redo: () => void
   showToast: (msg: string) => void
@@ -73,6 +93,10 @@ export const useStore = create<Store>((set, get) => ({
   toast: null,
   pendingConnect: null,
   publishOpen: false,
+  publishDiff: null,
+  publishDiffLoading: false,
+  dryRunOpen: false,
+  dryRun: null,
   past: [],
   future: [],
 
@@ -125,18 +149,19 @@ export const useStore = create<Store>((set, get) => ({
     set({ defInfo: null, spec: null, selection: null, pendingConnect: null })
   },
 
-  /** 所有写路径的唯一入口:structuredClone 后应用变更,历史/保存/校验自动跟上 */
+  /** 所有写路径的唯一入口:structuredClone 后应用变更,历史/保存/校验自动跟上。
+   *  keepDryRun: 纯布局类变更不使预演结果失效（路由拓扑未变）。 */
   mutate(fn, opts = {}) {
     const { spec } = get()
     if (!spec) return
-    const { history = true } = opts
+    const { history = true, keepDryRun = false } = opts
     const draft = structuredClone(spec)
     fn(draft)
     inferAdvancePolicies(draft)
     if (history) {
       set((s) => ({ past: [...s.past.slice(-49), JSON.stringify(spec)], future: [] }))
     }
-    set({ spec: draft })
+    set(keepDryRun ? { spec: draft } : { spec: draft, dryRun: null })
     if (opts.resave !== false) {
       scheduleSave(set, get)
       scheduleValidate(get)
@@ -246,10 +271,13 @@ export const useStore = create<Store>((set, get) => ({
   },
 
   setNodePos(code, x, y) {
-    // 拖拽不进历史(避免刷屏),但要触发保存
-    get().mutate((draft) => {
-      draft.layout[code] = { x, y }
-    }, { history: false })
+    // 拖拽不进历史(避免刷屏),但要触发保存;纯布局变更不失效预演
+    get().mutate(
+      (draft) => {
+        draft.layout[code] = { x, y }
+      },
+      { history: false, keepDryRun: true },
+    )
   },
 
   setRightTab(tab) {
@@ -325,6 +353,53 @@ export const useStore = create<Store>((set, get) => ({
 
   setPublishOpen(open) {
     set({ publishOpen: open })
+    if (open) void get().loadPublishDiff()
+  },
+
+  async loadPublishDiff() {
+    const { defInfo, spec } = get()
+    if (!defInfo || !spec) return
+    set({ publishDiffLoading: true })
+    try {
+      const diff = await api.diffDraft(defInfo.code, spec)
+      set({ publishDiff: diff, publishDiffLoading: false })
+    } catch {
+      set({ publishDiff: null, publishDiffLoading: false })
+    }
+  },
+
+  openDryRun() {
+    set({ dryRunOpen: true })
+  },
+
+  closeDryRun() {
+    // 关闭对话框但保留预演结果:画布高亮供继续对照,编辑配置时由 mutate 失效
+    set({ dryRunOpen: false })
+  },
+
+  async runDryRun(variables) {
+    const { spec } = get()
+    if (!spec) return false
+    try {
+      const result = await api.dryRun(spec, variables)
+      set({ dryRun: result })
+      if (result.ok) get().showToast(`预演完成:路径经过 ${result.steps.length} 个节点`)
+      else get().showToast('预演发现无法路由的分支 — 详见预演结果')
+      return true
+    } catch (err) {
+      get().showToast(`预演失败:${err instanceof Error ? err.message : String(err)}`)
+      return false
+    }
+  },
+
+  relayout() {
+    get().mutate(
+      (draft) => {
+        layoutSpec(draft, { force: true })
+      },
+      { keepDryRun: true },
+    )
+    get().showToast('已按分层重新排布全部节点')
   },
 
   undo() {
@@ -371,9 +446,15 @@ function inferAdvancePolicies(spec: Spec) {
 
 function ensureLayout(spec: Spec): Spec {
   spec.layout = spec.layout ?? {}
-  const missing = spec.nodes.filter((n) => !spec.layout[n.code])
-  if (!missing.length) return spec
-  // BFS 分层自动布局:层级 → x,同层内居中分布 → y
+  layoutSpec(spec, { force: false })
+  return spec
+}
+
+/** BFS 分层布局:层级 → x,同层内居中分布 → y。
+ *  force=false 只补缺失坐标(打开定义时);force=true 全部重排(「整理布局」按钮)。 */
+function layoutSpec(spec: Spec, { force }: { force: boolean }) {
+  if (!force && spec.nodes.every((n) => spec.layout[n.code])) return
+  if (force) spec.layout = {}
   const byCode = Object.fromEntries(spec.nodes.map((n) => [n.code, n]))
   const outgoing = Object.fromEntries(spec.nodes.map((n) => [n.code, [] as string[]]))
   for (const f of spec.flows) {
@@ -406,11 +487,9 @@ function ensureLayout(spec: Spec): Spec {
     const codes = levels.get(level)!
     const height = (codes.length - 1) * GAP_Y
     codes.forEach((code, i) => {
-      if (spec.layout[code]) return
       spec.layout[code] = { x: 60 + level * GAP_X, y: 200 - height / 2 + i * GAP_Y }
     })
   }
-  return spec
 }
 
 async function reloadListing(set: (partial: Partial<StoreState>) => void) {

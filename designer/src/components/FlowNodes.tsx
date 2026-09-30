@@ -109,7 +109,7 @@ export function RectNode({ data, selected }: NodeProps) {
   const onClick = useNodeClick(d)
   const actions = useNodeActions()
   return (
-    <div className={`fnode rect ${selected ? 'selected' : ''} ${d.pendingConnect ? 'connect-hint' : ''}`} style={{ borderColor: color }} onClick={onClick}>
+    <div className={`fnode rect ${selected ? 'selected' : ''} ${d.pendingConnect ? 'connect-hint' : ''} ${d.hit ? 'hit' : ''}`} style={{ borderColor: color }} onClick={onClick}>
       {handles(d, actions)}
       {issueBadge(d.issueLevel)}
       {d.kind === 'branch' && <BranchModeBadge mode={d.routeMode} />}
@@ -132,7 +132,7 @@ export function CircleNode({ data, selected }: NodeProps) {
   return (
     <div className="fnode-circle-wrap" onClick={onClick}>
       {handles(d, actions)}
-      <div className={`fnode circle ${selected ? 'selected' : ''} ${d.pendingConnect ? 'connect-hint' : ''}`} style={{ borderColor: color, background: `${color}1a`, color }}>
+      <div className={`fnode circle ${selected ? 'selected' : ''} ${d.pendingConnect ? 'connect-hint' : ''} ${d.hit ? 'hit' : ''}`} style={{ borderColor: color, background: `${color}1a`, color }}>
         <Icon name={d.meta?.ui?.icon} size={18} />
         {issueBadge(d.issueLevel)}
       </div>
@@ -143,22 +143,23 @@ export function CircleNode({ data, selected }: NodeProps) {
 
 export function SmoothEdge(props: EdgeProps) {
   const { id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, label, selected, markerEnd } = props
+  const hit = Boolean((props.data as { hit?: boolean } | undefined)?.hit)
   const [path, labelX, labelY] = getSmoothStepPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, borderRadius: 14 })
   const deleteEdge = useStore((s) => s.deleteSelection)
   const select = useStore((s) => s.select)
   return (
     <g onClick={() => select({ type: 'edge', id })} style={{ cursor: 'pointer' }}>
-      <BaseEdge id={id} path={path} markerEnd={markerEnd} style={{ stroke: selected ? '#2f6bff' : '#9aa8bd', strokeWidth: selected ? 2.2 : 1.6 }} />
+      <BaseEdge id={id} path={path} markerEnd={markerEnd} style={{ stroke: selected ? '#2f6bff' : hit ? '#16a34a' : '#9aa8bd', strokeWidth: selected || hit ? 2.2 : 1.6 }} />
       {label ? (
         <EdgeText
           x={labelX}
           y={labelY - 4}
           label={label}
-          labelStyle={{ fill: selected ? '#fff' : '#475569', fontSize: 11, fontWeight: selected ? 600 : 400 }}
+          labelStyle={{ fill: selected || hit ? '#fff' : '#475569', fontSize: 11, fontWeight: selected || hit ? 600 : 400 }}
           labelShowBg
           labelBgPadding={[6, 3]}
           labelBgBorderRadius={6}
-          labelBgStyle={{ fill: selected ? '#2f6bff' : '#fff', stroke: selected ? '#2f6bff' : '#dbe3ef', strokeWidth: 1 }}
+          labelBgStyle={{ fill: selected ? '#2f6bff' : hit ? '#16a34a' : '#fff', stroke: selected ? '#2f6bff' : hit ? '#16a34a' : '#dbe3ef', strokeWidth: 1 }}
         />
       ) : null}
       {selected && (

@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from enum import StrEnum
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, SerializeAsAny
 
@@ -23,6 +23,7 @@ __all__ = [
     "InvalidDefinitionData",
     "NodePosition",
     "ProcessDefinition",
+    "ProcessVariable",
     "dump_definition",
     "load_definition",
     "load_definition_file",
@@ -43,6 +44,23 @@ class NodePosition(BaseModel):
     y: float
 
 
+class ProcessVariable(BaseModel):
+    """发起时的流程变量声明（设计器级元数据）。
+
+    用途：设计器变量选择器的枚举来源、dry-run 取样默认值、
+    校验器对条件/公式未知变量引用的预警。运行时变量以实际 payload 为准，
+    声明不约束传参（多余或缺失的变量由引擎按条件求值行为处理）。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    type: Literal["string", "number", "boolean", "list"] = "string"
+    label: str = ""
+    # dry-run 取样默认值；类型与 type 一致（list 为任意 JSON 数组）
+    sample: Any = None
+
+
 class InvalidDefinitionData(DefinitionError):
     """定义数据不是合法的 JSON 对象。"""
 
@@ -59,6 +77,8 @@ class ProcessDefinition(BaseModel):
     # SerializeAsAny：节点按实例类型（Spec 子类）序列化，否则子类字段会在 dump 时丢失
     nodes: list[SerializeAsAny[FlowNode]] = Field(default_factory=list)
     flows: list[SequenceFlow] = Field(default_factory=list)
+    # 流程变量声明（设计器元数据；见 ProcessVariable）
+    variables: list[ProcessVariable] = Field(default_factory=list)
     # 设计器画布坐标（activity_code → {x,y}）；缺失时设计器自动布局
     layout: dict[str, NodePosition] = Field(default_factory=dict)
 

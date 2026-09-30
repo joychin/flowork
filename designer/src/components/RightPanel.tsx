@@ -1,10 +1,12 @@
-/** 右侧面板:属性(schema 驱动)/ Spec JSON / 校验 三个 Tab */
+/** 右侧面板:属性(schema 驱动、分组)/ Spec JSON / 校验 三个 Tab;空选态 = 流程设置 */
 
 import { useEffect, useMemo, useState } from 'react'
 import { OPERATOR_OPTIONS, conditionSummary } from '../adapter'
-import { parseEdgeId, type ConditionItem, type Spec } from '../types'
+import { parseEdgeId, type ConditionItem, type ProcessVariable, type Spec } from '../types'
+import { sampleVariables } from '../api'
+import { api } from '../api'
 import { useStore } from '../store'
-import { SchemaForm } from './SchemaForm'
+import { SchemaForm, requiredFieldErrors } from './SchemaForm'
 import { Icon } from './FlowNodes'
 
 export function RightPanel() {
@@ -39,26 +41,21 @@ function PropsTab() {
   const selection = useStore((s) => s.selection)
   const spec = useStore((s) => s.spec)
   const metaByKind = useStore((s) => s.metaByKind)
+  const issues = useStore((s) => s.issues)
   const mutate = useStore((s) => s.mutate)
   const deleteSelection = useStore((s) => s.deleteSelection)
+  const setRightTab = useStore((s) => s.setRightTab)
 
   if (!spec) return null
   if (!selection) {
-    return (
-      <div className="empty-hint">
-        <div className="empty-big">⬡</div>
-        点击画布中的节点或连线编辑属性。
-        <div className="empty-sub">
-          添加节点:点左侧调色板 · 建连线:点击节点右侧圆点,再点击目标节点
-        </div>
-      </div>
-    )
+    return <ProcessSettings spec={spec} />
   }
 
   if (selection.type === 'edge') {
     const { source, target } = parseEdgeId(selection.id)
     const flow = spec.flows.find((f) => f.source === source && f.target === target)
     if (!flow) return null
+    const edgeIssues = issues.filter((i) => i.flow === `${source}->${target}`)
     return (
       <div>
         <PanelHead
@@ -68,7 +65,9 @@ function PropsTab() {
           onDelete={deleteSelection}
           deleteLabel="删除连线"
         />
+        <IssueInline issues={edgeIssues} onOpen={() => setRightTab('issues')} />
         <EdgeForm
+          key={selection.id}
           flow={flow}
           onChange={(patch) => mutate((draft) => {
             const f = draft.flows.find((x) => x.source === source && x.target === target)
@@ -88,6 +87,10 @@ function PropsTab() {
   const schema = meta?.schema
   const exclude = [...(meta?.form_exclude ?? ['code', 'kind', 'hooks', 'properties']), 'advance_policy']
   const incoming = spec.flows.filter((f) => f.target === node.code)
+  const nodeIssues = issues.filter((i) => i.node === node.code)
+
+  // 字段级内联错误(必填空值),与引擎校验同源的 schema 计算
+  const fieldErrors = schema ? requiredFieldErrors(schema, schema.$defs ?? {}, node, exclude) : {}
 
   return (
     <div>
@@ -99,6 +102,7 @@ function PropsTab() {
         onDelete={deleteSelection}
         deleteLabel="删除节点"
       />
+      <IssueInline issues={nodeIssues} onOpen={() => setRightTab('issues')} />
       <div className="field">
         <div className="field-label"><span>activity_code</span></div>
         <input value={node.code} disabled />
@@ -118,6 +122,8 @@ function PropsTab() {
           schema={schema}
           defs={schema.$defs ?? {}}
           exclude={exclude}
+          groups={meta?.ui?.form_groups ?? null}
+          errors={fieldErrors}
           value={node}
           onChange={(next) => mutate((draft) => {
             const target = draft.nodes.find((n) => n.code === node.code)
@@ -129,6 +135,172 @@ function PropsTab() {
       )}
       <div className="panel-note">◉ 表单由 <b>{node.kind}Spec</b> 的 JSON Schema 自动生成 — 字段与引擎校验同源。</div>
     </div>
+  )
+}
+
+/* ── 校验问题内联(字段级反馈的节点/连线入口,可跳校验页) ── */
+
+function IssueInline({ issues, onOpen }: {
+  issues: { level: 'error' | 'warning'; rule: string; message: string }[]
+  onOpen: () => void
+}) {
+  if (!issues.length) return null
+  return (
+    <div className={`issue-inline ${issues.some((i) => i.level === 'error') ? 'bad' : 'warn'}`}>
+      {issues.slice(0, 3).map((issue, i) => (
+        <div key={i} className="issue-inline-row">
+          <span className="issue-badge">{issue.level === 'error' ? '!' : '⚠'}</span>
+          <span>{issue.message}</span>
+        </div>
+      ))}
+      {issues.length > 3 && (
+        <button className="issue-inline-more" onClick={onOpen}>还有 {issues.length - 3} 条,查看全部</button>
+      )}
+    </div>
+  )
+}
+
+/* ── 流程设置(空选态):流程名称 + 流程变量声明 ─────────── */
+
+const VAR_TYPE_LABELS: Record<ProcessVariable['type'], string> = {
+  string: '文本',
+  number: '数字',
+  boolean: '是/否',
+  list: '列表',
+}
+
+function ProcessSettings({ spec }: { spec: Spec }) {
+  const mutate = useStore((s) => s.mutate)
+  const openDryRun = useStore((s) => s.openDryRun)
+  const variables = spec.variables ?? []
+
+  const setVar = (index: number, patch: Partial<ProcessVariable>) => {
+    mutate((draft) => {
+      draft.variables = [...(draft.variables ?? [])]
+      draft.variables[index] = { ...draft.variables[index], ...patch }
+    })
+  }
+  const removeVar = (index: number) => {
+    mutate((draft) => {
+      draft.variables = (draft.variables ?? []).filter((_, i) => i !== index)
+    })
+  }
+  const addVar = () => {
+    mutate((draft) => {
+      draft.variables = [...(draft.variables ?? []), { name: '', type: 'string', label: '' }]
+    })
+  }
+
+  return (
+    <div>
+      <PanelHead icon="⌂" title="流程设置" code={spec.code} onDelete={() => {}} deleteLabel="" />
+      <div className="field">
+        <div className="field-label"><span>流程名称</span></div>
+        <input
+          value={spec.name}
+          placeholder="给流程起个名字"
+          onChange={(e) => mutate((draft) => { draft.name = e.target.value })}
+        />
+      </div>
+      <div className="field">
+        <div className="field-label">
+          <span>流程变量</span>
+          <span className="opt">条件/试运行/变量选择器的数据源</span>
+        </div>
+        {variables.length === 0 && (
+          <div className="empty-sub">
+            未声明变量。声明后:连线条件可直接点选变量,「试运行」用样例值预演路由。
+          </div>
+        )}
+        {variables.map((v, i) => (
+          <div key={i} className="var-row">
+            <input
+              className="var-name"
+              value={v.name}
+              placeholder="变量名(如 amount)"
+              onChange={(e) => setVar(i, { name: e.target.value.trim() })}
+            />
+            <select
+              value={v.type}
+              onChange={(e) => setVar(i, { type: e.target.value as ProcessVariable['type'] })}
+            >
+              {(Object.keys(VAR_TYPE_LABELS) as ProcessVariable['type'][]).map((t) => (
+                <option key={t} value={t}>{VAR_TYPE_LABELS[t]}</option>
+              ))}
+            </select>
+            <input
+              className="var-label"
+              value={v.label ?? ''}
+              placeholder="显示名(可选)"
+              onChange={(e) => setVar(i, { label: e.target.value })}
+            />
+            <VariableSampleInput value={v} onChange={(sample) => setVar(i, { sample })} />
+            <button className="mini-btn" title="删除变量" onClick={() => removeVar(i)}>×</button>
+          </div>
+        ))}
+        <button className="add-group" onClick={addVar}>＋ 添加变量</button>
+      </div>
+      <button className="btn btn-block" onClick={openDryRun}>▶ 试运行(按样例值预演路由)</button>
+      <div className="panel-note">
+        点击画布中的节点或连线编辑其属性;变量声明随 Spec 保存,与 Spec JSON Tab 同源。
+      </div>
+    </div>
+  )
+}
+
+/** 样例值输入:按变量类型给对应控件(string 文本 / number 数字 / boolean 下拉 / list JSON) */
+function VariableSampleInput({ value, onChange }: {
+  value: ProcessVariable
+  onChange: (sample: unknown) => void
+}) {
+  if (value.type === 'boolean') {
+    return (
+      <select
+        className="var-sample"
+        value={value.sample === true ? 'true' : 'false'}
+        onChange={(e) => onChange(e.target.value === 'true')}
+        title="试运行样例值"
+      >
+        <option value="false">否</option>
+        <option value="true">是</option>
+      </select>
+    )
+  }
+  if (value.type === 'number') {
+    return (
+      <input
+        className="var-sample"
+        type="number"
+        value={value.sample == null ? '' : String(value.sample)}
+        placeholder="样例值"
+        onChange={(e) => onChange(e.target.value === '' ? undefined : Number(e.target.value))}
+      />
+    )
+  }
+  if (value.type === 'list') {
+    return (
+      <input
+        className="var-sample"
+        value={Array.isArray(value.sample) ? JSON.stringify(value.sample) : ''}
+        placeholder='样例值,如 ["a","b"]'
+        onChange={(e) => {
+          try {
+            const parsed = JSON.parse(e.target.value)
+            onChange(Array.isArray(parsed) ? parsed : undefined)
+          } catch {
+            onChange(undefined)
+          }
+        }}
+      />
+    )
+  }
+  return (
+    <input
+      className="var-sample"
+      value={value.sample == null ? '' : String(value.sample)}
+      placeholder="样例值"
+      onChange={(e) => onChange(e.target.value === '' ? undefined : e.target.value)}
+    />
   )
 }
 
@@ -180,22 +352,66 @@ function PanelHead({ icon, color, title, code, onDelete, deleteLabel }: {
         <span className="panel-title" title={title}>{title}</span>
       </div>
       <div className="panel-code">{code}</div>
-      <button className="btn btn-delete" onClick={onDelete}>{deleteLabel}</button>
+      {deleteLabel && <button className="btn btn-delete" onClick={onDelete}>{deleteLabel}</button>}
     </div>
   )
 }
 
-/* ── 连线编辑:name / 默认边 / 条件组 / 公式 ───────────── */
+/* ── 连线编辑:name / 默认边 / 条件组 ⇄ 公式 双模式 ────── */
 
 function EdgeForm({ flow, onChange }: {
   flow: Spec['flows'][number]
   onChange: (patch: Partial<Spec['flows'][number]>) => void
 }) {
+  const spec = useStore((s) => s.spec)
+  const showToast = useStore((s) => s.showToast)
   const condition = flow.condition ?? { groups: [] }
   const groups = condition.groups ?? []
+  const [mode, setMode] = useState<'groups' | 'formula'>(condition.formula ? 'formula' : 'groups')
+  const [preview, setPreview] = useState<{ ok: boolean; text: string } | null>(null)
+
+  // 变量选项:声明的流程变量 + 其他连线条件里用过的变量(点选优先,手输兜底)
+  const variableOptions = useMemo(() => {
+    const out: { name: string; label: string }[] = []
+    for (const v of spec?.variables ?? []) {
+      out.push({ name: v.name, label: v.label || VAR_TYPE_LABELS[v.type] })
+    }
+    for (const f of spec?.flows ?? []) {
+      for (const g of f.condition?.groups ?? []) {
+        for (const item of g) {
+          const root = item.left.split('.')[0]
+          if (root && !out.some((o) => o.name === root)) out.push({ name: root, label: '已在使用' })
+        }
+      }
+    }
+    return out
+  }, [spec])
 
   const setGroups = (next: ConditionItem[][]) => {
-    onChange({ condition: next.length ? { groups: next } : null })
+    // 编辑条件组即放弃公式(引擎侧二选一)
+    onChange({ condition: next.length ? { groups: next, formula: null } : null })
+  }
+  const setFormula = (text: string) => {
+    onChange({ condition: text.trim() ? { groups: [], formula: text } : null })
+  }
+
+  const runPreview = async () => {
+    const formula = flow.condition?.formula ?? ''
+    if (!formula.trim()) {
+      setPreview({ ok: false, text: '先填写公式' })
+      return
+    }
+    try {
+      const result = await api.formulaPreview(formula, sampleVariables(spec?.variables))
+      setPreview(
+        result.ok
+          ? { ok: true, text: `按样例值试算结果:${result.result}` }
+          : { ok: false, text: result.error ?? '试算失败' },
+      )
+    } catch (err) {
+      setPreview({ ok: false, text: `试算失败:${err instanceof Error ? err.message : String(err)}` })
+    }
+    showToast('公式试算完成')
   }
 
   return (
@@ -220,65 +436,106 @@ function EdgeForm({ flow, onChange }: {
 
       <div className="field">
         <div className="field-label">
-          <span>条件组</span>
-          <span className="opt">组间 OR · 组内 AND</span>
+          <div className="mode-tabs" role="tablist">
+            <button role="tab" aria-selected={mode === 'groups'} className={mode === 'groups' ? 'on' : ''} onClick={() => setMode('groups')}>条件组</button>
+            <button role="tab" aria-selected={mode === 'formula'} className={mode === 'formula' ? 'on' : ''} onClick={() => setMode('formula')}>公式(高级)</button>
+          </div>
+          {mode === 'groups' && <span className="opt">组间 OR · 组内 AND</span>}
         </div>
-        {groups.map((group, gi) => (
-          <div key={gi} className="cond-group">
-            <div className="cond-group-head">
-              <span>组 {gi + 1}</span>
-              <button className="mini-btn" onClick={() => setGroups(groups.filter((_, i) => i !== gi))}>删除组</button>
+
+        {mode === 'formula' && (
+          <div className="formula-area">
+            <div className="field-desc">
+              公式与条件组二选一,切换编辑会清空另一侧。变量直接写名字;可用 and/or/not 比较运算。
             </div>
-            {group.map((item, ii) => (
-              <div key={ii} className="cond-row">
-                <input
-                  className="cond-left"
-                  value={item.left}
-                  placeholder="变量,如 amount"
-                  onChange={(e) => {
-                    const next = groups.map((g, i) => i !== gi ? g : g.map((it, j) => j !== ii ? it : { ...it, left: e.target.value }))
-                    setGroups(next)
-                  }}
-                />
-                <select
-                  value={item.operator}
-                  onChange={(e) => {
-                    const next = groups.map((g, i) => i !== gi ? g : g.map((it, j) => j !== ii ? it : { ...it, operator: e.target.value }))
-                    setGroups(next)
-                  }}
-                >
-                  {OPERATOR_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                </select>
-                {!['is_empty', 'is_not_empty'].includes(item.operator) && (
-                  <input
-                    className="cond-right"
-                    value={Array.isArray(item.right) ? (item.right as unknown[]).join(',') : String(item.right ?? '')}
-                    placeholder="值(逗号分隔列表)"
-                    onChange={(e) => {
-                      const raw = e.target.value
-                      const isList = ['in', 'not_in'].includes(item.operator)
-                      const right = isList ? raw.split(',').map((s) => s.trim()).filter(Boolean) : raw
-                      const asNum = !isList && raw !== '' && !Number.isNaN(Number(raw)) ? Number(raw) : right
-                      const next = groups.map((g, i) => i !== gi ? g : g.map((it, j) => j !== ii ? it : { ...it, right: asNum }))
-                      setGroups(next)
-                    }}
-                  />
-                )}
-                <button className="mini-btn" title="删除该条件" onClick={() => {
-                  const nextGroup = group.filter((_, j) => j !== ii)
-                  setGroups(groups.map((g, i) => i !== gi ? g : nextGroup).filter((g) => g.length))
-                }}>×</button>
+            <textarea
+              className="json-area"
+              rows={3}
+              spellCheck={false}
+              value={condition.formula ?? ''}
+              placeholder="如 amount > 10000 and level == 'L2'"
+              onChange={(e) => setFormula(e.target.value)}
+            />
+            <div className="formula-actions">
+              <datalist id="fk-cond-vars">
+                {variableOptions.map((o) => (
+                  <option key={o.name} value={o.name}>{o.label}</option>
+                ))}
+              </datalist>
+              <button className="mini-btn" type="button" onClick={() => void runPreview()}>▶ 按样例值试算</button>
+            </div>
+            {preview && (
+              <div className={`formula-preview ${preview.ok ? 'ok' : 'bad'}`}>{preview.text}</div>
+            )}
+          </div>
+        )}
+
+        {mode === 'groups' && (
+          <>
+            <datalist id="fk-cond-vars">
+              {variableOptions.map((o) => (
+                <option key={o.name} value={o.name}>{o.label}</option>
+              ))}
+            </datalist>
+            {groups.map((group, gi) => (
+              <div key={gi} className="cond-group">
+                <div className="cond-group-head">
+                  <span>组 {gi + 1}</span>
+                  <button className="mini-btn" onClick={() => setGroups(groups.filter((_, i) => i !== gi))}>删除组</button>
+                </div>
+                {group.map((item, ii) => (
+                  <div key={ii} className="cond-row">
+                    <input
+                      className="cond-left"
+                      value={item.left}
+                      placeholder="变量,点选或输入"
+                      list="fk-cond-vars"
+                      onChange={(e) => {
+                        const next = groups.map((g, i) => i !== gi ? g : g.map((it, j) => j !== ii ? it : { ...it, left: e.target.value }))
+                        setGroups(next)
+                      }}
+                    />
+                    <select
+                      value={item.operator}
+                      onChange={(e) => {
+                        const next = groups.map((g, i) => i !== gi ? g : g.map((it, j) => j !== ii ? it : { ...it, operator: e.target.value }))
+                        setGroups(next)
+                      }}
+                    >
+                      {OPERATOR_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                    </select>
+                    {!['is_empty', 'is_not_empty'].includes(item.operator) && (
+                      <input
+                        className="cond-right"
+                        value={Array.isArray(item.right) ? (item.right as unknown[]).join(',') : String(item.right ?? '')}
+                        placeholder="值(逗号分隔列表)"
+                        onChange={(e) => {
+                          const raw = e.target.value
+                          const isList = ['in', 'not_in'].includes(item.operator)
+                          const right = isList ? raw.split(',').map((s) => s.trim()).filter(Boolean) : raw
+                          const asNum = !isList && raw !== '' && !Number.isNaN(Number(raw)) ? Number(raw) : right
+                          const next = groups.map((g, i) => i !== gi ? g : g.map((it, j) => j !== ii ? it : { ...it, right: asNum }))
+                          setGroups(next)
+                        }}
+                      />
+                    )}
+                    <button className="mini-btn" title="删除该条件" onClick={() => {
+                      const nextGroup = group.filter((_, j) => j !== ii)
+                      setGroups(groups.map((g, i) => i !== gi ? g : nextGroup).filter((g) => g.length))
+                    }}>×</button>
+                  </div>
+                ))}
+                <button className="add-cond" onClick={() => {
+                  const next = groups.map((g, i) => i !== gi ? g : [...g, { left: '', operator: 'eq', right: '' }])
+                  setGroups(next)
+                }}>＋ 条件(AND)</button>
               </div>
             ))}
-            <button className="add-cond" onClick={() => {
-              const next = groups.map((g, i) => i !== gi ? g : [...g, { left: '', operator: 'eq', right: '' }])
-              setGroups(next)
-            }}>＋ 条件(AND)</button>
-          </div>
-        ))}
-        <button className="add-group" onClick={() => setGroups([...groups, [{ left: '', operator: 'gt', right: '' }]])}>
-          ＋ 添加条件组(OR)
-        </button>
+            <button className="add-group" onClick={() => setGroups([...groups, [{ left: '', operator: 'gt', right: '' }]])}>
+              ＋ 添加条件组(OR)
+            </button>
+          </>
+        )}
       </div>
     </div>
   )

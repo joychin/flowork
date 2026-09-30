@@ -385,3 +385,125 @@ input, select, textarea { font-family: inherit; }
 .advance-option .advance-title { font-size: 12px; font-weight: 600; color: #1e293b; }
 .advance-option.on .advance-title { color: #b45309; }
 .advance-option .advance-desc { font-size: 11px; color: #64748b; line-height: 1.5; }
+
+/* ── 属性面板:分组手风琴 / 必填星号 / 字段级错误 ── */
+.form-section { margin-bottom: 4px; }
+.form-section-head {
+  display: flex; align-items: center; gap: 6px; width: 100%; text-align: left;
+  height: 30px; border: none; background: transparent; font-size: 11.5px; font-weight: 600;
+  color: #475569; letter-spacing: 0.4px; padding: 0 2px;
+}
+.form-section-head:hover { color: var(--ink); }
+.form-section .chevron { color: #94a3b8; font-size: 10px; transition: transform 0.15s; }
+.form-section .chevron.open { transform: rotate(90deg); }
+.form-section-body { padding: 2px 2px 8px; }
+.req { color: var(--err); margin-right: 2px; font-weight: 700; }
+.field.has-error input, .field.has-error select, .field.has-error textarea { border-color: var(--err); }
+.field-error { color: var(--err); font-size: 11px; margin-top: 4px; }
+
+/* 校验问题内联(节点/连线面板顶部) */
+.issue-inline { border-radius: 8px; padding: 8px 10px; margin-bottom: 12px; font-size: 11.5px; line-height: 1.6; }
+.issue-inline.bad { background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; }
+.issue-inline.warn { background: #fffbeb; border: 1px solid #f0dca8; color: #92400e; }
+.issue-inline-row { display: flex; gap: 6px; align-items: flex-start; }
+.issue-inline-row + .issue-inline-row { margin-top: 4px; }
+.issue-inline .issue-badge { margin-top: 0; }
+.issue-inline .issue-badge { background: var(--err); }
+.issue-inline.warn .issue-badge { background: var(--warn); }
+.issue-inline-more {
+  margin-top: 5px; border: none; background: transparent; font-size: 11px;
+  color: inherit; text-decoration: underline; padding: 0;
+}
+
+/* 流程设置(空选态) */
+.btn-block { width: 100%; justify-content: center; margin-top: 4px; }
+.var-row {
+  display: flex; gap: 5px; align-items: center; margin-bottom: 6px;
+  border: 1px solid var(--line); border-radius: 8px; padding: 6px; background: #fafbfd;
+}
+.var-row input, .var-row select {
+  height: 26px; border: 1px solid var(--line); border-radius: 6px; padding: 0 6px;
+  font-size: 11.5px; min-width: 0; background: #fff;
+}
+.var-name { flex: 1.1; font-family: ui-monospace, Menlo, monospace; }
+.var-row select { flex: 0.8; }
+.var-label { flex: 1; }
+.var-sample { flex: 1.2; font-family: ui-monospace, Menlo, monospace; }
+.var-row .mini-btn { flex-shrink: 0; }
+
+/* ── 连线条件:模式切换 + 公式 ── */
+.mode-tabs { display: flex; gap: 2px; background: #f1f5f9; border-radius: 7px; padding: 2px; }
+.mode-tabs button {
+  height: 22px; padding: 0 10px; border: none; background: transparent; border-radius: 5px;
+  font-size: 11px; color: var(--sub);
+}
+.mode-tabs button.on { background: #fff; color: var(--ink); font-weight: 600; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08); }
+.formula-area textarea { margin-top: 2px; }
+.formula-actions { display: flex; margin-top: 6px; }
+.formula-preview {
+  margin-top: 7px; padding: 7px 9px; border-radius: 7px; font-size: 11.5px; line-height: 1.5;
+  font-family: ui-monospace, Menlo, monospace;
+}
+.formula-preview.ok { background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; }
+.formula-preview.bad { background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; }
+
+/* ── dry-run 预演 ── */
+.dryrun-modal { width: 460px; max-height: 82vh; overflow-y: auto; }
+.dryrun-vars-hint {
+  font-size: 11px; color: var(--sub); background: #f8fafc; border: 1px dashed var(--line);
+  border-radius: 7px; padding: 7px 9px; margin-bottom: 8px; line-height: 1.6;
+}
+.dryrun-vars-hint.warn { background: #fffbeb; border-color: #f0dca8; color: #92400e; }
+.dryrun-vars { margin-bottom: 4px; }
+.dryrun-result { margin-top: 14px; }
+.dryrun-verdict { font-size: 12.5px; font-weight: 600; margin-bottom: 8px; }
+.dryrun-verdict.ok { color: var(--ok); }
+.dryrun-verdict.bad { color: var(--err); }
+.dryrun-steps {
+  margin: 0 0 8px 4px; padding-left: 22px; display: flex; flex-direction: column; gap: 5px;
+}
+.dryrun-steps li { font-size: 12px; line-height: 1.5; }
+.dryrun-node { font-weight: 600; }
+.dryrun-reason {
+  margin-left: 7px; font-size: 10.5px; color: var(--ok); background: #f0fdf4;
+  border-radius: 5px; padding: 1px 6px;
+}
+.dryrun-note { margin-left: 6px; font-size: 10.5px; color: #94a3b8; }
+.dryrun-warning, .dryrun-blocked {
+  font-size: 11.5px; border-radius: 7px; padding: 7px 9px; margin-bottom: 6px; line-height: 1.55;
+}
+.dryrun-warning { background: #fffbeb; border: 1px solid #f0dca8; color: #92400e; }
+.dryrun-blocked { background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; }
+.dryrun-hint { font-size: 10.5px; color: #94a3b8; margin-top: 8px; line-height: 1.6; }
+
+/* 画布:预演命中样式 */
+.fnode.hit { border-color: var(--ok) !important; box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.18); }
+.fnode.circle.hit { box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.18); }
+
+/* ── 发布 diff ── */
+.diff-block {
+  border: 1px solid var(--line); border-radius: 9px; padding: 10px 12px; margin-top: 10px;
+  background: #fafbfd;
+}
+.diff-head { font-size: 11.5px; font-weight: 600; color: #334155; margin-bottom: 8px; }
+.diff-summary { font-size: 11.5px; color: var(--sub); line-height: 1.6; }
+.diff-summary.ok { color: var(--ok); }
+.diff-list { list-style: none; margin: 0; max-height: 200px; overflow-y: auto; }
+.diff-item {
+  display: flex; gap: 7px; align-items: flex-start; font-size: 11.5px; line-height: 1.6;
+  padding: 3px 0; color: #334155;
+}
+.diff-item + .diff-item { border-top: 1px dashed #eef2f7; }
+.diff-mark {
+  width: 16px; height: 16px; border-radius: 4px; flex-shrink: 0; font-size: 11px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center; margin-top: 1px;
+}
+.diff-mark.added { background: #dcfce7; color: #166534; }
+.diff-mark.removed { background: #fee2e2; color: #b91c1c; }
+.diff-mark.changed { background: #fef3c7; color: #92400e; }
+.diff-mark.info { background: #e2e8f0; color: var(--sub); }
+.diff-type {
+  flex-shrink: 0; font-size: 10px; color: #94a3b8; border: 1px solid var(--line);
+  border-radius: 4px; padding: 0 4px; margin-top: 2px; background: #fff;
+}
+.diff-detail { min-width: 0; }

@@ -130,7 +130,8 @@ def register_builtin_nodes(registry: NodeRegistry) -> None:
     """把全部内置类型注册进注册表（与自定义类型同一入口）。
 
     ``ui`` 为设计器展示元数据：name 显示名 / category 调色板分组 /
-    shape 画布形状 / color 主色 / palette 调色板预设项（含创建时的字段默认值）。
+    shape 画布形状 / color 主色 / palette 调色板预设项（含创建时的字段默认值）/
+    form_groups 属性面板分组（title + fields，collapsed 默认折叠）。
     """
     registry.register(
         KIND_START,
@@ -142,6 +143,7 @@ def register_builtin_nodes(registry: NodeRegistry) -> None:
             "color": "#16a34a",
             "icon": "play",
             "palette": [{"label": "开始", "defaults": {}}],
+            "form_groups": [{"title": "基础", "fields": ["name"]}],
         },
     )
     registry.register(
@@ -154,6 +156,7 @@ def register_builtin_nodes(registry: NodeRegistry) -> None:
             "color": "#dc2626",
             "icon": "stop",
             "palette": [{"label": "结束", "defaults": {}}],
+            "form_groups": [{"title": "基础", "fields": ["name"]}],
         },
     )
     registry.register(
@@ -169,6 +172,7 @@ def register_builtin_nodes(registry: NodeRegistry) -> None:
                 {"label": "条件分支", "defaults": {"route_mode": "first_match"}},
                 {"label": "条件分支(命中的都走)", "defaults": {"route_mode": "all_match"}},
             ],
+            "form_groups": [{"title": "基础", "fields": ["name", "route_mode"]}],
         },
     )
     registry.register(
@@ -190,6 +194,29 @@ def register_builtin_nodes(registry: NodeRegistry) -> None:
                     },
                 }
             ],
+            # 属性面板分组：常用在前，高级组默认折叠（渐进披露）
+            "form_groups": [
+                {"title": "基础", "fields": ["name"]},
+                {
+                    "title": "参与者",
+                    "fields": [
+                        "assignee",
+                        "assignees",
+                        "candidate_users",
+                        "candidate_groups",
+                        "no_participant_policy",
+                    ],
+                },
+                {"title": "多人审批", "fields": ["multi_instance"], "collapsed": True},
+                {
+                    "title": "自动通过",
+                    "fields": [
+                        "auto_pass_originator", "auto_pass_previous", "auto_pass_participated",
+                    ],
+                    "collapsed": True,
+                },
+                {"title": "驳回与超时", "fields": ["reject_target", "timeout"], "collapsed": True},
+            ],
         },
     )
     registry.register(
@@ -202,6 +229,10 @@ def register_builtin_nodes(registry: NodeRegistry) -> None:
             "color": "#7c3aed",
             "icon": "settings",
             "palette": [{"label": "服务任务", "defaults": {"action": ""}}],
+            "form_groups": [
+                {"title": "基础", "fields": ["name"]},
+                {"title": "动作", "fields": ["action", "params"]},
+            ],
         },
     )
     registry.register(
@@ -214,6 +245,15 @@ def register_builtin_nodes(registry: NodeRegistry) -> None:
             "color": "#475569",
             "icon": "box",
             "palette": [{"label": "子流程", "defaults": {"process_code": ""}}],
+            "form_groups": [
+                {"title": "基础", "fields": ["name"]},
+                {"title": "子流程", "fields": ["process_code", "is_synchronous"]},
+                {
+                    "title": "数据映射",
+                    "fields": ["input_mappings", "output_mappings"],
+                    "collapsed": True,
+                },
+            ],
         },
     )
     registry.register(
@@ -226,5 +266,9 @@ def register_builtin_nodes(registry: NodeRegistry) -> None:
             "color": "#0d9488",
             "icon": "mail",
             "palette": [{"label": "传阅", "defaults": {"recipients": []}}],
+            "form_groups": [
+                {"title": "基础", "fields": ["name"]},
+                {"title": "接收", "fields": ["recipients"]},
+            ],
         },
     )

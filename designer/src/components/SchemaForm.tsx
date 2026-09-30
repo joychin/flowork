@@ -1,10 +1,11 @@
 /**
  * SchemaForm:由 Spec 的 JSON Schema(pydantic 导出)递归生成表单。
  * 引擎侧字段变动,表单零代码跟进 —— 这是「schema 驱动」原则的落地。
+ * 分组(form_groups 元数据)+ 必填星号 + 字段级内联错误 = 渐进披露的信息架构。
  */
 
 import { useState } from 'react'
-import type { JSONSchema } from '../types'
+import type { FormGroup, JSONSchema } from '../types'
 
 /** 字段中文名(引擎 schema title 为英文时兜底) */
 const FIELD_LABELS: Record<string, string> = {
@@ -86,32 +87,97 @@ type Props = {
   defs: Record<string, JSONSchema>
   value: Record<string, unknown>
   exclude?: string[]
+  /** 属性面板分组元数据(registry ui.form_groups);未分组字段归入「其他」组 */
+  groups?: FormGroup[] | null
+  /** 字段级内联错误(key → 错误文案) */
+  errors?: Record<string, string>
   onChange: (next: Record<string, unknown>) => void
 }
 
-export function SchemaForm({ schema, defs, value, exclude = [], onChange }: Props) {
+/** 前端轻量必填校验:schema.required 中取值为空(空串/空数组/空对象/null)即报错。 */
+export function requiredFieldErrors(
+  schema: JSONSchema,
+  defs: Record<string, JSONSchema>,
+  value: Record<string, unknown>,
+  exclude: string[] = [],
+): Record<string, string> {
+  const { schema: target } = resolve(schema, defs)
+  if (!target?.properties) return {}
+  const out: Record<string, string> = {}
+  for (const key of target.required ?? []) {
+    if (exclude.includes(key)) continue
+    const v = value[key]
+    const empty =
+      v == null ||
+      v === '' ||
+      (Array.isArray(v) && v.length === 0) ||
+      (typeof v === 'object' && !Array.isArray(v) && Object.keys(v).length === 0)
+    if (empty) out[key] = '必填项不能为空'
+  }
+  return out
+}
+
+export function SchemaForm({ schema, defs, value, exclude = [], groups, errors, onChange }: Props) {
   const resolved = resolve(schema, defs)
   const target = resolved.schema
   if (!target?.properties) return <div className="form-empty">该节点类型无可配置字段</div>
 
-  const entries = Object.entries(target.properties).filter(([key]) => !exclude.includes(key))
   const required = new Set(target.required ?? [])
-
   const setField = (key: string, v: unknown) => onChange({ ...value, [key]: v })
+
+  const renderField = (key: string, sub: JSONSchema) => (
+    <SchemaField
+      key={key}
+      name={key}
+      schema={sub}
+      defs={defs}
+      required={required.has(key)}
+      error={errors?.[key]}
+      value={value[key]}
+      onChange={(v) => setField(key, v)}
+    />
+  )
+
+  // 无分组元数据:保持单列(自定义类型零配置兜底)
+  if (!groups?.length) {
+    const entries = Object.entries(target.properties).filter(([key]) => !exclude.includes(key))
+    return <div className="schema-form">{entries.map(([key, sub]) => renderField(key, sub))}</div>
+  }
+
+  // 有分组:按组渲染手风琴;未覆盖字段归入「其他」
+  const grouped = new Set(groups.flatMap((g) => g.fields))
+  const leftovers = Object.keys(target.properties).filter((key) => !exclude.includes(key) && !grouped.has(key))
+  const sections = [...groups]
+  if (leftovers.length) sections.push({ title: '其他', fields: leftovers })
 
   return (
     <div className="schema-form">
-      {entries.map(([key, sub]) => (
-        <SchemaField
-          key={key}
-          name={key}
-          schema={sub}
-          defs={defs}
-          required={required.has(key)}
-          value={value[key]}
-          onChange={(v) => setField(key, v)}
-        />
-      ))}
+      {sections
+        .filter((g) => g.fields.some((f) => !exclude.includes(f) && target.properties![f]))
+        .map((group) => (
+          <FormSection key={group.title} title={group.title} defaultCollapsed={group.collapsed ?? false}>
+            {group.fields
+              .filter((f) => !exclude.includes(f) && target.properties![f])
+              .map((key) => renderField(key, target.properties![key]))}
+          </FormSection>
+        ))}
+    </div>
+  )
+}
+
+function FormSection({ title, defaultCollapsed, children }: {
+  title: string
+  defaultCollapsed: boolean
+  children: React.ReactNode
+}) {
+  const [open, setOpen] = useState(!defaultCollapsed)
+  return (
+    <div className={`form-section ${open ? 'open' : 'closed'}`}>
+      <button type="button" className="form-section-head" onClick={() => setOpen(!open)}>
+        <span className={`chevron ${open ? 'open' : ''}`}>▸</span>
+        <span>{title}</span>
+      </button>
+      {open && <div className="form-section-body">{children}</div>}
     </div>
   )
 }
@@ -121,141 +187,128 @@ type FieldProps = {
   schema: JSONSchema
   defs: Record<string, JSONSchema>
   required: boolean
+  error?: string
   value: unknown
   onChange: (v: unknown) => void
 }
 
-function SchemaField({ name, schema, defs, required, value, onChange }: FieldProps) {
+function SchemaField({ name, schema, defs, required, error, value, onChange }: FieldProps) {
   const { schema: target, nullable } = resolve(schema, defs)
   if (!target) return null
   const label = fieldLabel(name, target)
   const desc = target.description
 
+  const labelRow = (extra?: React.ReactNode) => (
+    <div className="field-label">
+      <span>
+        {required && <span className="req" title="必填">*</span>}
+        {label}
+      </span>
+      {extra}
+    </div>
+  )
+
+  const wrap = (inner: React.ReactNode, extra?: React.ReactNode) => (
+    <div className={`field ${error ? 'has-error' : ''}`}>
+      {labelRow(extra)}
+      {inner}
+      {error && <div className="field-error">{error}</div>}
+    </div>
+  )
+
   // 可空对象(multi_instance / timeout):启用开关 + 嵌套表单
   if (target.type === 'object' && nullable && target.properties) {
     const enabled = value != null && typeof value === 'object'
-    return (
-      <div className="field">
-        <div className="field-label">
-          <span>{label}</span>
-          <button
-            type="button"
-            className={`switch ${enabled ? 'on' : ''}`}
-            onClick={() => onChange(enabled ? null : defaultsOf(target))}
-            aria-label={`启用${label}`}
-          >
-            {enabled ? '已启用' : '未启用'}
-          </button>
+    return wrap(
+      enabled && typeof value === 'object' && value != null && (
+        <div className="nested">
+          <SchemaForm schema={target} defs={defs} value={value as Record<string, unknown>} onChange={(v) => onChange(v)} />
         </div>
-        {enabled && typeof value === 'object' && value != null && (
-          <div className="nested">
-            <SchemaForm schema={target} defs={defs} value={value as Record<string, unknown>} onChange={(v) => onChange(v)} />
-          </div>
-        )}
-      </div>
+      ),
+      <button
+        type="button"
+        className={`switch ${enabled ? 'on' : ''}`}
+        onClick={() => onChange(enabled ? null : defaultsOf(target))}
+        aria-label={`启用${label}`}
+      >
+        {enabled ? '已启用' : '未启用'}
+      </button>,
     )
   }
 
   // 固定对象(不可空):直接嵌套
   if (target.type === 'object' && target.properties) {
-    return (
-      <div className="field">
-        <div className="field-label"><span>{label}</span></div>
-        <div className="nested">
-          <SchemaForm
-            schema={target}
-            defs={defs}
-            value={(value ?? {}) as Record<string, unknown>}
-            onChange={(v) => onChange(v)}
-          />
-        </div>
-      </div>
+    return wrap(
+      <div className="nested">
+        <SchemaForm
+          schema={target}
+          defs={defs}
+          value={(value ?? {}) as Record<string, unknown>}
+          onChange={(v) => onChange(v)}
+        />
+      </div>,
     )
   }
 
   // 任意键值对象(params / mappings):JSON 文本域
   if (target.type === 'object') {
-    return (
-      <div className="field">
-        <div className="field-label"><span>{label}</span></div>
-        <JsonArea value={value ?? {}} onChange={onChange} />
-      </div>
-    )
+    return wrap(<JsonArea value={value ?? {}} onChange={onChange} />)
   }
 
   // 数组:字符串标签输入
   if (target.type === 'array') {
     const items = Array.isArray(value) ? (value as unknown[]).map(String) : []
-    return (
-      <div className="field">
-        <div className="field-label">
-          <span>{label}</span>
-          {!required && <span className="opt">可选</span>}
-        </div>
-        <TagInput values={items} onChange={onChange} placeholder={desc ?? '输入后回车添加,点击标签删除'} />
-      </div>
+    return wrap(
+      <TagInput values={items} onChange={onChange} placeholder={desc ?? '输入后回车添加,点击标签删除'} />,
+      !required && <span className="opt">可选</span>,
     )
   }
 
   // 布尔:双态按钮
   if (target.type === 'boolean') {
     const on = value === true
-    return (
-      <div className="field">
-        <div className="field-label"><span>{label}</span></div>
-        <div className="bool-row">
-          <button type="button" className={`bool-btn ${on ? 'on' : ''}`} onClick={() => onChange(!on)}>
-            {on ? '是' : '否'}
-          </button>
-        </div>
-      </div>
+    return wrap(
+      <div className="bool-row">
+        <button type="button" className={`bool-btn ${on ? 'on' : ''}`} onClick={() => onChange(!on)}>
+          {on ? '是' : '否'}
+        </button>
+      </div>,
     )
   }
 
   // 枚举:下拉
   if (target.enum) {
-    return (
-      <div className="field">
-        <div className="field-label"><span>{label}</span></div>
-        <select value={String(value ?? target.default ?? target.enum[0])} onChange={(e) => onChange(e.target.value)}>
-          {target.enum.map((v) => (
-            <option key={String(v)} value={String(v)}>{enumLabel(name, v)}</option>
-          ))}
-        </select>
-      </div>
+    return wrap(
+      <select value={String(value ?? target.default ?? target.enum[0])} onChange={(e) => onChange(e.target.value)}>
+        {target.enum.map((v) => (
+          <option key={String(v)} value={String(v)}>{enumLabel(name, v)}</option>
+        ))}
+      </select>,
     )
   }
 
   // 数字
   if (target.type === 'integer' || target.type === 'number') {
-    return (
-      <div className="field">
-        <div className="field-label"><span>{label}</span></div>
-        <input
-          type="number"
-          value={value == null ? '' : String(value)}
-          placeholder={desc}
-          onChange={(e) => onChange(e.target.value === '' ? null : Number(e.target.value))}
-        />
-      </div>
+    return wrap(
+      <input
+        type="number"
+        value={value == null ? '' : String(value)}
+        placeholder={desc}
+        onChange={(e) => onChange(e.target.value === '' ? null : Number(e.target.value))}
+      />,
     )
   }
 
   // 可空字符串:输入 + 清空
   if (target.type === 'string') {
-    return (
-      <div className="field">
-        <div className="field-label">
-          <span>{label}</span>
-          {!required && <span className="opt">可选</span>}
-        </div>
-        <input
-          type="text"
-          value={value == null ? '' : String(value)}
-          placeholder={desc ?? (nullable ? '留空表示不设置' : '')}
-          onChange={(e) => onChange(e.target.value === '' ? null : e.target.value)}
-        />
-      </div>
+    return wrap(
+      <input
+        type="text"
+        value={value == null ? '' : String(value)}
+        placeholder={desc ?? (nullable ? '留空表示不设置' : '')}
+        onChange={(e) => onChange(e.target.value === '' ? null : e.target.value)}
+      />,
+      !required && <span className="opt">可选</span>,
     )
   }
 

@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING
@@ -32,6 +33,15 @@ __all__ = [
     "assert_valid",
     "validate_definition",
 ]
+
+# 公式白名单符号 + Python 关键字：变量引用检查时不算「未知变量」
+_FORMULA_NON_VARS = frozenset(
+    {
+        "abs", "min", "max", "round", "len", "sum", "str", "int", "float", "bool",
+        "True", "False", "None",
+        "and", "or", "not", "in", "is", "if", "else",
+    }
+)
 
 
 class IssueLevel(StrEnum):
@@ -272,6 +282,31 @@ def validate_definition(
                 warning(
                     "condition.missing_on_branch",
                     "分支节点出边未挂条件（仅默认边允许无条件）",
+                    flow=flow.flow_code(),
+                )
+
+    # —— 变量引用（声明了流程变量时启用：条件/公式引用未知变量 → 预警）——
+    declared = {v.name for v in definition.variables}
+    if declared:
+        for flow in flows:
+            condition = flow.condition
+            if condition is None:
+                continue
+            refs: set[str] = set()
+            for group in condition.groups:
+                for item in group:
+                    root = item.left.split(".", 1)[0]
+                    if root and root not in declared:
+                        refs.add(root)
+            if condition.formula:
+                for name in re.findall(r"[A-Za-z_][A-Za-z0-9_]*", condition.formula):
+                    if name not in declared and name not in _FORMULA_NON_VARS:
+                        refs.add(name)
+            if refs:
+                warning(
+                    "condition.variable.unknown",
+                    "条件引用了未声明的流程变量："
+                    f"{', '.join(sorted(refs))}（可在「流程设置」中声明）",
                     flow=flow.flow_code(),
                 )
 

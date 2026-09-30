@@ -12,6 +12,8 @@ export function Topbar() {
   const setRightTab = useStore((s) => s.setRightTab)
   const undo = useStore((s) => s.undo)
   const redo = useStore((s) => s.redo)
+  const relayout = useStore((s) => s.relayout)
+  const openDryRun = useStore((s) => s.openDryRun)
   const past = useStore((s) => s.past.length)
   const future = useStore((s) => s.future.length)
 
@@ -35,6 +37,8 @@ export function Topbar() {
       <div className="spacer" />
       <button className="icon-btn" onClick={undo} disabled={!past} title="撤销 (Ctrl+Z)">↺</button>
       <button className="icon-btn" onClick={redo} disabled={!future} title="重做 (Ctrl+Shift+Z)">↻</button>
+      <button className="icon-btn" onClick={relayout} title="按分层重新排布全部节点">⌗</button>
+      <button className="btn" onClick={openDryRun} title="按流程变量样例值预演路由,画布高亮路径">▶ 试运行</button>
       <span className={`save-state ${saveState}`}>
         {saveState === 'saving' && '保存中…'}
         {saveState === 'saved' && '✓ 已保存'}

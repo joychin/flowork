@@ -21,7 +21,7 @@ import {
   type OnReconnect,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { nodeSize, toFlowElements } from '../adapter'
+import { hitFromSteps, nodeSize, toFlowElements } from '../adapter'
 import { useStore } from '../store'
 import { edgeTypes, nodeTypes } from './FlowNodes'
 
@@ -39,6 +39,7 @@ function CanvasInner() {
   const issues = useStore((s) => s.issues)
   const selection = useStore((s) => s.selection)
   const pendingConnect = useStore((s) => s.pendingConnect)
+  const dryRun = useStore((s) => s.dryRun)
   const select = useStore((s) => s.select)
   const setNodePos = useStore((s) => s.setNodePos)
   const connect = useStore((s) => s.connect)
@@ -59,7 +60,8 @@ function CanvasInner() {
 
   const elements = useMemo(() => {
     if (!spec) return { nodes: [] as RFNode[], edges: [] }
-    const { nodes, edges } = toFlowElements(spec, metaByKind, issues, selection, pendingConnect)
+    const hit = dryRun ? hitFromSteps(dryRun.steps) : null
+    const { nodes, edges } = toFlowElements(spec, metaByKind, issues, selection, pendingConnect, hit)
     return {
       nodes: nodes.map((n) => {
         const live = livePositions.current[n.id]
@@ -67,7 +69,7 @@ function CanvasInner() {
       }),
       edges,
     }
-  }, [spec, metaByKind, issues, selection, pendingConnect])
+  }, [spec, metaByKind, issues, selection, pendingConnect, dryRun])
 
   const onNodeDrag = useCallback<OnNodeDrag>(
     (_event, node) => {

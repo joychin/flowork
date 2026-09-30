@@ -21,10 +21,13 @@ from flowork.definitions.definition import (
     load_definition,
     load_definition_file,
 )
+from flowork.definitions.dry_run import simulate_route
+from flowork.definitions.semantic_diff import semantic_diff
 from flowork.definitions.validator import InvalidDefinition, IssueLevel, ValidateIssue
 from flowork.engine.config import EngineConfig
 from flowork.engine.engine import ProcessEngine
 from flowork.errors import DefinitionError, FloworkError, UnknownNodeKind
+from flowork.expr.formula import evaluate_formula
 
 __all__ = ["app", "create_app"]
 
@@ -192,6 +195,62 @@ def create_app(db_file: str | Path | None = None, *, seed: bool = True) -> FastA
         issues = engine.repository.validate(definition)
         errors = sum(1 for issue in issues if issue.level == IssueLevel.ERROR)
         return {"ok": errors == 0, "issues": _issues_payload(issues)}
+
+    @app.post("/api/dry-run")
+    def dry_run(body: dict[str, Any]) -> dict[str, Any]:
+        """设计时路由预演（不落库、不执行节点行为）：按样例变量静态模拟条件路由。
+
+        body：``{"spec": 定义 JSON, "variables": {变量名: 样例值}}``。
+        """
+        definition = _parse_spec(engine, body.get("spec"))
+        raw_vars = body.get("variables")
+        variables = raw_vars if isinstance(raw_vars, dict) else {}
+        result = simulate_route(definition, variables)
+        return {
+            "ok": result.ok,
+            "steps": [
+                {
+                    "node": step.node,
+                    "via_source": step.via_source,
+                    "via_reason": step.via_reason,
+                    "note": step.note,
+                }
+                for step in result.steps
+            ],
+            "warnings": result.warnings,
+            "blocked": result.blocked,
+        }
+
+    @app.post("/api/formula/preview")
+    def formula_preview(body: dict[str, Any]) -> dict[str, Any]:
+        """公式试算：白名单沙箱中对样例变量求值，返回布尔结果或错误说明。"""
+        formula = str(body.get("formula") or "")
+        raw_vars = body.get("variables")
+        variables = raw_vars if isinstance(raw_vars, dict) else {}
+        try:
+            return {"ok": True, "result": evaluate_formula(formula, dict(variables))}
+        except FloworkError as exc:
+            return {"ok": False, "error": str(exc)}
+
+    @app.post("/api/definitions/{code}/diff")
+    def diff_with_published(code: str, body: dict[str, Any]) -> dict[str, Any]:
+        """把请求体里的 Spec 与最新已发布版本做语义 diff（layout/版本号忽略）。
+
+        无已发布版本时返回 first_publish=true（变更清单留空，前端按全量展示）。
+        """
+        definition = _parse_spec(engine, body)
+        try:
+            base_json = engine.repository.get_definition_json(code)
+        except FloworkError:
+            return {"base_version": None, "first_publish": True, "has_changes": True, "changes": []}
+        base = load_definition(base_json, engine.config.node_registry)
+        changes = semantic_diff(base, definition)
+        return {
+            "base_version": base.version,
+            "first_publish": False,
+            "has_changes": bool(changes),
+            "changes": changes,
+        }
 
     if jobs_enabled:
 
