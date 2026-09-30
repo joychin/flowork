@@ -1,4 +1,6 @@
-"""M2 语义测试：条件分支（命中即走/命中的都走）、同时进行与等齐、公式沙箱、串行会签、驳回回退、死循环。"""
+"""M2 语义测试：条件分支（命中即走/命中的都走）、同时进行与等齐、公式沙箱、串行会签、
+驳回回退、死循环。
+"""
 
 from __future__ import annotations
 
@@ -129,7 +131,8 @@ def test_parallel_split_and_join(engine: ProcessEngine):
     assert set(tasks) == {"hr", "it"}  # 同时进行（无需分流节点）
 
     engine.task.complete(tasks["hr"].id, actor="u_hr")
-    assert [t.activity_code for t in engine.task.list_tasks(instance_id=instance_id)] == ["it"]  # 未到齐
+    remaining = [t.activity_code for t in engine.task.list_tasks(instance_id=instance_id)]
+    assert remaining == ["it"]  # 未到齐
     assert engine.runtime.get_instance(instance_id).state == "running"
     final_tokens = [t for t in engine.history.tokens(instance_id) if t.activity_code == "final"]
     assert final_tokens == []  # 推进门拦截：未建令牌
@@ -171,7 +174,8 @@ def test_all_match_race_cancels_sibling_branch(engine: ProcessEngine):
     instance_id = engine.runtime.start_process("inc", start_user="u_user", variables={"x": 1})
     complete_of(engine, instance_id, "u_user")
     # 两个条件同时成立 → 双臂同时待办
-    assert {t.activity_code for t in engine.task.list_tasks(instance_id=instance_id)} == {"fast", "slow"}
+    active = {t.activity_code for t in engine.task.list_tasks(instance_id=instance_id)}
+    assert active == {"fast", "slow"}
 
     result = engine.task.complete(
         engine.task.list_tasks(instance_id=instance_id, assignee="u_fast")[0].id, actor="u_fast"

@@ -14,13 +14,15 @@ from sqlalchemy import JSON, Boolean, DateTime, Float, Index, Integer, String, T
 from sqlalchemy.ext.mutable import MutableDict
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
+from flowork.clock import utc_now
+
 
 class Base(DeclarativeBase):
     pass
 
 
 def _now() -> datetime:
-    return datetime.now()
+    return utc_now()
 
 
 class ProcessDefinitionRow(Base):

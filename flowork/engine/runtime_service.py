@@ -109,6 +109,7 @@ class RuntimeService:
 
         def _command(ctx: CommandContext) -> Any:
             instance = _load(ctx, instance_id)
+            ctx.touch(instance)
             kernel = self._engine.kernel_for(ctx)
             states = (TokenState.UNFINISHED.value,)
             for token in kernel.tokens(ctx.session, instance_id, states=states):
@@ -124,32 +125,35 @@ class RuntimeService:
 
     def _record_incident(self, instance_ids: list[str], error: Exception) -> None:
         """引擎错误 → Incident 落库 + 实例挂起（独立命令）。"""
+        self._engine.execute(lambda ctx: self._record_incident_in_ctx(ctx, instance_ids, error))
 
-        def _command(ctx: CommandContext) -> Any:
-            import uuid as _uuid
+    def _record_incident_in_ctx(
+        self, ctx: CommandContext, instance_ids: list[str], error: Exception
+    ) -> None:
+        """同事务记录 Incident（供命令管线与调度器等复合命令复用）。"""
 
-            from flowork.persistence.orm import IncidentRow
+        import uuid as _uuid
 
-            kernel = self._engine.kernel_for(ctx)
-            for instance_id in instance_ids:
-                ctx.session.add(
-                    IncidentRow(
-                        id=_uuid.uuid4().hex,
-                        instance_id=instance_id,
-                        message=str(error),
-                        error_class=type(error).__name__,
-                    )
+        from flowork.persistence.orm import IncidentRow
+
+        kernel = self._engine.kernel_for(ctx)
+        for instance_id in instance_ids:
+            ctx.session.add(
+                IncidentRow(
+                    id=_uuid.uuid4().hex,
+                    instance_id=instance_id,
+                    message=str(error),
+                    error_class=type(error).__name__,
                 )
-                instance = ctx.session.get(ProcessInstanceRow, instance_id)
-                if instance is not None and instance.state == "running":
-                    instance.state = "suspended"
-                kernel.record_event(
-                    "incident_raised",
-                    {"message": str(error), "error_class": type(error).__name__},
-                    instance_id,
-                )
-
-        self._engine.execute(_command)
+            )
+            instance = ctx.session.get(ProcessInstanceRow, instance_id)
+            if instance is not None and instance.state == "running":
+                instance.state = "suspended"
+            kernel.record_event(
+                "incident_raised",
+                {"message": str(error), "error_class": type(error).__name__},
+                instance_id,
+            )
 
     def list_incidents(self, instance_id: str | None = None) -> list[dict[str, Any]]:
         """查询 Incident（open/resolved）。"""
@@ -191,6 +195,7 @@ class RuntimeService:
             if action == "resume":
                 instance = ctx.session.get(ProcessInstanceRow, incident.instance_id)
                 if instance is not None:
+                    ctx.touch(instance)
                     instance.state = "running"
             elif action == "cancel":
                 self.cancel_process(incident.instance_id, actor=actor, reason="incident:cancel")
@@ -212,6 +217,7 @@ class RuntimeService:
                 raise InstanceNotFoundError(f"令牌不存在或已完成：{token_id}")
             instance = ctx.session.get(ProcessInstanceRow, token.instance_id)
             assert instance is not None
+            ctx.touch(instance)
             kernel = self._engine.kernel_for(ctx)
             definition = kernel.definition_of(ctx.session, instance)
             target = definition.node(target_activity)

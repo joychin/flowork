@@ -8,7 +8,6 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
@@ -62,12 +61,22 @@ def _parse_spec(engine: ProcessEngine, data: Any) -> ProcessDefinition:
 
 
 def create_app(db_file: str | Path | None = None, *, seed: bool = True) -> FastAPI:
-    """创建应用。``db_file`` 缺省取 FLOWORK_DB 环境变量，再缺省 designer.db。"""
+    """创建应用。``db_file`` 缺省取 FLOWORK_DB 环境变量，再缺省 designer.db。
+
+    超时 Job 调度默认随应用启动（多副本部署也安全：tick 内 CAS 认领，
+    同一 Job 只会被一个副本执行）。环境变量：
+
+    - ``FLOWORK_JOBS=off`` 关闭内置调度（改用外部定时器调 ``flowork tick``）；
+    - ``FLOWORK_JOB_INTERVAL`` 轮询间隔秒数（默认 30）。
+    """
     import os
 
     db_path = Path(db_file or os.environ.get("FLOWORK_DB", "designer.db"))
     engine = ProcessEngine(EngineConfig(db_file=db_path))
     app = FastAPI(title="flowork designer API", version="0.1.0")
+    app.state.engine = engine
+    jobs_enabled = os.environ.get("FLOWORK_JOBS", "on").lower() not in ("off", "0", "false")
+    job_interval = int(os.environ.get("FLOWORK_JOB_INTERVAL", "30"))
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
@@ -184,8 +193,15 @@ def create_app(db_file: str | Path | None = None, *, seed: bool = True) -> FastA
         errors = sum(1 for issue in issues if issue.level == IssueLevel.ERROR)
         return {"ok": errors == 0, "issues": _issues_payload(issues)}
 
+    if jobs_enabled:
+
+        @app.on_event("startup")
+        def _start_jobs() -> None:
+            engine.jobs.start(interval_seconds=job_interval)
+
     @app.on_event("shutdown")
     def _shutdown() -> None:
+        engine.jobs.stop()
         engine.close()
 
     if seed:

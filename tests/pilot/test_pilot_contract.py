@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from flowork.definitions.builtin import RouteMode
 from flowork.definitions.builder import FlowBuilder
+from flowork.definitions.builtin import RouteMode
 from flowork.engine.engine import ProcessEngine
 from tests.pilot.conftest import activities_of, complete_of, reject_of
 

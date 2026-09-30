@@ -91,7 +91,12 @@ class FlowBuilder:
         return self._add_node(code, "cc_task", name, {"recipients": recipients or [], **fields})
 
     def branch(
-        self, code: str, name: str = "", *, route_mode: RouteMode = RouteMode.FIRST_MATCH, **fields: Any
+        self,
+        code: str,
+        name: str = "",
+        *,
+        route_mode: RouteMode = RouteMode.FIRST_MATCH,
+        **fields: Any,
     ) -> FlowBuilder:
         """条件分支节点：出边挂条件，route_mode 决定命中即走 / 命中的都走。
 

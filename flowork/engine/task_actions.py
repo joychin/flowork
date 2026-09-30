@@ -65,6 +65,7 @@ class TaskOpsMixin:
         task = ctx.session.get(TaskRow, task_id)
         if task is None or task.state != "ready":
             raise TaskNotAvailableError(f"任务不可认领（不存在或已处理）：{task_id}")
+        ctx.touch(self._instance(ctx, task.instance_id))
         candidates = {
             row.user_id
             for row in ctx.session.scalars(
@@ -91,6 +92,7 @@ class TaskOpsMixin:
         task = ctx.session.get(TaskRow, task_id)
         if task is None or task.state != "ready" or task.assignee != user:
             raise TaskNotAvailableError(f"任务不可取消认领：{task_id}")
+        ctx.touch(self._instance(ctx, task.instance_id))
         task.assignee = ""
         ctx.session.flush()
         return self._task_info(task)
@@ -108,6 +110,7 @@ class TaskOpsMixin:
         self, ctx: CommandContext, task_id: str, to_user: str, actor: str, comment: str
     ) -> TaskInfo:
         task = self._ready_task(ctx, task_id)
+        ctx.touch(self._instance(ctx, task.instance_id))
         kernel = self._engine.kernel_for(ctx)
         self._emit_task_event(ctx, DomainEvent.TASK_TRANSFERRED, task, actor)
         new_task = self._clone_task(ctx, task, assignee=to_user, root=task.root_task_id or task.id)
@@ -129,6 +132,7 @@ class TaskOpsMixin:
         self, ctx: CommandContext, task_id: str, users: list[str], actor: str, comment: str
     ) -> list[TaskInfo]:
         task = self._ready_task(ctx, task_id)
+        ctx.touch(self._instance(ctx, task.instance_id))
         kernel = self._engine.kernel_for(ctx)
         created = [self._clone_task(ctx, task, assignee=user, task_type="assist") for user in users]
         kernel.record_event(
@@ -143,6 +147,7 @@ class TaskOpsMixin:
 
         def _command(ctx: CommandContext) -> None:
             task = self._ready_task(ctx, task_id, expected_type="assist")
+            ctx.touch(self._instance(ctx, task.instance_id))
             kernel = self._engine.kernel_for(ctx)
             kernel.archive_task(ctx.session, task, outcome="assist", comment=comment, actor=actor)
 
@@ -170,15 +175,12 @@ class TaskOpsMixin:
         """标记传阅件已读。"""
 
         def _command(ctx: CommandContext) -> None:
-            import uuid as _uuid
-            from datetime import datetime as _dt
-
             row = ctx.session.get(CcItemRow, cc_id)
             if row is None or row.recipient != user:
                 raise TaskNotAvailableError(f"传阅件不存在或不属于 {user}：{cc_id}")
+            ctx.touch(self._instance(ctx, row.instance_id))
             row.is_read = True
-            row.read_at = _dt.now()
-            _ = _uuid  # 保持导入对称
+            row.read_at = ctx.engine.config.now()
 
         self._engine.execute(_command)
 
@@ -207,6 +209,7 @@ class TaskOpsMixin:
         # 名单口径对齐：节点原名单 ∪ 已有手动名单 ∪ 新人 → item_count 与可办名单一致
         kernel = self._engine.kernel_for(ctx)
         instance = self._instance(ctx, task.instance_id)
+        ctx.touch(instance)
         node = kernel.definition_of(ctx.session, instance).node(task.activity_code)
         base_participants: list[str] = []
         if isinstance(node, UserTaskSpec):
@@ -245,6 +248,7 @@ class TaskOpsMixin:
         instance = self._instance(ctx, history.instance_id)
         if instance.state != "running":
             raise TaskNotAvailableError("实例已结束，不可撤回")
+        ctx.touch(instance)
         kernel = self._engine.kernel_for(ctx)
         # 取消该办理之后产生的全部未完令牌（简化：撤回即回退到当前节点）
         for token in kernel.tokens(ctx.session, instance.id, states=(TokenState.UNFINISHED.value,)):
@@ -281,6 +285,7 @@ class TaskOpsMixin:
 
         def _command(ctx: CommandContext) -> str:
             instance = self._instance(ctx, instance_id)
+            ctx.touch(instance)
             kernel = self._engine.kernel_for(ctx)
             node = kernel.definition_of(ctx.session, instance).node(activity_code)
             assert node is not None, f"节点不存在：{activity_code}"
@@ -299,6 +304,7 @@ class TaskOpsMixin:
         """管理员取消指定节点的全部未完令牌。"""
 
         def _command(ctx: CommandContext) -> None:
+            ctx.touch(self._instance(ctx, instance_id))
             kernel = self._engine.kernel_for(ctx)
             tokens = kernel.tokens(ctx.session, instance_id, states=(TokenState.UNFINISHED.value,))
             for token in tokens:
@@ -317,6 +323,7 @@ class TaskOpsMixin:
 
         def _command(ctx: CommandContext) -> None:
             instance = self._instance(ctx, instance_id)
+            ctx.touch(instance)
             kernel = self._engine.kernel_for(ctx)
             for token in kernel.tokens(
                 ctx.session, instance_id, states=(TokenState.UNFINISHED.value,)

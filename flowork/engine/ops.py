@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from sqlalchemy.orm import Session
 
     from flowork.engine.engine import ProcessEngine
+    from flowork.persistence.orm import ProcessInstanceRow
 
 __all__ = ["CommandContext", "LockConflictError", "execute_command"]
 
@@ -40,6 +41,15 @@ class CommandContext:
     session: Session
     events: list[tuple[str, dict[str, Any], str | None]] = field(default_factory=list)
     instances_touched: set[str] = field(default_factory=set)
+
+    def touch(self, instance: ProcessInstanceRow) -> None:
+        """写命令统一守卫：触碰实例行（updated_at），提交时触发 version 乐观锁。
+
+        所有修改实例域内数据（任务/令牌/传阅/Job 副作用）的写命令都必须调用，
+        使并发写在同一实例行上串行化；同时纳入 Incident 归因集合。
+        """
+        instance.updated_at = self.engine.config.now()
+        self.instances_touched.add(instance.id)
 
 
 def _flush_history(ctx: CommandContext) -> None:

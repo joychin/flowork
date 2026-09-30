@@ -99,7 +99,8 @@ class NodeBehavior:
         from flowork.engine.routing import select_outgoing
 
         definition = ctx.kernel.definition_of(ctx.session, ctx.instance)  # type: ignore[attr-defined]
-        return select_outgoing(definition.outgoing(ctx.node.code), dict(ctx.variables), mode="all_match")
+        outgoing = definition.outgoing(ctx.node.code)
+        return select_outgoing(outgoing, dict(ctx.variables), mode="all_match")
 
 
 class InMemoryNodeContext(NodeContext):

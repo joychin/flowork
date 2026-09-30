@@ -33,6 +33,15 @@ def init(db: Path = typer.Option(Path("flowork.db"), help="SQLite 数据库文�
 
 
 @app.command()
+def tick(db: Path = typer.Option(Path("flowork.db"), help="SQLite 数据库文件")) -> None:
+    """执行全部到期超时 Job（外部定时器形态：cron/systemd 周期调用）。"""
+    engine = ProcessEngine(EngineConfig(db_file=db))
+    processed = engine.jobs.tick()
+    console.print(f"[green]✓[/green] 本次执行 {processed} 个到期 Job（重试/死信见 wf_job）")
+    engine.close()
+
+
+@app.command()
 def validate(template: Path = typer.Argument(..., help="模板 JSON 文件路径")) -> None:
     """校验流程模板（结构 / 可达性 / 条件分支 / kind 注册）。"""
     registry = create_registry()

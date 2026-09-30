@@ -7,6 +7,11 @@
     scheduler.start() / stop()       # APScheduler 后台轮询（可选）
 
 时钟经 EngineConfig.now 注入，超时测试可完全确定性。
+
+多副本安全：每个 Job 先经 CAS（``state='scheduled' → 'running'``，条件 UPDATE）
+原子认领，认领失败即跳过——两个副本同时 tick 同一 Job 只会执行一次。
+认领、策略执行与结果落库在同一事务内：崩溃整体回滚（Job 回到 scheduled，
+由下次 tick 重试），不存在滞留 running 的中间态。
 """
 
 from __future__ import annotations
@@ -15,11 +20,13 @@ import logging
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 
+from flowork.engine.kernel import EngineExecutionError
 from flowork.engine.ops import CommandContext
+from flowork.errors import TaskNotAvailableError
 from flowork.events.domain import DomainEvent
-from flowork.persistence.orm import JobRow
+from flowork.persistence.orm import JobRow, TaskRow
 
 if TYPE_CHECKING:
     from flowork.engine.engine import ProcessEngine
@@ -41,90 +48,108 @@ class JobScheduler:
     # —— 推进 ——
 
     def tick(self, *, now: datetime | None = None) -> int:
-        """执行全部到期 Job，返回处理数量（含进入 dead-letter 的）。"""
+        """执行全部到期 Job，返回实际执行数量（含进入 dead-letter 的）。"""
         moment = now or self._engine.config.now()
 
-        def _collect(ctx: CommandContext) -> list[JobRow]:
+        def _collect(ctx: CommandContext) -> list[str]:
             stmt = (
-                select(JobRow)
+                select(JobRow.id)
                 .where(JobRow.state == "scheduled", JobRow.run_at <= moment)
                 .order_by(JobRow.run_at)
             )
             return list(ctx.session.scalars(stmt))
 
-        due: list[JobRow] = self._engine.execute(_collect)
-        for job in due:
-            self._run_one(job.id, moment)
-        return len(due)
+        due: list[str] = self._engine.execute(_collect)
+        return sum(1 for job_id in due if self._run_one(job_id, moment))
 
-    def _run_one(self, job_id: str, moment: datetime) -> None:
-        def _command(ctx: CommandContext) -> None:
+    def _run_one(self, job_id: str, moment: datetime) -> bool:
+        """认领并执行单个 Job。返回是否由本次调用执行（认领失败为 False）。"""
+
+        def _command(ctx: CommandContext) -> bool:
+            # CAS 认领：条件 UPDATE + RETURNING，认领失败（0 行）即返回
+            claimed_id = ctx.session.execute(
+                update(JobRow)
+                .where(JobRow.id == job_id, JobRow.state == "scheduled")
+                .values(state="running")
+                .returning(JobRow.id)
+            ).scalar_one_or_none()
+            if claimed_id is None:
+                return False  # 已被并发 tick 认领，或状态已变
             job = ctx.session.get(JobRow, job_id)
-            if job is None or job.state != "scheduled":
-                return
+            assert job is not None
             try:
-                self._apply_strategy(job)
+                # savepoint：策略失败只回滚流程侧变更，认领与重试标记保留
+                with ctx.session.begin_nested():
+                    self._apply_strategy(ctx, job)
+            except EngineExecutionError as exc:
+                # 引擎错误：与命令管线同口径，同事务记 Incident 并挂起实例
+                self._engine.runtime._record_incident_in_ctx(ctx, [job.instance_id], exc)
+                self._mark_failure(ctx, job, exc, moment)
             except Exception as exc:
-                job.last_error = str(exc)
-                job.retry_count += 1
-                if job.retry_count >= job.max_retries:
-                    job.state = "dead_letter"
-                    kernel = self._engine.kernel_for(ctx)
-                    kernel.record_event(
-                        DomainEvent.JOB_DEAD_LETTERED,
-                        {"job_id": job.id, "error": str(exc)},
-                        job.instance_id,
-                    )
-                else:
-                    backoff = _BACKOFF_BASE_SECONDS * (2 ** (job.retry_count - 1))
-                    job.run_at = moment + timedelta(seconds=backoff)
-                return
-            job.state = "done"
-            job.result_payload = {**(job.result_payload or {}), "finished_at": moment.isoformat()}
+                self._mark_failure(ctx, job, exc, moment)
+            else:
+                job.state = "done"
+                job.result_payload = {
+                    **(job.result_payload or {}),
+                    "finished_at": moment.isoformat(),
+                }
+            return True
 
-        self._engine.execute(_command)
+        return bool(self._engine.execute(_command))
 
-    def _apply_strategy(self, job: JobRow) -> None:
-        """执行超时策略；任务已被人工处理则按"跳过"结案（不重试不死信）。"""
-        from flowork.errors import TaskNotAvailableError
+    def _mark_failure(
+        self, ctx: CommandContext, job: JobRow, exc: Exception, moment: datetime
+    ) -> None:
+        """失败落账：退避重试或进入 dead-letter（含死信事件）。"""
+        job.last_error = str(exc)
+        job.retry_count += 1
+        if job.retry_count >= job.max_retries:
+            job.state = "dead_letter"
+            kernel = self._engine.kernel_for(ctx)
+            kernel.record_event(
+                DomainEvent.JOB_DEAD_LETTERED,
+                {"job_id": job.id, "error": str(exc)},
+                job.instance_id,
+            )
+        else:
+            backoff = _BACKOFF_BASE_SECONDS * (2 ** (job.retry_count - 1))
+            job.state = "scheduled"
+            job.run_at = moment + timedelta(seconds=backoff)
 
+    def _apply_strategy(self, ctx: CommandContext, job: JobRow) -> None:
+        """执行超时策略（同事务）；任务已被人工处理则按"跳过"结案（不重试不死信）。"""
         strategy = job.payload.get("strategy", "notify")
         task_id = job.payload.get("task_id")
         if strategy == "notify" or not task_id:
-            self._emit_timeout_warned(job)
-            return
-        task = self._engine.task.get_task(task_id)
-        if task is None:
-            job.result_payload = {"skipped": "task already finished"}
-            return
-        try:
-            self._execute_strategy(strategy, task_id)
-        except TaskNotAvailableError:
-            job.result_payload = {"skipped": "task already finished"}
-
-    def _execute_strategy(self, strategy: str, task_id: str) -> None:
-        """对在办任务执行策略（任务不存在由调用方跳过）。"""
-        if strategy == "auto_approve":
-            self._engine.task.complete(
-                task_id, actor="system:timeout", comment="超时自动通过", as_agent=True
-            )
-        elif strategy == "auto_reject":
-            self._engine.task.reject(
-                task_id, actor="system:timeout", comment="超时自动驳回", as_agent=True
-            )
-        else:  # pragma: no cover - 配置兜底
-            raise ValueError(f"未知超时策略：{strategy}")
-
-    def _emit_timeout_warned(self, job: JobRow) -> None:
-        def _notify(ctx: CommandContext) -> None:
             kernel = self._engine.kernel_for(ctx)
             kernel.record_event(
                 "timeout_warned",
-                {"job_id": job.id, "strategy": job.payload.get("strategy", "notify")},
+                {"job_id": job.id, "strategy": strategy},
                 job.instance_id,
             )
+            return
+        task = ctx.session.get(TaskRow, task_id)
+        if task is None or task.state != "ready":
+            job.result_payload = {**(job.result_payload or {}), "skipped": "task already finished"}
+            return
+        try:
+            self._execute_strategy(ctx, strategy, task_id)
+        except TaskNotAvailableError:
+            job.result_payload = {**(job.result_payload or {}), "skipped": "task already finished"}
 
-        self._engine.execute(_notify)
+    def _execute_strategy(self, ctx: CommandContext, strategy: str, task_id: str) -> None:
+        """对在办任务执行策略（任务不存在由调用方跳过）。"""
+        task = self._engine.task
+        if strategy == "auto_approve":
+            task.complete_in_ctx(
+                ctx, task_id, actor="system:timeout", comment="超时自动通过", as_agent=True
+            )
+        elif strategy == "auto_reject":
+            task.reject_in_ctx(
+                ctx, task_id, actor="system:timeout", comment="超时自动驳回", as_agent=True
+            )
+        else:  # pragma: no cover - 配置兜底
+            raise ValueError(f"未知超时策略：{strategy}")
 
     def requeue(self, job_id: str) -> None:
         """人工重派 dead-letter Job（重置为 scheduled，清零重试计数）。"""
@@ -142,7 +167,7 @@ class JobScheduler:
     # —— 后台轮询（可选）——
 
     def start(self, interval_seconds: int = 30) -> None:
-        """启动后台轮询（APScheduler）。测试用 tick() 即可，无需 start。"""
+        """启动后台轮询（APScheduler）。测试用 tick() 即可，无需 start()。"""
         from apscheduler.schedulers.background import BackgroundScheduler
 
         if self._scheduler is not None:

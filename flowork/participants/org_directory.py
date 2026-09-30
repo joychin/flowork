@@ -126,7 +126,9 @@ class OrgDirectory:
 
     def delegation_of(self, user_id: str, when: datetime | None = None) -> str | None:
         """生效委托：返回受托人（无则 None）。"""
-        today = (when or datetime.now()).date()
+        from flowork.clock import utc_now
+
+        today = (when or utc_now()).date()
         for item in self.delegations:
             if item.delegate_from == user_id and item.active_at(today):
                 return item.delegate_to

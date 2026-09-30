@@ -34,7 +34,9 @@ class BranchBehavior(NodeBehavior):
         assert isinstance(ctx, RuntimeNodeContext)
         definition = ctx.kernel.definition_of(ctx.session, ctx.instance)
         outgoing = definition.outgoing(ctx.node.code)
-        from flowork.engine.routing import select_outgoing
+        from flowork.engine.routing import Mode, select_outgoing
 
-        mode = "first_match" if self._spec().route_mode == RouteMode.FIRST_MATCH else "all_match"
+        mode: Mode = (
+            "first_match" if self._spec().route_mode == RouteMode.FIRST_MATCH else "all_match"
+        )
         return select_outgoing(outgoing, dict(ctx.variables), mode=mode)

@@ -253,13 +253,12 @@ class Kernel:
         cause_token_id: str | None = None,
     ) -> None:
         """任务归档：写历史（append-only）并从活表删除。"""
-        import datetime as _dt
         import uuid as _uuid
 
         from flowork.persistence.orm import TaskHistoryRow
 
         cost = (
-            (_dt.datetime.now() - task.created_at).total_seconds()
+            (self.config.now() - task.created_at).total_seconds()
             if task.created_at is not None
             else 0.0
         )
@@ -459,18 +458,24 @@ class Kernel:
         sources = [f.source for f in definition.incoming(node.code)]
         if len(sources) > 1:
             if self._advance_policy_of(node) == "all":
+                finished_states = (
+                    TokenState.FINISHED.value,
+                    TokenState.CANCELLED.value,
+                    TokenState.REVOKED.value,
+                )
                 settled = {
                     token.activity_code
                     for token in self.tokens(session, instance.id)
-                    if token.state
-                    in (TokenState.FINISHED.value, TokenState.CANCELLED.value, TokenState.REVOKED.value)
+                    if token.state in finished_states
                 }
                 if not all(source in settled for source in sources):
                     return  # 等待其余入边来源完成
             else:
                 busy = any(
                     token.activity_code == node.code
-                    for token in self.tokens(session, instance.id, states=(TokenState.UNFINISHED.value,))
+                    for token in self.tokens(
+                        session, instance.id, states=(TokenState.UNFINISHED.value,)
+                    )
                 )
                 if busy:
                     return  # 吸收重复到达（节点已在办）
@@ -481,7 +486,9 @@ class Kernel:
         """节点开始条件（Spec 声明；cc_task 在其 Spec 上覆写恒 any）。缺省 any。"""
         return getattr(node, "advance_policy", None) or "any"
 
-    def _cancel_sibling_branches(self, session: Session, instance: ProcessInstanceRow, sources: list[str]) -> None:
+    def _cancel_sibling_branches(
+        self, session: Session, instance: ProcessInstanceRow, sources: list[str]
+    ) -> None:
         """任一到达即开始后，取消仍未完成的兄弟分支（避免僵尸分支与迟到到达）。"""
         source_set = set(sources)
         for token in self.tokens(session, instance.id, states=(TokenState.UNFINISHED.value,)):

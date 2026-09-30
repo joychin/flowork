@@ -31,7 +31,8 @@ def test_node_kinds_builtin(client: TestClient) -> None:
     # 调色板两个分支变体：命中即走 / 命中的都走
     palette = kinds["branch"]["ui"]["palette"]
     assert [item["defaults"]["route_mode"] for item in palette] == [
-        "first_match", "all_match",
+        "first_match",
+        "all_match",
     ]
     # schema 驱动表单：user_task 的 schema 含 multi_instance（$defs 解析）
     schema = kinds["user_task"]["schema"]
@@ -51,8 +52,13 @@ def test_save_list_get_draft(client: TestClient, spec02: dict) -> None:
 
     listing = client.get("/api/definitions").json()
     assert listing == [
-        {"code": "countersign_branch", "name": "改名了", "draft_version": 1,
-         "published_version": None, "updated_at": listing[0]["updated_at"]},
+        {
+            "code": "countersign_branch",
+            "name": "改名了",
+            "draft_version": 1,
+            "published_version": None,
+            "updated_at": listing[0]["updated_at"],
+        },
     ]
 
     got = client.get("/api/definitions/countersign_branch").json()
@@ -63,7 +69,9 @@ def test_save_list_get_draft(client: TestClient, spec02: dict) -> None:
 
 def test_validate_reports_issue_with_location(client: TestClient) -> None:
     broken = {
-        "code": "broken", "name": "坏定义", "nodes": [
+        "code": "broken",
+        "name": "坏定义",
+        "nodes": [
             {"code": "start", "name": "发起", "kind": "start"},
             {"code": "task", "name": "审批", "kind": "user_task"},
         ],
@@ -79,7 +87,9 @@ def test_validate_reports_issue_with_location(client: TestClient) -> None:
 
 def test_publish_blocked_by_error_then_ok(client: TestClient) -> None:
     broken = {
-        "code": "broken", "name": "坏定义", "nodes": [
+        "code": "broken",
+        "name": "坏定义",
+        "nodes": [
             {"code": "start", "name": "发起", "kind": "start"},
             {"code": "task", "name": "审批", "kind": "user_task"},
         ],

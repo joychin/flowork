@@ -58,9 +58,7 @@ class NodeRegistry:
         if ui is None and kind in self._kinds:
             # replace 重注册（如 Behavior 接入）不传 ui 时保留原元数据
             ui = self._kinds[kind].ui or {}
-        self._kinds[kind] = NodeRegistration(
-            kind=kind, spec=spec, behavior=behavior, ui=ui or {}
-        )
+        self._kinds[kind] = NodeRegistration(kind=kind, spec=spec, behavior=behavior, ui=ui or {})
 
     def registration(self, kind: str) -> NodeRegistration:
         try:

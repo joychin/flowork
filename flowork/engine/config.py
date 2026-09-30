@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
+from flowork.clock import utc_now
 from flowork.events.domain import DomainEvent
 from flowork.participants.functions import ParticipantFunctions
 from flowork.participants.org_directory import OrgDirectory
@@ -16,7 +17,7 @@ HistoryLevel = str  # none / activity / audit / full（M6 起生效，当前默�
 
 
 def _system_now() -> datetime:
-    return datetime.now()
+    return utc_now()
 
 
 def _noop_notifier(event: str, payload: dict[str, object]) -> None:

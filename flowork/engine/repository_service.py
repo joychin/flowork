@@ -165,10 +165,7 @@ class RepositoryService:
             from sqlalchemy import select
 
             row = ctx.session.scalars(
-                select(_Row)
-                .where(_Row.code == code)
-                .order_by(_Row.version.desc())
-                .limit(1)
+                select(_Row).where(_Row.code == code).order_by(_Row.version.desc()).limit(1)
             ).first()
             if row is None:
                 return None
@@ -189,8 +186,13 @@ class RepositoryService:
             for row in rows:
                 summary = grouped.setdefault(
                     row.code,
-                    {"code": row.code, "name": row.name, "draft_version": None,
-                     "published_version": None, "updated_at": None},
+                    {
+                        "code": row.code,
+                        "name": row.name,
+                        "draft_version": None,
+                        "published_version": None,
+                        "updated_at": None,
+                    },
                 )
                 if row.status == "draft":
                     summary["draft_version"] = row.version
