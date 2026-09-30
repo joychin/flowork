@@ -21,6 +21,7 @@ from flowork.runtime.registry import NodeRegistry
 __all__ = [
     "DefinitionStatus",
     "InvalidDefinitionData",
+    "NodePosition",
     "ProcessDefinition",
     "dump_definition",
     "load_definition",
@@ -31,6 +32,15 @@ __all__ = [
 class DefinitionStatus(StrEnum):
     DRAFT = "draft"
     PUBLISHED = "published"
+
+
+class NodePosition(BaseModel):
+    """设计器画布坐标（纯展示数据，引擎不消费；semantic diff 应忽略）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    x: float
+    y: float
 
 
 class InvalidDefinitionData(DefinitionError):
@@ -49,6 +59,8 @@ class ProcessDefinition(BaseModel):
     # SerializeAsAny：节点按实例类型（Spec 子类）序列化，否则子类字段会在 dump 时丢失
     nodes: list[SerializeAsAny[FlowNode]] = Field(default_factory=list)
     flows: list[SequenceFlow] = Field(default_factory=list)
+    # 设计器画布坐标（activity_code → {x,y}）；缺失时设计器自动布局
+    layout: dict[str, NodePosition] = Field(default_factory=dict)
 
     def node(self, code: str) -> FlowNode | None:
         return next((n for n in self.nodes if n.code == code), None)

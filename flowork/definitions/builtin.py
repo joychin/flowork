@@ -115,11 +115,105 @@ class CcTaskSpec(FlowNode):
 
 
 def register_builtin_nodes(registry: NodeRegistry) -> None:
-    """把全部内置类型注册进注册表（与自定义类型同一入口）。"""
-    registry.register(KIND_START, StartSpec)
-    registry.register(KIND_END, EndSpec)
-    registry.register(KIND_GATEWAY, GatewaySpec)
-    registry.register(KIND_USER_TASK, UserTaskSpec)
-    registry.register(KIND_SERVICE_TASK, ServiceTaskSpec)
-    registry.register(KIND_CALL_ACTIVITY, CallActivitySpec)
-    registry.register(KIND_CC_TASK, CcTaskSpec)
+    """把全部内置类型注册进注册表（与自定义类型同一入口）。
+
+    ``ui`` 为设计器展示元数据：name 显示名 / category 调色板分组 /
+    shape 画布形状 / color 主色 / palette 调色板预设项（含创建时的字段默认值）。
+    """
+    registry.register(
+        KIND_START,
+        StartSpec,
+        ui={
+            "name": "开始",
+            "category": "事件",
+            "shape": "circle",
+            "color": "#16a34a",
+            "icon": "play",
+            "palette": [{"label": "开始", "defaults": {}}],
+        },
+    )
+    registry.register(
+        KIND_END,
+        EndSpec,
+        ui={
+            "name": "结束",
+            "category": "事件",
+            "shape": "circle",
+            "color": "#dc2626",
+            "icon": "stop",
+            "palette": [{"label": "结束", "defaults": {}}],
+        },
+    )
+    registry.register(
+        KIND_GATEWAY,
+        GatewaySpec,
+        ui={
+            "name": "网关",
+            "category": "网关",
+            "shape": "diamond",
+            "color": "#d97706",
+            "icon": "gateway",
+            "palette": [
+                {"label": "排他网关", "defaults": {"gateway_kind": "exclusive"}},
+                {"label": "并行网关", "defaults": {"gateway_kind": "parallel"}},
+                {"label": "相容网关", "defaults": {"gateway_kind": "inclusive"}},
+            ],
+        },
+    )
+    registry.register(
+        KIND_USER_TASK,
+        UserTaskSpec,
+        ui={
+            "name": "审批任务",
+            "category": "任务",
+            "shape": "rect",
+            "color": "#2563eb",
+            "icon": "user",
+            "palette": [
+                {
+                    "label": "审批任务",
+                    "defaults": {
+                        "assignee": None,
+                        "multi_instance": {"mode": "parallel"},
+                        "timeout": {"due_minutes": 1440, "strategy": "notify"},
+                    },
+                }
+            ],
+        },
+    )
+    registry.register(
+        KIND_SERVICE_TASK,
+        ServiceTaskSpec,
+        ui={
+            "name": "服务任务",
+            "category": "自动化",
+            "shape": "rect",
+            "color": "#7c3aed",
+            "icon": "settings",
+            "palette": [{"label": "服务任务", "defaults": {"action": ""}}],
+        },
+    )
+    registry.register(
+        KIND_CALL_ACTIVITY,
+        CallActivitySpec,
+        ui={
+            "name": "子流程",
+            "category": "自动化",
+            "shape": "rect",
+            "color": "#475569",
+            "icon": "box",
+            "palette": [{"label": "子流程", "defaults": {"process_code": ""}}],
+        },
+    )
+    registry.register(
+        KIND_CC_TASK,
+        CcTaskSpec,
+        ui={
+            "name": "传阅",
+            "category": "任务",
+            "shape": "rect",
+            "color": "#0d9488",
+            "icon": "mail",
+            "palette": [{"label": "传阅", "defaults": {"recipients": []}}],
+        },
+    )

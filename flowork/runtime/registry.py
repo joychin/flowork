@@ -7,8 +7,8 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any
 
 from flowork.errors import UnknownHandler, UnknownNodeKind
 
@@ -26,6 +26,9 @@ class NodeRegistration:
     kind: str
     spec: type[FlowNode]
     behavior: type[NodeBehavior] | None = None
+    # 设计器 UI 元数据：name/icon/category/shape/color/palette（纯展示，引擎不消费）。
+    # 缺省时设计器按 kind 兜底渲染——引擎新增节点类型，前端零代码跟进。
+    ui: dict[str, Any] = field(default_factory=dict)
 
 
 class NodeRegistry:
@@ -41,13 +44,23 @@ class NodeRegistry:
         behavior: type[NodeBehavior] | None = None,
         *,
         replace: bool = False,
+        ui: dict[str, Any] | None = None,
     ) -> None:
-        """注册节点类型；同 kind 重复注册需显式 ``replace=True``。"""
+        """注册节点类型；同 kind 重复注册需显式 ``replace=True``。
+
+        ``ui`` 为设计器展示元数据（name/icon/category/shape/color/palette），
+        可省略——设计器对缺省项按通用样式兜底。
+        """
         if not kind:
             raise ValueError("kind 不能为空")
         if kind in self._kinds and not replace:
             raise ValueError(f"节点类型 kind={kind!r} 已注册（如需覆盖请 replace=True）")
-        self._kinds[kind] = NodeRegistration(kind=kind, spec=spec, behavior=behavior)
+        if ui is None and kind in self._kinds:
+            # replace 重注册（如 Behavior 接入）不传 ui 时保留原元数据
+            ui = self._kinds[kind].ui or {}
+        self._kinds[kind] = NodeRegistration(
+            kind=kind, spec=spec, behavior=behavior, ui=ui or {}
+        )
 
     def registration(self, kind: str) -> NodeRegistration:
         try:

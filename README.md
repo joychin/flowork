@@ -40,3 +40,15 @@ node_registry.register("my_node", MySpec, MyBehavior)
 
 - 构建约定与包结构：`AGENTS.md`
 - 文档索引：`llms.txt`
+
+## 流程设计器(Web UI)
+
+`designer/` 提供 React Flow 可视化设计器(草稿 → 校验 → 发布生命周期、schema 驱动属性表单、
+registry 驱动调色板、Spec JSON 直编辑),后端为 `flowork/web/` 的薄 FastAPI:
+
+```bash
+FLOWORK_DB=/tmp/flowork-designer.db uv run uvicorn flowork.web.app:app --port 8901  # 引擎 API
+cd designer && npm install && npm run dev                                            # http://localhost:5173
+```
+
+详见 `designer/README.md`。

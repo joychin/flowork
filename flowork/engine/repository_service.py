@@ -121,6 +121,88 @@ class RepositoryService:
         result: dict[str, Any] = self._engine.execute(_command)
         return result
 
+    # —— 设计器支撑：草稿就地更新 / 最新行 / 汇总列表 ——
+
+    def update_draft(self, definition: ProcessDefinition) -> int:
+        """保存草稿：最新版本已是草稿则就地覆盖，否则新建草稿版本。返回草稿版本号。"""
+        from flowork.persistence.orm import ProcessDefinitionRow as _Row
+
+        def _command(ctx: CommandContext) -> Any:
+            from sqlalchemy import select
+
+            latest = ctx.session.scalars(
+                select(_Row)
+                .where(_Row.code == definition.code)
+                .order_by(_Row.version.desc())
+                .limit(1)
+            ).first()
+            content = json.dumps(dump_definition(definition), ensure_ascii=False)
+            if latest is not None and latest.status == "draft":
+                latest.content = content
+                latest.name = definition.name
+                ctx.session.flush()
+                return latest.version
+            row = _Row(
+                id=_new_id(),
+                code=definition.code,
+                version=(latest.version + 1) if latest is not None else 1,
+                status="draft",
+                name=definition.name,
+                content=content,
+            )
+            ctx.session.add(row)
+            ctx.session.flush()
+            return row.version
+
+        result: int = self._engine.execute(_command)
+        return result
+
+    def latest_row(self, code: str) -> dict[str, Any] | None:
+        """取某 code 的最新定义行摘要（任意状态）；无则 None。"""
+        from flowork.persistence.orm import ProcessDefinitionRow as _Row
+
+        def _command(ctx: CommandContext) -> Any:
+            from sqlalchemy import select
+
+            row = ctx.session.scalars(
+                select(_Row)
+                .where(_Row.code == code)
+                .order_by(_Row.version.desc())
+                .limit(1)
+            ).first()
+            if row is None:
+                return None
+            return {"version": row.version, "status": row.status, "name": row.name}
+
+        result: dict[str, Any] | None = self._engine.execute(_command)
+        return result
+
+    def list_summaries(self) -> list[dict[str, Any]]:
+        """按 code 汇总定义列表（最新草稿版本 / 最高已发布版本 / 更新时间）。"""
+        from flowork.persistence.orm import ProcessDefinitionRow as _Row
+
+        def _command(ctx: CommandContext) -> Any:
+            from sqlalchemy import select
+
+            rows = ctx.session.scalars(select(_Row).order_by(_Row.code, _Row.version)).all()
+            grouped: dict[str, dict[str, Any]] = {}
+            for row in rows:
+                summary = grouped.setdefault(
+                    row.code,
+                    {"code": row.code, "name": row.name, "draft_version": None,
+                     "published_version": None, "updated_at": None},
+                )
+                if row.status == "draft":
+                    summary["draft_version"] = row.version
+                else:
+                    summary["published_version"] = row.version
+                summary["name"] = row.name or summary["name"]
+                summary["updated_at"] = row.created_at.isoformat(timespec="seconds")
+            return sorted(grouped.values(), key=lambda s: s["code"])
+
+        result: list[dict[str, Any]] = self._engine.execute(_command)
+        return result
+
 
 def _new_id() -> str:
     import uuid

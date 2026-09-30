@@ -8,7 +8,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -44,7 +44,7 @@ class MultiInstance(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    mode: str = "parallel"
+    mode: Literal["parallel", "sequential"] = "parallel"
     approve_exit: str | None = None
     disapprove_exit: str | None = None
 

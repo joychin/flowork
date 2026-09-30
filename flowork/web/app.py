@@ -1,0 +1,213 @@
+"""FastAPI 应用工厂：定义 CRUD / 校验 / 发布 / 节点类型元数据。
+
+启动::
+
+    uvicorn flowork.web.app:app --port 8901     # FLOWORK_DB 指定 SQLite 文件
+"""
+
+from __future__ import annotations
+
+import json
+from dataclasses import asdict
+from pathlib import Path
+from typing import Any
+
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+
+from flowork.definitions.definition import (
+    InvalidDefinitionData,
+    ProcessDefinition,
+    load_definition,
+    load_definition_file,
+)
+from flowork.definitions.validator import InvalidDefinition, IssueLevel, ValidateIssue
+from flowork.engine.config import EngineConfig
+from flowork.engine.engine import ProcessEngine
+from flowork.errors import DefinitionError, FloworkError, UnknownNodeKind
+
+__all__ = ["app", "create_app"]
+
+# 属性面板不渲染的基础字段：code 由设计器生成、kind 固定、
+# hooks/properties 属于高级用法（Spec JSON Tab 直接编辑）
+FORM_EXCLUDE = ("code", "kind", "hooks", "properties")
+
+EXAMPLES_DIR = Path(__file__).parent.parent.parent / "examples"
+
+
+def _issues_payload(issues: list[ValidateIssue]) -> list[dict[str, Any]]:
+    return [
+        {
+            "level": issue.level.value,
+            "rule": issue.rule,
+            "message": issue.message,
+            "node": issue.node,
+            "flow": issue.flow,
+        }
+        for issue in issues
+    ]
+
+
+def _parse_spec(engine: ProcessEngine, data: Any) -> ProcessDefinition:
+    """把请求体解析为定义（未知 kind / 非法结构 → 422）。"""
+    try:
+        return load_definition(data, engine.config.node_registry)
+    except InvalidDefinitionData as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except UnknownNodeKind as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except DefinitionError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+def create_app(db_file: str | Path | None = None, *, seed: bool = True) -> FastAPI:
+    """创建应用。``db_file`` 缺省取 FLOWORK_DB 环境变量，再缺省 designer.db。"""
+    import os
+
+    db_path = Path(db_file or os.environ.get("FLOWORK_DB", "designer.db"))
+    engine = ProcessEngine(EngineConfig(db_file=db_path))
+    app = FastAPI(title="flowork designer API", version="0.1.0")
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    @app.exception_handler(FloworkError)
+    async def _flowork_error(_request: Any, exc: FloworkError) -> JSONResponse:
+        return JSONResponse(status_code=422, content={"detail": str(exc)})
+
+    @app.get("/api/health")
+    def health() -> dict[str, str]:
+        return {"status": "ok"}
+
+    @app.get("/api/node-kinds")
+    def node_kinds() -> list[dict[str, Any]]:
+        """节点类型元数据：registry ui + Spec 的 JSON Schema（表单由此自动生成）。"""
+        result: list[dict[str, Any]] = []
+        for kind in engine.config.node_registry.kinds():
+            registration = engine.config.node_registry.registration(kind)
+            result.append(
+                {
+                    "kind": kind,
+                    "ui": registration.ui,
+                    "form_exclude": list(FORM_EXCLUDE),
+                    "schema": registration.spec.model_json_schema(),
+                }
+            )
+        return result
+
+    @app.get("/api/definitions")
+    def list_definitions() -> list[dict[str, Any]]:
+        return engine.repository.list_summaries()
+
+    @app.get("/api/definitions/{code}")
+    def get_definition(code: str) -> dict[str, Any]:
+        latest = engine.repository.latest_row(code)
+        if latest is None:
+            raise HTTPException(status_code=404, detail=f"定义 {code} 不存在")
+        published_version = _latest_published_version(code)
+        if latest["status"] == "draft":
+            row = _raw_row(code, latest["version"])
+            return {
+                "code": code,
+                "name": latest["name"],
+                "draft_version": latest["version"],
+                "published_version": published_version,
+                "spec": json.loads(row["content"]),
+            }
+        # 无草稿：返回已发布内容作为新草稿的基底
+        spec = engine.repository.get_definition_json(code)
+        return {
+            "code": code,
+            "name": latest["name"],
+            "draft_version": None,
+            "published_version": published_version,
+            "spec": spec,
+        }
+
+    def _latest_published_version(code: str) -> int | None:
+        try:
+            return engine.repository.get_definition(code).version
+        except FloworkError:
+            return None
+
+    def _raw_row(code: str, version: int) -> dict[str, Any]:
+        def _command(ctx: Any) -> Any:
+            from sqlalchemy import select
+
+            from flowork.persistence.orm import ProcessDefinitionRow as Row
+
+            row = ctx.session.scalars(
+                select(Row).where(Row.code == code, Row.version == version)
+            ).first()
+            if row is None:
+                raise HTTPException(status_code=404, detail=f"定义 {code} v{version} 不存在")
+            return {
+                "content": row.content,
+                "status": row.status,
+                "name": row.name,
+            }
+
+        result: dict[str, Any] = engine.execute(_command)
+        return result
+
+    @app.put("/api/definitions/{code}")
+    def save_draft(code: str, body: dict[str, Any]) -> dict[str, Any]:
+        """保存草稿（最新版本已是草稿则就地覆盖，否则新建草稿版本）。"""
+        body = {**body, "code": code}
+        definition = _parse_spec(engine, body)
+        version = engine.repository.update_draft(definition)
+        return {"code": code, "version": version, "status": "draft"}
+
+    @app.post("/api/definitions/{code}/publish")
+    def publish(code: str) -> dict[str, Any]:
+        """发布最新草稿（发布前强制校验；ERROR 级问题 → 422 + issues）。"""
+        try:
+            version = engine.repository.publish(code)
+        except InvalidDefinition as exc:
+            raise HTTPException(
+                status_code=422,
+                detail={"message": "校验未通过，禁止发布", "issues": _issues_payload(exc.issues)},
+            ) from exc
+        except FloworkError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return {"code": code, "version": version, "status": "published"}
+
+    @app.post("/api/validate")
+    def validate(body: dict[str, Any]) -> dict[str, Any]:
+        """设计时校验（不落库）。body 即模板 JSON。"""
+        definition = _parse_spec(engine, body)
+        issues = engine.repository.validate(definition)
+        errors = sum(1 for issue in issues if issue.level == IssueLevel.ERROR)
+        return {"ok": errors == 0, "issues": _issues_payload(issues)}
+
+    @app.on_event("shutdown")
+    def _shutdown() -> None:
+        engine.close()
+
+    if seed:
+        _seed_examples(engine)
+
+    return app
+
+
+def _seed_examples(engine: ProcessEngine) -> None:
+    """空库时把 examples/*.json 灌为草稿（首个示例顺手发布，便于演示两种状态）。"""
+    if engine.repository.list_summaries():
+        return
+    if not EXAMPLES_DIR.is_dir():
+        return
+    for index, path in enumerate(sorted(EXAMPLES_DIR.glob("*.json"))):
+        try:
+            definition = load_definition_file(path, engine.config.node_registry)
+        except (DefinitionError, json.JSONDecodeError):
+            continue
+        engine.repository.update_draft(definition)
+        if index == 0:
+            engine.repository.publish(definition.code)
+
+
+app = create_app()
