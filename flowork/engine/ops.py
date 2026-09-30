@@ -14,7 +14,6 @@ from typing import TYPE_CHECKING, Any, TypeVar
 
 from flowork.engine.kernel import EngineExecutionError
 from flowork.errors import FloworkError
-from flowork.events.domain import DomainEvent
 from flowork.persistence.orm import EventOutboxRow
 
 if TYPE_CHECKING:
@@ -120,14 +119,3 @@ def _is_lock_conflict(exc: Exception) -> bool:
     if isinstance(exc, SQLAlchemyError):
         return "database is locked" in str(exc).lower()
     return False
-
-
-def emit(
-    kernel_events: list[tuple[str, dict[str, Any], str | None]],
-    event: DomainEvent | str,
-    payload: dict[str, Any],
-    instance_id: str | None,
-) -> None:
-    """便捷：向事件缓冲追加一条（内核内部使用）。"""
-    name = event.value if isinstance(event, DomainEvent) else str(event)
-    kernel_events.append((name, payload, instance_id))

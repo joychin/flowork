@@ -144,6 +144,7 @@ class TaskService(TaskOpsMixin):
         if task.task_type == "assist":
             raise TaskNotAvailableError("协办任务请用 complete_assist 完成")
         instance = self._instance(ctx, task.instance_id)
+        self._touch(instance)
         if instance.state == "suspended":
             raise TaskNotAvailableError("实例已挂起（Incident 待修复），不可办理")
         if task.assignee == "":
@@ -198,6 +199,7 @@ class TaskService(TaskOpsMixin):
         if task is None or task.state != "ready":
             raise TaskNotAvailableError(f"任务不可驳回（不存在或已处理）：{task_id}")
         instance = self._instance(ctx, task.instance_id)
+        self._touch(instance)
         if instance.state == "suspended":
             raise TaskNotAvailableError("实例已挂起（Incident 待修复），不可驳回")
         if variables:
@@ -296,6 +298,12 @@ class TaskService(TaskOpsMixin):
             instance_state=instance.state,
             next_tasks=next_tasks,
         )
+
+    def _touch(self, instance: Any) -> None:
+        """触碰实例行：确保写命令提交时触发 version 乐观锁检查。"""
+        from datetime import datetime as _dt
+
+        instance.updated_at = _dt.now()
 
     def _find_history_by_key(self, ctx: CommandContext, key: str) -> TaskHistoryRow | None:
         from sqlalchemy import select

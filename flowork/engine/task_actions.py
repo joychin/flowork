@@ -336,18 +336,32 @@ class TaskOpsMixin:
         self._engine.execute(_command)
 
     def remove_instance(self, instance_id: str, actor: str) -> None:
-        """删除实例及其全部运行时数据（管理员，不可恢复）。"""
+        """删除实例及其全部运行时数据（含身份关联/Job/Incident，不可恢复）。"""
 
         def _command(ctx: CommandContext) -> None:
-            from sqlalchemy import delete
+            from sqlalchemy import delete, select
 
-            for row_type in (TaskRow, TaskHistoryRow, TokenRow, CcItemRow):
+            from flowork.persistence.orm import (
+                EventOutboxRow,
+                IncidentRow,
+                JobRow,
+                ProcessInstanceRow,
+            )
+
+            # 身份关联经 task_id 挂靠，先于任务删除
+            ctx.session.execute(
+                delete(IdentityLinkRow).where(
+                    IdentityLinkRow.task_id.in_(
+                        select(TaskRow.id).where(TaskRow.instance_id == instance_id)
+                    )
+                )
+            )
+            for row_type in (TaskRow, TaskHistoryRow, TokenRow, CcItemRow, JobRow):
                 ctx.session.execute(delete(row_type).where(row_type.instance_id == instance_id))
-            from flowork.persistence.orm import EventOutboxRow, ProcessInstanceRow
-
             ctx.session.execute(
                 delete(EventOutboxRow).where(EventOutboxRow.instance_id == instance_id)
             )
+            ctx.session.execute(delete(IncidentRow).where(IncidentRow.instance_id == instance_id))
             instance = ctx.session.get(ProcessInstanceRow, instance_id)
             if instance is None:
                 raise InstanceNotFoundError(f"实例不存在：{instance_id}")

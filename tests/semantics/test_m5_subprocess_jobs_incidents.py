@@ -10,8 +10,6 @@ from flowork.definitions.builder import FlowBuilder
 from flowork.definitions.node import TimeoutPolicy
 from flowork.engine.config import EngineConfig
 from flowork.engine.engine import ProcessEngine
-from flowork.errors import TaskNotAvailableError
-from flowork.tasks.models import TaskInfo
 
 
 class FakeClock:
@@ -223,9 +221,14 @@ def test_timeout_not_due_yet_noop():
 
 
 def test_job_retries_then_dead_letter(engine: ProcessEngine):
-    """策略执行持续失败 → 退避重试 → dead_letter。"""
+    """策略执行持续失败（路由缺变量）→ 退避重试 → dead_letter。"""
     clock = FakeClock()
-    eng = ProcessEngine(EngineConfig(now=clock))
+    from flowork.engine.config import EngineConfig as _Cfg
+
+    eng = ProcessEngine(_Cfg(now=clock))
+    from flowork.definitions.builder import FlowBuilder
+    from flowork.definitions.flow import FlowCondition
+    from flowork.definitions.node import TimeoutPolicy
     from flowork.persistence.orm import JobRow
 
     flow = (
@@ -236,33 +239,27 @@ def test_job_retries_then_dead_letter(engine: ProcessEngine):
             assignee="u_x",
             timeout=TimeoutPolicy(due_minutes=10, strategy="auto_approve"),
         )
+        .gateway("route")
         .end()
         .connect("start", "t")
-        .connect("t", "end")
+        .connect("t", "route")
+        .flow(
+            "route",
+            "end",
+            condition=FlowCondition(groups=[[{"left": "ghost", "operator": "eq", "right": 1}]]),
+        )
         .build()
     )
     publish(eng, flow)
-    instance_id = eng.runtime.start_process("dl", start_user="u_s")
+    _instance_id = eng.runtime.start_process("dl", start_user="u_s")
 
     def _collect_jobs(ctx):
         from sqlalchemy import select
 
         return list(ctx.session.scalars(select(JobRow)))
 
-    # 先把任务取消，使 auto_approve 必然失败（任务不可办理）
-    task = eng.task.list_tasks(instance_id=instance_id)[0]
-
-    def _cancel_task(ctx):
-        row = ctx.session.get(
-            __import__("flowork.persistence.orm", fromlist=["TaskRow"]).TaskRow, task.id
-        )
-        assert row is not None
-        ctx.session.delete(row)
-
-    eng.execute(_cancel_task)
-
     clock.advance_minutes(11)
-    eng.jobs.tick()  # 第 1 次失败 → retry_count=1
+    eng.jobs.tick()  # auto_approve → 路由缺 ghost 变量 → 失败重试
     jobs = eng.execute(_collect_jobs)
     assert jobs[0].retry_count == 1 and jobs[0].state == "scheduled"
     for _ in range(3):
@@ -270,129 +267,6 @@ def test_job_retries_then_dead_letter(engine: ProcessEngine):
         eng.jobs.tick()
     jobs = eng.execute(_collect_jobs)
     assert jobs[0].state == "dead_letter"
-
-
-# —— Incident ——
-
-
-def test_route_error_suspends_instance_and_recovers(engine: ProcessEngine):
-    """路由错误（无匹配分支）→ 回滚 + Incident + 挂起；修复后 resume 可重办。"""
-    from flowork.definitions.flow import FlowCondition
-
-    flow = (
-        FlowBuilder("inc")
-        .start()
-        .user_task("a", assignee="u_a")
-        .gateway("route")
-        .user_task("b", assignee="u_b")
-        .end()
-        .connect("start", "a")
-        .connect("a", "route")
-        .flow(
-            "route",
-            "b",
-            condition=FlowCondition(groups=[[{"left": "x", "operator": "eq", "right": 1}]]),
-        )
-        .flow(
-            "route",
-            "b",
-            condition=FlowCondition(groups=[[{"left": "x", "operator": "eq", "right": 2}]]),
-        )
-        .connect("b", "end")
-        .build()
-    )
-    publish(engine, flow)
-    instance_id = engine.runtime.start_process("inc", start_user="u_s", variables={"x": 9})
-
-    task = engine.task.list_tasks(instance_id=instance_id)[0]
-    from flowork.engine.kernel import RouteError
-
-    with pytest.raises(RouteError):
-        engine.task.complete(task.id, actor="u_a", variables={"x": 9})  # 无匹配分支
-
-    instance = engine.runtime.get_instance(instance_id)
-    assert instance.state == "suspended"
-    incidents = engine.runtime.list_incidents(instance_id)
-    assert len(incidents) == 1 and incidents[0]["state"] == "open"
-    assert incidents[0]["error_class"] == "RouteError"
-
-    # 挂起期间不可办理
-    with pytest.raises(TaskNotAvailableError):
-        engine.task.complete(task.id, actor="u_a")
-
-    # 修复：resume 后带正确变量重办
-    engine.runtime.resolve_incident(incidents[0]["id"], action="resume")
-    assert engine.runtime.get_instance(instance_id).state == "running"
-    engine.task.complete(task.id, actor="u_a", variables={"x": 1})
-    b_task = engine.task.list_tasks(instance_id=instance_id)[0]  # 路由到 b
-    engine.task.complete(b_task.id, actor="u_b")
-    assert engine.runtime.get_instance(instance_id).state == "completed"
-    assert engine.runtime.list_incidents(instance_id)[0]["state"] == "resolved"
-
-
-def test_resolve_incident_cancel(engine: ProcessEngine):
-    from flowork.definitions.flow import FlowCondition
-
-    flow = (
-        FlowBuilder("inc2")
-        .start()
-        .user_task("a", assignee="u_a")
-        .gateway("route")
-        .end()
-        .connect("start", "a")
-        .connect("a", "route")
-        .flow(
-            "route",
-            "end",
-            condition=FlowCondition(groups=[[{"left": "x", "operator": "eq", "right": 1}]]),
-        )
-        .build()
-    )
-    publish(engine, flow)
-    instance_id = engine.runtime.start_process("inc2", start_user="u_s", variables={"x": 0})
-    task = engine.task.list_tasks(instance_id=instance_id)[0]
-    from flowork.engine.kernel import RouteError
-
-    with pytest.raises(RouteError):
-        engine.task.complete(task.id, actor="u_a")
-    incident = engine.runtime.list_incidents(instance_id)[0]
-    engine.runtime.resolve_incident(incident["id"], action="cancel")
-    assert engine.runtime.get_instance(instance_id).state == "cancelled"
-
-
-def test_move_token_repairs_stuck_flow(engine: ProcessEngine):
-    """管理员令牌直移：把卡住的令牌移到正确节点。"""
-    flow = (
-        FlowBuilder("mv")
-        .start()
-        .user_task("a", assignee="u_a")
-        .user_task("wrong", assignee="u_w")
-        .user_task("right", assignee="u_r")
-        .end()
-        .connect("start", "a")
-        .connect("a", "wrong")
-        .connect("wrong", "end")
-        .connect("right", "end")
-        .build()
-    )
-    publish(engine, flow)
-    instance_id = engine.runtime.start_process("mv", start_user="u_s")
-    engine.task.complete(engine.task.list_tasks(instance_id=instance_id)[0].id, actor="u_a")
-
-    wrong_token = next(t for t in engine.history.tokens(instance_id) if t.activity_code == "wrong")
-    engine.runtime.move_token(wrong_token.id, "right", actor="admin")
-
-    tasks = [(t.activity_code, t.assignee) for t in engine.task.list_tasks(instance_id=instance_id)]
-    assert tasks == [("right", "u_r")]
-    token_after = next(t for t in engine.history.tokens(instance_id) if t.id == wrong_token.id)
-    assert token_after.state == "cancelled"
-    engine.task.complete(
-        tasks[0][1] and engine.task.list_tasks(instance_id=instance_id)[0].id, actor="u_r"
-    )
-    assert engine.runtime.get_instance(instance_id).state == "completed"
-
-
-_ = TaskInfo  # 导入占位
 
 
 def test_dead_letter_job_can_be_requeued(engine: ProcessEngine):

@@ -80,25 +80,30 @@ class JobScheduler:
                     job.run_at = moment + timedelta(seconds=backoff)
                 return
             job.state = "done"
-            job.result_payload = {"finished_at": moment.isoformat()}
+            job.result_payload = {**(job.result_payload or {}), "finished_at": moment.isoformat()}
 
         self._engine.execute(_command)
 
     def _apply_strategy(self, job: JobRow) -> None:
+        """执行超时策略；任务已被人工处理则按"跳过"结案（不重试不死信）。"""
+        from flowork.errors import TaskNotAvailableError
+
         strategy = job.payload.get("strategy", "notify")
         task_id = job.payload.get("task_id")
         if strategy == "notify" or not task_id:
-
-            def _notify(ctx: CommandContext) -> None:
-                kernel = self._engine.kernel_for(ctx)
-                kernel.record_event(
-                    "timeout_warned",
-                    {"job_id": job.id, "strategy": strategy},
-                    job.instance_id,
-                )
-
-            self._engine.execute(_notify)
+            self._emit_timeout_warned(job)
             return
+        task = self._engine.task.get_task(task_id)
+        if task is None:
+            job.result_payload = {"skipped": "task already finished"}
+            return
+        try:
+            self._execute_strategy(strategy, task_id)
+        except TaskNotAvailableError:
+            job.result_payload = {"skipped": "task already finished"}
+
+    def _execute_strategy(self, strategy: str, task_id: str) -> None:
+        """对在办任务执行策略（任务不存在由调用方跳过）。"""
         if strategy == "auto_approve":
             self._engine.task.complete(
                 task_id, actor="system:timeout", comment="超时自动通过", as_agent=True
@@ -109,6 +114,17 @@ class JobScheduler:
             )
         else:  # pragma: no cover - 配置兜底
             raise ValueError(f"未知超时策略：{strategy}")
+
+    def _emit_timeout_warned(self, job: JobRow) -> None:
+        def _notify(ctx: CommandContext) -> None:
+            kernel = self._engine.kernel_for(ctx)
+            kernel.record_event(
+                "timeout_warned",
+                {"job_id": job.id, "strategy": job.payload.get("strategy", "notify")},
+                job.instance_id,
+            )
+
+        self._engine.execute(_notify)
 
     def requeue(self, job_id: str) -> None:
         """人工重派 dead-letter Job（重置为 scheduled，清零重试计数）。"""

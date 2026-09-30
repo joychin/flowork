@@ -14,7 +14,6 @@ from flowork.definitions.builtin import (
 )
 from flowork.engine.context import RuntimeNodeContext
 from flowork.engine.kernel import NoParticipantError
-from flowork.errors import FloworkError
 from flowork.runtime.behavior import NodeBehavior, NodeContext
 from flowork.runtime.registry import NodeRegistry
 from flowork.tasks.countersign import evaluate_exit
@@ -133,6 +132,7 @@ class UserTaskBehavior(NodeBehavior):
         ctx.token.item_count = 1
         ctx.token_updated()
         task = ctx.create_task(assignee="")
+        _schedule_timeout(ctx, spec, task.id)  # 超时策略同样适用于认领场景
         candidates = list(spec.candidate_users) + list(spec.candidate_groups)
         for candidate in dict.fromkeys(candidates):
             ctx.session.add(
@@ -252,10 +252,6 @@ class CcTaskBehavior(NodeBehavior):
         spec = self.spec
         assert isinstance(spec, CcTaskSpec)
         create_cc_items(ctx, spec)
-
-
-class UnsupportedFlowError(FloworkError):
-    """保留：M2 网关行为接管条件路由。"""
 
 
 def _schedule_timeout(ctx: RuntimeNodeContext, spec: UserTaskSpec, task_id: str) -> None:

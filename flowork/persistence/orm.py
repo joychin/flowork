@@ -57,6 +57,7 @@ class ProcessInstanceRow(Base):
     version: Mapped[int] = mapped_column(Integer, default=1)  # 乐观锁（ORM version_id）
     started_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     __mapper_args__ = {"version_id_col": version}
 

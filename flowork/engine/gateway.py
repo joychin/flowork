@@ -17,7 +17,6 @@ from flowork.runtime.lifecycle import TokenState
 
 if TYPE_CHECKING:
     from flowork.definitions.flow import SequenceFlow
-    from flowork.persistence.orm import TokenRow
 
 __all__ = ["GatewayBehavior"]
 
@@ -86,7 +85,3 @@ class GatewayBehavior(NodeBehavior):
         for token in ctx.kernel.tokens(ctx.session, ctx.instance.id, states=unfinished):
             if token.activity_code == ctx.node.code and token.id != ctx.token.id:
                 ctx.kernel.cancel_token(ctx.session, token)
-
-
-def _unused(token: TokenRow) -> None:  # pragma: no cover
-    """类型导入占位。"""

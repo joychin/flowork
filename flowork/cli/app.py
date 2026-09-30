@@ -57,8 +57,15 @@ def validate(template: Path = typer.Argument(..., help="模板 JSON 文件路径
 @app.command()
 def demo() -> None:
     """跑通示例 01（发起 → 经理审批 → 财务复核 → 结束）并回放事件。"""
+    template = EXAMPLES / "01_simple_approval.json"
+    if not template.exists():
+        console.print(
+            "[red]示例模板未随包分发[/red]：请在源码仓库内运行 demo"
+            "（examples/ 目录），或用 validate 校验你自己的模板。"
+        )
+        raise typer.Exit(code=1)
     engine = ProcessEngine()
-    definition = load_definition_file(EXAMPLES / "01_simple_approval.json", create_registry())
+    definition = load_definition_file(template, create_registry())
     engine.repository.save_definition(definition)
     engine.repository.publish(definition.code)
 
@@ -86,7 +93,7 @@ def demo() -> None:
 def demo_full() -> None:
     """最终 DoD 演示：发起 → 分支 → 会签 → 驳回 → 重提 → 传阅 → 结束（事件可回放）。"""
     engine = ProcessEngine()
-    _publish_full_demo_flow(engine)
+    _publish_full_demo_flow(engine)  # 演示模板为运行时构建，不依赖 examples 目录
     instance_id = engine.runtime.start_process(
         "full_demo", start_user="u_zhang", variables={"amount": 20_000}
     )

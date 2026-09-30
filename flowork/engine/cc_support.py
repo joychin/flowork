@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
-
-from flowork.events.domain import DomainEvent
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from flowork.definitions.builtin import CcTaskSpec
@@ -50,11 +48,3 @@ def _new_id() -> str:
     import uuid
 
     return uuid.uuid4().hex
-
-
-def _unused(*args: Any) -> None:  # pragma: no cover
-    """占位以保持导入整洁。"""
-    return None
-
-
-_ = DomainEvent  # 事件名常量在 M3 mark_read 中使用

@@ -14,7 +14,7 @@ from flowork.definitions.definition import (
 )
 from flowork.definitions.validator import ValidateIssue, assert_valid, validate_definition
 from flowork.engine.ops import CommandContext
-from flowork.errors import DefinitionNotPublishedError, NotFoundError
+from flowork.errors import DefinitionNotPublishedError
 
 if TYPE_CHECKING:
     from flowork.engine.engine import ProcessEngine
@@ -126,6 +126,3 @@ def _new_id() -> str:
     import uuid
 
     return uuid.uuid4().hex
-
-
-_ = NotFoundError  # 导出占位（保持导入整洁）

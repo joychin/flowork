@@ -5,7 +5,6 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING, Any
 
-from flowork.engine.kernel import Kernel
 from flowork.engine.ops import CommandContext
 from flowork.errors import InstanceNotFoundError
 from flowork.events.domain import DomainEvent
@@ -260,6 +259,3 @@ def _to_info(instance: ProcessInstanceRow) -> InstanceInfo:
         finished_at=instance.finished_at,
         parent_id=instance.parent_id,
     )
-
-
-_ = Kernel  # Kernel 在 kernel_for 装配处使用
