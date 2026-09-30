@@ -1,0 +1,45 @@
+{
+  "code": "countersign_branch",
+  "name": "条件分支 + 会签（示例 02）",
+  "version": 1,
+  "status": "published",
+  "nodes": [
+    { "code": "start", "name": "发起", "kind": "start" },
+    { "code": "manager", "name": "经理审批", "kind": "user_task", "assignee": "u_manager" },
+    {
+      "code": "route",
+      "name": "按金额分流",
+      "kind": "gateway",
+      "gateway_kind": "exclusive"
+    },
+    {
+      "code": "director",
+      "name": "总监会签",
+      "kind": "user_task",
+      "assignees": ["u_alice", "u_bob"],
+      "multi_instance": { "mode": "parallel", "approve_exit": ">=50%" },
+      "reject_target": "manager"
+    },
+    {
+      "code": "notify",
+      "name": "结果传阅",
+      "kind": "cc_task",
+      "recipients": ["u_originator"]
+    },
+    { "code": "end", "name": "结束", "kind": "end" }
+  ],
+  "flows": [
+    { "source": "start", "target": "manager" },
+    { "source": "manager", "target": "route" },
+    {
+      "source": "route",
+      "target": "director",
+      "condition": {
+        "groups": [[{ "left": "amount", "operator": "gt", "right": 10000 }]]
+      }
+    },
+    { "source": "route", "target": "notify", "is_default": true },
+    { "source": "director", "target": "end" },
+    { "source": "notify", "target": "end" }
+  ]
+}

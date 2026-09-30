@@ -1,0 +1,17 @@
+{
+  "code": "simple_approval",
+  "name": "串行审批（示例 01）",
+  "version": 1,
+  "status": "published",
+  "nodes": [
+    { "code": "start", "name": "发起", "kind": "start" },
+    { "code": "manager", "name": "经理审批", "kind": "user_task", "assignee": "u_manager" },
+    { "code": "finance", "name": "财务复核", "kind": "user_task", "assignee": "u_finance" },
+    { "code": "end", "name": "结束", "kind": "end" }
+  ],
+  "flows": [
+    { "source": "start", "target": "manager" },
+    { "source": "manager", "target": "finance" },
+    { "source": "finance", "target": "end" }
+  ]
+}
