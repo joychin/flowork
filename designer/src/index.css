@@ -372,3 +372,16 @@ input, select, textarea { font-family: inherit; }
 }
 .react-flow__controls-button { background: #fff; border-bottom: 1px solid var(--line); width: 28px; height: 28px; }
 .react-flow__attribution { display: none; }
+
+/* ── 开始条件（advance_policy）选项卡 ── */
+.advance-options { display: flex; flex-direction: column; gap: 6px; }
+.advance-option {
+  display: flex; flex-direction: column; gap: 3px; text-align: left;
+  padding: 8px 10px; border-radius: 8px; cursor: pointer;
+  border: 1px solid #dbe3ef; background: #fff;
+}
+.advance-option:disabled { opacity: 0.55; cursor: not-allowed; }
+.advance-option.on { border-color: #d97706; background: #fffbeb; box-shadow: 0 0 0 2px rgba(217, 119, 6, 0.12); }
+.advance-option .advance-title { font-size: 12px; font-weight: 600; color: #1e293b; }
+.advance-option.on .advance-title { color: #b45309; }
+.advance-option .advance-desc { font-size: 11px; color: #64748b; line-height: 1.5; }

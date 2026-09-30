@@ -132,6 +132,7 @@ export const useStore = create<Store>((set, get) => ({
     const { history = true } = opts
     const draft = structuredClone(spec)
     fn(draft)
+    inferAdvancePolicies(draft)
     if (history) {
       set((s) => ({ past: [...s.past.slice(-49), JSON.stringify(spec)], future: [] }))
     }
@@ -352,6 +353,21 @@ export const useStore = create<Store>((set, get) => ({
 }))
 
 // ── 内部工具 ──────────────────────────────────────────────
+
+/** 推进策略推断：≥2 入边且未显式设置的节点自动落字段（用户显式选择优先，只填空不覆盖）。
+ *  入边全为无条件 → all（并行汇合，等齐）；含条件/默认边 → any（分支合并，任一到达即开始）。 */
+function inferAdvancePolicies(spec: Spec) {
+  const incoming: Record<string, Spec['flows']> = {}
+  for (const f of spec.flows) {
+    ;(incoming[f.target] ??= []).push(f)
+  }
+  for (const node of spec.nodes) {
+    const edges = incoming[node.code]
+    if (!edges || edges.length < 2) continue
+    if (node.advance_policy != null) continue
+    node.advance_policy = edges.every((f) => !f.condition && !f.is_default) ? 'all' : 'any'
+  }
+}
 
 function ensureLayout(spec: Spec): Spec {
   spec.layout = spec.layout ?? {}

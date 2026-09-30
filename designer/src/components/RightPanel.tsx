@@ -86,7 +86,8 @@ function PropsTab() {
   if (!node) return null
   const meta = metaByKind[node.kind]
   const schema = meta?.schema
-  const exclude = meta?.form_exclude ?? ['code', 'kind', 'hooks', 'properties']
+  const exclude = [...(meta?.form_exclude ?? ['code', 'kind', 'hooks', 'properties']), 'advance_policy']
+  const incoming = spec.flows.filter((f) => f.target === node.code)
 
   return (
     <div>
@@ -102,6 +103,16 @@ function PropsTab() {
         <div className="field-label"><span>activity_code</span></div>
         <input value={node.code} disabled />
       </div>
+      {incoming.length >= 2 && (
+        <AdvancePolicyField
+          node={node}
+          disabled={node.kind === 'cc_task'}
+          onChange={(patch) => mutate((draft) => {
+            const target = draft.nodes.find((n) => n.code === node.code)
+            if (target) Object.assign(target, patch)
+          })}
+        />
+      )}
       {schema ? (
         <SchemaForm
           schema={schema}
@@ -117,6 +128,42 @@ function PropsTab() {
         <div className="form-empty">未注册的节点类型:{node.kind}</div>
       )}
       <div className="panel-note">◉ 表单由 <b>{node.kind}Spec</b> 的 JSON Schema 自动生成 — 字段与引擎校验同源。</div>
+    </div>
+  )
+}
+
+/* ── 开始条件：仅多条入边节点显示（advance_policy any/all）── */
+
+function AdvancePolicyField({ node, disabled, onChange }: {
+  node: Spec['nodes'][number]
+  disabled: boolean
+  onChange: (patch: Partial<Spec['nodes'][number]>) => void
+}) {
+  const value = (node.advance_policy as string | null | undefined) ?? 'any'
+  const options: [string, string, string][] = [
+    ['any', '任一前置分支到达即开始', '竞速：先到的分支开始本节点，其余在办分支自动取消'],
+    ['all', '所有前置分支到齐再开始', '等齐：本节点等待全部入边来源完成后才激活（并行汇合）'],
+  ]
+  return (
+    <div className="field advance-field">
+      <div className="field-label">
+        <span>开始条件</span>
+        <span className="opt">{disabled ? '传阅节点恒按「任一到达」执行' : '多条入边时的推进策略'}</span>
+      </div>
+      <div className="advance-options">
+        {options.map(([mode, title, desc]) => (
+          <button
+            key={mode}
+            type="button"
+            disabled={disabled}
+            className={`advance-option ${value === mode ? 'on' : ''}`}
+            onClick={() => onChange({ advance_policy: mode })}
+          >
+            <span className="advance-title">{title}</span>
+            <span className="advance-desc">{desc}</span>
+          </button>
+        ))}
+      </div>
     </div>
   )
 }
