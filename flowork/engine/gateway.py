@@ -12,8 +12,6 @@ from typing import TYPE_CHECKING
 
 from flowork.definitions.builtin import GatewayKind, GatewaySpec
 from flowork.engine.context import RuntimeNodeContext
-from flowork.engine.kernel import RouteError
-from flowork.expr.conditions import evaluate_condition
 from flowork.runtime.behavior import NodeBehavior, NodeContext
 from flowork.runtime.lifecycle import TokenState
 
@@ -35,45 +33,15 @@ class GatewayBehavior(NodeBehavior):
     # —— 分支 ——
 
     def get_outgoing(self, ctx: NodeContext) -> list[SequenceFlow]:
+        """EXCLUSIVE：第一条真条件/默认边；INCLUSIVE/PARALLEL：基类相容语义。"""
         assert isinstance(ctx, RuntimeNodeContext)
         definition = ctx.kernel.definition_of(ctx.session, ctx.instance)
         outgoing = definition.outgoing(ctx.node.code)
-        has_conditions = any(flow.condition is not None for flow in outgoing)
-        if not has_conditions:
-            # 汇聚场景：出边全部无条件 → 全部直通
-            return [flow for flow in outgoing if not flow.is_default]
-        kind = self._spec().gateway_kind
-        if kind == GatewayKind.EXCLUSIVE:
-            return self._exclusive(outgoing, ctx)
-        if kind == GatewayKind.INCLUSIVE:
-            return self._inclusive(outgoing, ctx)
-        return [flow for flow in outgoing if not flow.is_default]  # PARALLEL
+        if self._spec().gateway_kind != GatewayKind.EXCLUSIVE:
+            return super().get_outgoing(ctx)
+        from flowork.engine.routing import select_outgoing
 
-    def _exclusive(
-        self, outgoing: list[SequenceFlow], ctx: RuntimeNodeContext
-    ) -> list[SequenceFlow]:
-        for flow in outgoing:
-            if flow.condition is not None and evaluate_condition(flow.condition, ctx.variables):
-                return [flow]
-        defaults = [flow for flow in outgoing if flow.is_default]
-        if defaults:
-            return defaults
-        raise RouteError(f"排他网关 {ctx.node.code} 无匹配分支且未配置默认边")
-
-    def _inclusive(
-        self, outgoing: list[SequenceFlow], ctx: RuntimeNodeContext
-    ) -> list[SequenceFlow]:
-        matched = [
-            flow
-            for flow in outgoing
-            if flow.condition is not None and evaluate_condition(flow.condition, ctx.variables)
-        ]
-        if matched:
-            return matched
-        defaults = [flow for flow in outgoing if flow.is_default]
-        if defaults:
-            return defaults
-        raise RouteError(f"相容网关 {ctx.node.code} 无匹配分支且未配置默认边")
+        return select_outgoing(outgoing, dict(ctx.variables), mode="exclusive")
 
     # —— 汇聚 ——
 

@@ -1,0 +1,179 @@
+{
+  "code": "leave_request",
+  "name": "请假申请",
+  "version": 1,
+  "status": "draft",
+  "nodes": [
+    {
+      "code": "start",
+      "name": "提交",
+      "kind": "start",
+      "hooks": {
+        "on_enter": null,
+        "on_exit": null,
+        "on_cancel": null,
+        "on_fail": null
+      },
+      "properties": {}
+    },
+    {
+      "code": "supervisor",
+      "name": "主管审批",
+      "kind": "user_task",
+      "hooks": {
+        "on_enter": null,
+        "on_exit": null,
+        "on_cancel": null,
+        "on_fail": null
+      },
+      "properties": {},
+      "assignee": "manager()",
+      "reject_target": "start",
+      "auto_pass_originator": true
+    },
+    {
+      "code": "days_route",
+      "name": "天数分流",
+      "kind": "gateway",
+      "hooks": {
+        "on_enter": null,
+        "on_exit": null,
+        "on_cancel": null,
+        "on_fail": null
+      },
+      "properties": {},
+      "gateway_kind": "exclusive"
+    },
+    {
+      "code": "hr_sequential",
+      "name": "HR 串行会签",
+      "kind": "user_task",
+      "hooks": {
+        "on_enter": null,
+        "on_exit": null,
+        "on_cancel": null,
+        "on_fail": null
+      },
+      "properties": {},
+      "assignees": [
+        "u_hr1",
+        "u_hr2"
+      ],
+      "multi_instance": {
+        "mode": "sequential",
+        "approve_exit": "all",
+        "disapprove_exit": ">=1"
+      },
+      "reject_target": "supervisor"
+    },
+    {
+      "code": "hr_record",
+      "name": "HR 备案",
+      "kind": "user_task",
+      "hooks": {
+        "on_enter": null,
+        "on_exit": null,
+        "on_cancel": null,
+        "on_fail": null
+      },
+      "properties": {},
+      "assignee": "u_hr1"
+    },
+    {
+      "code": "notify",
+      "name": "结果传阅发起人",
+      "kind": "cc_task",
+      "hooks": {
+        "on_enter": null,
+        "on_exit": null,
+        "on_cancel": null,
+        "on_fail": null
+      },
+      "properties": {},
+      "recipients": [
+        "originator"
+      ]
+    },
+    {
+      "code": "end",
+      "name": "结束",
+      "kind": "end",
+      "hooks": {
+        "on_enter": null,
+        "on_exit": null,
+        "on_cancel": null,
+        "on_fail": null
+      },
+      "properties": {}
+    }
+  ],
+  "flows": [
+    {
+      "source": "start",
+      "target": "supervisor",
+      "name": "",
+      "is_default": false,
+      "condition": null,
+      "on_take": null
+    },
+    {
+      "source": "supervisor",
+      "target": "days_route",
+      "name": "",
+      "is_default": false,
+      "condition": null,
+      "on_take": null
+    },
+    {
+      "source": "days_route",
+      "target": "hr_sequential",
+      "name": "",
+      "is_default": false,
+      "condition": {
+        "groups": [
+          [
+            {
+              "left": "days",
+              "operator": "gt",
+              "right": 3
+            }
+          ]
+        ],
+        "formula": null
+      },
+      "on_take": null
+    },
+    {
+      "source": "days_route",
+      "target": "hr_record",
+      "name": "",
+      "is_default": true,
+      "condition": null,
+      "on_take": null
+    },
+    {
+      "source": "hr_sequential",
+      "target": "notify",
+      "name": "",
+      "is_default": false,
+      "condition": null,
+      "on_take": null
+    },
+    {
+      "source": "hr_record",
+      "target": "notify",
+      "name": "",
+      "is_default": false,
+      "condition": null,
+      "on_take": null
+    },
+    {
+      "source": "notify",
+      "target": "end",
+      "name": "",
+      "is_default": false,
+      "condition": null,
+      "on_take": null
+    }
+  ]
+}

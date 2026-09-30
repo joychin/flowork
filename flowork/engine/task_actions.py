@@ -199,10 +199,22 @@ class TaskOpsMixin:
     def _add_countersigner(
         self, ctx: CommandContext, task_id: str, users: list[str], actor: str, comment: str
     ) -> list[TaskInfo]:
+        from flowork.definitions.builtin import UserTaskSpec
+
         task = self._ready_task(ctx, task_id)
         token = ctx.session.get(TokenRow, task.token_id)
         assert token is not None
-        token.item_count += len(users)
+        # 名单口径对齐：节点原名单 ∪ 已有手动名单 ∪ 新人 → item_count 与可办名单一致
+        kernel = self._engine.kernel_for(ctx)
+        instance = self._instance(ctx, task.instance_id)
+        node = kernel.definition_of(ctx.session, instance).node(task.activity_code)
+        base_participants: list[str] = []
+        if isinstance(node, UserTaskSpec):
+            base_participants = ([node.assignee] if node.assignee else []) + list(node.assignees)
+        existing = list((token.manual_participants or {}).get(task.activity_code, []))
+        merged = list(dict.fromkeys([*base_participants, *existing, *users]))
+        token.manual_participants[task.activity_code] = merged
+        token.item_count = len(merged)
         ctx.session.flush()
         kernel = self._engine.kernel_for(ctx)
         kernel.record_event(

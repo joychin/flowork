@@ -1,0 +1,64 @@
+{
+  "code": "supplier_compliance",
+  "name": "供应商合规检查",
+  "version": 1,
+  "status": "draft",
+  "nodes": [
+    {
+      "code": "start",
+      "name": "发起",
+      "kind": "start",
+      "hooks": {
+        "on_enter": null,
+        "on_exit": null,
+        "on_cancel": null,
+        "on_fail": null
+      },
+      "properties": {}
+    },
+    {
+      "code": "verify",
+      "name": "合规核验",
+      "kind": "user_task",
+      "hooks": {
+        "on_enter": null,
+        "on_exit": null,
+        "on_cancel": null,
+        "on_fail": null
+      },
+      "properties": {},
+      "assignee": "u_fa1",
+      "reject_target": "start"
+    },
+    {
+      "code": "end",
+      "name": "完成",
+      "kind": "end",
+      "hooks": {
+        "on_enter": null,
+        "on_exit": null,
+        "on_cancel": null,
+        "on_fail": null
+      },
+      "properties": {}
+    }
+  ],
+  "flows": [
+    {
+      "source": "start",
+      "target": "verify",
+      "name": "",
+      "is_default": false,
+      "condition": null,
+      "on_take": null
+    },
+    {
+      "source": "verify",
+      "target": "end",
+      "name": "",
+      "is_default": false,
+      "condition": null,
+      "on_take": null
+    }
+  ]
+}

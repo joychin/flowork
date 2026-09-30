@@ -1,0 +1,306 @@
+{
+  "code": "purchase_order",
+  "name": "采购申请",
+  "version": 1,
+  "status": "draft",
+  "nodes": [
+    {
+      "code": "start",
+      "name": "提交",
+      "kind": "start",
+      "hooks": {
+        "on_enter": null,
+        "on_exit": null,
+        "on_cancel": null,
+        "on_fail": null
+      },
+      "properties": {}
+    },
+    {
+      "code": "dept_review",
+      "name": "部门主管审批",
+      "kind": "user_task",
+      "hooks": {
+        "on_enter": null,
+        "on_exit": null,
+        "on_cancel": null,
+        "on_fail": null
+      },
+      "properties": {},
+      "assignee": "manager()",
+      "reject_target": "start"
+    },
+    {
+      "code": "amount_route",
+      "name": "金额分流",
+      "kind": "gateway",
+      "hooks": {
+        "on_enter": null,
+        "on_exit": null,
+        "on_cancel": null,
+        "on_fail": null
+      },
+      "properties": {},
+      "gateway_kind": "exclusive"
+    },
+    {
+      "code": "parallel",
+      "name": "法务/财务并行",
+      "kind": "gateway",
+      "hooks": {
+        "on_enter": null,
+        "on_exit": null,
+        "on_cancel": null,
+        "on_fail": null
+      },
+      "properties": {},
+      "gateway_kind": "parallel"
+    },
+    {
+      "code": "legal_review",
+      "name": "法务核验",
+      "kind": "user_task",
+      "hooks": {
+        "on_enter": null,
+        "on_exit": null,
+        "on_cancel": null,
+        "on_fail": null
+      },
+      "properties": {},
+      "assignee": "u_fa1"
+    },
+    {
+      "code": "finance_pricing",
+      "name": "财务核价",
+      "kind": "user_task",
+      "hooks": {
+        "on_enter": null,
+        "on_exit": null,
+        "on_cancel": null,
+        "on_fail": null
+      },
+      "properties": {},
+      "assignee": "u_cai1",
+      "reject_target": "dept_review"
+    },
+    {
+      "code": "join",
+      "name": "与汇聚",
+      "kind": "gateway",
+      "hooks": {
+        "on_enter": null,
+        "on_exit": null,
+        "on_cancel": null,
+        "on_fail": null
+      },
+      "properties": {},
+      "gateway_kind": "parallel"
+    },
+    {
+      "code": "big_route",
+      "name": "大额分流",
+      "kind": "gateway",
+      "hooks": {
+        "on_enter": null,
+        "on_exit": null,
+        "on_cancel": null,
+        "on_fail": null
+      },
+      "properties": {},
+      "gateway_kind": "exclusive"
+    },
+    {
+      "code": "gm_review",
+      "name": "总经理审批",
+      "kind": "user_task",
+      "hooks": {
+        "on_enter": null,
+        "on_exit": null,
+        "on_cancel": null,
+        "on_fail": null
+      },
+      "properties": {},
+      "assignee": "u_yang"
+    },
+    {
+      "code": "supplier_check",
+      "name": "供应商合规子流程",
+      "kind": "call_activity",
+      "hooks": {
+        "on_enter": null,
+        "on_exit": null,
+        "on_cancel": null,
+        "on_fail": null
+      },
+      "properties": {},
+      "process_code": "supplier_compliance",
+      "input_mappings": {
+        "supplier": "supplier"
+      },
+      "output_mappings": {
+        "compliance": "compliance"
+      }
+    },
+    {
+      "code": "payment",
+      "name": "采购打款",
+      "kind": "service_task",
+      "hooks": {
+        "on_enter": null,
+        "on_exit": null,
+        "on_cancel": null,
+        "on_fail": null
+      },
+      "properties": {},
+      "action": "make_payment"
+    },
+    {
+      "code": "end",
+      "name": "结束",
+      "kind": "end",
+      "hooks": {
+        "on_enter": null,
+        "on_exit": null,
+        "on_cancel": null,
+        "on_fail": null
+      },
+      "properties": {}
+    }
+  ],
+  "flows": [
+    {
+      "source": "start",
+      "target": "dept_review",
+      "name": "",
+      "is_default": false,
+      "condition": null,
+      "on_take": null
+    },
+    {
+      "source": "dept_review",
+      "target": "amount_route",
+      "name": "",
+      "is_default": false,
+      "condition": null,
+      "on_take": null
+    },
+    {
+      "source": "amount_route",
+      "target": "parallel",
+      "name": "",
+      "is_default": false,
+      "condition": {
+        "groups": [
+          [
+            {
+              "left": "amount",
+              "operator": "ge",
+              "right": 100000
+            }
+          ]
+        ],
+        "formula": null
+      },
+      "on_take": null
+    },
+    {
+      "source": "amount_route",
+      "target": "end",
+      "name": "",
+      "is_default": true,
+      "condition": null,
+      "on_take": null
+    },
+    {
+      "source": "parallel",
+      "target": "legal_review",
+      "name": "",
+      "is_default": false,
+      "condition": null,
+      "on_take": null
+    },
+    {
+      "source": "parallel",
+      "target": "finance_pricing",
+      "name": "",
+      "is_default": false,
+      "condition": null,
+      "on_take": null
+    },
+    {
+      "source": "legal_review",
+      "target": "join",
+      "name": "",
+      "is_default": false,
+      "condition": null,
+      "on_take": null
+    },
+    {
+      "source": "finance_pricing",
+      "target": "join",
+      "name": "",
+      "is_default": false,
+      "condition": null,
+      "on_take": null
+    },
+    {
+      "source": "join",
+      "target": "big_route",
+      "name": "",
+      "is_default": false,
+      "condition": null,
+      "on_take": null
+    },
+    {
+      "source": "big_route",
+      "target": "gm_review",
+      "name": "",
+      "is_default": false,
+      "condition": {
+        "groups": [
+          [
+            {
+              "left": "amount",
+              "operator": "ge",
+              "right": 500000
+            }
+          ]
+        ],
+        "formula": null
+      },
+      "on_take": null
+    },
+    {
+      "source": "big_route",
+      "target": "end",
+      "name": "",
+      "is_default": true,
+      "condition": null,
+      "on_take": null
+    },
+    {
+      "source": "gm_review",
+      "target": "supplier_check",
+      "name": "",
+      "is_default": false,
+      "condition": null,
+      "on_take": null
+    },
+    {
+      "source": "supplier_check",
+      "target": "payment",
+      "name": "",
+      "is_default": false,
+      "condition": null,
+      "on_take": null
+    },
+    {
+      "source": "payment",
+      "target": "end",
+      "name": "",
+      "is_default": false,
+      "condition": null,
+      "on_take": null
+    }
+  ]
+}

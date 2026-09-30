@@ -1,0 +1,22 @@
+# 试点组织目录：技术部/财务/法务/HR + 管理链 + 一条委托（u_li → u_dave）
+users:
+  u_zhang: {manager: u_li, department: d_tech, roles: [developer]}
+  u_wang: {manager: u_li, department: d_tech, roles: [developer]}
+  u_li: {manager: u_chen, department: d_tech, roles: [dept_head]}
+  u_chen: {manager: u_yang, department: d_tech, roles: [director]}
+  u_yang: {department: d_all, roles: [gm]}
+  u_dave: {manager: u_chen, department: d_tech, roles: [developer]}
+  u_cai1: {manager: u_chen, department: d_fin, roles: [finance]}
+  u_cai2: {manager: u_chen, department: d_fin, roles: [finance]}
+  u_fa1: {manager: u_chen, department: d_legal, roles: [legal]}
+  u_hr1: {manager: u_chen, department: d_hr, roles: [hr]}
+  u_hr2: {manager: u_chen, department: d_hr, roles: [hr]}
+departments:
+  d_tech: {head: u_li, parent: d_all}
+  d_fin: {head: u_chen, parent: d_all}
+  d_legal: {head: u_chen, parent: d_all}
+  d_hr: {head: u_chen, parent: d_all}
+  d_all: {head: u_yang}
+delegations:
+  - {from: u_li, to: u_dave, until: "2099-12-31"}
+admins: [u_admin]

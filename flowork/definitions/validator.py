@@ -170,6 +170,12 @@ def validate_definition(
                         node=node.code,
                         flow=flow.flow_code(),
                     )
+            if outgoing and not defaults and conditional and len(conditional) == len(outgoing):
+                warning(
+                    "gateway.exclusive.all_conditional",
+                    "排他网关出边全部带条件且无默认边：条件不互补时运行期将无法路由",
+                    node=node.code,
+                )
         elif gateway_kind == GatewayKind.INCLUSIVE:
             # 相容网关：条件边 + 可选默认边；无条件非默认边视为告警（恒真分支）
             if len(defaults) > 1:

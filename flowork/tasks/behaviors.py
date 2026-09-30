@@ -47,7 +47,29 @@ def register_builtin_behaviors(registry: NodeRegistry) -> None:
 
 
 class StartBehavior(NodeBehavior):
-    """开始节点：进入即完成（无任务）。"""
+    """开始节点：进入即完成（无任务）。
+
+    例外——驳回到发起（reject_target 指向 start）：为发起人生成
+    "修改后重新提交"任务，完成后流程重新从 start 路由（变量可改，分支随之变化）。
+    """
+
+    def on_enter(self, ctx: NodeContext) -> None:
+        assert isinstance(ctx, RuntimeNodeContext)
+        if ctx.token is not None and ctx.token.reject_flag:
+            ctx.token.item_count = 1
+            ctx.token_updated()
+            ctx.create_task(
+                assignee=ctx.instance.start_user,
+                name="修改后重新提交",
+                context_payload={"hint": "申请被驳回，请修改后重新提交"},
+            )
+
+    def try_complete(self, ctx: NodeContext) -> bool:
+        assert isinstance(ctx, RuntimeNodeContext)
+        if ctx.token is not None and ctx.token.reject_flag:
+            open_tasks = ctx.kernel.tasks(ctx.session, ctx.instance.id, token_id=ctx.token.id)
+            return not open_tasks
+        return True
 
 
 class EndBehavior(NodeBehavior):

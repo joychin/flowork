@@ -1,0 +1,237 @@
+{
+  "code": "expense_claim",
+  "name": "报销申请",
+  "version": 1,
+  "status": "draft",
+  "nodes": [
+    {
+      "code": "start",
+      "name": "提交",
+      "kind": "start",
+      "hooks": {
+        "on_enter": null,
+        "on_exit": null,
+        "on_cancel": null,
+        "on_fail": null
+      },
+      "properties": {}
+    },
+    {
+      "code": "supervisor",
+      "name": "直属主管审批",
+      "kind": "user_task",
+      "hooks": {
+        "on_enter": null,
+        "on_exit": null,
+        "on_cancel": null,
+        "on_fail": null
+      },
+      "properties": {},
+      "assignee": "manager()",
+      "reject_target": "start"
+    },
+    {
+      "code": "amount_route",
+      "name": "金额分流",
+      "kind": "gateway",
+      "hooks": {
+        "on_enter": null,
+        "on_exit": null,
+        "on_cancel": null,
+        "on_fail": null
+      },
+      "properties": {},
+      "gateway_kind": "exclusive"
+    },
+    {
+      "code": "finance_review",
+      "name": "财务会签",
+      "kind": "user_task",
+      "hooks": {
+        "on_enter": null,
+        "on_exit": null,
+        "on_cancel": null,
+        "on_fail": null
+      },
+      "properties": {},
+      "assignees": [
+        "u_cai1",
+        "u_cai2"
+      ],
+      "multi_instance": {
+        "mode": "parallel",
+        "approve_exit": ">=50%",
+        "disapprove_exit": ">=1"
+      },
+      "reject_target": "supervisor"
+    },
+    {
+      "code": "director_review",
+      "name": "总监审批",
+      "kind": "user_task",
+      "hooks": {
+        "on_enter": null,
+        "on_exit": null,
+        "on_cancel": null,
+        "on_fail": null
+      },
+      "properties": {},
+      "assignee": "u_chen"
+    },
+    {
+      "code": "legal_cc",
+      "name": "法务留档传阅",
+      "kind": "cc_task",
+      "hooks": {
+        "on_enter": null,
+        "on_exit": null,
+        "on_cancel": null,
+        "on_fail": null
+      },
+      "properties": {},
+      "recipients": [
+        "u_fa1"
+      ]
+    },
+    {
+      "code": "payment",
+      "name": "财务打款",
+      "kind": "service_task",
+      "hooks": {
+        "on_enter": null,
+        "on_exit": null,
+        "on_cancel": null,
+        "on_fail": null
+      },
+      "properties": {},
+      "action": "make_payment"
+    },
+    {
+      "code": "end",
+      "name": "结束",
+      "kind": "end",
+      "hooks": {
+        "on_enter": null,
+        "on_exit": null,
+        "on_cancel": null,
+        "on_fail": null
+      },
+      "properties": {}
+    }
+  ],
+  "flows": [
+    {
+      "source": "start",
+      "target": "supervisor",
+      "name": "",
+      "is_default": false,
+      "condition": null,
+      "on_take": null
+    },
+    {
+      "source": "supervisor",
+      "target": "amount_route",
+      "name": "",
+      "is_default": false,
+      "condition": null,
+      "on_take": null
+    },
+    {
+      "source": "amount_route",
+      "target": "director_review",
+      "name": "",
+      "is_default": false,
+      "condition": {
+        "groups": [
+          [
+            {
+              "left": "amount",
+              "operator": "gt",
+              "right": 10000
+            }
+          ]
+        ],
+        "formula": null
+      },
+      "on_take": null
+    },
+    {
+      "source": "amount_route",
+      "target": "finance_review",
+      "name": "",
+      "is_default": false,
+      "condition": {
+        "groups": [
+          [
+            {
+              "left": "amount",
+              "operator": "ge",
+              "right": 1000
+            }
+          ]
+        ],
+        "formula": null
+      },
+      "on_take": null
+    },
+    {
+      "source": "amount_route",
+      "target": "payment",
+      "name": "",
+      "is_default": true,
+      "condition": null,
+      "on_take": null
+    },
+    {
+      "source": "director_review",
+      "target": "finance_review",
+      "name": "",
+      "is_default": false,
+      "condition": null,
+      "on_take": null
+    },
+    {
+      "source": "finance_review",
+      "target": "legal_cc",
+      "name": "",
+      "is_default": false,
+      "condition": {
+        "groups": [
+          [
+            {
+              "left": "amount",
+              "operator": "gt",
+              "right": 10000
+            }
+          ]
+        ],
+        "formula": null
+      },
+      "on_take": null
+    },
+    {
+      "source": "finance_review",
+      "target": "payment",
+      "name": "",
+      "is_default": true,
+      "condition": null,
+      "on_take": null
+    },
+    {
+      "source": "legal_cc",
+      "target": "payment",
+      "name": "",
+      "is_default": false,
+      "condition": null,
+      "on_take": null
+    },
+    {
+      "source": "payment",
+      "target": "end",
+      "name": "",
+      "is_default": false,
+      "condition": null,
+      "on_take": null
+    }
+  ]
+}

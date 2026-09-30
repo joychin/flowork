@@ -10,6 +10,7 @@ from flowork.engine.task_actions import TaskOpsMixin
 from flowork.errors import TaskNotAvailableError
 from flowork.events.domain import DomainEvent
 from flowork.persistence.orm import TaskHistoryRow, TaskRow
+from flowork.runtime.lifecycle import TokenState
 from flowork.tasks.models import TaskInfo
 
 if TYPE_CHECKING:
@@ -234,6 +235,11 @@ class TaskService(TaskOpsMixin):
             raise RejectTargetMissing(f"任务 {task_id} 无可用驳回目标")
         token.approval_exit = "reject"
         kernel.finish_token(ctx.session, token, approval_exit="reject")
+        # 并行场景：驳回归零——取消其余未完令牌（兄弟分支不再继续）
+        unfinished = (TokenState.UNFINISHED.value,)
+        for other in kernel.tokens(ctx.session, instance.id, states=unfinished):
+            if other.id != token.id:
+                kernel.cancel_token(ctx.session, other)
         for pending in kernel.tasks(ctx.session, instance.id, token_id=token.id):
             kernel.archive_task(
                 ctx.session,

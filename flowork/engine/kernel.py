@@ -307,13 +307,9 @@ class Kernel:
             resume_parent_if_waiting(self, session, instance)
 
     def normal_flows(self, ctx: RuntimeNodeContext) -> list[SequenceFlow]:
-        """默认路由出口：无条件且非默认的出边。"""
+        """无条件出边（default 视同无条件）；条件路由见 engine.routing.select_outgoing。"""
         definition = self.definition_of(ctx.session, ctx.instance)
-        return [
-            flow
-            for flow in definition.outgoing(ctx.node.code)
-            if flow.condition is None and not flow.is_default
-        ]
+        return [flow for flow in definition.outgoing(ctx.node.code) if flow.condition is None]
 
     # —— 参与者 / 已办 ——
 
