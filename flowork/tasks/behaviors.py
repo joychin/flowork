@@ -68,6 +68,8 @@ class UserTaskBehavior(NodeBehavior):
         assert ctx.token is not None
         participants = ctx.kernel.resolve_participants(ctx, spec)
         if not participants:
+            if spec.candidate_users or spec.candidate_groups:
+                return self._create_claimable_task(ctx, spec)
             raise NoParticipantError(
                 f"审批节点 {spec.code}（{spec.name or spec.code}）没有可用参与者"
             )
@@ -77,6 +79,28 @@ class UserTaskBehavior(NodeBehavior):
         targets = [participants[0]] if sequential else participants
         for assignee in targets:
             ctx.create_task(assignee=assignee)
+
+    def _create_claimable_task(self, ctx: RuntimeNodeContext, spec: UserTaskSpec) -> None:
+        """无指定办理人但有候选人：生成可认领任务（assignee 置空 + 候选关联）。"""
+        import uuid
+
+        from flowork.persistence.orm import IdentityLinkRow
+
+        assert ctx.token is not None
+        ctx.token.item_count = 1
+        ctx.token_updated()
+        task = ctx.create_task(assignee="")
+        candidates = list(spec.candidate_users) + list(spec.candidate_groups)
+        for candidate in dict.fromkeys(candidates):
+            ctx.session.add(
+                IdentityLinkRow(
+                    id=uuid.uuid4().hex,
+                    task_id=task.id,
+                    user_id=candidate,
+                    link_type="candidate",
+                )
+            )
+        ctx.session.flush()
 
     def on_exit(self, ctx: NodeContext) -> None:
         """会签出口达成：本令牌剩余待办撤销（记录为 auto_pass）。"""

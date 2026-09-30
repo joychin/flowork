@@ -165,3 +165,16 @@ class CcItemRow(Base):
     is_read: Mapped[bool] = mapped_column(Boolean, default=False)
     read_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
+class IdentityLinkRow(Base):
+    """任务与人的关联（assignee/candidate；M3 认领语义）。"""
+
+    __tablename__ = "wf_identity_link"
+    __table_args__ = (Index("ix_identity_task", "task_id"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    task_id: Mapped[str] = mapped_column(String(36))
+    user_id: Mapped[str] = mapped_column(String(64))
+    link_type: Mapped[str] = mapped_column(String(16), default="candidate")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)

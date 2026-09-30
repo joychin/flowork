@@ -1,24 +1,21 @@
-"""TaskService：待办任务的操作面（complete 为 M1 主干，其余操作随 M2/M3 增补）。"""
+"""TaskService：待办任务的办理与查询（操作全集见 task_actions.TaskOpsMixin）。"""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
 from flowork.engine.context import RuntimeNodeContext
-from flowork.engine.kernel import Kernel
 from flowork.engine.ops import CommandContext
+from flowork.engine.task_actions import TaskOpsMixin
 from flowork.errors import TaskNotAvailableError
 from flowork.events.domain import DomainEvent
 from flowork.persistence.orm import TaskHistoryRow, TaskRow
-from flowork.runtime.lifecycle import TokenState
-from flowork.tasks.models import InstanceInfo, TaskHistoryInfo, TaskInfo
+from flowork.tasks.models import TaskInfo
 
 if TYPE_CHECKING:
     from flowork.engine.engine import ProcessEngine
-    from flowork.persistence.orm import ProcessInstanceRow
 
 __all__ = ["TaskCompleteResult", "TaskService"]
-
 
 from pydantic import BaseModel, ConfigDict
 
@@ -34,7 +31,7 @@ class TaskCompleteResult(BaseModel):
     next_tasks: list[TaskInfo] = []
 
 
-class TaskService:
+class TaskService(TaskOpsMixin):
     """任务服务：办理 / 查询。所有操作带 actor 归因（人 or agent 可区分）。"""
 
     def __init__(self, engine: ProcessEngine) -> None:
@@ -45,7 +42,7 @@ class TaskService:
     def get_task(self, task_id: str) -> TaskInfo | None:
         def _command(ctx: CommandContext) -> Any:
             task = ctx.session.get(TaskRow, task_id)
-            return _to_info(task) if task else None
+            return self._task_info(task) if task else None
 
         result: TaskInfo | None = self._engine.execute(_command)
         return result
@@ -60,7 +57,7 @@ class TaskService:
         """查询待办（默认 ready；state=None 查全部）。"""
         from sqlalchemy import select
 
-        def _command(ctx: CommandContext) -> Any:
+        def _command(ctx: CommandContext) -> list[TaskInfo]:
             stmt = select(TaskRow)
             if instance_id:
                 stmt = stmt.where(TaskRow.instance_id == instance_id)
@@ -68,7 +65,7 @@ class TaskService:
                 stmt = stmt.where(TaskRow.assignee == assignee)
             if state:
                 stmt = stmt.where(TaskRow.state == state)
-            return [_to_info(row) for row in ctx.session.scalars(stmt)]
+            return [self._task_info(row) for row in ctx.session.scalars(stmt)]
 
         result: list[TaskInfo] = self._engine.execute(_command)
         return result
@@ -119,18 +116,65 @@ class TaskService:
         - 目标节点 = 显式 target > 节点配置 reject_target > 来源节点。
         - 回退 = 新令牌（reject_flag=True）+ 为目标节点原办理人生成新待办
           （cause_token_id 溯源；历史只追加不修改）。
-
-        Args:
-            task_id: 待驳回任务 ID。
-            actor: 驳回人。
-            comment: 驳回意见。
-            target: 驳回目标节点编码（缺省按上述优先级推导）。
-            variables: 随驳回合并的变量。
-            as_agent: 是否 agent 代办。
         """
         return self._engine.execute(
             lambda ctx: self._reject(ctx, task_id, actor, comment, target, variables, as_agent)
         )
+
+    # —— 内部 ——
+
+    def _complete(
+        self,
+        ctx: CommandContext,
+        task_id: str,
+        actor: str,
+        comment: str,
+        variables: dict[str, Any] | None,
+        idempotency_key: str | None,
+        as_agent: bool,
+    ) -> TaskCompleteResult:
+        task = ctx.session.get(TaskRow, task_id)
+        if task is None or task.state != "ready":
+            if idempotency_key:
+                previous = self._find_history_by_key(ctx, idempotency_key)
+                if previous is not None:
+                    return self._result(ctx, previous.task_id, previous.outcome)
+            raise TaskNotAvailableError(f"任务不可办理（不存在或已处理）：{task_id}")
+        if task.task_type == "assist":
+            raise TaskNotAvailableError("协办任务请用 complete_assist 完成")
+        instance = self._instance(ctx, task.instance_id)
+        if task.assignee == "":
+            raise TaskNotAvailableError("候选任务需先 claim 认领")
+        if variables:
+            instance.variables.update(variables)
+        kernel = self._engine.kernel_for(ctx)
+        from flowork.persistence.orm import TokenRow
+
+        token = ctx.session.get(TokenRow, task.token_id)
+        if token is None:  # pragma: no cover - 数据一致性保护
+            raise TaskNotAvailableError(f"任务令牌不存在：{task.token_id}")
+        token.approve_count += 1
+        kernel.record_event(
+            DomainEvent.TASK_COMPLETED,
+            {"task_id": task.id, "assignee": task.assignee, "actor": actor, "outcome": "agree"},
+            instance.id,
+        )
+        kernel.archive_task(
+            ctx.session,
+            task,
+            outcome="agree",
+            comment=comment,
+            actor=actor,
+            as_agent=as_agent,
+            idempotency_key=idempotency_key,
+        )
+        node = kernel.definition_of(ctx.session, instance).node(task.activity_code)
+        assert node is not None, f"任务节点不存在：{task.activity_code}"
+        behavior = kernel.behavior_of(node)
+        node_ctx = RuntimeNodeContext(kernel, ctx.session, instance, node, token)
+        behavior.on_task_completed(node_ctx, task.id, "agree")
+        kernel.advance_after_task(ctx.session, instance, token)
+        return self._result(ctx, task.id, "agree")
 
     def _reject(
         self,
@@ -179,7 +223,6 @@ class TaskService:
             kernel.advance_after_task(ctx.session, instance, token)
             return self._result(ctx, task.id, "reject")
 
-        # 出口达成：结束当前节点（否决）并回退
         reject_target = (
             target or (spec.reject_target if spec else None) or token.source_activity_code
         )
@@ -187,8 +230,7 @@ class TaskService:
             raise RejectTargetMissing(f"任务 {task_id} 无可用驳回目标")
         token.approval_exit = "reject"
         kernel.finish_token(ctx.session, token, approval_exit="reject")
-        remaining = kernel.tasks(ctx.session, instance.id, token_id=token.id)
-        for pending in remaining:
+        for pending in kernel.tasks(ctx.session, instance.id, token_id=token.id):
             kernel.archive_task(
                 ctx.session,
                 pending,
@@ -198,7 +240,6 @@ class TaskService:
                 cause_token_id=token.id,
             )
         kernel.record_event(DomainEvent.NODE_EXITED, {"activity_code": node.code}, instance.id)
-        # 回退目标的原办理人重新待办（无历史办理人则按节点配置解析）
         from sqlalchemy import select
 
         history_rows = ctx.session.scalars(
@@ -223,59 +264,6 @@ class TaskService:
         )
         return self._result(ctx, task.id, "reject")
 
-    # —— 内部 ——
-
-    def _complete(
-        self,
-        ctx: CommandContext,
-        task_id: str,
-        actor: str,
-        comment: str,
-        variables: dict[str, Any] | None,
-        idempotency_key: str | None,
-        as_agent: bool,
-    ) -> TaskCompleteResult:
-
-        task = ctx.session.get(TaskRow, task_id)
-        if task is None or task.state != "ready":
-            if idempotency_key:
-                previous = self._find_history_by_key(ctx, idempotency_key)
-                if previous is not None:
-                    return self._result(ctx, previous.task_id, previous.outcome)
-            raise TaskNotAvailableError(f"任务不可办理（不存在或已处理）：{task_id}")
-        instance = self._instance(ctx, task.instance_id)
-        if variables:
-            instance.variables.update(variables)
-        kernel = self._engine.kernel_for(ctx)
-        from flowork.persistence.orm import TokenRow
-
-        token = ctx.session.get(TokenRow, task.token_id)
-        if token is None:  # pragma: no cover - 数据一致性保护
-            raise TaskNotAvailableError(f"任务令牌不存在：{task.token_id}")
-        token.approve_count += 1
-        kernel.record_event(
-            DomainEvent.TASK_COMPLETED,
-            {"task_id": task.id, "assignee": task.assignee, "actor": actor, "outcome": "agree"},
-            instance.id,
-        )
-        self._archive_task(
-            ctx,
-            task,
-            outcome="agree",
-            comment=comment,
-            actor=actor,
-            as_agent=as_agent,
-            idempotency_key=idempotency_key,
-        )
-        node = kernel.definition_of(ctx.session, instance).node(task.activity_code)
-        assert node is not None, f"任务节点不存在：{task.activity_code}"
-        behavior = kernel.behavior_of(node)
-        node_ctx = RuntimeNodeContext(kernel, ctx.session, instance, node, token)
-        if behavior is not None:
-            behavior.on_task_completed(node_ctx, task.id, "agree")
-        kernel.advance_after_task(ctx.session, instance, token)
-        return self._result(ctx, task.id, "agree")
-
     def _result(self, ctx: CommandContext, task_id: str, outcome: str) -> TaskCompleteResult:
         """同事务内构造结果（避免嵌套会话读不到未提交数据）。"""
         from sqlalchemy import select
@@ -291,7 +279,7 @@ class TaskService:
             rows = ctx.session.scalars(
                 select(TaskRow).where(TaskRow.instance_id == instance.id, TaskRow.state == "ready")
             )
-            next_tasks = [_to_info(row) for row in rows]
+            next_tasks = [self._task_info(row) for row in rows]
         return TaskCompleteResult(
             task_id=task_id,
             outcome=outcome,
@@ -299,99 +287,9 @@ class TaskService:
             next_tasks=next_tasks,
         )
 
-    def _archive_task(
-        self,
-        ctx: CommandContext,
-        task: TaskRow,
-        *,
-        outcome: str,
-        comment: str,
-        actor: str,
-        as_agent: bool = False,
-        idempotency_key: str | None = None,
-        cause_token_id: str | None = None,
-    ) -> None:
-
-        kernel = self._engine.kernel_for(ctx)
-        kernel.archive_task(
-            ctx.session,
-            task,
-            outcome=outcome,
-            comment=comment,
-            actor=actor,
-            as_agent=as_agent,
-            idempotency_key=idempotency_key,
-            cause_token_id=cause_token_id,
-        )
-
     def _find_history_by_key(self, ctx: CommandContext, key: str) -> TaskHistoryRow | None:
         from sqlalchemy import select
-
-        from flowork.persistence.orm import TaskHistoryRow
 
         return ctx.session.scalars(
             select(TaskHistoryRow).where(TaskHistoryRow.idempotency_key == key)
         ).first()
-
-    def _instance(self, ctx: CommandContext, instance_id: str) -> ProcessInstanceRow:
-        from flowork.persistence.orm import ProcessInstanceRow as _Row
-
-        instance = ctx.session.get(_Row, instance_id)
-        if instance is None:  # pragma: no cover
-            raise TaskNotAvailableError(f"实例不存在：{instance_id}")
-        assert instance is not None
-        return instance
-
-
-def _to_info(task: TaskRow) -> TaskInfo:
-    return TaskInfo(
-        id=task.id,
-        instance_id=task.instance_id,
-        token_id=task.token_id,
-        activity_code=task.activity_code,
-        name=task.name,
-        assignee=task.assignee,
-        task_type=task.task_type,
-        state=task.state,
-        context_payload=task.context_payload,
-        created_at=task.created_at,
-    )
-
-
-def _history_to_info(row: TaskHistoryRow) -> TaskHistoryInfo:
-    return TaskHistoryInfo(
-        id=row.id,
-        task_id=row.task_id,
-        instance_id=row.instance_id,
-        token_id=row.token_id,
-        activity_code=row.activity_code,
-        name=row.name,
-        assignee=row.assignee,
-        task_type=row.task_type,
-        state="completed",
-        context_payload=row.context_payload,
-        created_at=row.created_at,
-        outcome=row.outcome,
-        comment=row.comment,
-        acted_by=row.acted_by,
-        acted_as_agent=row.acted_as_agent,
-        cause_token_id=row.cause_token_id,
-    )
-
-
-def _new_id() -> str:
-    import uuid
-
-    return uuid.uuid4().hex
-
-
-def _cost_seconds(created_at: object) -> float:
-    import datetime as _dt
-
-    if created_at is None:
-        return 0.0
-    delta = _dt.datetime.now() - created_at  # type: ignore[operator]
-    return float(delta.total_seconds())
-
-
-_ = TokenState, InstanceInfo, _history_to_info, Kernel  # M2/M3 使用的导出占位
