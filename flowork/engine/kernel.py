@@ -46,6 +46,10 @@ class NoParticipantError(EngineExecutionError):
     """审批节点无可用的参与者。"""
 
 
+class RejectTargetMissing(EngineExecutionError):
+    """驳回目标节点缺失（未配置且无来源节点）。"""
+
+
 def _new_id() -> str:
     return uuid.uuid4().hex
 
@@ -233,6 +237,52 @@ class Kernel:
             stmt = stmt.where(_TaskRow.assignee == assignee)
         return list(session.scalars(stmt))
 
+    def archive_task(
+        self,
+        session: Session,
+        task: TaskRow,
+        *,
+        outcome: str,
+        comment: str = "",
+        actor: str = "system",
+        as_agent: bool = False,
+        idempotency_key: str | None = None,
+        cause_token_id: str | None = None,
+    ) -> None:
+        """任务归档：写历史（append-only）并从活表删除。"""
+        import datetime as _dt
+        import uuid as _uuid
+
+        from flowork.persistence.orm import TaskHistoryRow
+
+        cost = (
+            (_dt.datetime.now() - task.created_at).total_seconds()
+            if task.created_at is not None
+            else 0.0
+        )
+        session.add(
+            TaskHistoryRow(
+                id=_uuid.uuid4().hex,
+                task_id=task.id,
+                instance_id=task.instance_id,
+                token_id=task.token_id,
+                activity_code=task.activity_code,
+                name=task.name,
+                assignee=task.assignee,
+                task_type=task.task_type,
+                outcome=outcome,
+                comment=comment,
+                context_payload=task.context_payload,
+                acted_by=actor,
+                acted_as_agent=as_agent,
+                idempotency_key=idempotency_key,
+                cause_token_id=cause_token_id,
+                cost_seconds=cost,
+            )
+        )
+        session.delete(task)
+        session.flush()
+
     # —— 实例 ——
 
     def complete_instance(
@@ -312,6 +362,8 @@ class Kernel:
     def _maybe_complete(
         self, session: Session, instance: ProcessInstanceRow, node: FlowNode, token: TokenRow
     ) -> None:
+        if token.state != TokenState.UNFINISHED.value:
+            return  # 节点已完成（如会签出口已达成）：重复提交不再推进
         ctx = RuntimeNodeContext(self, session, instance, node, token)
         if self.behavior_of(node).try_complete(ctx):
             self._finish_and_route(session, instance, node, token)

@@ -9,7 +9,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from flowork.definitions.flow import ConditionItem, FlowCondition
-from flowork.errors import ConditionError, FormulaNotSupported, VariableNotDefined
+from flowork.errors import ConditionError, VariableNotDefined
 
 __all__ = ["evaluate_condition", "evaluate_groups", "evaluate_item", "resolve_path"]
 
@@ -88,11 +88,11 @@ def evaluate_groups(groups: list[list[ConditionItem]], variables: Mapping[str, A
 
 
 def evaluate_condition(condition: FlowCondition, variables: Mapping[str, Any]) -> bool:
-    """求值路由条件：结构化组优先；公式 M2 前显式报未支持。"""
+    """求值路由条件：结构化组优先，公式走沙箱（expr.formula）。"""
     if condition.groups:
         return evaluate_groups(condition.groups, variables)
     if condition.formula:
-        raise FormulaNotSupported(
-            f"公式条件 {condition.formula!r} 将在 M2 启用（沙箱求值），当前请使用结构化条件组"
-        )
+        from flowork.expr.formula import evaluate_formula
+
+        return evaluate_formula(condition.formula, dict(variables))
     return False

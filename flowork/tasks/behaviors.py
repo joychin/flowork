@@ -34,12 +34,16 @@ ORIGINATOR = "originator"
 
 def register_builtin_behaviors(registry: NodeRegistry) -> None:
     """把内置行为接入注册表（与自定义行为同一入口）。"""
+    from flowork.definitions.builtin import GatewaySpec
+    from flowork.engine.gateway import GatewayBehavior
+
     registry.register("start", StartSpec, StartBehavior, replace=True)
     registry.register("end", EndSpec, EndBehavior, replace=True)
     registry.register("user_task", UserTaskSpec, UserTaskBehavior, replace=True)
     registry.register("service_task", ServiceTaskSpec, ServiceTaskBehavior, replace=True)
     registry.register("call_activity", CallActivitySpec, CallActivityBehavior, replace=True)
     registry.register("cc_task", CcTaskSpec, CcTaskBehavior, replace=True)
+    registry.register("gateway", GatewaySpec, GatewayBehavior, replace=True)
 
 
 class StartBehavior(NodeBehavior):
@@ -73,6 +77,20 @@ class UserTaskBehavior(NodeBehavior):
         targets = [participants[0]] if sequential else participants
         for assignee in targets:
             ctx.create_task(assignee=assignee)
+
+    def on_exit(self, ctx: NodeContext) -> None:
+        """会签出口达成：本令牌剩余待办撤销（记录为 auto_pass）。"""
+        assert isinstance(ctx, RuntimeNodeContext)
+        assert ctx.token is not None
+        remaining = ctx.kernel.tasks(ctx.session, ctx.instance.id, token_id=ctx.token.id)
+        for task in remaining:
+            ctx.kernel.archive_task(
+                ctx.session,
+                task,
+                outcome="auto_pass",
+                comment="会签出口已达成，自动通过",
+                actor="system",
+            )
 
     def on_task_completed(self, ctx: NodeContext, task_id: str, outcome: str) -> None:
         """串行会签：当前出口未达成时为下一位参与者生成待办。"""

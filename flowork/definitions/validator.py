@@ -170,18 +170,30 @@ def validate_definition(
                         node=node.code,
                         flow=flow.flow_code(),
                     )
-        else:
+        elif gateway_kind == GatewayKind.INCLUSIVE:
+            # 相容网关：条件边 + 可选默认边；无条件非默认边视为告警（恒真分支）
+            if len(defaults) > 1:
+                error("gateway.default.duplicate", "网关最多一条默认边", node=node.code)
+            for flow in outgoing:
+                if flow.condition is None and not flow.is_default:
+                    warning(
+                        "gateway.inclusive.unconditional",
+                        "相容网关的无条件出边恒为真（等价并行分支）",
+                        node=node.code,
+                        flow=flow.flow_code(),
+                    )
+        else:  # PARALLEL
             if defaults:
                 error(
                     "gateway.default.not_allowed",
-                    f"{gateway_kind.value} 网关不允许默认边（默认边仅用于排他网关）",
+                    "并行网关不允许默认边（默认边仅用于排他/相容网关）",
                     node=node.code,
                 )
             for flow in outgoing:
                 if flow.condition is not None:
                     error(
                         "gateway.unconditional_only",
-                        f"{gateway_kind.value} 网关出边不允许挂条件",
+                        "并行网关出边不允许挂条件",
                         node=node.code,
                         flow=flow.flow_code(),
                     )

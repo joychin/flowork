@@ -102,6 +102,127 @@ class TaskService:
         )
         return result
 
+    def reject(
+        self,
+        task_id: str,
+        actor: str,
+        *,
+        comment: str = "",
+        target: str | None = None,
+        variables: dict[str, Any] | None = None,
+        as_agent: bool = False,
+    ) -> TaskCompleteResult:
+        """驳回任务：结束当前节点（否决出口）并回退到目标节点。
+
+        语义（对齐 对标产品，实现为追加式）：
+        - 单人节点：一票即回退；多实例节点：达到 disapprove_exit（默认 1 票）回退。
+        - 目标节点 = 显式 target > 节点配置 reject_target > 来源节点。
+        - 回退 = 新令牌（reject_flag=True）+ 为目标节点原办理人生成新待办
+          （cause_token_id 溯源；历史只追加不修改）。
+
+        Args:
+            task_id: 待驳回任务 ID。
+            actor: 驳回人。
+            comment: 驳回意见。
+            target: 驳回目标节点编码（缺省按上述优先级推导）。
+            variables: 随驳回合并的变量。
+            as_agent: 是否 agent 代办。
+        """
+        return self._engine.execute(
+            lambda ctx: self._reject(ctx, task_id, actor, comment, target, variables, as_agent)
+        )
+
+    def _reject(
+        self,
+        ctx: CommandContext,
+        task_id: str,
+        actor: str,
+        comment: str,
+        target: str | None,
+        variables: dict[str, Any] | None,
+        as_agent: bool,
+    ) -> TaskCompleteResult:
+        from flowork.definitions.builtin import UserTaskSpec
+        from flowork.engine.kernel import RejectTargetMissing
+        from flowork.persistence.orm import TokenRow as _TokenRow
+        from flowork.tasks.countersign import evaluate_exit
+
+        task = ctx.session.get(TaskRow, task_id)
+        if task is None or task.state != "ready":
+            raise TaskNotAvailableError(f"任务不可驳回（不存在或已处理）：{task_id}")
+        instance = self._instance(ctx, task.instance_id)
+        if variables:
+            instance.variables.update(variables)
+        kernel = self._engine.kernel_for(ctx)
+        token = ctx.session.get(_TokenRow, task.token_id)
+        assert token is not None
+        token.disapprove_count += 1
+        kernel.archive_task(
+            ctx.session, task, outcome="reject", comment=comment, actor=actor, as_agent=as_agent
+        )
+        kernel.record_event(
+            DomainEvent.TASK_REJECTED,
+            {"task_id": task.id, "assignee": task.assignee, "actor": actor},
+            instance.id,
+        )
+
+        node = kernel.definition_of(ctx.session, instance).node(task.activity_code)
+        assert node is not None
+        spec = node if isinstance(node, UserTaskSpec) else None
+        disapprove_exit = (
+            spec.multi_instance.disapprove_exit if spec and spec.multi_instance else ">=1"
+        )
+        exit_reached = evaluate_exit(disapprove_exit, token.item_count, token.disapprove_count)
+        if not exit_reached:
+            node_ctx = RuntimeNodeContext(kernel, ctx.session, instance, node, token)
+            kernel.behavior_of(node).on_task_completed(node_ctx, task.id, "reject")
+            kernel.advance_after_task(ctx.session, instance, token)
+            return self._result(ctx, task.id, "reject")
+
+        # 出口达成：结束当前节点（否决）并回退
+        reject_target = (
+            target or (spec.reject_target if spec else None) or token.source_activity_code
+        )
+        if not reject_target:
+            raise RejectTargetMissing(f"任务 {task_id} 无可用驳回目标")
+        token.approval_exit = "reject"
+        kernel.finish_token(ctx.session, token, approval_exit="reject")
+        remaining = kernel.tasks(ctx.session, instance.id, token_id=token.id)
+        for pending in remaining:
+            kernel.archive_task(
+                ctx.session,
+                pending,
+                outcome="auto_pass",
+                comment="节点已否决",
+                actor="system",
+                cause_token_id=token.id,
+            )
+        kernel.record_event(DomainEvent.NODE_EXITED, {"activity_code": node.code}, instance.id)
+        # 回退目标的原办理人重新待办（无历史办理人则按节点配置解析）
+        from sqlalchemy import select
+
+        history_rows = ctx.session.scalars(
+            select(TaskHistoryRow).where(
+                TaskHistoryRow.instance_id == instance.id,
+                TaskHistoryRow.activity_code == reject_target,
+                TaskHistoryRow.outcome != "cancelled",
+            )
+        )
+        handlers = [row.assignee for row in history_rows]
+        manual = {reject_target: list(dict.fromkeys(handlers))} if handlers else None
+        definition = kernel.definition_of(ctx.session, instance)
+        target_node = definition.node(reject_target)
+        assert target_node is not None, f"驳回目标节点不存在：{reject_target}"
+        kernel.activate(
+            ctx.session,
+            instance,
+            target_node,
+            source_activity_code=node.code,
+            reject_flag=True,
+            manual_participants=manual,
+        )
+        return self._result(ctx, task.id, "reject")
+
     # —— 内部 ——
 
     def _complete(
@@ -190,30 +311,18 @@ class TaskService:
         idempotency_key: str | None = None,
         cause_token_id: str | None = None,
     ) -> None:
-        from flowork.persistence.orm import TaskHistoryRow
 
-        ctx.session.add(
-            TaskHistoryRow(
-                id=_new_id(),
-                task_id=task.id,
-                instance_id=task.instance_id,
-                token_id=task.token_id,
-                activity_code=task.activity_code,
-                name=task.name,
-                assignee=task.assignee,
-                task_type=task.task_type,
-                outcome=outcome,
-                comment=comment,
-                context_payload=task.context_payload,
-                acted_by=actor,
-                acted_as_agent=as_agent,
-                idempotency_key=idempotency_key,
-                cause_token_id=cause_token_id,
-                cost_seconds=_cost_seconds(task.created_at),
-            )
+        kernel = self._engine.kernel_for(ctx)
+        kernel.archive_task(
+            ctx.session,
+            task,
+            outcome=outcome,
+            comment=comment,
+            actor=actor,
+            as_agent=as_agent,
+            idempotency_key=idempotency_key,
+            cause_token_id=cause_token_id,
         )
-        ctx.session.delete(task)
-        ctx.session.flush()
 
     def _find_history_by_key(self, ctx: CommandContext, key: str) -> TaskHistoryRow | None:
         from sqlalchemy import select

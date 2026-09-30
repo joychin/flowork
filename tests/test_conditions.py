@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from flowork.definitions.flow import ConditionItem, ConditionOperator, FlowCondition
-from flowork.errors import ConditionError, FormulaNotSupported, VariableNotDefined
+from flowork.errors import ConditionError, VariableNotDefined
 from flowork.expr.conditions import (
     evaluate_condition,
     evaluate_groups,
@@ -68,10 +68,10 @@ def test_numeric_compare_type_guard():
         evaluate_item(item("x", "gt", 1), {"x": "not-a-number"})
 
 
-def test_formula_not_supported_yet():
+def test_formula_evaluated_via_sandbox():
     condition = FlowCondition(formula="amount > 100")
-    with pytest.raises(FormulaNotSupported):
-        evaluate_condition(condition, {"amount": 200})
+    assert evaluate_condition(condition, {"amount": 200}) is True
+    assert evaluate_condition(condition, {"amount": 50}) is False
 
 
 def test_condition_prefers_groups():
