@@ -7,7 +7,9 @@
 
 - [README.md](README.md): 项目简介、快速开始、扩展节点三步法
 - [AGENTS.md](AGENTS.md): 构建/测试命令、包结构地图、硬约束（改代码必读）
-- examples/: 3 个示例模板（串行审批 / 条件分支+会签 / 子流程）与 ai_review 自定义节点 demo
+- [docs/API.md](docs/API.md): 四服务 API 参考（含扩展点）
+- [docs/integration.md](docs/integration.md): 集成与部署指南（表结构/超时调度/二期对接/运维）
+- examples/: 3 个示例模板（串行审批 / 条件分支+会签 / 子流程）、org.yaml 组织配置与 ai_review 自定义节点 demo
 
 ## 设计文档（位于 ../../benchmark_refs/out/，按权威优先级）
 

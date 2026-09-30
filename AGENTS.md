@@ -51,5 +51,5 @@ examples/          3 个模板 JSON + ai_review_demo.py
 
 ## 当前里程碑
 
-M0（定义层与扩展骨架）已完成；下一步 M1（执行内核：Command 管线、持久化、四服务、主干执行）。
-里程碑任务清单见《本期建设边界》第 2 节。
+M0–M6 全部完成（headless 内核完结）：153 个测试、mypy strict 零错误、CLI demo-full 通过最终 DoD。
+后续（二期）：FastAPI 服务层、pyflow-mcp、AI 行为包、UI、实例迁移（M7）。
