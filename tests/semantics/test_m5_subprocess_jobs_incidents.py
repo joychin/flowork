@@ -393,3 +393,33 @@ def test_move_token_repairs_stuck_flow(engine: ProcessEngine):
 
 
 _ = TaskInfo  # 导入占位
+
+
+def test_dead_letter_job_can_be_requeued(engine: ProcessEngine):
+    """死信 Job 人工重派：状态重置、计数清零、可再次执行。"""
+    from flowork.persistence.orm import JobRow
+
+    def _make_dead(ctx):
+        ctx.session.add(
+            JobRow(
+                id="job-dead-1",
+                job_type="timer",
+                state="dead_letter",
+                run_at=datetime(2026, 9, 30, 8, 0, 0),
+                retry_count=3,
+                instance_id="fake-instance",
+                payload={"strategy": "notify"},
+            )
+        )
+
+    engine.execute(_make_dead)
+    engine.jobs.requeue("job-dead-1")
+
+    def _check(ctx):
+        job = ctx.session.get(JobRow, "job-dead-1")
+        assert job is not None
+        return job.state, job.retry_count
+
+    assert engine.execute(_check) == ("scheduled", 0)
+    with pytest.raises(ValueError):
+        engine.jobs.requeue("no-such-job")

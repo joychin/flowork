@@ -110,6 +110,19 @@ class JobScheduler:
         else:  # pragma: no cover - 配置兜底
             raise ValueError(f"未知超时策略：{strategy}")
 
+    def requeue(self, job_id: str) -> None:
+        """人工重派 dead-letter Job（重置为 scheduled，清零重试计数）。"""
+
+        def _command(ctx: CommandContext) -> None:
+            job = ctx.session.get(JobRow, job_id)
+            if job is None or job.state != "dead_letter":
+                raise ValueError(f"Job 不存在或不在 dead_letter 状态：{job_id}")
+            job.state = "scheduled"
+            job.retry_count = 0
+            job.run_at = self._engine.config.now()
+
+        self._engine.execute(_command)
+
     # —— 后台轮询（可选）——
 
     def start(self, interval_seconds: int = 30) -> None:

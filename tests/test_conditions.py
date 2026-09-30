@@ -81,3 +81,19 @@ def test_condition_prefers_groups():
 
 def test_resolve_path_nested():
     assert resolve_path({"a": {"b": {"c": 7}}}, "a.b.c") == 7
+
+
+def test_exit_expression_ratio_boundaries():
+    """会签出口比例边界：50% 的 2 人=1 票、3 人=2 票（向上取整）；100%=all。"""
+    from flowork.tasks.countersign import evaluate_exit, parse_exit_expr
+
+    assert evaluate_exit(">=50%", 2, 1) is True  # 2×50% → 1 票即达
+    assert evaluate_exit(">=50%", 3, 1) is False  # 3×50% → 需 2 票
+    assert evaluate_exit(">=50%", 3, 2) is True
+    assert evaluate_exit(">=100%", 3, 3) is True
+    assert evaluate_exit(">=100%", 3, 2) is False
+    assert evaluate_exit(">=2", 5, 2) is True
+    assert evaluate_exit("any", 5, 1) is True
+    assert evaluate_exit(None, 0, 0) is True  # 无应办人
+    assert parse_exit_expr(">=50%") == ("ratio", 50)
+    assert parse_exit_expr("all") == ("all", None)
