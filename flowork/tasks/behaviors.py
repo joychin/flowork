@@ -1,0 +1,161 @@
+"""内置节点行为：Start / End / UserTask / ServiceTask / CallActivity / CcTask。
+（Gateway 行为在 M2 提供；本文件不含任何 if kind 分支——每 kind 一个类。）
+"""
+
+from __future__ import annotations
+
+from flowork.definitions.builtin import (
+    CallActivitySpec,
+    CcTaskSpec,
+    EndSpec,
+    ServiceTaskSpec,
+    StartSpec,
+    UserTaskSpec,
+)
+from flowork.engine.context import RuntimeNodeContext
+from flowork.engine.kernel import NoParticipantError
+from flowork.errors import FloworkError
+from flowork.runtime.behavior import NodeBehavior, NodeContext
+from flowork.runtime.registry import NodeRegistry
+from flowork.tasks.countersign import evaluate_exit
+
+__all__ = [
+    "CallActivityBehavior",
+    "CcTaskBehavior",
+    "EndBehavior",
+    "ServiceTaskBehavior",
+    "StartBehavior",
+    "UserTaskBehavior",
+    "register_builtin_behaviors",
+]
+
+ORIGINATOR = "originator"
+
+
+def register_builtin_behaviors(registry: NodeRegistry) -> None:
+    """把内置行为接入注册表（与自定义行为同一入口）。"""
+    registry.register("start", StartSpec, StartBehavior, replace=True)
+    registry.register("end", EndSpec, EndBehavior, replace=True)
+    registry.register("user_task", UserTaskSpec, UserTaskBehavior, replace=True)
+    registry.register("service_task", ServiceTaskSpec, ServiceTaskBehavior, replace=True)
+    registry.register("call_activity", CallActivitySpec, CallActivityBehavior, replace=True)
+    registry.register("cc_task", CcTaskSpec, CcTaskBehavior, replace=True)
+
+
+class StartBehavior(NodeBehavior):
+    """开始节点：进入即完成（无任务）。"""
+
+
+class EndBehavior(NodeBehavior):
+    """结束节点：进入即完成实例。"""
+
+    def on_enter(self, ctx: NodeContext) -> None:
+        assert isinstance(ctx, RuntimeNodeContext)
+        ctx.complete_instance("completed")
+
+
+class UserTaskBehavior(NodeBehavior):
+    """人工审批节点：进入时解析参与者并生成待办；完成判定走会签计数。"""
+
+    def on_enter(self, ctx: NodeContext) -> None:
+        assert isinstance(ctx, RuntimeNodeContext)
+        spec = self.spec
+        assert isinstance(spec, UserTaskSpec)
+        assert ctx.token is not None
+        participants = ctx.kernel.resolve_participants(ctx, spec)
+        if not participants:
+            raise NoParticipantError(
+                f"审批节点 {spec.code}（{spec.name or spec.code}）没有可用参与者"
+            )
+        ctx.token.item_count = len(participants)
+        ctx.token_updated()
+        sequential = spec.multi_instance is not None and spec.multi_instance.mode == "sequential"
+        targets = [participants[0]] if sequential else participants
+        for assignee in targets:
+            ctx.create_task(assignee=assignee)
+
+    def on_task_completed(self, ctx: NodeContext, task_id: str, outcome: str) -> None:
+        """串行会签：当前出口未达成时为下一位参与者生成待办。"""
+        assert isinstance(ctx, RuntimeNodeContext)
+        spec = self.spec
+        assert isinstance(spec, UserTaskSpec)
+        if spec.multi_instance is None or spec.multi_instance.mode != "sequential":
+            return
+        assert ctx.token is not None
+        participants = ctx.kernel.resolve_participants(ctx, spec)
+        already = set(ctx.kernel.handled_assignees(ctx.session, ctx.token.id))
+        remaining = [p for p in participants if p not in already]
+        if remaining and not self._exit_reached(ctx):
+            ctx.create_task(assignee=remaining[0])
+
+    def _exit_reached(self, ctx: RuntimeNodeContext) -> bool:
+        assert ctx.token is not None
+        return self.try_complete(ctx)
+
+    def try_complete(self, ctx: NodeContext) -> bool:
+        assert isinstance(ctx, RuntimeNodeContext)
+        spec = self.spec
+        assert isinstance(spec, UserTaskSpec)
+        token = ctx.token
+        assert token is not None
+        mi = spec.multi_instance
+        if evaluate_exit(mi.approve_exit if mi else None, token.item_count, token.approve_count):
+            token.approval_exit = "agree"
+            return True
+        if (
+            mi is not None
+            and mi.disapprove_exit
+            and evaluate_exit(mi.disapprove_exit, token.item_count, token.disapprove_count)
+        ):
+            token.approval_exit = "reject"
+            return True
+        return False
+
+
+class ServiceTaskBehavior(NodeBehavior):
+    """系统节点：执行 HandlerRegistry 中注册的动作。"""
+
+    def on_enter(self, ctx: NodeContext) -> None:
+        assert isinstance(ctx, RuntimeNodeContext)
+        spec = self.spec
+        assert isinstance(spec, ServiceTaskSpec)
+        if not spec.action:
+            return
+        handler = ctx.kernel.handlers.resolve(spec.action)
+        handler(ctx, spec.params)
+
+
+class CallActivityBehavior(NodeBehavior):
+    """子流程节点（完整数据映射在 M5；M1 占位：同步启动子实例并等待）。"""
+
+    def on_enter(self, ctx: NodeContext) -> None:
+        from flowork.engine.subprocess_support import start_sub_process
+
+        assert isinstance(ctx, RuntimeNodeContext)
+        spec = self.spec
+        assert isinstance(spec, CallActivitySpec)
+        start_sub_process(ctx, spec)
+
+    def try_complete(self, ctx: NodeContext) -> bool:
+        from flowork.engine.subprocess_support import sub_process_finished
+
+        assert isinstance(ctx, RuntimeNodeContext)
+        spec = self.spec
+        assert isinstance(spec, CallActivitySpec)
+        return sub_process_finished(ctx, spec)
+
+
+class CcTaskBehavior(NodeBehavior):
+    """传阅节点：进入即生成传阅件并完成（M3 提供已读接口）。"""
+
+    def on_enter(self, ctx: NodeContext) -> None:
+        from flowork.engine.cc_support import create_cc_items
+
+        assert isinstance(ctx, RuntimeNodeContext)
+        spec = self.spec
+        assert isinstance(spec, CcTaskSpec)
+        create_cc_items(ctx, spec)
+
+
+class UnsupportedFlowError(FloworkError):
+    """保留：M2 网关行为接管条件路由。"""

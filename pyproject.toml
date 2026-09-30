@@ -7,6 +7,7 @@ requires-python = ">=3.11"
 license = { text = "Apache-2.0" }
 authors = [{ name = "flowork" }]
 dependencies = [
+    "pyyaml>=6.0",
     "pydantic>=2.7",
     "sqlalchemy>=2.0",
     "asteval>=0.9.29",
@@ -26,12 +27,19 @@ dev = [
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[project.scripts]
+flowork = "flowork.cli.app:app"
+
 [tool.hatch.build.targets.wheel]
 packages = ["flowork"]
 
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+
+[tool.ruff.lint.per-file-ignores]
+"flowork/persistence/orm.py" = ["RUF012"]  # SQLAlchemy mapped_column(default=dict) 惯例
+"flowork/cli/*.py" = ["B008"]              # typer Argument/Option 惯例
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "SIM", "RUF"]

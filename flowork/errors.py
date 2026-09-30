@@ -47,3 +47,19 @@ class VariableNotDefined(ConditionError):
 
 class FormulaNotSupported(ConditionError):
     """公式条件在当前版本尚未启用（M2 提供沙箱求值）。"""
+
+
+class NotFoundError(FloworkError):
+    """目标对象不存在。"""
+
+
+class DefinitionNotPublishedError(NotFoundError):
+    """流程定义未发布（或版本不存在）。"""
+
+
+class InstanceNotFoundError(NotFoundError):
+    """流程实例不存在。"""
+
+
+class TaskNotAvailableError(FloworkError):
+    """任务不存在、已完成或不属于当前状态。"""

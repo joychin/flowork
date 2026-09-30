@@ -1,0 +1,384 @@
+"""执行内核：令牌状态机与路由推进（引擎核心，对节点 kind 零分支）。
+
+流程：activate（建令牌→on_enter→完成判定）→ finish（on_exit→记事件→路由）→
+route（行为给出出边→逐边推进）。节点语义全部由 NodeBehavior 提供；
+内核只负责状态、计数、事件与守卫（死循环/乐观锁）。
+"""
+
+from __future__ import annotations
+
+import uuid
+from typing import TYPE_CHECKING, Any
+
+from flowork.definitions.builtin import UserTaskSpec
+from flowork.definitions.definition import ProcessDefinition, load_definition
+from flowork.engine.context import RuntimeNodeContext
+from flowork.errors import FloworkError
+from flowork.events.domain import DomainEvent
+from flowork.runtime.behavior import NodeBehavior
+from flowork.runtime.lifecycle import TokenState
+from flowork.runtime.registry import HandlerRegistry, NodeRegistry
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
+
+    from flowork.definitions.flow import SequenceFlow
+    from flowork.definitions.node import FlowNode
+    from flowork.engine.config import EngineConfig
+    from flowork.persistence.orm import ProcessInstanceRow, TaskRow, TokenRow
+
+__all__ = ["DeadLoopError", "EngineExecutionError", "Kernel", "RouteError"]
+
+
+class EngineExecutionError(FloworkError):
+    """引擎执行错误（将转为 Incident，M5）。"""
+
+
+class RouteError(EngineExecutionError):
+    """路由无法确定（如排他网关条件全不满足且无默认边）。"""
+
+
+class DeadLoopError(EngineExecutionError):
+    """死循环守卫触发。"""
+
+
+class NoParticipantError(EngineExecutionError):
+    """审批节点无可用的参与者。"""
+
+
+def _new_id() -> str:
+    return uuid.uuid4().hex
+
+
+class Kernel:
+    """单命令内的执行内核（不提交事务；事务由 Command 管线管理）。"""
+
+    def __init__(
+        self,
+        config: EngineConfig,
+        registry: NodeRegistry,
+        handlers: HandlerRegistry,
+        events: list[tuple[str, dict[str, Any], str | None]],
+        engine: Any = None,
+    ) -> None:
+        self.config = config
+        self.registry = registry
+        self.handlers = handlers
+        self.engine = engine
+        self.events = events  # 事件缓冲，由 HistoryInterceptor 统一落库
+        self._definition_cache: dict[str, ProcessDefinition] = {}
+
+    # —— 定义 ——
+
+    def definition_of(self, session: Session, instance: ProcessInstanceRow) -> ProcessDefinition:
+        """实例的定义 = 发起时快照（模板后续演进不影响在途实例）。"""
+        cached = self._definition_cache.get(instance.id)
+        if cached is not None:
+            return cached
+        import json
+
+        definition = load_definition(json.loads(instance.definition_snapshot), self.registry)
+        self._definition_cache[instance.id] = definition
+        return definition
+
+    # —— 事件 ——
+
+    def record_event(self, name: str, payload: dict[str, Any], instance_id: str | None) -> None:
+        self.events.append((name, payload, instance_id))
+
+    # —— 令牌 ——
+
+    def create_token(
+        self,
+        session: Session,
+        instance: ProcessInstanceRow,
+        activity_code: str,
+        *,
+        source_activity_code: str | None = None,
+        reject_flag: bool = False,
+        item_count: int = 0,
+        manual_participants: dict[str, list[str]] | None = None,
+    ) -> TokenRow:
+        from flowork.persistence.orm import TokenRow as _TokenRow
+
+        existing = self.tokens(session, instance.id)
+        next_no = max((t.token_no for t in existing), default=0) + 1
+        token = _TokenRow(
+            id=_new_id(),
+            instance_id=instance.id,
+            token_no=next_no,
+            activity_code=activity_code,
+            source_activity_code=source_activity_code,
+            state=TokenState.UNFINISHED.value,
+            reject_flag=reject_flag,
+            item_count=item_count,
+            manual_participants=manual_participants or {},
+        )
+        session.add(token)
+        session.flush()
+        return token
+
+    def tokens(
+        self, session: Session, instance_id: str, states: tuple[str, ...] | None = None
+    ) -> list[TokenRow]:
+        from sqlalchemy import select
+
+        from flowork.persistence.orm import TokenRow as _TokenRow
+
+        stmt = (
+            select(_TokenRow)
+            .where(_TokenRow.instance_id == instance_id)
+            .order_by(_TokenRow.token_no)
+        )
+        rows = list(session.scalars(stmt))
+        if states:
+            rows = [row for row in rows if row.state in states]
+        return rows
+
+    def touch_token(self, session: Session, token: TokenRow) -> None:
+        session.flush()
+
+    def finish_token(
+        self, session: Session, token: TokenRow, *, approval_exit: str | None = None
+    ) -> None:
+        token.state = TokenState.FINISHED.value
+        token.finished_at = self.config.now()
+        if approval_exit:
+            token.approval_exit = approval_exit
+        session.flush()
+
+    def cancel_token(self, session: Session, token: TokenRow) -> None:
+        """取消令牌并撤销其未办任务（任务落历史 outcome=cancelled）。"""
+        from flowork.persistence.orm import TaskHistoryRow
+
+        for task in self.tasks(session, token.instance_id, token_id=token.id):
+            session.add(
+                TaskHistoryRow(
+                    id=_new_id(),
+                    task_id=task.id,
+                    instance_id=task.instance_id,
+                    token_id=task.token_id,
+                    activity_code=task.activity_code,
+                    name=task.name,
+                    assignee=task.assignee,
+                    task_type=task.task_type,
+                    outcome="cancelled",
+                    context_payload=task.context_payload,
+                    acted_by="system",
+                )
+            )
+            session.delete(task)
+        token.state = TokenState.CANCELLED.value
+        token.finished_at = self.config.now()
+        session.flush()
+
+    # —— 任务 ——
+
+    def create_task(
+        self,
+        session: Session,
+        instance: ProcessInstanceRow,
+        token: TokenRow,
+        node: FlowNode,
+        *,
+        assignee: str,
+        name: str,
+        task_type: str = "approval",
+        context_payload: dict[str, Any] | None = None,
+        root_task_id: str | None = None,
+    ) -> TaskRow:
+        from flowork.persistence.orm import TaskRow as _TaskRow
+
+        task = _TaskRow(
+            id=_new_id(),
+            instance_id=instance.id,
+            token_id=token.id,
+            activity_code=node.code,
+            name=name,
+            assignee=assignee,
+            task_type=task_type,
+            context_payload=context_payload or {},
+            root_task_id=root_task_id,
+        )
+        session.add(task)
+        session.flush()
+        self.record_event(
+            DomainEvent.TASK_CREATED,
+            {
+                "task_id": task.id,
+                "activity_code": node.code,
+                "assignee": assignee,
+                "task_type": task_type,
+            },
+            instance.id,
+        )
+        return task
+
+    def tasks(
+        self,
+        session: Session,
+        instance_id: str,
+        *,
+        token_id: str | None = None,
+        assignee: str | None = None,
+    ) -> list[TaskRow]:
+        from sqlalchemy import select
+
+        from flowork.persistence.orm import TaskRow as _TaskRow
+
+        stmt = select(_TaskRow).where(_TaskRow.instance_id == instance_id)
+        if token_id:
+            stmt = stmt.where(_TaskRow.token_id == token_id)
+        if assignee:
+            stmt = stmt.where(_TaskRow.assignee == assignee)
+        return list(session.scalars(stmt))
+
+    # —— 实例 ——
+
+    def complete_instance(
+        self, session: Session, instance: ProcessInstanceRow, end_status: str
+    ) -> None:
+        if instance.state == "running":
+            instance.state = end_status
+            instance.finished_at = self.config.now()
+            session.flush()
+            self.record_event(
+                DomainEvent.PROCESS_COMPLETED
+                if end_status == "completed"
+                else DomainEvent.PROCESS_CANCELLED,
+                {"end_status": end_status},
+                instance.id,
+            )
+
+    def normal_flows(self, ctx: RuntimeNodeContext) -> list[SequenceFlow]:
+        """默认路由出口：无条件且非默认的出边。"""
+        definition = self.definition_of(ctx.session, ctx.instance)
+        return [
+            flow
+            for flow in definition.outgoing(ctx.node.code)
+            if flow.condition is None and not flow.is_default
+        ]
+
+    # —— 参与者 / 已办 ——
+
+    def resolve_participants(self, ctx: RuntimeNodeContext, spec: UserTaskSpec) -> list[str]:
+        """参与者解析入口（M1 简化版；M4 替换为完整 ParticipantResolver）。"""
+        from flowork.participants.simple import resolve_simple
+
+        return resolve_simple(ctx, spec)
+
+    def handled_assignees(self, session: Session, token_id: str) -> list[str]:
+        """令牌下已实际办理过的人（排除被取消的任务）。"""
+        from sqlalchemy import select
+
+        from flowork.persistence.orm import TaskHistoryRow
+
+        stmt = select(TaskHistoryRow).where(TaskHistoryRow.token_id == token_id)
+        return [row.assignee for row in session.scalars(stmt) if row.outcome != "cancelled"]
+
+    # —— 执行推进 ——
+
+    def behavior_of(self, node: FlowNode) -> NodeBehavior:
+        behavior_cls = self.registry.behavior_cls(node.kind)
+        if behavior_cls is None:
+            raise EngineExecutionError(f"节点类型 {node.kind!r} 未注册运行行为（Behavior）")
+        return behavior_cls(node)
+
+    def activate(
+        self,
+        session: Session,
+        instance: ProcessInstanceRow,
+        node: FlowNode,
+        *,
+        source_activity_code: str | None = None,
+        reject_flag: bool = False,
+        manual_participants: dict[str, list[str]] | None = None,
+    ) -> TokenRow:
+        """激活节点：建令牌 → node_entered → on_enter → 完成判定。"""
+        token = self.create_token(
+            session,
+            instance,
+            node.code,
+            source_activity_code=source_activity_code,
+            reject_flag=reject_flag,
+            manual_participants=manual_participants,
+        )
+        self.record_event(DomainEvent.NODE_ENTERED, {"activity_code": node.code}, instance.id)
+        ctx = RuntimeNodeContext(self, session, instance, node, token)
+        self.behavior_of(node).on_enter(ctx)
+        self._maybe_complete(session, instance, node, token)
+        return token
+
+    def _maybe_complete(
+        self, session: Session, instance: ProcessInstanceRow, node: FlowNode, token: TokenRow
+    ) -> None:
+        ctx = RuntimeNodeContext(self, session, instance, node, token)
+        if self.behavior_of(node).try_complete(ctx):
+            self._finish_and_route(session, instance, node, token)
+
+    def _finish_and_route(
+        self, session: Session, instance: ProcessInstanceRow, node: FlowNode, token: TokenRow
+    ) -> None:
+        # 死循环守卫
+        finished_count = sum(
+            1
+            for row in self.tokens(session, instance.id)
+            if row.activity_code == node.code and row.state == TokenState.FINISHED.value
+        )
+        if finished_count >= self.config.max_node_loops:
+            raise DeadLoopError(
+                f"节点 {node.code} 完成次数已达上限 {self.config.max_node_loops}，疑似死循环"
+            )
+        ctx = RuntimeNodeContext(self, session, instance, node, token)
+        self.behavior_of(node).on_exit(ctx)
+        self.finish_token(session, token, approval_exit=token.approval_exit)
+        self.record_event(DomainEvent.NODE_EXITED, {"activity_code": node.code}, instance.id)
+        self.route(session, instance, node, token)
+
+    def route(
+        self,
+        session: Session,
+        instance: ProcessInstanceRow,
+        node: FlowNode,
+        token: TokenRow,
+        *,
+        behavior_override: NodeBehavior | None = None,
+    ) -> None:
+        """路由：行为给出出边列表 → on_take 钩子 → 激活目标节点。"""
+        definition = self.definition_of(session, instance)
+        ctx = RuntimeNodeContext(self, session, instance, node, token)
+        behavior = behavior_override or self.behavior_of(node)
+        outgoing = behavior.get_outgoing(ctx)
+        for flow in outgoing:
+            self._take_flow(session, instance, flow, token, definition)
+
+    def _take_flow(
+        self,
+        session: Session,
+        instance: ProcessInstanceRow,
+        flow: SequenceFlow,
+        from_token: TokenRow,
+        definition: ProcessDefinition,
+    ) -> None:
+        if flow.on_take is not None:
+            handler = self.handlers.resolve(flow.on_take.handler)
+            source_node = self._node(definition, flow.source)
+            assert source_node is not None
+            hook_ctx = RuntimeNodeContext(self, session, instance, source_node, from_token)
+            handler(hook_ctx, flow.on_take.params)
+        target = self._node(definition, flow.target)
+        if target is None:
+            raise RouteError(f"目标节点不存在：{flow.target}")
+        self.activate(session, instance, target, source_activity_code=flow.source)
+
+    def _node(self, definition: ProcessDefinition, code: str) -> FlowNode | None:
+        return definition.node(code)
+
+    def advance_after_task(
+        self, session: Session, instance: ProcessInstanceRow, token: TokenRow
+    ) -> None:
+        """任务提交后的统一推进入口。"""
+        node = self.definition_of(session, instance).node(token.activity_code)
+        if node is None:
+            raise EngineExecutionError(f"令牌节点不存在：{token.activity_code}")
+        self._maybe_complete(session, instance, node, token)
