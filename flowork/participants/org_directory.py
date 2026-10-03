@@ -16,13 +16,28 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 import yaml
 
 from flowork.errors import FloworkError
 
-__all__ = ["OrgConfigError", "OrgDirectory"]
+__all__ = ["OrgConfigError", "OrgDirectory", "OrgDirectoryLike"]
+
+
+class OrgDirectoryLike(Protocol):
+    """引擎消费的目录查询面：静态 OrgDirectory 与持久化 DirectoryStore 均满足。"""
+
+    def user_exists(self, user_id: str) -> bool: ...
+    def manager_of(self, user_id: str) -> str | None: ...
+    def department_of(self, user_id: str) -> str | None: ...
+    def department_head(self, department: str) -> str | None: ...
+    def parent_department(self, department: str) -> str | None: ...
+    def users_with_role(self, role: str) -> list[str]: ...
+    def users_in_department(self, department: str, *, recursive: bool = False) -> list[str]: ...
+    def delegation_of(self, user_id: str, when: datetime | None = None) -> str | None: ...
+    @property
+    def admins(self) -> list[str]: ...
 
 
 class OrgConfigError(FloworkError):

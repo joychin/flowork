@@ -10,7 +10,7 @@ from pathlib import Path
 from flowork.clock import utc_now
 from flowork.events.domain import DomainEvent
 from flowork.participants.functions import ParticipantFunctions
-from flowork.participants.org_directory import OrgDirectory
+from flowork.participants.org_directory import OrgDirectoryLike
 from flowork.runtime.registry import NodeRegistry, create_registry
 
 HistoryLevel = str  # none / activity / audit / full（M6 起生效，当前默认 full）
@@ -44,7 +44,7 @@ class EngineConfig:
     now: Callable[[], datetime] = _system_now
     notifier: Callable[[str, dict[str, object]], None] = _noop_notifier
     db_file: str | Path | None = None  # CLI 便利字段：设置后覆盖 db_url
-    org: OrgDirectory | None = None  # M4：组织目录（缺省走简化参与者解析）
+    org: OrgDirectoryLike | None = None  # M4：组织目录（缺省走简化参与者解析）
     participant_functions: ParticipantFunctions | None = None
 
 

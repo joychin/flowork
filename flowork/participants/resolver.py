@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from flowork.definitions.builtin import UserTaskSpec
     from flowork.engine.context import RuntimeNodeContext
     from flowork.participants.functions import ParticipantFunctions
-    from flowork.participants.org_directory import OrgDirectory
+    from flowork.participants.org_directory import OrgDirectoryLike
 
 __all__ = ["ParticipantResolution", "resolve_participants"]
 
@@ -36,7 +36,7 @@ class ParticipantResolution:
 def resolve_participants(
     ctx: RuntimeNodeContext,
     spec: UserTaskSpec,
-    org: OrgDirectory | None,
+    org: OrgDirectoryLike | None,
     functions: ParticipantFunctions | None = None,
 ) -> ParticipantResolution:
     """完整解析管线。"""
@@ -55,7 +55,7 @@ def resolve_participants(
 def _evaluate_expressions(
     ctx: RuntimeNodeContext,
     spec: UserTaskSpec,
-    org: OrgDirectory,
+    org: OrgDirectoryLike,
     functions: ParticipantFunctions,
 ) -> list[str]:
     pool: list[str] = []
@@ -93,7 +93,7 @@ def _apply_strategies(
     return todo, skipped
 
 
-def _delegation_replace(todo: list[str], org: OrgDirectory) -> tuple[list[str], dict[str, str]]:
+def _delegation_replace(todo: list[str], org: OrgDirectoryLike) -> tuple[list[str], dict[str, str]]:
     """委托替换：返回（替换后待办人, 委托人→受托人映射）。"""
     replaced: list[str] = []
     mapping: dict[str, str] = {}
@@ -110,7 +110,7 @@ def _delegation_replace(todo: list[str], org: OrgDirectory) -> tuple[list[str], 
 def resolve_with_delegation(
     ctx: RuntimeNodeContext,
     spec: UserTaskSpec,
-    org: OrgDirectory,
+    org: OrgDirectoryLike,
     functions: ParticipantFunctions | None = None,
 ) -> tuple[ParticipantResolution, dict[str, str]]:
     """解析 + 委托替换（供行为层使用）。"""
@@ -120,7 +120,7 @@ def resolve_with_delegation(
 
 
 def fallback_when_empty(
-    ctx: RuntimeNodeContext, spec: UserTaskSpec, org: OrgDirectory
+    ctx: RuntimeNodeContext, spec: UserTaskSpec, org: OrgDirectoryLike
 ) -> ParticipantResolution:
     """无参与者兜底：to_admins / raise。"""
     if spec.no_participant_policy == "to_admins" and org.admins:

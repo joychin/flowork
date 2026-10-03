@@ -16,7 +16,7 @@ from flowork.errors import FloworkError
 
 if TYPE_CHECKING:
     from flowork.engine.context import RuntimeNodeContext
-    from flowork.participants.org_directory import OrgDirectory
+    from flowork.participants.org_directory import OrgDirectoryLike
 
 __all__ = ["FunctionCall", "ParticipantFunctions", "UnknownFunction", "parse_expression"]
 
@@ -59,7 +59,7 @@ class ParticipantFunctions:
         self._registry[name] = fn
 
     def call(
-        self, name: str, ctx: RuntimeNodeContext, org: OrgDirectory | None, args: list[str]
+        self, name: str, ctx: RuntimeNodeContext, org: OrgDirectoryLike | None, args: list[str]
     ) -> list[str]:
         if name not in self._registry:
             known = ", ".join(self._registry)
@@ -70,27 +70,27 @@ class ParticipantFunctions:
         return tuple(self._registry)
 
 
-def _org_required(org: OrgDirectory | None) -> OrgDirectory:
+def _org_required(org: OrgDirectoryLike | None) -> OrgDirectoryLike:
     if org is None:
         raise UnknownFunction("本函数需要配置组织目录（EngineConfig.org）")
     return org
 
 
-def _originator(ctx: RuntimeNodeContext, org: OrgDirectory | None) -> list[str]:
+def _originator(ctx: RuntimeNodeContext, org: OrgDirectoryLike | None) -> list[str]:
     return [ctx.instance.start_user]
 
 
-def _manager(ctx: RuntimeNodeContext, org: OrgDirectory | None) -> list[str]:
+def _manager(ctx: RuntimeNodeContext, org: OrgDirectoryLike | None) -> list[str]:
     return [m for m in [_org_required(org).manager_of(ctx.instance.start_user)] if m]
 
 
-def _manager_of(ctx: RuntimeNodeContext, org: OrgDirectory | None, user: str = "") -> list[str]:
+def _manager_of(ctx: RuntimeNodeContext, org: OrgDirectoryLike | None, user: str = "") -> list[str]:
     user_id = str(ctx.variables.get(user, user))
     return [m for m in [_org_required(org).manager_of(user_id)] if m]
 
 
 def _dept_head(
-    ctx: RuntimeNodeContext, org: OrgDirectory | None, department: str = ""
+    ctx: RuntimeNodeContext, org: OrgDirectoryLike | None, department: str = ""
 ) -> list[str]:
     directory = _org_required(org)
     dept = str(ctx.variables.get(department, department)) if department else ""
@@ -100,14 +100,14 @@ def _dept_head(
 
 
 def _users_with_role(
-    ctx: RuntimeNodeContext, org: OrgDirectory | None, role: str = ""
+    ctx: RuntimeNodeContext, org: OrgDirectoryLike | None, role: str = ""
 ) -> list[str]:
     role_name = str(ctx.variables.get(role, role)) if role else ""
     return _org_required(org).users_with_role(role_name)
 
 
 def _users_in_department(
-    ctx: RuntimeNodeContext, org: OrgDirectory | None, department: str = "", recursive: str = ""
+    ctx: RuntimeNodeContext, org: OrgDirectoryLike | None, department: str = "", recursive: str = ""
 ) -> list[str]:
     directory = _org_required(org)
     dept = str(ctx.variables.get(department, department)) if department else ""
@@ -117,7 +117,7 @@ def _users_in_department(
 
 
 def _previous_handlers(
-    ctx: RuntimeNodeContext, org: OrgDirectory | None, activity: str = ""
+    ctx: RuntimeNodeContext, org: OrgDirectoryLike | None, activity: str = ""
 ) -> list[str]:
     """上一节点（或指定节点）的办理人。"""
     from sqlalchemy import select
@@ -138,7 +138,7 @@ def _previous_handlers(
     return list(dict.fromkeys(row.assignee for row in rows))
 
 
-def _literal(ctx: RuntimeNodeContext, org: OrgDirectory | None, *users: str) -> list[str]:
+def _literal(ctx: RuntimeNodeContext, org: OrgDirectoryLike | None, *users: str) -> list[str]:
     return [u for u in users if u]
 
 
