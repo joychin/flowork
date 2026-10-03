@@ -55,4 +55,8 @@ M0–M6 全部完成（headless 内核完结）：153 个测试、mypy strict �
 单实例强化（M6 后）：写命令统一 `CommandContext.touch`（乐观锁全覆盖）、Job 调度 CAS
 原子认领（多副本 tick 恰一次）、web 内置调度（`FLOWORK_JOBS`/`FLOWORK_JOB_INTERVAL`）+
 `flowork tick` 独立 worker、时间戳统一 naive UTC（`flowork.clock`）；236 个测试。
-后续（二期）：FastAPI 运行时服务层、pyflow-mcp、AI 行为包、UI、实例迁移（M7）。
+产品 v1（进行中，2026-10-03 定稿，范围权威 `docs/product/engine-v1/`，11 篇）：独立部署流程引擎——
+REST+MCP 双开放、目录（组织/角色/用户/Agent 映射，M-A）与权限（凭证/scope/RBAC，M-A）两支柱、
+三面同构（Console/REST+MCP/Skill+CLI）、运行时开放面与数据契约 business_object（M-B）、
+任务页+CLI+docker（M-C）。原二期项（FastAPI 服务层、pyflow-mcp、组织适配器、消息推送、UI）
+并入 v1 主线；M7 实例迁移与 AI 行为包顺延。
