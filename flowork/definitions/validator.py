@@ -37,9 +37,26 @@ __all__ = [
 # 公式白名单符号 + Python 关键字：变量引用检查时不算「未知变量」
 _FORMULA_NON_VARS = frozenset(
     {
-        "abs", "min", "max", "round", "len", "sum", "str", "int", "float", "bool",
-        "True", "False", "None",
-        "and", "or", "not", "in", "is", "if", "else",
+        "abs",
+        "min",
+        "max",
+        "round",
+        "len",
+        "sum",
+        "str",
+        "int",
+        "float",
+        "bool",
+        "True",
+        "False",
+        "None",
+        "and",
+        "or",
+        "not",
+        "in",
+        "is",
+        "if",
+        "else",
     }
 )
 

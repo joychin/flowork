@@ -75,9 +75,7 @@ def _edge_text(flow: Any) -> str:
     return " 或 ".join(" 且 ".join(_condition_text(i) for i in group) for group in condition.groups)
 
 
-def simulate_route(
-    definition: ProcessDefinition, variables: Mapping[str, Any]
-) -> DryRunResult:
+def simulate_route(definition: ProcessDefinition, variables: Mapping[str, Any]) -> DryRunResult:
     """按样例变量静态预演路由，返回路径步骤 / 警告 / 阻断。"""
     from flowork.expr.conditions import evaluate_condition
 
@@ -101,9 +99,7 @@ def simulate_route(
             name = str(exc)
             if name not in warned_vars:
                 warned_vars.add(name)
-                result.warnings.append(
-                    f"变量 {name} 未提供样例值，相关条件按不满足处理"
-                )
+                result.warnings.append(f"变量 {name} 未提供样例值，相关条件按不满足处理")
         except ConditionError as exc:
             text = _edge_text(flow) or "条件"
             if text not in warned_vars:
@@ -156,9 +152,7 @@ def simulate_route(
                     "当前仅有无条件出边（命中即走分支建议设置默认边）"
                 )
             else:
-                result.blocked.append(
-                    f"分支 {code} 条件全不满足且无默认边，流程在此无法路由"
-                )
+                result.blocked.append(f"分支 {code} 条件全不满足且无默认边，流程在此无法路由")
         else:
             chosen = [(f, "无条件出边") for f in unconditional]
             chosen += [(f, f"条件满足：{_edge_text(f)}") for f in passed]

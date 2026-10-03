@@ -211,7 +211,9 @@ def register_builtin_nodes(registry: NodeRegistry) -> None:
                 {
                     "title": "自动通过",
                     "fields": [
-                        "auto_pass_originator", "auto_pass_previous", "auto_pass_participated",
+                        "auto_pass_originator",
+                        "auto_pass_previous",
+                        "auto_pass_participated",
                     ],
                     "collapsed": True,
                 },
