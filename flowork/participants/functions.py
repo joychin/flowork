@@ -102,8 +102,10 @@ def _dept_head(
 def _users_with_role(
     ctx: RuntimeNodeContext, org: OrgDirectoryLike | None, role: str = ""
 ) -> list[str]:
+    directory = _org_required(org)
     role_name = str(ctx.variables.get(role, role)) if role else ""
-    return _org_required(org).users_with_role(role_name)
+    within = directory.department_of(ctx.instance.start_user)
+    return directory.users_with_role(role_name, within=within)
 
 
 def _users_in_department(

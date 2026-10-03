@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, String
+from sqlalchemy import DateTime, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from flowork.clock import utc_now
@@ -37,4 +37,28 @@ class OrgUserRow(Base):
     name: Mapped[str] = mapped_column(String(200), default="")
     org_unit_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
     status: Mapped[str] = mapped_column(String(16), default="active")  # active/suspended
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
+
+
+class RoleRow(Base):
+    """角色。default_scope_org_unit 为空 = 默认全局；授权行未显式给范围时继承此默认。"""
+
+    __tablename__ = "org_role"
+
+    code: Mapped[str] = mapped_column(String(64), primary_key=True)
+    name: Mapped[str] = mapped_column(String(200), default="")
+    default_scope_org_unit: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
+
+
+class RoleAssignmentRow(Base):
+    """角色授权行：user × role × 生效范围（None=继承角色默认）。"""
+
+    __tablename__ = "org_role_assignment"
+    __table_args__ = (Index("ix_role_assign", "role_code", "user_id"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(String(64))
+    role_code: Mapped[str] = mapped_column(String(64))
+    org_unit_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)

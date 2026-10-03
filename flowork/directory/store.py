@@ -1,13 +1,13 @@
-"""持久化目录（M-A 竖切）：部门树 + 用户 + OrgDirectory 查询面。
+"""持久化目录（M-A）：部门树 + 用户 + 角色范围化授权 + OrgDirectory 查询面。
 
 语义对齐 docs/product/engine-v1/01-身份与组织模型.md §2：
 - manager_of(user) = user 主属部门的 manager_user_id（部门属性，非用户属性）；
-- users_with_role / delegation_of 为竖切占位（角色与委托表随 M-A 全量落地）。
+- users_with_role 范围解析见 roles.py（子树→逐级向上→全局，最近命中层胜出）；
+- delegation_of 为竖切占位（委托表随 M-A 全量落地）。
 """
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -15,17 +15,13 @@ from sqlalchemy import select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
+from flowork.directory.common import DirectoryError, _like_prefix, _validate_code
 from flowork.directory.orm import OrgUnitRow, OrgUserRow
-from flowork.errors import FloworkError
+from flowork.directory.roles import RoleDirectoryMixin
 
 __all__ = ["DirectoryError", "DirectoryStore", "OrgUnitInfo", "UserInfo"]
 
-_CODE_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
 _MAX_DEPTH = 1000
-
-
-class DirectoryError(FloworkError):
-    """目录操作非法。"""
 
 
 @dataclass(frozen=True)
@@ -45,16 +41,7 @@ class UserInfo:
     status: str
 
 
-def _validate_code(kind: str, code: str) -> None:
-    if not _CODE_PATTERN.match(code):
-        raise DirectoryError(f"{kind}标识 {code!r} 非法（限字母数字与 _ -，长度 1-64）")
-
-
-def _like_prefix(prefix: str) -> str:
-    return prefix.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
-
-
-class DirectoryStore:
+class DirectoryStore(RoleDirectoryMixin):
     """DB 版组织目录：写操作短事务，读操作满足 OrgDirectoryLike 协议。"""
 
     def __init__(self, factory: sessionmaker[Session]) -> None:
@@ -175,9 +162,6 @@ class DirectoryStore:
         with self._factory() as session:
             unit = session.get(OrgUnitRow, department)
             return unit.parent_code if unit else None
-
-    def users_with_role(self, role: str) -> list[str]:
-        return []  # 角色表随 M-A 全量落地（04 需求规格 DIR-03）
 
     def users_in_department(self, department: str, *, recursive: bool = False) -> list[str]:
         with self._factory() as session:
