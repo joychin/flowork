@@ -15,6 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
+from flowork.directory.agents import AgentDirectoryMixin
 from flowork.directory.common import DirectoryError, _like_prefix, _validate_code
 from flowork.directory.orm import OrgUnitRow, OrgUserRow
 from flowork.directory.roles import RoleDirectoryMixin
@@ -41,7 +42,7 @@ class UserInfo:
     status: str
 
 
-class DirectoryStore(RoleDirectoryMixin):
+class DirectoryStore(AgentDirectoryMixin, RoleDirectoryMixin):
     """DB 版组织目录：写操作短事务，读操作满足 OrgDirectoryLike 协议。"""
 
     def __init__(self, factory: sessionmaker[Session]) -> None:

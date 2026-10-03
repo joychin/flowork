@@ -62,3 +62,33 @@ class RoleAssignmentRow(Base):
     role_code: Mapped[str] = mapped_column(String(64))
     org_unit_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
+
+
+class AgentRow(Base):
+    """Agent 一等身份：负责人（问责链 root）/所属部门/可选代表某人/状态机。
+
+    status: trial → active ⇄ suspended（见 agents.py 状态机）。
+    """
+
+    __tablename__ = "org_agent"
+
+    agent_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    name: Mapped[str] = mapped_column(String(200), default="")
+    owner_user_id: Mapped[str] = mapped_column(String(64))
+    org_unit_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    on_behalf_of_user: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    status: Mapped[str] = mapped_column(String(16), default="trial")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
+
+
+class AgentCredentialRow(Base):
+    """Agent 凭证：仅存 scrypt 哈希；吊销/停用即时失效（verify 读当前状态）。"""
+
+    __tablename__ = "org_agent_credential"
+
+    id: Mapped[str] = mapped_column(String(16), primary_key=True)
+    agent_id: Mapped[str] = mapped_column(String(64))
+    secret_hash: Mapped[str] = mapped_column(String(128))
+    salt: Mapped[str] = mapped_column(String(32))
+    issued_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
