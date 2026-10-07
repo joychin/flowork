@@ -11,6 +11,7 @@ from flowork.errors import TaskNotAvailableError
 from flowork.events.domain import DomainEvent
 from flowork.persistence.orm import TaskHistoryRow, TaskRow
 from flowork.runtime.lifecycle import TokenState
+from flowork.tasks.anticipate import AnticipateMixin
 from flowork.tasks.models import TaskInfo
 
 if TYPE_CHECKING:
@@ -42,7 +43,7 @@ def _input_schema_of(instance: Any) -> dict[str, Any] | None:
         return None
 
 
-class TaskService(TaskOpsMixin):
+class TaskService(TaskOpsMixin, AnticipateMixin):
     """任务服务：办理 / 查询。所有操作带 actor 归因（人 or agent 可区分）。"""
 
     def __init__(self, engine: ProcessEngine) -> None:

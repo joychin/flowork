@@ -70,4 +70,8 @@ P0-7 all 汇聚可达性放行（engine/join_gate.py）｜P1：消息服务/Job 
 错误二分（resolve 五动作）/wf_variable_index/定义生命周期（retire-purge-drift）/身份快照 actor_context/
 deadline 列表+实例级时限+escalate/anticipate 只读预判。DoD 全链路（单 SQLite 文件零配置）已验证；
 下一程：REST /v2 搜索面（§12）与 MCP 17 工具（§13，M7）、Alembic 基线迁移（§14 尾注）。
+代码 REVIEW 修复批（2026-10-07 第二批提交）：dead_letter 统一/消息防重收窄 message_id/暂停全动作
+拦截/驳回契约/时限终态事件/文件拆分（repository·runtime·incident·anticipate·orm_v2，engine 主文件回归
+≤300 行）。残留超标（既有债务，非本轮引入）：kernel.py 534、task_actions.py 470、task_service.py 364、
+validator.py 368——拆解随 M 系 REST/MCP 前的重构刀处理。
 

@@ -18,7 +18,7 @@ from flowork.persistence.orm import (
     TokenRow,
 )
 from flowork.runtime.lifecycle import TokenState
-from flowork.tasks.models import AnticipateResult, TaskInfo
+from flowork.tasks.models import TaskInfo
 
 if TYPE_CHECKING:
     from flowork.engine.engine import ProcessEngine
@@ -97,96 +97,6 @@ class TaskOpsMixin:
         task.assignee = ""
         ctx.session.flush()
         return self._task_info(task)
-
-    # —— 只读预判（v2.2 spec §11/P1-9）——;
-
-    def anticipate(self, task_id: str, outcome: str = "agree") -> AnticipateResult:
-        """预判「照此提交后节点是否出、实例是否完」——纯读，不落库不改状态。
-
-        主流引擎无等价 API（AI 原生差异点）：UI 的「你是最后一个审批人」提示、
-        AI 预审共用。读令牌会签计数＋出口规则即时计算；instance_complete 以当前
-        变量值沿路由近似（提交 output 可能改写条件分支，结果按此解读）。
-        """
-        result: AnticipateResult = self._engine.execute(
-            lambda ctx: self._anticipate(ctx, task_id, outcome)
-        )
-        return result
-
-    def _anticipate(self, ctx: CommandContext, task_id: str, outcome: str) -> AnticipateResult:
-        from flowork.definitions.builtin import CallActivitySpec, EndSpec, UserTaskSpec
-        from flowork.persistence.orm import TaskRow as _TaskRow
-        from flowork.persistence.orm import TokenRow as _TokenRow
-        from flowork.tasks.countersign import evaluate_exit
-
-        task = ctx.session.get(_TaskRow, task_id)
-        if task is None or task.state != "ready":
-            raise TaskNotAvailableError(f"任务不可预判（不存在或已处理）：{task_id}")
-        instance = self._instance(ctx, task.instance_id)
-        token = ctx.session.get(_TokenRow, task.token_id)
-        assert token is not None
-        kernel = self._engine.kernel_for(ctx)
-        definition = kernel.definition_of(ctx.session, instance)
-        node = definition.node(task.activity_code)
-        assert node is not None
-        spec = node if isinstance(node, UserTaskSpec) else None
-        mi = spec.multi_instance if spec else None
-
-        if outcome == "reject":
-            disapproves = token.disapprove_count + 1
-            node_exit = evaluate_exit(
-                mi.disapprove_exit if mi else ">=1", token.item_count, disapproves
-            )
-        elif outcome == "agree":
-            approves = token.approve_count + 1
-            node_exit = evaluate_exit(mi.approve_exit if mi else None, token.item_count, approves)
-        else:
-            raise ValueError(f"假想 outcome 仅支持 agree/reject：{outcome!r}")
-
-        if not node_exit:
-            return AnticipateResult(node_exit=False, instance_complete=False)
-
-        # 节点将出：按当前变量近似路由，看是否无需再等任何人工/子流程即到 end
-        from flowork.engine.routing import select_outgoing
-
-        if outcome == "reject" and spec is not None:
-            reject_target = spec.reject_target or token.source_activity_code or ""
-            targets = [reject_target] if reject_target else []
-        else:
-            targets = [
-                flow.target
-                for flow in select_outgoing(
-                    definition.outgoing(node.code),
-                    dict(instance.variables),
-                    mode=getattr(node, "route_mode", "all_match"),
-                )
-            ]
-        waiting_specs = (UserTaskSpec, CallActivitySpec)
-        complete = True
-        seen: set[str] = set()
-        frontier = list(targets)
-        while frontier and complete:
-            code = frontier.pop()
-            if code in seen:
-                continue
-            seen.add(code)
-            hop = definition.node(code)
-            if hop is None:
-                complete = False
-                break
-            if isinstance(hop, EndSpec):
-                continue
-            if isinstance(hop, waiting_specs):
-                complete = False
-                break
-            frontier.extend(
-                flow.target
-                for flow in select_outgoing(
-                    definition.outgoing(hop.code), dict(instance.variables), mode="all_match"
-                )
-            )
-            if len(seen) > 200:  # 环路守卫
-                complete = False
-        return AnticipateResult(node_exit=True, instance_complete=complete)
 
     # —— 转办 ——;
 

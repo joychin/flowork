@@ -72,7 +72,7 @@ ignore_imports = []
 # engine.routing），分层拆解不在本契约范围——随内核 v2 模块重排（spec §15）再立。
 
 [tool.ruff.lint.per-file-ignores]
-"flowork/persistence/orm.py" = ["RUF012"]  # SQLAlchemy mapped_column(default=dict) 惯例
+"flowork/persistence/orm.py" = ["RUF012", "E402"]  # SQLAlchemy mapped_column 惯例 + 尾部再导出 v2 表（同 Base 元数据的刻意结构）
 "flowork/cli/*.py" = ["B008"]              # typer Argument/Option 惯例
 
 [tool.ruff.lint]
