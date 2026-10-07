@@ -67,3 +67,7 @@ class TaskNotAvailableError(FloworkError):
 
 class DuplicateStartError(FloworkError):
     """启动幂等键冲突（reuse=reject 撞已有实例，spec §11）。"""
+
+
+class DefinitionRetiredError(DefinitionNotPublishedError):
+    """定义已 retired，不接新实例（spec §6.2）。"""

@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy.orm import Session
@@ -20,7 +21,7 @@ from flowork.definitions.definition import (
 from flowork.definitions.validator import ValidateIssue, validate_definition
 from flowork.definitions.versioning import VersionVerdict, compute_verdict, content_hash_of
 from flowork.engine.ops import CommandContext
-from flowork.errors import DefinitionNotPublishedError
+from flowork.errors import DefinitionError, DefinitionNotPublishedError
 from flowork.events.domain import DomainEvent
 
 if TYPE_CHECKING:
@@ -70,8 +71,10 @@ class RepositoryService:
                 definition, self._engine.config.node_registry
             )  # org_configured 联动在 validate()（deploy 保持强校验语义）
 
+            # 规范化 round-trip：哈希与构造路径无关（bare build 薄形态/registry 全形态一致）
             content = dump_definition(definition)
-            digest = content_hash_of(content)
+            canonical = dump_definition(load_definition(content, self._engine.config.node_registry))
+            digest = content_hash_of(canonical)
             # 哈希按语义字段计算；落库内容补上判定出的版本身份（spec §6.6 审计）
             published = {
                 (row.major, row.revision): row.content_hash
@@ -100,6 +103,22 @@ class RepositoryService:
             )
             if verdict.identical_to is not None:
                 return verdict  # 幂等去重：不落库、不发事件（降噪，spec §6.4）
+
+            if base is None:
+                # 新 code 但既有行（如全部 retired）：恢复部署须越过既有最高版本
+                # （spec §6.2 恢复 retired＝重新 deploy 为新版本）
+                from dataclasses import replace as _replace
+
+                existing = ctx.session.execute(
+                    select(_Row.major, _Row.revision)
+                    .where(_Row.code == definition.code)
+                    .order_by(_Row.major.desc(), _Row.revision.desc())
+                    .limit(1)
+                ).first()
+                if existing is not None:
+                    verdict = _replace(
+                        verdict, next_major=existing.major, next_revision=existing.revision + 1
+                    )
 
             stored = dict(content)
             stored["major"] = verdict.next_major
@@ -153,7 +172,9 @@ class RepositoryService:
 
             from flowork.persistence.orm import ProcessDefinitionRow as _Row
 
-            content = dump_definition(definition)
+            content = dump_definition(
+                load_definition(dump_definition(definition), self._engine.config.node_registry)
+            )
             published = {
                 (row.major, row.revision): row.content_hash
                 for row in ctx.session.scalars(
@@ -240,6 +261,15 @@ class RepositoryService:
         found = session.scalars(stmt).first()
         row: ProcessDefinitionRow | None = found
         if row is None:
+            from flowork.errors import DefinitionRetiredError
+
+            retired = session.scalars(
+                select(_Row.id).where(_Row.code == code, _Row.status == "retired")
+            ).first()
+            if retired is not None:
+                raise DefinitionRetiredError(
+                    f"定义 {code} 已 retired，不接新实例（重新 deploy 可恢复）"
+                )
             raise DefinitionNotPublishedError(
                 f"已发布定义 {code}（major={major}, revision={revision}）不存在"
             )
@@ -387,3 +417,154 @@ class RepositoryService:
 
         result: list[dict[str, Any]] = self._engine.execute(_command)
         return result
+
+    # —— 生命周期（spec §6.5/P1-6）——
+
+    def retire(self, code: str, actor: str = "admin", reason: str = "") -> int:
+        """retire：该 code 全部 published 行转 retired（在跑跑完，行保留）。"""
+
+        def _command(ctx: CommandContext) -> int:
+            from sqlalchemy import update
+
+            from flowork.persistence.orm import ProcessDefinitionRow as _Row
+
+            result = ctx.session.execute(
+                update(_Row)
+                .where(_Row.code == code, _Row.status == "published")
+                .values(status="retired")
+            )
+            count = int(getattr(result, "rowcount", 0) or 0)
+            if count == 0:
+                raise DefinitionNotPublishedError(f"定义 {code} 无已发布版本可 retire")
+            self._engine.kernel_for(ctx).record_event(
+                DomainEvent.DEFINITION_RETIRED,
+                {"code": code, "actor": actor, "reason": reason},
+                None,
+            )
+            return count
+
+        return self._engine.execute(_command)
+
+    def purge(self, code: str, actor: str = "admin", *, force: bool = False) -> int:
+        """purge：物理删除定义行（仅 CLI --force；有实例引用该定义则拒绝）。"""
+
+        def _command(ctx: CommandContext) -> int:
+            from sqlalchemy import delete, select
+
+            from flowork.persistence.orm import ProcessDefinitionRow as _Row
+            from flowork.persistence.orm import ProcessInstanceRow
+
+            if not force:
+                raise ValueError("purge 需要 --force（物理删除不可逆，spec §6.5）")
+            referenced = (
+                ctx.session.scalars(
+                    select(ProcessInstanceRow.id)
+                    .where(ProcessInstanceRow.definition_code == code)
+                    .limit(1)
+                ).first()
+                is not None
+            )
+            if referenced:
+                raise DefinitionNotPublishedError(
+                    f"定义 {code} 被在途/历史实例引用，拒绝 purge（先核对实例清单）"
+                )
+            stale_ids = ctx.session.scalars(select(_Row.id).where(_Row.code == code)).all()
+            if stale_ids:
+                ctx.session.execute(delete(_Row).where(_Row.id.in_(stale_ids)))
+            self._engine.kernel_for(ctx).record_event(
+                DomainEvent.DEFINITION_PURGED, {"code": code, "actor": actor}, None
+            )
+            return len(stale_ids)
+
+        return self._engine.execute(_command)
+
+    def list_definitions(
+        self, *, code_prefix: str = "", latest_only: bool = True
+    ) -> list[dict[str, Any]]:
+        """定义清单（默认每 code 只列最高 published；含 retired 标记）。"""
+
+        def _command(ctx: CommandContext) -> Any:
+            from sqlalchemy import select
+
+            from flowork.persistence.orm import ProcessDefinitionRow as _Row
+
+            stmt = select(_Row).order_by(_Row.code, _Row.major.desc(), _Row.revision.desc())
+            if code_prefix:
+                stmt = stmt.where(_Row.code.like(f"{code_prefix}%"))
+            rows = ctx.session.scalars(stmt).all()
+            grouped: dict[str, dict[str, Any]] = {}
+            for row in rows:
+                summary = grouped.setdefault(
+                    row.code,
+                    {
+                        "code": row.code,
+                        "name": row.name,
+                        "major": None,
+                        "revision": None,
+                        "breaking": False,
+                        "status": "published",
+                        "versions": 0,
+                    },
+                )
+                summary["versions"] += 1
+                if summary["major"] is None:
+                    summary.update(
+                        major=row.major,
+                        revision=row.revision,
+                        breaking=row.breaking,
+                        status=row.status,
+                        name=row.name or summary["name"],
+                    )
+                elif row.status == "published" and summary["status"] == "retired":
+                    summary["status"] = "published"
+            if latest_only:
+                return list(grouped.values())
+            return list(grouped.values())
+
+        return self._engine.execute(_command)
+
+    def definition_drift(self, directory: str | Path) -> dict[str, list[dict[str, Any]]]:
+        """git 目录与库对账（spec §6.5）：未部署/库多余/库落后 三张清单。"""
+        import json as _json
+        from pathlib import Path as _Path
+
+        from flowork.definitions.definition import dump_definition, load_definition
+        from flowork.definitions.versioning import content_hash_of
+
+        def _command(ctx: CommandContext) -> Any:
+            from sqlalchemy import select
+
+            from flowork.persistence.orm import ProcessDefinitionRow as _Row
+
+            file_hashes: dict[str, str] = {}
+            for path in sorted(_Path(directory).glob("*.json")):
+                try:
+                    definition = load_definition(
+                        _json.loads(path.read_text(encoding="utf-8")),
+                        self._engine.config.node_registry,
+                    )
+                except (ValueError, DefinitionError):
+                    continue
+                file_hashes[definition.code] = content_hash_of(dump_definition(definition))
+            # 每 code 取最高 published 版本的哈希
+            db_latest: dict[str, str] = {}
+            for row in ctx.session.scalars(
+                select(_Row)
+                .where(_Row.status == "published")
+                .order_by(_Row.code, _Row.major.desc(), _Row.revision.desc())
+            ):
+                db_latest.setdefault(row.code, row.content_hash)
+
+            undeployed = [
+                {"code": code, "file": f"{code}.json"}
+                for code in sorted(file_hashes.keys() - db_latest.keys())
+            ]
+            extra = [{"code": code} for code in sorted(db_latest.keys() - file_hashes.keys())]
+            stale = [
+                {"code": code, "file": f"{code}.json", "db_hash": db_latest[code][:12]}
+                for code in sorted(file_hashes.keys() & db_latest.keys())
+                if file_hashes[code] != db_latest[code]
+            ]
+            return {"undeployed": undeployed, "extra_in_db": extra, "stale_in_db": stale}
+
+        return self._engine.execute(_command)

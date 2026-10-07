@@ -42,6 +42,43 @@ def tick(db: Path = typer.Option(Path("flowork.db"), help="SQLite 数据库文�
 
 
 @app.command()
+def retire(code: str, db: Path = typer.Option(Path("flowork.db")), reason: str = "") -> None:
+    """retire 定义：不接新实例，在跑跑完（spec §6.2）。"""
+    engine = ProcessEngine(EngineConfig(db_file=db))
+    count = engine.repository.retire(code, actor="cli", reason=reason)
+    console.print(f"[green]✓[/green] {code} 已 retire（{count} 个已发布版本）")
+    engine.close()
+
+
+@app.command()
+def purge(
+    code: str,
+    db: Path = typer.Option(Path("flowork.db")),
+    force: bool = typer.Option(False, "--force", help="物理删除不可逆，必须显式确认"),
+) -> None:
+    """purge 定义：物理删除全部版本行（仅 CLI；有实例引用则拒绝）。"""
+    engine = ProcessEngine(EngineConfig(db_file=db))
+    removed = engine.repository.purge(code, actor="cli", force=force)
+    console.print(f"[green]✓[/green] {code} 已物理删除 {removed} 个版本行")
+    engine.close()
+
+
+@app.command()
+def drift(
+    directory: Path = typer.Argument(..., help="git 定义目录（*.json）"),
+    db: Path = typer.Option(Path("flowork.db")),
+) -> None:
+    """git 与库对账：未部署/库多余/库落后 三张清单（spec §6.5）。"""
+    engine = ProcessEngine(EngineConfig(db_file=db))
+    result = engine.repository.definition_drift(str(directory))
+    for name, items in result.items():
+        console.print(f"[cyan]{name}[/cyan]: {len(items)}")
+        for item in items:
+            console.print(f"  - {item}")
+    engine.close()
+
+
+@app.command()
 def validate(template: Path = typer.Argument(..., help="模板 JSON 文件路径")) -> None:
     """校验流程模板（结构 / 可达性 / 条件分支 / kind 注册）。"""
     registry = create_registry()

@@ -446,6 +446,31 @@ class RuntimeService:
         token_id_new: str = self._engine.execute(_command)
         return token_id_new
 
+    def list_instances(
+        self,
+        *,
+        definition_code: str | None = None,
+        major: int | None = None,
+        revision: int | None = None,
+        state: str | None = None,
+    ) -> list[InstanceInfo]:
+        """实例清单（可按定义版本过滤——「多少在跑实例钉旧版」的查询，spec §6.5）。"""
+
+        def _command(ctx: CommandContext) -> Any:
+            stmt = select(ProcessInstanceRow).order_by(ProcessInstanceRow.started_at.desc())
+            if definition_code is not None:
+                stmt = stmt.where(ProcessInstanceRow.definition_code == definition_code)
+            if major is not None:
+                stmt = stmt.where(ProcessInstanceRow.definition_major == major)
+            if revision is not None:
+                stmt = stmt.where(ProcessInstanceRow.definition_revision == revision)
+            if state is not None:
+                stmt = stmt.where(ProcessInstanceRow.state == state)
+            return [_to_info(row) for row in ctx.session.scalars(stmt)]
+
+        result: list[InstanceInfo] = self._engine.execute(_command)
+        return result
+
     def get_instance(self, instance_id: str) -> InstanceInfo:
         def _command(ctx: CommandContext) -> Any:
             return _to_info(_load(ctx, instance_id))
