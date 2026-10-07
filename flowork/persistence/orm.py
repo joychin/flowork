@@ -302,6 +302,8 @@ class MessageSubscriptionRow(Base):
     name: Mapped[str] = mapped_column(String(64))
     correlation_key: Mapped[str] = mapped_column(String(200), default="")
     state: Mapped[str] = mapped_column(String(16), default="open")
+    # 已消费的 message_id（关联时定格）——防重按 message_id 判，与 (name,key) 无关
+    message_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
 

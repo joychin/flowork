@@ -148,3 +148,37 @@ def test_events_recorded(engine: ProcessEngine):
         names = {row.event_name for row in session.scalars(select(EventOutboxRow)).all()}
     assert DomainEvent.MESSAGE_CORRELATED.value in names
     _ = instance_id
+
+
+def test_second_event_same_key_with_new_message_id_correlates(engine: ProcessEngine):
+    """REVIEW P0-②回归：防重只按 message_id——同一业务键的第二次事件（新 id）
+    对新 open 订阅照常关联，不被 (name,key) 维度的旧 matched 订阅误杀。"""
+    first_instance = engine.runtime.start_process("msg_flow", start_user="u_1")
+    _subscribe(engine, first_instance)  # 第一轮等待
+    assert (
+        engine.messages.publish_message("order_paid", "ORD-1", {"seq": 1}, message_id="m-1") is True
+    )  # 关联 → matched（定格 m-1）
+
+    second_instance = engine.runtime.start_process("msg_flow", start_user="u_2")
+    _subscribe(engine, second_instance)  # 第二轮等待同一业务单的更新
+    assert (
+        engine.messages.publish_message("order_paid", "ORD-1", {"seq": 2}, message_id="m-2") is True
+    )  # 新事件照常关联
+    assert engine.runtime.get_instance(second_instance).state == "running"
+
+
+def test_consumed_message_id_replay_is_ignored(engine: ProcessEngine):
+    """REVIEW P0-②回归：已消费 message_id 重放被订阅定格记录拦下（不入库不关联）。"""
+    instance_id = engine.runtime.start_process("msg_flow", start_user="u_s")
+    _subscribe(engine, instance_id)
+    assert (
+        engine.messages.publish_message("order_paid", "ORD-1", {"seq": 1}, message_id="m-replay")
+        is True
+    )
+    # 重放同一 message_id（此时无 open 订阅）——不得再入缓冲
+    assert (
+        engine.messages.publish_message("order_paid", "ORD-1", {"seq": 1}, message_id="m-replay")
+        is False
+    )
+    with engine.session_factory() as session:
+        assert session.scalars(select(MessageBufferRow)).all() == []

@@ -391,7 +391,7 @@ class RuntimeService:
                 for job in ctx.session.scalars(
                     select(JobRow).where(
                         JobRow.instance_id == incident.instance_id,
-                        JobRow.state == "dead-letter",
+                        JobRow.state == "dead_letter",
                     )
                 ):
                     job.state = "scheduled"

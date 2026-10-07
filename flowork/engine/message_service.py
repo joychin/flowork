@@ -58,6 +58,8 @@ class MessageService:
         def _command(ctx: CommandContext) -> bool:
             message_id_ = message_id or uuid.uuid4().hex
             self._purge_expired(ctx)
+            # 防重只按 message_id（spec §7）：未消费缓冲 ∪ 已消费订阅的定格记录。
+            # 与 (name, correlation_key) 无关——同一业务键的后续事件是合法输入。
             duplicate = (
                 ctx.session.scalars(
                     select(MessageBufferRow.id).where(MessageBufferRow.message_id == message_id_)
@@ -65,9 +67,7 @@ class MessageService:
                 is not None
                 or ctx.session.scalars(
                     select(MessageSubscriptionRow.id).where(
-                        MessageSubscriptionRow.state == "matched",
-                        MessageSubscriptionRow.name == name,
-                        MessageSubscriptionRow.correlation_key == correlation_key,
+                        MessageSubscriptionRow.message_id == message_id_
                     )
                 ).first()
                 is not None
@@ -86,7 +86,7 @@ class MessageService:
                 .limit(1)
             ).first()
             if subscription is not None:
-                self._correlate(ctx, subscription, dict(payload or {}))
+                self._correlate(ctx, subscription, dict(payload or {}), message_id=message_id_)
                 return True
 
             ctx.session.add(
@@ -182,10 +182,13 @@ class MessageService:
                     MessageSubscriptionRow.state == "open",
                 )
             ).all()
+            kernel = self._engine.kernel_for(ctx)
             for row in rows:
                 row.state = "matched"
-                self._emit(
-                    ctx, DomainEvent.MESSAGE_CORRELATED, name, row.correlation_key, row.instance_id
+                kernel.record_event(
+                    DomainEvent.MESSAGE_CORRELATED,
+                    self._correlated_payload(row, {}, None),
+                    row.instance_id,
                 )
             return len(rows)
 
@@ -214,13 +217,28 @@ class MessageService:
             instance.variables.update(payload)
             ctx.touch(instance)
         subscription.state = "matched"
-        event: dict[str, Any] = {
+        subscription.message_id = message_id  # 防重定格（只按 message_id 判）
+        kernel = self._engine.kernel_for(ctx)
+        kernel.record_event(
+            DomainEvent.MESSAGE_CORRELATED,
+            self._correlated_payload(subscription, payload, message_id),
+            subscription.instance_id,
+        )
+
+    def _correlated_payload(
+        self,
+        subscription: MessageSubscriptionRow,
+        payload: dict[str, Any],
+        message_id: str | None,
+    ) -> dict[str, Any]:
+        """message_correlated 统一载荷形状（消息关联与 signal 唤醒同款）。"""
+        return {
+            "name": subscription.name,
+            "correlation_key": subscription.correlation_key,
             "message_id": message_id,
             "node_id": subscription.node_id,
             "payload_keys": sorted(payload),
         }
-        kernel = self._engine.kernel_for(ctx)
-        kernel.record_event(DomainEvent.MESSAGE_CORRELATED, event, subscription.instance_id)
 
     def _purge_expired(self, ctx: CommandContext) -> None:
         ctx.session.execute(delete(MessageBufferRow).where(MessageBufferRow.expires_at < utc_now()))

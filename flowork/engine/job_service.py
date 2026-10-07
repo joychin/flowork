@@ -164,7 +164,7 @@ class JobService:
             job.retry_count += 1
             remaining = retries if retries is not None else (job.max_retries - job.retry_count)
             if remaining <= 0:
-                job.state = "dead-letter"
+                job.state = "dead_letter"
                 job.worker_id = None
                 job.lease_until = None
                 self._engine.runtime._record_incident_in_ctx(
@@ -179,7 +179,7 @@ class JobService:
                     job.instance_id,
                 )
                 ctx.session.flush()
-                return "dead-letter"
+                return "dead_letter"
             delay = (
                 backoff_seconds
                 if backoff_seconds is not None

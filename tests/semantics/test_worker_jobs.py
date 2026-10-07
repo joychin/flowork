@@ -83,11 +83,11 @@ def test_fail_reports_retry_then_dead_letter(engine: ProcessEngine):
     engine.worker_jobs.activate_jobs(["http_call"], worker_id="w-1")
     assert (
         engine.worker_jobs.fail_job(job_id, worker_id="w-1", error="仍超时", retries=0)
-        == "dead-letter"
+        == "dead_letter"
     )
     with engine.session_factory() as session:
         row = session.get(JobRow, job_id)
-        assert row is not None and row.state == "dead-letter"
+        assert row is not None and row.state == "dead_letter"
         assert (
             session.scalars(
                 select(IncidentRow).where(IncidentRow.instance_id == instance_id)
@@ -122,3 +122,24 @@ def test_worker_job_invisible_to_internal_tick(engine: ProcessEngine):
     instance_id = engine.runtime.start_process("job_flow", start_user="u_s")
     _job(engine, instance_id)
     assert engine.jobs.tick() == 0
+
+
+def test_resolve_incident_retry_requeues_worker_dead_letter(engine: ProcessEngine):
+    """跨执行面对拍（REVIEW P0-①回归）：job_service 写入的死信 Job 能被
+    resolve_incident(retry) 查到并重派——状态值拼写必须两处一致。"""
+    instance_id = engine.runtime.start_process("job_flow", start_user="u_s")
+    job_id = _job(engine, instance_id)
+    engine.worker_jobs.activate_jobs(["http_call"], worker_id="w-1")
+    engine.worker_jobs.fail_job(job_id, worker_id="w-1", error="第一次失败", retries=1)
+    engine.worker_jobs.activate_jobs(["http_call"], worker_id="w-1")
+    outcome = engine.worker_jobs.fail_job(  # 重试耗尽 → dead_letter + incident
+        job_id, worker_id="w-1", error="彻底失败", retries=0
+    )
+    assert outcome == "dead_letter"
+
+    incident = engine.runtime.list_incidents(instance_id=instance_id)[0]
+    engine.runtime.resolve_incident(incident["id"], action="retry", actor="ops")
+    with engine.session_factory() as session:
+        row = session.get(JobRow, job_id)
+        assert row is not None and row.state == "scheduled"  # 死信被重派
+    assert engine.runtime.get_instance(instance_id).state == "running"
