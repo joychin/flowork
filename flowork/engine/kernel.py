@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any
 from flowork.definitions.builtin import UserTaskSpec
 from flowork.definitions.definition import ProcessDefinition, load_definition
 from flowork.engine.context import RuntimeNodeContext
+from flowork.engine.join_gate import should_release
 from flowork.errors import FloworkError
 from flowork.events.domain import DomainEvent
 from flowork.runtime.behavior import NodeBehavior
@@ -448,9 +449,10 @@ class Kernel:
         flow: SequenceFlow,
         definition: ProcessDefinition,
     ) -> None:
-        """边到达后的推进判定：any 任一到达即办（缺省）/ all 等全部到齐。
+        """边到达后的推进判定：any 任一到达即办（缺省）/ all 可达性放行（§2.3）。
 
-        - all 未到齐：不激活、不建令牌（各来源已完成令牌即到达证据）；
+        - all：除已停靠本节点的令牌外无任何**未完令牌**可结构可达本节点才放行
+          （条件未命中的臂落定后不再阻塞；旧 settled 令牌不算数，见 join_gate）；
         - any 且节点已在办：吸收本次到达，不重复激活；
         - any 放行后：取消仍未完成的兄弟分支（竞速收尾，防迟到到达）。
         驳回/撤回/管理员等直调 ``activate`` 的路径不经此门。
@@ -458,18 +460,15 @@ class Kernel:
         sources = [f.source for f in definition.incoming(node.code)]
         if len(sources) > 1:
             if self._advance_policy_of(node) == "all":
-                finished_states = (
-                    TokenState.FINISHED.value,
-                    TokenState.CANCELLED.value,
-                    TokenState.REVOKED.value,
-                )
-                settled = {
+                unfinished_elsewhere = {
                     token.activity_code
-                    for token in self.tokens(session, instance.id)
-                    if token.state in finished_states
+                    for token in self.tokens(
+                        session, instance.id, states=(TokenState.UNFINISHED.value,)
+                    )
+                    if token.activity_code != node.code
                 }
-                if not all(source in settled for source in sources):
-                    return  # 等待其余入边来源完成
+                if not should_release(definition, unfinished_elsewhere, node.code):
+                    return  # 仍有未完令牌可达，等待其余入边落定
             else:
                 busy = any(
                     token.activity_code == node.code

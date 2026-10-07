@@ -208,8 +208,12 @@ def test_first_match_takes_first_true_in_order(engine: ProcessEngine):
     assert active_of(engine, low) == {"low"}
 
 
-def test_validator_flags_all_join_on_exclusive_arm():
-    """校验：等全部到齐 挂在「命中即走」分支臂上 → 死等告警。"""
+def test_validator_allows_all_join_on_exclusive_arm():
+    """校验：等全部到齐 挂在「命中即走」分支臂上不再死等告警。
+
+    v2 §2.3 可达性放行下，未选中的臂不阻塞汇聚（包容网关映射，spec §2.4），
+    旧 ``advance.all_conditional_arm`` 规则已随语义修复移除。
+    """
     from flowork.definitions.validator import IssueLevel, validate_definition
     from flowork.runtime.registry import create_registry
 
@@ -229,10 +233,10 @@ def test_validator_flags_all_join_on_exclusive_arm():
         .connect("merged", "end")
         .build()
     )
-    rules = {i.rule for i in validate_definition(definition, create_registry())}
-    assert "advance.all_conditional_arm" in rules
+    issues = validate_definition(definition, create_registry())
+    assert "advance.all_conditional_arm" not in {i.rule for i in issues}
 
-    # all_join 与并行臂相连（来源入边无条件）不告警
+    # 并行臂相连（来源入边无条件）同样无错误
     definition_ok = (
         FlowBuilder("adv_ok")
         .start()

@@ -215,8 +215,7 @@ def validate_definition(
 
     # —— 开始条件（advance_policy）规则 ——
     for node in definition.nodes:
-        incoming = definition.incoming(node.code)
-        if len(incoming) < 2:
+        if len(definition.incoming(node.code)) < 2:
             continue
         policy = getattr(node, "advance_policy", None)
         if policy is None:
@@ -225,26 +224,8 @@ def validate_definition(
                 "节点有多条入边但未设置开始条件（缺省按「任一到达即开始」执行）",
                 node=node.code,
             )
-        elif policy == "all":
-            # 死锁风险：来源是「命中即走」分支的臂（恰好一臂激活，其余永不到达）
-            for source in {f.source for f in incoming}:
-                if not any(
-                    f.condition is not None or f.is_default for f in definition.incoming(source)
-                ):
-                    continue
-                for arrival in definition.incoming(source):
-                    upstream = nodes.get(arrival.source)
-                    if (
-                        upstream is not None
-                        and upstream.kind == KIND_BRANCH
-                        and getattr(upstream, "route_mode", "first_match") == RouteMode.FIRST_MATCH
-                    ):
-                        warning(
-                            "advance.all_conditional_arm",
-                            f"「全部到齐」与命中即走分支的臂（{source}）相连：未选中的臂永不到达，将死等",
-                            node=node.code,
-                        )
-                        break
+        # 「all 挂条件分支臂」不再告警：v2 §2.3 可达性放行下未命中臂不阻塞
+        # （包容网关映射 = branch + all 汇聚，见 spec §2.4）
 
     # —— 节点语义检查 ——
     for node in definition.nodes:

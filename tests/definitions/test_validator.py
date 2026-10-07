@@ -108,7 +108,8 @@ def test_first_match_branch_without_default(registry):
     assert "branch.first_match.no_default" in error_rules(definition, registry)
 
 
-def test_advance_all_on_exclusive_arm_warns(registry):
+def test_advance_all_on_exclusive_arm_no_warning(registry):
+    """v2 §2.3 可达性放行：all 汇聚挂「命中即走」分支臂不再死等告警（规则已移除）。"""
     from flowork.definitions.flow import FlowCondition
 
     definition = (
@@ -130,9 +131,8 @@ def test_advance_all_on_exclusive_arm_warns(registry):
         .build(registry)
     )
     rules = error_rules(definition, registry)
-    # 旧「并行网关无条件出边」规则随节点类型移除；改为开始条件死等告警
     all_rules = {issue.rule for issue in validate_definition(definition, registry)}
-    assert "advance.all_conditional_arm" in all_rules
+    assert "advance.all_conditional_arm" not in all_rules
     assert "structure.node.unreachable" not in rules
 
 

@@ -60,3 +60,8 @@ REST+MCP 双开放、目录（组织/角色/用户/Agent 映射，M-A）与权�
 三面同构（Console/REST+MCP/Skill+CLI）、运行时开放面与数据契约 business_object（M-B）、
 任务页+CLI+docker（M-C）。原二期项（FastAPI 服务层、pyflow-mcp、组织适配器、消息推送、UI）
 并入 v1 主线；M7 实例迁移与 AI 行为包顺延。
+内核 v2（进行中，2026-10-07 定稿，范围权威 `docs/product/kernel-v2/spec.md` v2.2，P0/P1 开工清单）：
+P0-1 已完成（CEL PoC 采用 cel-python，决策记录 p0-1-cel-poc.md，换绑待 P0-2 端口一并落地）；
+P0-7 已完成（all 汇聚改可达性放行，engine/join_gate.py，validator 死等告警随语义移除）；
+下一刀 P0-2（SPI 定稿：OrgDirectory 四方法+contrib+import-linter）。
+
