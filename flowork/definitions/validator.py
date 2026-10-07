@@ -114,6 +114,14 @@ def validate_definition(
     def warning(rule: str, message: str, **where: str) -> None:
         issues.append(ValidateIssue(IssueLevel.WARNING, rule, message, **where))
 
+    for variable in definition.variables:
+        if variable.searchable and variable.type not in ("string", "number", "boolean"):
+            error(
+                "variables.searchable_type",
+                f"searchable 变量仅限 string/number/boolean（{variable.name}: {variable.type}）",
+                node=variable.name,
+            )
+
     if org_configured is False:
         for node in definition.nodes:
             groups = list(getattr(node, "candidate_groups", None) or [])

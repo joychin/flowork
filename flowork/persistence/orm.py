@@ -296,6 +296,22 @@ class MessageSubscriptionRow(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
 
+class VariableIndexRow(Base):
+    """变量索引（v2 §14/P1-5）：searchable 变量值随命令同事务同步，供实例检索。
+
+    string/boolean → value_text；number → value_num（布尔不入数值槽）。
+    """
+
+    __tablename__ = "wf_variable_index"
+    __table_args__ = (Index("ix_var_instance_name", "instance_id", "name"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    instance_id: Mapped[str] = mapped_column(String(36))
+    name: Mapped[str] = mapped_column(String(100))
+    value_text: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    value_num: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+
 class IncidentRow(Base):
     """流程事件（Incident）：需运维关注的异常，修复后实例恢复。"""
 

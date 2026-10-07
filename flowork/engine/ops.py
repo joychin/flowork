@@ -52,6 +52,17 @@ class CommandContext:
         self.instances_touched.add(instance.id)
 
 
+def _sync_variable_index(ctx: CommandContext) -> None:
+    """变量索引同步（spec §14/P1-5）：触及实例的 searchable 变量同事务重写。"""
+    from flowork.persistence.orm import ProcessInstanceRow
+    from flowork.persistence.variable_index import sync_variable_index
+
+    for instance_id in ctx.instances_touched:
+        instance = ctx.session.get(ProcessInstanceRow, instance_id)
+        if instance is not None:
+            sync_variable_index(ctx.session, instance)
+
+
 def _flush_history(ctx: CommandContext) -> None:
     """HistoryFlush 拦截器：把命令期间缓冲的领域事件写入 outbox（同事务）。"""
     import uuid
@@ -91,6 +102,7 @@ def _run_once(engine: ProcessEngine, command: Callable[[CommandContext], T]) -> 
         # Transaction 拦截器：单命令单事务
         with session.begin():
             result = command(ctx)
+            _sync_variable_index(ctx)
             _flush_history(ctx)
         return result
     except EngineExecutionError as error:
