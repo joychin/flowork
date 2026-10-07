@@ -141,16 +141,24 @@ class TaskHistoryRow(Base):
 
 
 class EventOutboxRow(Base):
-    """领域事件（outbox）：单事务内与业务变更一起落库，后续消息/UI/MCP 统一消费。"""
+    """领域事件（outbox）：单事务内与业务变更一起落库，后续消息/UI/MCP 统一消费。
+
+    delivered_at（v2 P0-3）：消费器送达标记——None＝未送达；至少一次语义下
+    送达后崩溃可能重发，消费端须按 id（CloudEvents envelope id＝本行 id）幂等。
+    """
 
     __tablename__ = "wf_event_outbox"
-    __table_args__ = (Index("ix_event_instance", "instance_id"),)
+    __table_args__ = (
+        Index("ix_event_instance", "instance_id"),
+        Index("ix_event_delivered", "delivered_at"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     event_name: Mapped[str] = mapped_column(String(64))
     instance_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     payload: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     occurred_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class CcItemRow(Base):
