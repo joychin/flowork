@@ -62,6 +62,9 @@ class ProcessInstanceRow(Base):
     definition_revision: Mapped[int] = mapped_column(Integer, default=1)
     definition_snapshot: Mapped[str] = mapped_column(Text)  # 发起时的模板 JSON（不可变）
     business_key: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    # v2（spec §14/§11）：启动幂等键——有值时与 definition_code 联合唯一
+    # （NULL 不参与唯一性，SQLite/PG 多 NULL 共存）
+    idempotency_key: Mapped[str | None] = mapped_column(String(200), nullable=True)
     state: Mapped[str] = mapped_column(String(16), default="running")
     start_user: Mapped[str] = mapped_column(String(64))
     variables: Mapped[dict[str, Any]] = mapped_column(MutableDict.as_mutable(JSON), default=dict)
@@ -72,6 +75,14 @@ class ProcessInstanceRow(Base):
     finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
+    __table_args__ = (
+        Index(
+            "uq_instance_start_idem",
+            "definition_code",
+            "idempotency_key",
+            unique=True,
+        ),
+    )
     __mapper_args__ = {"version_id_col": version}
 
 

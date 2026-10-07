@@ -63,3 +63,7 @@ class InstanceNotFoundError(NotFoundError):
 
 class TaskNotAvailableError(FloworkError):
     """任务不存在、已完成或不属于当前状态。"""
+
+
+class DuplicateStartError(FloworkError):
+    """启动幂等键冲突（reuse=reject 撞已有实例，spec §11）。"""

@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import uuid
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
+
+from sqlalchemy.exc import IntegrityError
 
 from flowork.engine.ops import CommandContext
-from flowork.errors import InstanceNotFoundError
+from flowork.errors import DuplicateStartError, InstanceNotFoundError
 from flowork.events.domain import DomainEvent
 from flowork.persistence.orm import ProcessInstanceRow
 from flowork.runtime.lifecycle import TokenState
@@ -34,6 +36,8 @@ class RuntimeService:
         business_key: str | None = None,
         major: int | None = None,
         revision: int | None = None,
+        idempotency_key: str | None = None,
+        reuse: Literal["reject", "return_existing", "allow_duplicate"] = "reject",
     ) -> str:
         """发起流程（使用已发布定义的快照）。返回实例 ID。
 
@@ -44,13 +48,43 @@ class RuntimeService:
             business_key: 业务关联键（如订单号），供外部对账。
             major/revision: 显式钉版本启动（spec §6.2）；缺省＝启动事务内
                 SELECT 最新 published（deploy 前旧版、之后新版，变更边界＝deploy 时刻）。
+            idempotency_key/reuse: 启动幂等三策略（spec §11）——reject（撞 key 报
+                DuplicateStartError，默认）/ return_existing（返回已有实例）/
+                allow_duplicate（明示放弃幂等）。key 与 definition_code 联合唯一，
+                并发撞车由唯一索引兜底后按策略收口。
         """
-        result: str = self._engine.execute(
-            lambda ctx: self._start(
-                ctx, code, start_user, variables, business_key, None, None, major, revision
+
+        def _command(ctx: CommandContext) -> str:
+            return self._start(
+                ctx,
+                code,
+                start_user,
+                variables,
+                business_key,
+                None,
+                None,
+                major,
+                revision,
+                idempotency_key,
+                reuse,
             )
-        )
-        return result
+
+        try:
+            return self._engine.execute(_command)
+        except IntegrityError as exc:
+            # 并发同 key 撞联合唯一索引：败者事务已回滚，新事务重查后按策略收口
+            if idempotency_key is None or reuse == "allow_duplicate":
+                raise
+            existing = self._engine.execute(
+                lambda ctx: self._existing_instance(ctx, code, idempotency_key)
+            )
+            if existing is None:
+                raise
+            if reuse == "reject":
+                raise DuplicateStartError(
+                    f"启动幂等键冲突（并发）：{code}#{idempotency_key} 已有实例 {existing}"
+                ) from exc
+            return existing
 
     def _start_child(
         self,
@@ -72,9 +106,22 @@ class RuntimeService:
                 parent_token_id,
                 None,
                 None,
+                None,
+                "reject",
             )
         )
         return result
+
+    def _existing_instance(self, ctx: CommandContext, code: str, key: str) -> str | None:
+        """按 (definition_code, idempotency_key) 查已有实例。"""
+        from sqlalchemy import select
+
+        from flowork.persistence.orm import ProcessInstanceRow as _Row
+
+        found = ctx.session.scalars(
+            select(_Row.id).where(_Row.definition_code == code, _Row.idempotency_key == key)
+        ).first()
+        return found
 
     def _start(
         self,
@@ -87,10 +134,21 @@ class RuntimeService:
         parent_token_id: str | None,
         major: int | None,
         revision: int | None,
+        idempotency_key: str | None,
+        reuse: Literal["reject", "return_existing", "allow_duplicate"],
     ) -> str:
         import json
 
         from flowork.persistence.orm import ProcessInstanceRow as _Row
+
+        if idempotency_key is not None and reuse != "allow_duplicate":
+            existing = self._existing_instance(ctx, code, idempotency_key)
+            if existing is not None:
+                if reuse == "reject":
+                    raise DuplicateStartError(
+                        f"启动幂等键冲突：{code}#{idempotency_key} 已有实例 {existing}"
+                    )
+                return existing
 
         snapshot = self._engine.repository.get_definition_json(code, major, revision)
         definition = self._engine.repository.get_definition(code, major, revision)
@@ -101,6 +159,8 @@ class RuntimeService:
             definition_revision=snapshot["revision"],
             definition_snapshot=json.dumps(snapshot, ensure_ascii=False),
             business_key=business_key,
+            # allow_duplicate＝明示放弃幂等：不落 key（联合唯一索引下同 key 只能一行）
+            idempotency_key=idempotency_key if reuse != "allow_duplicate" else None,
             state="running",
             start_user=start_user,
             variables=dict(variables or {}),
