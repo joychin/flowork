@@ -37,23 +37,23 @@ def searchable_names_of(instance: ProcessInstanceRow) -> list[str]:
 
 
 def sync_variable_index(session: Session, instance: ProcessInstanceRow) -> None:
-    """把实例 searchable 变量的当前值整表重写进索引（删旧插新，同事务）。"""
+    """把实例 searchable 变量的当前值整表重写进索引（删旧插新，同事务）。
+
+    脏检测：现有索引行与目标值一致时跳过写（认领等未改变量的命令不产生
+    无谓的删插写放大）。
+    """
     instance_id = instance.id
+    desired = _desired_rows(instance)
+    existing = {
+        row.name: (row.value_text, row.value_num)
+        for row in session.scalars(
+            select(VariableIndexRow).where(VariableIndexRow.instance_id == instance_id)
+        )
+    }
+    if existing == {name: (text, num) for name, text, num in desired}:
+        return
     session.execute(delete(VariableIndexRow).where(VariableIndexRow.instance_id == instance_id))
-    for name in searchable_names_of(instance):
-        value = (instance.variables or {}).get(name)
-        if value is None:
-            continue
-        text_value: str | None = None
-        number_value: float | None = None
-        if isinstance(value, bool):
-            text_value = "true" if value else "false"
-        elif isinstance(value, (int, float)):
-            number_value = float(value)
-        elif isinstance(value, str):
-            text_value = value[:500]
-        else:
-            continue  # object/list 不入索引（C.5）
+    for name, text_value, number_value in desired:
         session.add(
             VariableIndexRow(
                 id=uuid.uuid4().hex,
@@ -63,6 +63,22 @@ def sync_variable_index(session: Session, instance: ProcessInstanceRow) -> None:
                 value_num=number_value,
             )
         )
+
+
+def _desired_rows(instance: ProcessInstanceRow) -> list[tuple[str, str | None, float | None]]:
+    """目标索引行 (name, value_text, value_num)；类型槽规则见表 docstring。"""
+    rows: list[tuple[str, str | None, float | None]] = []
+    for name in searchable_names_of(instance):
+        value = (instance.variables or {}).get(name)
+        if value is None:
+            continue
+        if isinstance(value, bool):
+            rows.append((name, "true" if value else "false", None))
+        elif isinstance(value, (int, float)):
+            rows.append((name, None, float(value)))
+        elif isinstance(value, str):
+            rows.append((name, value[:500], None))
+    return rows
 
 
 def instances_by_variable(

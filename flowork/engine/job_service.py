@@ -36,16 +36,22 @@ class JobStateError(FloworkError):
 
 
 class JobClaim:
-    """一次领取的结果（脱壳的 Job 视图，离会话可用）。"""
+    """一次领取的结果（脱壳的 Job 视图，离会话可用）。
 
-    def __init__(self, job_id: str, job_type: str, payload: dict[str, Any], retries: int) -> None:
+    max_retries＝本 Job 允许的失败总次数上限（fail_job 的 retries 参数才是
+    worker 自报的剩余次数）。
+    """
+
+    def __init__(
+        self, job_id: str, job_type: str, payload: dict[str, Any], max_retries: int
+    ) -> None:
         self.job_id = job_id
         self.job_type = job_type
         self.payload = payload
-        self.retries = retries
+        self.max_retries = max_retries
 
     def __repr__(self) -> str:  # pragma: no cover - 调试便利
-        return f"JobClaim({self.job_id}, {self.job_type}, retries={self.retries})"
+        return f"JobClaim({self.job_id}, {self.job_type}, max_retries={self.max_retries})"
 
 
 class JobService:

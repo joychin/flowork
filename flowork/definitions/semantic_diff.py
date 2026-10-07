@@ -65,7 +65,20 @@ def semantic_diff(base: ProcessDefinition, target: ProcessDefinition) -> list[di
             target_dump.pop("timeout", None)
             target_dump.pop("deadlines", None)
         diff_keys = set(base_dump) | set(target_dump)
-        fields = sorted(k for k in diff_keys if base_dump.get(k) != target_dump.get(k))
+        fields = sorted(
+            k
+            for k in diff_keys
+            if base_dump.get(k) != target_dump.get(k) and not k.startswith("__")
+        )
+        if base_dump.get("__deadlines") != target_dump.get("__deadlines"):
+            changes.append(
+                {
+                    "type": "node",
+                    "action": "changed",
+                    "key": code,
+                    "detail": "超时动作配置变更（deadlines 生效列表不同）",
+                }
+            )
         if fields:
             detail = f"修改节点 {code} 配置：{', '.join(fields)}"
             changes.append({"type": "node", "action": "changed", "key": code, "detail": detail})

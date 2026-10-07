@@ -492,6 +492,18 @@ class RepositoryService:
             if code_prefix:
                 stmt = stmt.where(_Row.code.like(f"{code_prefix}%"))
             rows = ctx.session.scalars(stmt).all()
+            if not latest_only:
+                return [
+                    {
+                        "code": row.code,
+                        "name": row.name,
+                        "major": row.major,
+                        "revision": row.revision,
+                        "breaking": row.breaking,
+                        "status": row.status,
+                    }
+                    for row in rows
+                ]
             grouped: dict[str, dict[str, Any]] = {}
             for row in rows:
                 summary = grouped.setdefault(
@@ -517,8 +529,6 @@ class RepositoryService:
                     )
                 elif row.status == "published" and summary["status"] == "retired":
                     summary["status"] = "published"
-            if latest_only:
-                return list(grouped.values())
             return list(grouped.values())
 
         return self._engine.execute(_command)
