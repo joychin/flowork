@@ -246,6 +246,11 @@ class JobRow(Base):
     payload: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     result_payload: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     last_error: Mapped[str] = mapped_column(Text, default="")
+    # v2（spec §5.2/§14）：外部 worker 领取-汇报——租约期内他人不可领；到期可重领
+    worker_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    lease_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    next_retry_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    job_kind: Mapped[str] = mapped_column(String(16), default="timer")  # timer/async/worker
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
 

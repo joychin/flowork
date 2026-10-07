@@ -54,7 +54,11 @@ class JobScheduler:
         def _collect(ctx: CommandContext) -> list[str]:
             stmt = (
                 select(JobRow.id)
-                .where(JobRow.state == "scheduled", JobRow.run_at <= moment)
+                .where(
+                    JobRow.state == "scheduled",
+                    JobRow.run_at <= moment,
+                    JobRow.job_kind != "worker",  # worker 类由外部领取-汇报面执行（§5.2）
+                )
                 .order_by(JobRow.run_at)
             )
             return list(ctx.session.scalars(stmt))
