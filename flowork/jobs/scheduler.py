@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select, update
 
@@ -27,6 +27,7 @@ from flowork.engine.ops import CommandContext
 from flowork.errors import TaskNotAvailableError
 from flowork.events.domain import DomainEvent
 from flowork.persistence.orm import JobRow, ProcessInstanceRow, TaskRow
+from flowork.runtime.lifecycle import TokenState
 
 if TYPE_CHECKING:
     from flowork.engine.engine import ProcessEngine
@@ -123,25 +124,98 @@ class JobScheduler:
             job.run_at = moment + timedelta(seconds=backoff)
 
     def _apply_strategy(self, ctx: CommandContext, job: JobRow) -> None:
-        """执行超时策略（同事务）；任务已被人工处理则按"跳过"结案（不重试不死信）。"""
+        """执行到期策略（同事务）；已被人工处理则按"跳过"结案（不重试不死信）。"""
+        kernel = self._engine.kernel_for(ctx)
+        kind = job.payload.get("kind", "task_deadline")
+        if kind == "instance_deadline":
+            self._apply_instance_deadline(ctx, job, kernel)
+            return
         strategy = job.payload.get("strategy", "notify")
         task_id = job.payload.get("task_id")
-        if strategy == "notify" or not task_id:
-            kernel = self._engine.kernel_for(ctx)
+        task = ctx.session.get(TaskRow, task_id) if task_id else None
+        if strategy == "notify":
+            if task_id and (task is None or task.state != "ready"):
+                # 等待已被终结（auto_approve/reject 先行）：预警不再触发（spec §5.1）
+                job.result_payload = {
+                    **(job.result_payload or {}),
+                    "skipped": "task already finished",
+                }
+                return
             kernel.record_event(
                 "timeout_warned",
                 {"job_id": job.id, "strategy": strategy},
                 job.instance_id,
             )
             return
-        task = ctx.session.get(TaskRow, task_id)
+        if not task_id:
+            return
         if task is None or task.state != "ready":
             job.result_payload = {**(job.result_payload or {}), "skipped": "task already finished"}
             return
         try:
-            self._execute_strategy(ctx, strategy, task_id)
+            if strategy in ("reassign", "escalate"):
+                self._execute_handover(ctx, job, task, strategy)
+            else:
+                self._execute_strategy(ctx, strategy, task_id)
         except TaskNotAvailableError:
             job.result_payload = {**(job.result_payload or {}), "skipped": "task already finished"}
+
+    def _apply_instance_deadline(self, ctx: CommandContext, job: JobRow, kernel: Any) -> None:
+        """实例时限到点（v2.2 spec §7）：mark 打标继续跑 / cancel 作废 / terminate 终止。"""
+        from flowork.persistence.orm import ProcessInstanceRow
+
+        strategy = job.payload.get("strategy", "mark")
+        instance = ctx.session.get(ProcessInstanceRow, job.instance_id)
+        if instance is None or instance.state in ("completed", "cancelled", "terminated"):
+            job.result_payload = {**(job.result_payload or {}), "skipped": "instance finished"}
+            return  # 实例已完成则静默不触发
+        ctx.touch(instance)
+        kernel.record_event(
+            DomainEvent.INSTANCE_DEADLINE_REACHED,
+            {
+                "strategy": strategy,
+                "deadline_at": None
+                if instance.deadline_at is None
+                else instance.deadline_at.isoformat(),
+            },
+            instance.id,
+        )
+        if strategy == "mark":
+            instance.deadline_marked = True
+            return
+        states = (TokenState.UNFINISHED.value,)
+        for token in kernel.tokens(ctx.session, instance.id, states=states):
+            kernel.cancel_token(ctx.session, token)
+        end_status = "cancelled" if strategy == "cancel" else "terminated"
+        kernel.complete_instance(ctx.session, instance, end_status)
+
+    def _execute_handover(
+        self, ctx: CommandContext, job: JobRow, task: TaskRow, strategy: str
+    ) -> None:
+        """reassign（按目标改派）/ escalate（自动转上级，查无上级→故障单）。"""
+        kernel = self._engine.kernel_for(ctx)
+        if strategy == "reassign":
+            target = str(job.payload.get("reassign_to") or "")
+            if not target:
+                raise EngineExecutionError(f"reassign deadline 缺少改派目标（job={job.id}）")
+        else:  # escalate：宿主目录的上级；查无 → 故障单（不静默丢，spec §5.1）
+            org = self._engine.config.org
+            if org is None:
+                raise EngineExecutionError(
+                    f"escalate 需要组织目录（EngineConfig.org），job={job.id}"
+                )
+            target_manager = org.manager_of(task.assignee)
+            if not target_manager:
+                raise EngineExecutionError(
+                    f"escalate 查无上级：{task.assignee}（job={job.id}）→ 故障单"
+                )
+            target = target_manager
+            kernel.record_event(
+                DomainEvent.TASK_ESCALATED,
+                {"task_id": task.id, "from": task.assignee, "to": target},
+                job.instance_id,
+            )
+        self._engine.task._transfer(ctx, task.id, target, "system:timeout", f"超时{strategy}")
 
     def _execute_strategy(self, ctx: CommandContext, strategy: str, task_id: str) -> None:
         """对在办任务执行策略（任务不存在由调用方跳过）。"""

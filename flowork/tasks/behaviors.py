@@ -263,27 +263,41 @@ class CcTaskBehavior(NodeBehavior):
 
 
 def _schedule_timeout(ctx: RuntimeNodeContext, spec: UserTaskSpec, task_id: str) -> None:
-    """按节点超时配置创建 timer Job（到期由 JobScheduler.tick 执行策略）。"""
-    if spec.timeout is None:
+    """按节点超时配置创建 timer Job（v2.2：deadlines 列表逐条建 Job，≤8 条）。
+
+    首条到期时刻物化进 task.due_at（due_before 过滤与排序，spec §5.1）；
+    auto_approve/auto_reject 终结等待后剩余 Job 因任务已完自然跳过。
+    """
+    from flowork.definitions.node import effective_deadlines
+
+    deadlines = effective_deadlines(spec)
+    if not deadlines:
         return
     import uuid
     from datetime import timedelta
 
-    from flowork.persistence.orm import JobRow
+    from flowork.persistence.orm import JobRow, TaskRow
 
-    run_at = ctx.kernel.config.now() + timedelta(minutes=spec.timeout.due_minutes)
-    ctx.session.add(
-        JobRow(
-            id=uuid.uuid4().hex,
-            job_type="timer",
-            state="scheduled",
-            run_at=run_at,
-            instance_id=ctx.instance.id,
-            payload={
-                "task_id": task_id,
-                "activity_code": spec.code,
-                "strategy": spec.timeout.strategy,
-                "due_minutes": spec.timeout.due_minutes,
-            },
+    now = ctx.kernel.config.now()
+    for index, deadline in enumerate(deadlines):
+        ctx.session.add(
+            JobRow(
+                id=uuid.uuid4().hex,
+                job_type="timer",
+                state="scheduled",
+                run_at=now + timedelta(minutes=deadline.after_minutes),
+                instance_id=ctx.instance.id,
+                payload={
+                    "task_id": task_id,
+                    "activity_code": spec.code,
+                    "kind": "task_deadline",
+                    "strategy": deadline.action.value,
+                    "after_minutes": deadline.after_minutes,
+                    "deadline_index": index,
+                    **({"reassign_to": deadline.reassign_to} if deadline.reassign_to else {}),
+                },
+            )
         )
-    )
+    task = ctx.session.get(TaskRow, task_id)
+    if task is not None:
+        task.due_at = now + timedelta(minutes=deadlines[0].after_minutes)

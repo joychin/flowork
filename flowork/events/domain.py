@@ -39,3 +39,5 @@ class DomainEvent(StrEnum):
     PROCESS_PAUSED = "process_paused"
     PROCESS_RESUMED = "process_resumed"
     PROCESS_TERMINATED = "process_terminated"
+    INSTANCE_DEADLINE_REACHED = "instance_deadline_reached"  # v2.2（spec §10）
+    TASK_ESCALATED = "task_escalated"

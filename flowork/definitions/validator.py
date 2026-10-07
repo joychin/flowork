@@ -256,6 +256,23 @@ def validate_definition(
         # 「all 挂条件分支臂」不再告警：v2 §2.3 可达性放行下未命中臂不阻塞
         # （包容网关映射 = branch + all 汇聚，见 spec §2.4）
 
+    # —— 超时动作列表（v2.2 §5.1/C.5）——
+    for node in definition.nodes:
+        deadlines = list(getattr(node, "deadlines", None) or [])
+        if len(deadlines) > 8:
+            error(
+                "user_task.deadlines.too_many",
+                f"超时动作列表上限 8 条（当前 {len(deadlines)}）",
+                node=node.code,
+            )
+        for deadline in deadlines:
+            if deadline.action == "reassign" and not deadline.reassign_to:
+                error(
+                    "user_task.deadline.reassign_target_missing",
+                    "reassign 动作必须带改派目标（reassign_to）",
+                    node=node.code,
+                )
+
     # —— 节点语义检查 ——
     for node in definition.nodes:
         if node.kind == KIND_USER_TASK:

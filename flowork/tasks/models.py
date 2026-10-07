@@ -22,6 +22,8 @@ class TaskInfo(BaseModel):
     task_type: str = "approval"
     state: str = "ready"
     context_payload: dict[str, Any] = {}
+    priority: int = 50  # v2.2（spec §3.4）：0–100，小→大＝低→高
+    due_at: datetime | None = None  # 首条 deadline 到期时刻（无超时配置为 None）
     created_at: datetime | None = None
 
 

@@ -19,7 +19,9 @@ from flowork.errors import DefinitionError
 from flowork.runtime.registry import NodeRegistry
 
 __all__ = [
+    "DeadlineStrategy",
     "DefinitionStatus",
+    "InstanceDeadline",
     "InvalidDefinitionData",
     "NodePosition",
     "ProcessDefinition",
@@ -66,6 +68,23 @@ class ProcessVariable(BaseModel):
     searchable: bool = False
 
 
+class DeadlineStrategy(StrEnum):
+    """实例时限策略（v2.2 spec §7）：Temporal Workflow Execution Timeout 同款语义。"""
+
+    MARK = "mark"
+    CANCEL = "cancel"
+    TERMINATE = "terminate"
+
+
+class InstanceDeadline(BaseModel):
+    """实例级时限：整单最大存活时间（单对象，非列表；到点按 strategy 处置）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    after_minutes: int = Field(gt=0)
+    strategy: DeadlineStrategy = DeadlineStrategy.MARK
+
+
 class InvalidDefinitionData(DefinitionError):
     """定义数据不是合法的 JSON 对象。"""
 
@@ -85,6 +104,9 @@ class ProcessDefinition(BaseModel):
     # v2（spec §3.2）：input 契约（JSON Schema 2020-12）。None＝无契约；
     # 有值时发起/任务提交/节点输出三处边界按 schema 校验（P0-6）。
     input: dict[str, Any] | None = None
+    # v2.2（spec §7）：实例级时限——发起时按 after_minutes 物化 deadline_at，
+    # 到点 mark（打标继续跑）/cancel（作废）/terminate（终止）
+    deadline: InstanceDeadline | None = None
     # SerializeAsAny：节点按实例类型（Spec 子类）序列化，否则子类字段会在 dump 时丢失
     nodes: list[SerializeAsAny[FlowNode]] = Field(default_factory=list)
     flows: list[SequenceFlow] = Field(default_factory=list)

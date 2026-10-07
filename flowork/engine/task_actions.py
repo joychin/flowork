@@ -434,6 +434,8 @@ class TaskOpsMixin:
             task_type=task.task_type,
             state=task.state,
             context_payload=task.context_payload,
+            priority=task.priority,
+            due_at=task.due_at,
             created_at=task.created_at,
         )
 

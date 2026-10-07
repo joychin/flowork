@@ -8,11 +8,20 @@
 
 from __future__ import annotations
 
+from enum import StrEnum
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-__all__ = ["FlowNode", "HandlerRef", "MultiInstance", "NodeHooks"]
+__all__ = [
+    "DeadlineAction",
+    "FlowNode",
+    "HandlerRef",
+    "MultiInstance",
+    "NodeHooks",
+    "TaskDeadline",
+    "TimeoutPolicy",
+]
 
 
 class HandlerRef(BaseModel):
@@ -50,12 +59,48 @@ class MultiInstance(BaseModel):
 
 
 class TimeoutPolicy(BaseModel):
-    """超时策略：due_minutes 到期后执行 strategy（notify/auto_approve/auto_reject）。"""
+    """超时策略（旧形态，v2.2 由 deadlines 列表取代；validate/diff 兼容读取）。"""
 
     model_config = ConfigDict(extra="forbid")
 
     due_minutes: int
     strategy: str = "notify"
+
+
+class DeadlineAction(StrEnum):
+    """超时动作五枚举（v2.2 spec §5.1，对齐 WS-HumanTask escalation 形态）。"""
+
+    NOTIFY = "notify"
+    REASSIGN = "reassign"
+    ESCALATE = "escalate"
+    AUTO_APPROVE = "auto_approve"
+    AUTO_REJECT = "auto_reject"
+
+
+class TaskDeadline(BaseModel):
+    """单条超时动作：进入节点 after_minutes 分钟后执行 action（自进入起算）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    after_minutes: int = Field(gt=0)
+    action: DeadlineAction = DeadlineAction.NOTIFY
+    # reassign 改派目标（Subject 字面量；CEL 表达式随 expr/cel.py 换绑启用，spec §4.2）
+    reassign_to: str | None = None
+
+
+def effective_deadlines(spec: Any) -> list[TaskDeadline]:
+    """节点的生效超时列表：deadlines 优先；空则旧 timeout 字段一一映射（兼容）。"""
+    deadlines = list(getattr(spec, "deadlines", None) or [])
+    if deadlines:
+        return sorted(deadlines, key=lambda d: d.after_minutes)
+    timeout = getattr(spec, "timeout", None)
+    if timeout is None or timeout.strategy not in (
+        "notify",
+        "auto_approve",
+        "auto_reject",
+    ):
+        return []
+    return [TaskDeadline(after_minutes=timeout.due_minutes, action=timeout.strategy)]
 
 
 class FlowNode(BaseModel):

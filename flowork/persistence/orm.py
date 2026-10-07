@@ -75,6 +75,9 @@ class ProcessInstanceRow(Base):
     finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     paused_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)  # v2 §7
+    # v2.2（spec §7）：实例时限——发起时物化到期时刻；mark 策略打标（流程继续跑）
+    deadline_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    deadline_marked: Mapped[bool] = mapped_column(Boolean, default=False)
 
     __table_args__ = (
         Index(
@@ -132,6 +135,10 @@ class TaskRow(Base):
     # 审批卡片/AI 预审共用载荷
     context_payload: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     root_task_id: Mapped[str | None] = mapped_column(String(36), nullable=True)  # 加签链(M3)
+    # v2.2（spec §3.4）：priority 0–100（小→大＝低→高）默认 50；due_at＝首条
+    # deadline 到期时刻物化（due_before 过滤与排序用）
+    priority: Mapped[int] = mapped_column(Integer, default=50)
+    due_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
 

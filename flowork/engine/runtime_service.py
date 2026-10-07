@@ -173,7 +173,34 @@ class RuntimeService:
             parent_token_id=parent_token_id,
         )
         ctx.session.add(instance)
+        # v2.2（spec §7）：实例时限物化——按 after_minutes 折算 deadline_at（自然时间）
+        if definition.deadline is not None:
+            from datetime import timedelta
+
+            from flowork.persistence.orm import JobRow
+
+            instance.deadline_at = self._engine.config.now() + timedelta(
+                minutes=definition.deadline.after_minutes
+            )
         ctx.session.flush()
+        if definition.deadline is not None:
+            import uuid as _uuid
+
+            from flowork.persistence.orm import JobRow
+
+            ctx.session.add(
+                JobRow(
+                    id=_uuid.uuid4().hex,
+                    job_type="timer",
+                    state="scheduled",
+                    run_at=instance.deadline_at,
+                    instance_id=instance.id,
+                    payload={
+                        "kind": "instance_deadline",
+                        "strategy": definition.deadline.strategy.value,
+                    },
+                )
+            )
         kernel = self._engine.kernel_for(ctx)
         kernel.record_event(
             DomainEvent.PROCESS_STARTED,

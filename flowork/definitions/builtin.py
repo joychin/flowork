@@ -16,7 +16,12 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import Field
 
-from flowork.definitions.node import FlowNode, MultiInstance, TimeoutPolicy
+from flowork.definitions.node import (
+    FlowNode,
+    MultiInstance,
+    TaskDeadline,
+    TimeoutPolicy,
+)
 
 if TYPE_CHECKING:
     from flowork.runtime.registry import NodeRegistry
@@ -97,6 +102,9 @@ class UserTaskSpec(FlowNode):
     auto_pass_participated: bool = False
     no_participant_policy: str = "raise"  # raise / to_admins
     timeout: TimeoutPolicy | None = None
+    # v2.2（spec §5.1）：超时动作列表（多级预警/改派/升级/自动通过·驳回），
+    # 同节点上限 8 条（validator 把关）；旧 timeout 为其退化形态
+    deadlines: list[TaskDeadline] = Field(default_factory=list)
 
 
 class ServiceTaskSpec(FlowNode):

@@ -54,6 +54,16 @@ def semantic_diff(base: ProcessDefinition, target: ProcessDefinition) -> list[di
         target_dump = target_node.model_dump()
         base_dump.pop("name", None)
         target_dump.pop("name", None)
+        # v2.2 等价归一：旧 timeout 与 deadlines 列表互为退化形态，比较生效列表
+        if base_dump.get("kind") == "user_task":
+            from flowork.definitions.node import effective_deadlines
+
+            base_dump["__deadlines"] = [d.model_dump() for d in effective_deadlines(base_node)]
+            target_dump["__deadlines"] = [d.model_dump() for d in effective_deadlines(target_node)]
+            base_dump.pop("timeout", None)
+            base_dump.pop("deadlines", None)
+            target_dump.pop("timeout", None)
+            target_dump.pop("deadlines", None)
         diff_keys = set(base_dump) | set(target_dump)
         fields = sorted(k for k in diff_keys if base_dump.get(k) != target_dump.get(k))
         if fields:
