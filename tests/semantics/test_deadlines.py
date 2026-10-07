@@ -335,4 +335,5 @@ def test_instance_deadline_cancel_emits_terminal_event():
     engine.jobs.tick()
     assert engine.runtime.get_instance(instance_id).state == "cancelled"
     payloads = events_named(engine, DomainEvent.PROCESS_CANCELLED.value)
-    assert payloads and payloads[0]["reason"] == "instance_deadline"
+    # kernel.complete_instance 亦发一条（无 reason）；deadline 路径带 reason=instance_deadline
+    assert any(p.get("reason") == "instance_deadline" for p in payloads)
