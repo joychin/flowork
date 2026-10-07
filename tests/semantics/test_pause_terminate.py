@@ -129,3 +129,25 @@ def test_double_pause_rejected():
     engine.runtime.pause_process(instance_id, actor="a")
     with pytest.raises(FloworkError):
         engine.runtime.pause_process(instance_id, actor="a")
+
+
+def test_paused_blocks_all_task_actions():
+    """REVIEW P1-③回归：暂停期 reject/claim/transfer 全部拦截，恢复后放行。"""
+    from flowork.errors import FloworkError
+
+    engine, _clock = build_engine()
+    instance_id = engine.runtime.start_process("pause_flow", start_user="u_s")
+    engine.runtime.pause_process(instance_id, actor="admin")
+    task = engine.task.list_tasks(instance_id=instance_id)[0]
+
+    with pytest.raises(FloworkError, match="暂停"):
+        engine.task.reject(task.id, actor="u_a")
+    with pytest.raises(FloworkError, match="暂停"):
+        engine.task.claim(task.id, "u_a")
+    with pytest.raises(FloworkError, match="暂停"):
+        engine.task.transfer(task.id, to_user="u_b", actor="u_a")
+    assert engine.task.list_tasks(instance_id=instance_id, assignee="u_a")  # 待办原样
+
+    engine.runtime.resume_process(instance_id, actor="admin")
+    engine.task.complete(task.id, actor="u_a")  # 恢复后放行
+    assert engine.runtime.get_instance(instance_id).state == "completed"

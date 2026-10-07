@@ -248,7 +248,17 @@ class TaskService(TaskOpsMixin):
         ctx.touch(instance)
         if instance.state == "suspended":
             raise TaskNotAvailableError("实例已挂起（Incident 待修复），不可驳回")
+        if instance.state == "paused":
+            raise TaskNotAvailableError("实例已暂停，恢复后才可驳回")
         if variables:
+            # input 契约边界（spec §3.2）：驳回携带的 variables 同为任务提交侧输出
+            from flowork.definitions.contract import validate_input_contract
+
+            schema = _input_schema_of(instance)
+            if schema:
+                merged = dict(instance.variables)
+                merged.update(variables)
+                validate_input_contract(schema, merged, boundary="task_output")
             instance.variables.update(variables)
         kernel = self._engine.kernel_for(ctx)
         token = ctx.session.get(_TokenRow, task.token_id)

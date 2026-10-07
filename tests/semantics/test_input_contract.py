@@ -173,3 +173,17 @@ def test_subprocess_output_mapping_boundary(tmp_path):
     # 兼容映射（number）放行
     engine.task.complete(child_task.id, actor="u_c", variables={"amount": 2})
     assert engine.runtime.get_instance(instance_id).state == "completed"
+
+
+def test_reject_variables_respect_contract():
+    """REVIEW P1-④回归：驳回携带的 variables 同走 input 契约（任务提交侧输出）。"""
+    engine = _engine_with_contract()
+    instance_id = engine.runtime.start_process(
+        "contract_flow", start_user="u_s", variables={"amount": 100, "reason": "差旅"}
+    )
+    task = engine.task.list_tasks(instance_id=instance_id)[0]
+    with pytest.raises(InputContractError, match="task_output"):
+        engine.task.reject(task.id, actor="u_a", variables={"amount": "污染"})
+    # 拒收后任务仍在、可正常驳回（驳回生效：a 待办消失）
+    engine.task.reject(task.id, actor="u_a")
+    assert engine.task.list_tasks(instance_id=instance_id, assignee="u_a") == []

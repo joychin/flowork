@@ -314,3 +314,25 @@ def test_instance_deadline_silent_after_completion():
     clock.advance(60)
     engine.jobs.tick()
     assert engine.runtime.get_instance(instance_id).state == "completed"  # 不被作废
+
+
+def test_instance_deadline_cancel_emits_terminal_event():
+    """REVIEW P1-⑤回归：时限作废/终止与 runtime 路径同款终态事件。"""
+    engine, clock = build_engine()
+    definition = (
+        FlowBuilder("ins_evt")
+        .start()
+        .user_task("a", assignee="u_a")
+        .end()
+        .connect("start", "a")
+        .connect("a", "end")
+        .build()
+    )
+    definition.deadline = {"after_minutes": 30, "strategy": "cancel"}
+    deploy(engine, definition)
+    instance_id = engine.runtime.start_process("ins_evt", start_user="u_s")
+    clock.advance(30)
+    engine.jobs.tick()
+    assert engine.runtime.get_instance(instance_id).state == "cancelled"
+    payloads = events_named(engine, DomainEvent.PROCESS_CANCELLED.value)
+    assert payloads and payloads[0]["reason"] == "instance_deadline"

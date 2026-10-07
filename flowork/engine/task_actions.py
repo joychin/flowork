@@ -65,6 +65,7 @@ class TaskOpsMixin:
         task = ctx.session.get(TaskRow, task_id)
         if task is None or task.state != "ready":
             raise TaskNotAvailableError(f"任务不可认领（不存在或已处理）：{task_id}")
+        self._assert_operable(ctx, task)
         ctx.touch(self._instance(ctx, task.instance_id))
         candidates = {
             row.user_id
@@ -482,9 +483,18 @@ class TaskOpsMixin:
         task = ctx.session.get(TaskRow, task_id)
         if task is None or task.state != "ready":
             raise TaskNotAvailableError(f"任务不可操作（不存在或已处理）：{task_id}")
+        self._assert_operable(ctx, task)
         if expected_type and task.task_type != expected_type:
             raise TaskNotAvailableError(f"任务类型不符（期望 {expected_type}）：{task_id}")
         return task
+
+    def _assert_operable(self, ctx: CommandContext, task: TaskRow) -> None:
+        """任务动作统一实例态守卫：挂起/暂停的实例上不可操作任何待办（spec §7）。"""
+        instance = self._instance(ctx, task.instance_id)
+        if instance.state == "suspended":
+            raise TaskNotAvailableError("实例已挂起（Incident 待修复），不可操作")
+        if instance.state == "paused":
+            raise TaskNotAvailableError("实例已暂停，恢复后才可操作")
 
     def _clone_task(
         self,

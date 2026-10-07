@@ -188,6 +188,17 @@ class JobScheduler:
             kernel.cancel_token(ctx.session, token)
         end_status = "cancelled" if strategy == "cancel" else "terminated"
         kernel.complete_instance(ctx.session, instance, end_status)
+        # 终态事件与 runtime 路径同款（消费端统一感知实例因何终态）
+        terminal_event = (
+            DomainEvent.PROCESS_CANCELLED
+            if strategy == "cancel"
+            else DomainEvent.PROCESS_TERMINATED
+        )
+        kernel.record_event(
+            terminal_event,
+            {"actor": "system:deadline", "reason": "instance_deadline"},
+            instance.id,
+        )
 
     def _execute_handover(
         self, ctx: CommandContext, job: JobRow, task: TaskRow, strategy: str
