@@ -112,7 +112,7 @@ class TaskOpsMixin:
         return result
 
     def _anticipate(self, ctx: CommandContext, task_id: str, outcome: str) -> AnticipateResult:
-        from flowork.definitions.builtin import UserTaskSpec
+        from flowork.definitions.builtin import CallActivitySpec, EndSpec, UserTaskSpec
         from flowork.persistence.orm import TaskRow as _TaskRow
         from flowork.persistence.orm import TokenRow as _TokenRow
         from flowork.tasks.countersign import evaluate_exit
@@ -156,13 +156,10 @@ class TaskOpsMixin:
                 for flow in select_outgoing(
                     definition.outgoing(node.code),
                     dict(instance.variables),
-                    mode="first_match"
-                    if node.kind == "branch"
-                    and getattr(node, "route_mode", "first_match") == "first_match"
-                    else "all_match",
+                    mode=getattr(node, "route_mode", "all_match"),
                 )
             ]
-        waiting_kinds = {"user_task", "call_activity"}
+        waiting_specs = (UserTaskSpec, CallActivitySpec)
         complete = True
         seen: set[str] = set()
         frontier = list(targets)
@@ -175,9 +172,9 @@ class TaskOpsMixin:
             if hop is None:
                 complete = False
                 break
-            if hop.kind == "end":
+            if isinstance(hop, EndSpec):
                 continue
-            if hop.kind in waiting_kinds:
+            if isinstance(hop, waiting_specs):
                 complete = False
                 break
             frontier.extend(
