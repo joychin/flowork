@@ -307,6 +307,8 @@ class IncidentRow(Base):
     message: Mapped[str] = mapped_column(Text)
     error_class: Mapped[str] = mapped_column(String(100), default="")
     state: Mapped[str] = mapped_column(String(16), default="open")  # open/resolved
-    resolution: Mapped[str] = mapped_column(Text, default="")  # resume/cancel
+    resolution: Mapped[str] = mapped_column(
+        Text, default=""
+    )  # resume/cancel/retry/skip/fail（v2 §8）
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

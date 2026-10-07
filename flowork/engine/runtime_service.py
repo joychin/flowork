@@ -337,10 +337,17 @@ class RuntimeService:
     def resolve_incident(
         self, incident_id: str, action: str = "resume", actor: str = "admin"
     ) -> None:
-        """修复 Incident：resume（恢复运行）/ cancel（取消实例）。"""
+        """修复 Incident（spec §8/P1-4，根因没修好允许复发）。
+
+        - resume：恢复运行（轻症——外部环境已恢复）；
+        - cancel：取消实例（业务侧放弃）；
+        - retry：重派——该实例 dead-letter Job 重置 scheduled，实例恢复；
+        - skip：跳过节点——故障节点的未完令牌视为完成并按路由推进（绕放行门）；
+        - fail：终止实例（管理员判定不可恢复，终态 terminated）。
+        """
 
         def _command(ctx: CommandContext) -> Any:
-            from flowork.persistence.orm import IncidentRow
+            from flowork.persistence.orm import IncidentRow, JobRow
 
             incident = ctx.session.get(IncidentRow, incident_id)
             if incident is None or incident.state != "open":
@@ -352,12 +359,62 @@ class RuntimeService:
                     instance.state = "running"
             elif action == "cancel":
                 self.cancel_process(incident.instance_id, actor=actor, reason="incident:cancel")
+            elif action == "retry":
+                moment = self._engine.config.now()
+                for job in ctx.session.scalars(
+                    select(JobRow).where(
+                        JobRow.instance_id == incident.instance_id,
+                        JobRow.state == "dead-letter",
+                    )
+                ):
+                    job.state = "scheduled"
+                    job.run_at = moment
+                    job.next_retry_at = None
+                    job.worker_id = None
+                    job.lease_until = None
+                instance = ctx.session.get(ProcessInstanceRow, incident.instance_id)
+                if instance is not None:
+                    ctx.touch(instance)
+                    instance.state = "running"
+            elif action == "skip":
+                self._skip_failed_nodes(ctx, incident.instance_id, actor)
+            elif action == "fail":
+                self.terminate_process(incident.instance_id, actor=actor, reason="incident:fail")
             else:
-                raise ValueError(f"未知修复动作：{action}（支持 resume/cancel）")
+                raise ValueError(f"未知修复动作：{action}（支持 resume/cancel/retry/skip/fail）")
             incident.state = "resolved"
             incident.resolution = action
 
         self._engine.execute(_command)
+
+    def _skip_failed_nodes(self, ctx: CommandContext, instance_id: str, actor: str) -> None:
+        """跳过故障节点：未完令牌视为完成，按条件路由激活后继（管理员手术，绕放行门）。"""
+        from flowork.engine.routing import select_outgoing
+
+        kernel = self._engine.kernel_for(ctx)
+        instance = ctx.session.get(ProcessInstanceRow, instance_id)
+        assert instance is not None
+        definition = kernel.definition_of(ctx.session, instance)
+        for token in kernel.tokens(ctx.session, instance_id, states=(TokenState.UNFINISHED.value,)):
+            node = definition.node(token.activity_code)
+            kernel.cancel_token(ctx.session, token)
+            kernel.record_event(
+                DomainEvent.NODE_CANCELLED,
+                {"activity_code": token.activity_code, "by": "incident:skip", "actor": actor},
+                instance_id,
+            )
+            if node is None:
+                continue
+            outgoing = select_outgoing(
+                definition.outgoing(node.code), dict(instance.variables), mode="all_match"
+            )
+            for flow in outgoing:
+                target = definition.node(flow.target)
+                if target is not None:
+                    kernel.activate(ctx.session, instance, target, source_activity_code=node.code)
+        if instance.state == "suspended":
+            instance.state = "running"
+        ctx.touch(instance)
 
     def move_token(self, token_id: str, target_activity: str, actor: str = "admin") -> str:
         """管理员修复：把未完令牌直移到目标节点（返回新令牌 ID）。"""

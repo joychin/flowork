@@ -68,9 +68,11 @@ class ProcessEngine:
         kernel.command_ctx = ctx
         return kernel
 
-    def register_handler(self, name: str, handler: Callable[..., None]) -> None:
+    def register_handler(
+        self, name: str, handler: Callable[..., None], *, replace: bool = False
+    ) -> None:
         """注册声明式钩子/系统动作处理器（HandlerRegistry）。"""
-        self.handlers.register(name, handler)
+        self.handlers.register(name, handler, replace=replace)
 
     def close(self) -> None:
         self._db_engine.dispose()

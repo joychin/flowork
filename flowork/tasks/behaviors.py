@@ -13,7 +13,7 @@ from flowork.definitions.builtin import (
     UserTaskSpec,
 )
 from flowork.engine.context import RuntimeNodeContext
-from flowork.engine.kernel import NoParticipantError
+from flowork.engine.kernel import EngineExecutionError, NoParticipantError
 from flowork.runtime.behavior import NodeBehavior, NodeContext
 from flowork.runtime.registry import NodeRegistry
 from flowork.tasks.countersign import evaluate_exit
@@ -219,7 +219,15 @@ class ServiceTaskBehavior(NodeBehavior):
         if not spec.action:
             return
         handler = ctx.kernel.handlers.resolve(spec.action)
-        handler(ctx, spec.params)
+        try:
+            handler(ctx, spec.params)
+        except EngineExecutionError:
+            raise
+        except Exception as exc:
+            # 技术故障→故障单（spec §8）：原始异常包成引擎错误，命令管线挂起实例
+            raise EngineExecutionError(
+                f"service_task {spec.code} 动作 {spec.action!r} 执行失败：{exc}"
+            ) from exc
 
 
 class CallActivityBehavior(NodeBehavior):
