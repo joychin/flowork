@@ -161,6 +161,8 @@ class TaskHistoryRow(Base):
     idempotency_key: Mapped[str | None] = mapped_column(String(100), nullable=True)
     cost_seconds: Mapped[float] = mapped_column(Float, default=0.0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+    # v2.1（spec §5.6）：身份快照——完成事务内经 OrgDirectory.snapshot 原样定格（JSON 袋 4KB 上限，内核不解析）
+    actor_context: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
 
 
 class DesignerDraftRow(Base):

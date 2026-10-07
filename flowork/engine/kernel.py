@@ -241,6 +241,32 @@ class Kernel:
             stmt = stmt.where(_TaskRow.assignee == assignee)
         return list(session.scalars(stmt))
 
+    MAX_ACTOR_CONTEXT_BYTES = 4096  # spec §5.6：JSON 袋上限，超限拒收
+
+    def _actor_context_of(self, actor: str) -> dict[str, Any]:
+        """身份快照：完成事务内经目录端口定格操作者当时的岗位/角色/部门。
+
+        目录未配置（裸跑/单测）→ {}；内核不解析、不校验、不理解内容——
+        存什么、存多细是宿主的审计策略（spec §5.6）。
+        """
+        import json as _json
+
+        org = self.engine.config.org if self.engine else None
+        if org is None:
+            return {}
+        try:
+            snapshot = dict(org.snapshot(actor) or {})
+        except Exception:
+            return {}
+        if (
+            len(_json.dumps(snapshot, ensure_ascii=False).encode("utf-8"))
+            > self.MAX_ACTOR_CONTEXT_BYTES
+        ):
+            raise EngineExecutionError(
+                f"身份快照超限（>{self.MAX_ACTOR_CONTEXT_BYTES}B）：宿主 snapshot 返回内容过大"
+            )
+        return snapshot
+
     def archive_task(
         self,
         session: Session,
@@ -281,6 +307,7 @@ class Kernel:
                 idempotency_key=idempotency_key,
                 cause_token_id=cause_token_id,
                 cost_seconds=cost,
+                actor_context=self._actor_context_of(actor),
             )
         )
         session.delete(task)
