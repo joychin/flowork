@@ -92,9 +92,18 @@ class InvalidDefinition(DefinitionError):
 
 
 def validate_definition(
-    definition: ProcessDefinition, registry: NodeRegistry
+    definition: ProcessDefinition,
+    registry: NodeRegistry,
+    *,
+    org_configured: bool | None = None,
 ) -> list[ValidateIssue]:
-    """执行全部设计时校验，返回问题列表（ERROR + WARNING）。"""
+    """执行全部设计时校验，返回问题列表（ERROR + WARNING）。
+
+    Args:
+        org_configured: 调用方是否知道组织目录已配置（spec §9）。
+            None＝未知（跳过组主体检查）；False＝确知未配置——图纸使用
+            role:/org: 组主体时给 WARNING（不拦发布，后果＝组待办无人能认领）。
+    """
     issues: list[ValidateIssue] = []
     nodes = {n.code: n for n in definition.nodes}
     flows = definition.flows
@@ -104,6 +113,18 @@ def validate_definition(
 
     def warning(rule: str, message: str, **where: str) -> None:
         issues.append(ValidateIssue(IssueLevel.WARNING, rule, message, **where))
+
+    if org_configured is False:
+        for node in definition.nodes:
+            groups = list(getattr(node, "candidate_groups", None) or [])
+            prefixed = [g for g in groups if g.startswith(("role:", "org:"))]
+            if prefixed:
+                warning(
+                    "participant.group_without_directory",
+                    f"图纸使用组主体 {prefixed} 而组织目录未配置：组待办将无人能认领"
+                    "（EngineConfig.org / 目录见 spec §9）",
+                    node=node.code,
+                )
 
     # —— 唯一性与编码 ——
     seen: set[str] = set()

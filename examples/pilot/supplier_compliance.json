@@ -8,6 +8,7 @@
       "code": "start",
       "name": "发起",
       "kind": "start",
+      "advance_policy": null,
       "hooks": {
         "on_enter": null,
         "on_exit": null,
@@ -20,6 +21,7 @@
       "code": "verify",
       "name": "合规核验",
       "kind": "user_task",
+      "advance_policy": null,
       "hooks": {
         "on_enter": null,
         "on_exit": null,
@@ -34,6 +36,7 @@
       "code": "end",
       "name": "完成",
       "kind": "end",
+      "advance_policy": null,
       "hooks": {
         "on_enter": null,
         "on_exit": null,
@@ -60,5 +63,7 @@
       "condition": null,
       "on_take": null
     }
-  ]
+  ],
+  "variables": [],
+  "layout": {}
 }

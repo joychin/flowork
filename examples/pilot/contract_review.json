@@ -8,6 +8,7 @@
       "code": "start",
       "name": "提交",
       "kind": "start",
+      "advance_policy": null,
       "hooks": {
         "on_enter": null,
         "on_exit": null,
@@ -20,6 +21,7 @@
       "code": "legal_review",
       "name": "法务审查",
       "kind": "user_task",
+      "advance_policy": null,
       "hooks": {
         "on_enter": null,
         "on_exit": null,
@@ -34,6 +36,7 @@
       "code": "risk_route",
       "name": "风险分流",
       "kind": "branch",
+      "advance_policy": null,
       "hooks": {
         "on_enter": null,
         "on_exit": null,
@@ -47,6 +50,7 @@
       "code": "finance_review",
       "name": "财务核价",
       "kind": "user_task",
+      "advance_policy": null,
       "hooks": {
         "on_enter": null,
         "on_exit": null,
@@ -61,6 +65,7 @@
       "code": "gm_review",
       "name": "总经理终审",
       "kind": "user_task",
+      "advance_policy": null,
       "hooks": {
         "on_enter": null,
         "on_exit": null,
@@ -75,14 +80,14 @@
       "code": "end",
       "name": "完成",
       "kind": "end",
+      "advance_policy": "any",
       "hooks": {
         "on_enter": null,
         "on_exit": null,
         "on_cancel": null,
         "on_fail": null
       },
-      "properties": {},
-      "advance_policy": "any"
+      "properties": {}
     }
   ],
   "flows": [
@@ -164,5 +169,7 @@
       "condition": null,
       "on_take": null
     }
-  ]
+  ],
+  "variables": [],
+  "layout": {}
 }

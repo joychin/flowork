@@ -1,4 +1,4 @@
-"""目录竖切端到端：持久化目录注入引擎后，manager() 取人函数按"主属部门主管"落任务。
+"""目录竖切端到端：持久化目录注入引擎后，manager_of() 取人函数按"主属部门主管"落任务。
 
 验证 docs/product/engine-v1/05-架构总体设计.md §4 的关键接缝：
 目录（新模块）→ EngineConfig.org → kernel.resolve_participants → 任务落库。
@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from flowork import contrib
 from flowork.definitions.definition import load_definition
 from flowork.directory import DirectoryStore
 from flowork.engine.config import EngineConfig
@@ -18,7 +19,7 @@ DEFINITION = {
     "name": "目录竖切（主管审批）",
     "nodes": [
         {"code": "start", "name": "发起", "kind": "start"},
-        {"code": "mgr", "name": "主管审批", "kind": "user_task", "assignee": "manager()"},
+        {"code": "mgr", "name": "主管审批", "kind": "user_task", "assignee": "manager_of()"},
         {"code": "end", "name": "结束", "kind": "end"},
     ],
     "flows": [
@@ -37,6 +38,7 @@ def make_engine_with_directory(tmp_path: Path) -> tuple[ProcessEngine, Directory
     store.create_user("u_zhang", name="张三", org_unit_code="d_eng")
     store.create_user("u_bob", name="李主管", org_unit_code="d_eng")
     config.org = store
+    config.participant_functions = contrib.org_vocabulary()  # v2.1：词汇由宿主挂
     definition = load_definition(DEFINITION, engine.config.node_registry)
     engine.repository.save_definition(definition)
     engine.repository.publish("dir_vertical")

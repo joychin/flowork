@@ -6,11 +6,13 @@ from pathlib import Path
 
 import pytest
 
+from flowork import contrib
 from flowork.definitions.builder import FlowBuilder
 from flowork.engine.config import EngineConfig
 from flowork.engine.engine import ProcessEngine
 from flowork.engine.kernel import NoParticipantError
-from flowork.participants.functions import UnknownFunction, builtin_functions, parse_expression
+from flowork.errors import FloworkError
+from flowork.participants.functions import UnknownFunction, parse_expression
 from flowork.participants.org_directory import OrgDirectory
 
 ORG_DATA = {
@@ -42,8 +44,13 @@ def _org_data_no_delegation() -> dict:
 
 @pytest.fixture
 def org_engine() -> ProcessEngine:
-    """无委托的组织目录（委托语义由专门用例验证）。"""
-    return ProcessEngine(EngineConfig(org=OrgDirectory.from_dict(_org_data_no_delegation())))
+    """无委托的组织目录 + contrib 词汇（委托语义由专门用例验证）。"""
+    return ProcessEngine(
+        EngineConfig(
+            org=OrgDirectory.from_dict(_org_data_no_delegation()),
+            participant_functions=contrib.org_vocabulary(),
+        )
+    )
 
 
 def publish(engine: ProcessEngine, definition) -> None:
@@ -114,7 +121,7 @@ def test_org_from_yaml(examples_dir: Path):
     assert org.admins == ["u_admin"]
 
 
-# —— 取人函数（9 例）——
+# —— 取人函数（v2.1：注册表出厂为空，contrib 三词汇 + 宿主自定义）——
 
 
 def test_parse_expression_function():
@@ -124,6 +131,21 @@ def test_parse_expression_function():
 
 def test_parse_expression_literal():
     assert parse_expression("u_alice") is None
+
+
+def test_registry_empty_by_default_without_org():
+    """v2.1：内核注册表出厂为空——目录在而词汇未挂时，函数调用报 UnknownFunction。"""
+    engine = ProcessEngine(EngineConfig(org=OrgDirectory.from_dict(_org_data_no_delegation())))
+    flow = (
+        FlowBuilder("f_empty")
+        .start()
+        .user_task("a", assignee="manager_of()")
+        .end()
+        .connect("start", "a")
+        .connect("a", "end")
+    )
+    with pytest.raises(UnknownFunction):
+        run_flow(engine, flow)
 
 
 def test_unknown_function_raises(org_engine: ProcessEngine):
@@ -139,11 +161,12 @@ def test_unknown_function_raises(org_engine: ProcessEngine):
         run_flow(org_engine, flow)
 
 
-def test_function_originator(org_engine: ProcessEngine):
+def test_function_originator_literal(org_engine: ProcessEngine):
+    """发起人字面量（等价 CEL 命名空间 initiator，不占注册表）。"""
     flow = (
         FlowBuilder("f1")
         .start()
-        .user_task("a", assignee="originator()")
+        .user_task("a", assignee="originator")
         .end()
         .connect("start", "a")
         .connect("a", "end")
@@ -153,11 +176,12 @@ def test_function_originator(org_engine: ProcessEngine):
     assert [t.assignee for t in tasks] == ["u_zhang"]
 
 
-def test_function_manager(org_engine: ProcessEngine):
+def test_function_manager_of_no_args(org_engine: ProcessEngine):
+    """manager_of() 无参＝发起人的上级。"""
     flow = (
         FlowBuilder("f2")
         .start()
-        .user_task("a", assignee="manager()")
+        .user_task("a", assignee="manager_of()")
         .end()
         .connect("start", "a")
         .connect("a", "end")
@@ -166,16 +190,38 @@ def test_function_manager(org_engine: ProcessEngine):
     assert [t.assignee for t in org_engine.task.list_tasks(instance_id=instance_id)] == ["u_bob"]
 
 
-def test_function_dept_head_default(org_engine: ProcessEngine):
+def test_contrib_requires_directory():
+    """contrib 词汇基于目录端口——未配置目录时报技术性错误（不留静默空结果）。"""
+    functions = contrib.org_vocabulary()
+    with pytest.raises(contrib.ContribDirectoryMissing):
+        functions.call("manager_of", None, None, [])  # type: ignore[arg-type]
+
+
+def test_contrib_manager_of_rejects_role_subject(org_engine: ProcessEngine):
+    """manager_of 吃 role: 主体 → 设计期语义错误（spec §5.5）。"""
     flow = (
-        FlowBuilder("f3")
+        FlowBuilder("f_role")
         .start()
-        .user_task("a", assignee="dept_head()")
+        .user_task("a", assignee="manager_of('x')")
         .end()
         .connect("start", "a")
         .connect("a", "end")
     )
-    instance_id = run_flow(org_engine, flow)  # 发起人在 d_eng → 主管 u_bob
+    with pytest.raises(FloworkError):
+        run_flow(org_engine, flow, variables={"x": "role:finance"})
+
+
+def test_contrib_manager_of_org_subject_returns_dept_head(org_engine: ProcessEngine):
+    """manager_of 吃 org: 主体 → 部门负责人（spec §5.5）。"""
+    flow = (
+        FlowBuilder("f_org")
+        .start()
+        .user_task("a", assignee="manager_of('x')")
+        .end()
+        .connect("start", "a")
+        .connect("a", "end")
+    )
+    instance_id = run_flow(org_engine, flow, variables={"x": "org:d_eng"})
     assert [t.assignee for t in org_engine.task.list_tasks(instance_id=instance_id)] == ["u_bob"]
 
 
@@ -206,7 +252,52 @@ def test_function_variable_argument(org_engine: ProcessEngine):
     assert [t.assignee for t in org_engine.task.list_tasks(instance_id=instance_id)] == ["u_bob"]
 
 
-def test_function_previous_handlers(org_engine: ProcessEngine):
+def test_host_registered_vocabulary_dept_head(org_engine: ProcessEngine):
+    """宿主自定义词汇演示：dept_head()（部门类词汇归宿主，spec §5.5）。"""
+
+    def _dept_head(ctx, org, department: str = "") -> list[str]:
+        directory = org
+        assert directory is not None
+        dept = str(ctx.variables.get(department, department)) if department else ""
+        if not dept:
+            dept = directory.department_of(ctx.instance.start_user) or ""
+        return [h for h in [directory.department_head(dept)] if h]
+
+    org_engine.config.participant_functions.register("dept_head", _dept_head)
+    flow = (
+        FlowBuilder("f3")
+        .start()
+        .user_task("a", assignee="dept_head()")
+        .end()
+        .connect("start", "a")
+        .connect("a", "end")
+    )
+    instance_id = run_flow(org_engine, flow)  # 发起人在 d_eng → 主管 u_bob
+    assert [t.assignee for t in org_engine.task.list_tasks(instance_id=instance_id)] == ["u_bob"]
+
+
+def test_host_registered_vocabulary_previous_handlers(org_engine: ProcessEngine):
+    """宿主自定义词汇演示：previous_handlers()（上一节点办理人）。"""
+
+    def _previous_handlers(ctx, org, activity: str = "") -> list[str]:
+        from sqlalchemy import select
+
+        from flowork.persistence.orm import TaskHistoryRow
+
+        assert ctx.token is not None
+        activity_code = activity or ctx.token.source_activity_code or ""
+        if not activity_code:
+            return []
+        rows = ctx.session.scalars(
+            select(TaskHistoryRow).where(
+                TaskHistoryRow.instance_id == ctx.instance.id,
+                TaskHistoryRow.activity_code == activity_code,
+                TaskHistoryRow.outcome != "cancelled",
+            )
+        )
+        return list(dict.fromkeys(row.assignee for row in rows))
+
+    org_engine.config.participant_functions.register("previous_handlers", _previous_handlers)
     flow = (
         FlowBuilder("f6")
         .start()
@@ -438,6 +529,6 @@ def test_simple_fallback_without_org():
 
 
 def test_functions_registry_custom():
-    functions = builtin_functions()
-    functions.register("pick_boss", lambda ctx, org: ["u_chair"], replace=True)
+    functions = contrib.org_vocabulary()
+    functions.register("pick_boss", lambda ctx, org: ["u_chair"])
     assert "pick_boss" in functions.names()

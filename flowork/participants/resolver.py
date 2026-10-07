@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from flowork.engine.kernel import NoParticipantError
-from flowork.participants.functions import builtin_functions, parse_expression
+from flowork.participants.functions import ParticipantFunctions, parse_expression
 from flowork.participants.simple import resolve_simple
 
 if TYPE_CHECKING:
@@ -47,7 +47,7 @@ def resolve_participants(
     if manual:
         return ParticipantResolution(todo=_dedupe(manual))
 
-    pool = _evaluate_expressions(ctx, spec, org, functions or builtin_functions())
+    pool = _evaluate_expressions(ctx, spec, org, functions or ParticipantFunctions())
     todo, skipped = _apply_strategies(ctx, spec, pool)
     return ParticipantResolution(todo=_dedupe(todo), skipped=_dedupe(skipped))
 
@@ -68,7 +68,12 @@ def _evaluate_expressions(
             else:
                 pool.append(expression)
         else:
-            pool.extend(functions.call(call.name, ctx, org, call.args))
+            result = functions.call(call.name, ctx, org, call.args)
+            if not isinstance(result, list):
+                raise NoParticipantError(
+                    f"取人函数 {call.name!r} 在参与人位须返回人列表（谓词函数属条件位）"
+                )
+            pool.extend(str(user) for user in result)
     return _dedupe(pool)
 
 

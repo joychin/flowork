@@ -27,6 +27,7 @@ dev = [
     "mypy>=1.10",
     "types-pyyaml>=6.0.12.20260906",
     "httpx>=0.28.1",
+    "import-linter>=2.15",
 ]
 
 [build-system]
@@ -42,6 +43,31 @@ packages = ["flowork"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+
+[tool.importlinter]
+root_package = "flowork"
+
+[[tool.importlinter.contracts]]
+name = "内核不得 import 插件包（contrib）——官方插件不吃小灶（spec §9 铁律）"
+type = "forbidden"
+source_modules = [
+    "flowork.definitions",
+    "flowork.runtime",
+    "flowork.expr",
+    "flowork.spi",
+    "flowork.events",
+    "flowork.tasks",
+    "flowork.participants",
+    "flowork.persistence",
+    "flowork.engine",
+    "flowork.jobs",
+    "flowork.errors",
+    "flowork.clock",
+]
+forbidden_modules = ["flowork.contrib"]
+ignore_imports = []
+# 注：definitions→runtime→engine 的传递链是既有分层现实（runtime.behavior 懒加载
+# engine.routing），分层拆解不在本契约范围——随内核 v2 模块重排（spec §15）再立。
 
 [tool.ruff.lint.per-file-ignores]
 "flowork/persistence/orm.py" = ["RUF012"]  # SQLAlchemy mapped_column(default=dict) 惯例

@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from flowork import contrib
 from flowork.definitions.definition import load_definition
 from flowork.engine.config import EngineConfig
 from flowork.engine.engine import ProcessEngine
@@ -24,7 +25,12 @@ TEMPLATES = [
 @pytest.fixture
 def pilot() -> ProcessEngine:
     """带试点组织目录的引擎，五个模板均已发布。"""
-    engine = ProcessEngine(EngineConfig(org=OrgDirectory.from_yaml(PILOT_DIR / "org.yaml")))
+    engine = ProcessEngine(
+        EngineConfig(
+            org=OrgDirectory.from_yaml(PILOT_DIR / "org.yaml"),
+            participant_functions=contrib.org_vocabulary(),  # v2.1：词汇由宿主挂
+        )
+    )
     for code in TEMPLATES:
         definition = load_definition(
             (PILOT_DIR / f"{code}.json").read_text(encoding="utf-8"), engine.config.node_registry

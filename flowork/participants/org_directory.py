@@ -22,14 +22,22 @@ import yaml
 
 from flowork.errors import FloworkError
 
-__all__ = ["OrgConfigError", "OrgDirectory", "OrgDirectoryLike"]
+__all__ = ["OrgConfigError", "OrgDirectory", "OrgDirectoryLike", "split_group"]
 
 
 class OrgDirectoryLike(Protocol):
-    """引擎消费的目录查询面：静态 OrgDirectory 与持久化 DirectoryStore 均满足。"""
+    """引擎消费的目录查询面：静态 OrgDirectory 与持久化 DirectoryStore 均满足。
 
-    def user_exists(self, user_id: str) -> bool: ...
+    v2.1（spec §9）：前四个方法（is_member/subjects_in/manager_of/snapshot）为引擎
+    必需的最小面——关系判断（人→组）与身份定格是引擎自己的行为；其余为宿主函数
+    （flowork.contrib）与既有解析管线使用的丰富面，实现方可按需退化。
+    """
+
+    def is_member(self, user: str, group: str) -> bool: ...
+    def subjects_in(self, group: str) -> list[str]: ...
     def manager_of(self, user_id: str) -> str | None: ...
+    def snapshot(self, subject: str) -> dict[str, Any]: ...
+    def user_exists(self, user_id: str) -> bool: ...
     def department_of(self, user_id: str) -> str | None: ...
     def department_head(self, department: str) -> str | None: ...
     def parent_department(self, department: str) -> str | None: ...
@@ -97,15 +105,49 @@ class OrgDirectory:
             admins=[str(a) for a in data.get("admins", [])],
         )
 
-    # —— 查询 ——
+    # —— 查询：v2.1 引擎必需四方法（spec §9）——
+
+    def is_member(self, user: str, group: str) -> bool:
+        """人→组：``role:{name}`` 按角色、``org:{code}`` 按直属部门；裸名视同角色。"""
+        kind, name = split_group(group)
+        if not name:
+            return False
+        if kind == "org":
+            info = self.users.get(user)
+            return bool(info and info.get("department") == name)
+        return bool(self.users.get(user)) and name in (self.users[user].get("roles") or [])
+
+    def subjects_in(self, group: str) -> list[str]:
+        """组→人：直接成员（不含子部门）。"""
+        kind, name = split_group(group)
+        if not name:
+            return []
+        if kind == "org":
+            return self.users_in_department(name)
+        return self.users_with_role(name)
+
+    def manager_of(self, user_id: str) -> str | None:
+        """转上级：吃 user id 返回其 manager；吃 ``org:{code}`` 返回部门负责人。"""
+        if user_id.startswith("org:"):
+            return self.department_head(user_id[4:])
+        info = self.users.get(user_id.removeprefix("user:").removeprefix("agent:"))
+        manager = info.get("manager") if info else None
+        return str(manager) if manager else None
+
+    def snapshot(self, subject: str) -> dict[str, Any]:
+        """身份快照（spec §5.6）：静态目录可给出的岗位事实；未知主体返回 {}。"""
+        info = self.users.get(subject.removeprefix("user:"))
+        if not info:
+            return {}
+        return {
+            "department": info.get("department"),
+            "roles": list(info.get("roles") or []),
+        }
+
+    # —— 查询：丰富面（contrib 词汇与既有管线使用）——
 
     def user_exists(self, user_id: str) -> bool:
         return user_id in self.users
-
-    def manager_of(self, user_id: str) -> str | None:
-        info = self.users.get(user_id)
-        manager = info.get("manager") if info else None
-        return str(manager) if manager else None
 
     def department_of(self, user_id: str) -> str | None:
         info = self.users.get(user_id)
@@ -148,6 +190,14 @@ class OrgDirectory:
             if item.delegate_from == user_id and item.active_at(today):
                 return item.delegate_to
         return None
+
+
+def split_group(group: str) -> tuple[str, str]:
+    """拆组引用：``role:finance``→("role","finance")；裸名视同 role。"""
+    if group.startswith(("role:", "org:")):
+        kind, _, name = group.partition(":")
+        return kind, name
+    return "role", group
 
 
 def _as_date(value: Any) -> date | None:

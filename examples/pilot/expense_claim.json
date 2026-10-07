@@ -8,6 +8,7 @@
       "code": "start",
       "name": "提交",
       "kind": "start",
+      "advance_policy": null,
       "hooks": {
         "on_enter": null,
         "on_exit": null,
@@ -20,6 +21,7 @@
       "code": "supervisor",
       "name": "直属主管审批",
       "kind": "user_task",
+      "advance_policy": null,
       "hooks": {
         "on_enter": null,
         "on_exit": null,
@@ -27,13 +29,14 @@
         "on_fail": null
       },
       "properties": {},
-      "assignee": "manager()",
+      "assignee": "manager_of()",
       "reject_target": "start"
     },
     {
       "code": "amount_route",
       "name": "金额分流",
       "kind": "branch",
+      "advance_policy": null,
       "hooks": {
         "on_enter": null,
         "on_exit": null,
@@ -47,6 +50,7 @@
       "code": "finance_review",
       "name": "财务会签",
       "kind": "user_task",
+      "advance_policy": "any",
       "hooks": {
         "on_enter": null,
         "on_exit": null,
@@ -63,13 +67,13 @@
         "approve_exit": ">=50%",
         "disapprove_exit": ">=1"
       },
-      "reject_target": "supervisor",
-      "advance_policy": "any"
+      "reject_target": "supervisor"
     },
     {
       "code": "director_review",
       "name": "总监审批",
       "kind": "user_task",
+      "advance_policy": null,
       "hooks": {
         "on_enter": null,
         "on_exit": null,
@@ -83,6 +87,7 @@
       "code": "legal_cc",
       "name": "法务留档传阅",
       "kind": "cc_task",
+      "advance_policy": null,
       "hooks": {
         "on_enter": null,
         "on_exit": null,
@@ -98,6 +103,7 @@
       "code": "payment",
       "name": "财务打款",
       "kind": "service_task",
+      "advance_policy": "any",
       "hooks": {
         "on_enter": null,
         "on_exit": null,
@@ -105,13 +111,13 @@
         "on_fail": null
       },
       "properties": {},
-      "action": "make_payment",
-      "advance_policy": "any"
+      "action": "make_payment"
     },
     {
       "code": "end",
       "name": "结束",
       "kind": "end",
+      "advance_policy": null,
       "hooks": {
         "on_enter": null,
         "on_exit": null,
@@ -235,5 +241,7 @@
       "condition": null,
       "on_take": null
     }
-  ]
+  ],
+  "variables": [],
+  "layout": {}
 }

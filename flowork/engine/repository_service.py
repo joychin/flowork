@@ -108,8 +108,12 @@ class RepositoryService:
         return row
 
     def validate(self, definition: ProcessDefinition) -> list[ValidateIssue]:
-        """设计时校验（不落库）。"""
-        return validate_definition(definition, self._engine.config.node_registry)
+        """设计时校验（不落库；组主体×目录状态联动检查，spec §9）。"""
+        return validate_definition(
+            definition,
+            self._engine.config.node_registry,
+            org_configured=self._engine.config.org is not None,
+        )
 
     def get_definition_json(self, code: str, version: int | None = None) -> dict[str, Any]:
         """取已发布定义的原始 JSON（快照用）。"""

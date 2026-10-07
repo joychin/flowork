@@ -8,6 +8,7 @@
       "code": "start",
       "name": "提交",
       "kind": "start",
+      "advance_policy": null,
       "hooks": {
         "on_enter": null,
         "on_exit": null,
@@ -20,6 +21,7 @@
       "code": "supervisor",
       "name": "主管审批",
       "kind": "user_task",
+      "advance_policy": null,
       "hooks": {
         "on_enter": null,
         "on_exit": null,
@@ -27,7 +29,7 @@
         "on_fail": null
       },
       "properties": {},
-      "assignee": "manager()",
+      "assignee": "manager_of()",
       "reject_target": "start",
       "auto_pass_originator": true
     },
@@ -35,6 +37,7 @@
       "code": "days_route",
       "name": "天数分流",
       "kind": "branch",
+      "advance_policy": null,
       "hooks": {
         "on_enter": null,
         "on_exit": null,
@@ -48,6 +51,7 @@
       "code": "hr_sequential",
       "name": "HR 串行会签",
       "kind": "user_task",
+      "advance_policy": null,
       "hooks": {
         "on_enter": null,
         "on_exit": null,
@@ -70,6 +74,7 @@
       "code": "hr_record",
       "name": "HR 备案",
       "kind": "user_task",
+      "advance_policy": null,
       "hooks": {
         "on_enter": null,
         "on_exit": null,
@@ -83,6 +88,7 @@
       "code": "notify",
       "name": "结果传阅发起人",
       "kind": "cc_task",
+      "advance_policy": "any",
       "hooks": {
         "on_enter": null,
         "on_exit": null,
@@ -92,13 +98,13 @@
       "properties": {},
       "recipients": [
         "originator"
-      ],
-      "advance_policy": "any"
+      ]
     },
     {
       "code": "end",
       "name": "结束",
       "kind": "end",
+      "advance_policy": null,
       "hooks": {
         "on_enter": null,
         "on_exit": null,
@@ -176,5 +182,7 @@
       "condition": null,
       "on_take": null
     }
-  ]
+  ],
+  "variables": [],
+  "layout": {}
 }

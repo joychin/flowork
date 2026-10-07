@@ -19,6 +19,7 @@ from flowork.directory.agents import AgentDirectoryMixin
 from flowork.directory.common import DirectoryError, _like_prefix, _validate_code
 from flowork.directory.orm import OrgUnitRow, OrgUserRow
 from flowork.directory.roles import RoleDirectoryMixin
+from flowork.participants.org_directory import split_group
 
 __all__ = ["DirectoryError", "DirectoryStore", "OrgUnitInfo", "UserInfo"]
 
@@ -141,6 +142,29 @@ class DirectoryStore(AgentDirectoryMixin, RoleDirectoryMixin):
             self._user(session, user_id).status = status
 
     # —— 读：OrgDirectoryLike 面 ——
+
+    def is_member(self, user: str, group: str) -> bool:
+        """人→组（spec §9）：role: 按范围化角色、org: 按直属部门；裸名视同角色。"""
+        kind, name = split_group(group)
+        if not name:
+            return False
+        if kind == "org":
+            return user in self.users_in_department(name)
+        return user in self.users_with_role(name)
+
+    def subjects_in(self, group: str) -> list[str]:
+        """组→人：直接成员（不含子部门）。"""
+        kind, name = split_group(group)
+        if not name:
+            return []
+        if kind == "org":
+            return self.users_in_department(name)
+        return self.users_with_role(name)
+
+    def snapshot(self, subject: str) -> dict[str, object]:
+        """身份快照（spec §5.6）：宿主审计策略待接，先返回部门事实。"""
+        department = self.department_of(subject.removeprefix("user:"))
+        return {"department": department} if department else {}
 
     def user_exists(self, user_id: str) -> bool:
         with self._factory() as session:

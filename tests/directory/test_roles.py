@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from flowork import contrib
 from flowork.definitions.definition import load_definition
 from flowork.directory import DirectoryError, DirectoryStore
 from flowork.engine.config import EngineConfig
@@ -128,6 +129,7 @@ class TestRoleEndToEnd:
         store.assign_role("u_east_fin", "finance", org_unit_code="d_east")
         store.assign_role("u_global_fin", "finance")
         config.org = store
+        config.participant_functions = contrib.org_vocabulary()  # v2.1：词汇由宿主挂
 
         definition = load_definition(DEFINITION, engine.config.node_registry)
         engine.repository.save_definition(definition)

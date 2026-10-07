@@ -137,15 +137,21 @@ def test_purchase_timeout_auto_approve():
             return self.value
 
     clock = FakeClock()
+    from flowork import contrib
+
     engine = ProcessEngine(
-        EngineConfig(org=OrgDirectory.from_yaml(PILOT_DIR / "org.yaml"), now=clock)
+        EngineConfig(
+            org=OrgDirectory.from_yaml(PILOT_DIR / "org.yaml"),
+            participant_functions=contrib.org_vocabulary(),
+            now=clock,
+        )
     )
     definition = (
         FlowBuilder("purchase_timeout")
         .start()
         .user_task(
             "dept_review",
-            assignee="manager()",
+            assignee="manager_of()",
             timeout=TimeoutPolicy(due_minutes=120, strategy="auto_approve"),
         )
         .end()
