@@ -144,8 +144,9 @@ class FlowBuilder:
         self,
         registry: NodeRegistry | None = None,
         *,
-        version: int = 1,
-        status: DefinitionStatus = DefinitionStatus.DRAFT,
+        major: int = 1,
+        revision: int = 1,
+        status: DefinitionStatus = DefinitionStatus.PUBLISHED,
     ) -> ProcessDefinition:
         nodes: list[FlowNode] = []
         for raw in self._nodes:
@@ -154,7 +155,8 @@ class FlowBuilder:
         return ProcessDefinition(
             code=self._code,
             name=self._name,
-            version=version,
+            major=major,
+            revision=revision,
             status=status,
             nodes=nodes,
             flows=list(self._flows),

@@ -131,8 +131,7 @@ def _engine(db: Path, *, now: Callable[[], datetime] | None = None) -> ProcessEn
         _timeout("hs_auto_approve", "auto_approve"),
     ):
         definition = builder.build()
-        engine.repository.save_definition(definition)
-        engine.repository.publish(definition.code)
+        engine.repository.deploy(definition)
     return engine
 
 

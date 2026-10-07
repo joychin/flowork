@@ -28,3 +28,7 @@ class DomainEvent(StrEnum):
     TASK_TRANSFERRED = "task_transferred"
     INCIDENT_RAISED = "incident_raised"
     JOB_DEAD_LETTERED = "job_dead_lettered"
+    # —— v2 定义生命周期（spec §6.4；幂等部署不发 definition_deployed）——
+    DEFINITION_DEPLOYED = "definition_deployed"
+    DEFINITION_RETIRED = "definition_retired"
+    DEFINITION_PURGED = "definition_purged"

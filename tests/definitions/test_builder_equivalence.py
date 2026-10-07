@@ -20,7 +20,7 @@ def test_builder_matches_json_simple(registry, examples_dir):
         .connect("start", "manager")
         .connect("manager", "finance")
         .connect("finance", "end")
-        .build(registry, version=1, status="published")
+        .build(registry, status="published")
     )
     assert built == definition
 
@@ -48,6 +48,6 @@ def test_builder_matches_json_countersign_branch(registry, examples_dir):
         .flow("route", "notify", default=True)
         .connect("director", "end")
         .connect("notify", "end")
-        .build(registry, version=1, status="published")
+        .build(registry, status="published")
     )
     assert built == definition

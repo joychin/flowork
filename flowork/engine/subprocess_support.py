@@ -37,7 +37,7 @@ def start_sub_process(ctx: RuntimeNodeContext, spec: CallActivitySpec) -> None:
             ProcessDefinitionRow.code == spec.process_code,
             ProcessDefinitionRow.status == "published",
         )
-        .order_by(ProcessDefinitionRow.version.desc())
+        .order_by(ProcessDefinitionRow.major.desc(), ProcessDefinitionRow.revision.desc())
         .limit(1)
     ).first()
     if row is None:
@@ -49,7 +49,8 @@ def start_sub_process(ctx: RuntimeNodeContext, spec: CallActivitySpec) -> None:
     child = ProcessInstanceRow(
         id=uuid.uuid4().hex,
         definition_code=spec.process_code,
-        definition_version=row.version,
+        definition_major=row.major,
+        definition_revision=row.revision,
         definition_snapshot=row.content,
         state="running",
         start_user=ctx.instance.start_user,

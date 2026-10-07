@@ -32,6 +32,8 @@ class RuntimeService:
         start_user: str,
         variables: dict[str, Any] | None = None,
         business_key: str | None = None,
+        major: int | None = None,
+        revision: int | None = None,
     ) -> str:
         """发起流程（使用已发布定义的快照）。返回实例 ID。
 
@@ -40,9 +42,13 @@ class RuntimeService:
             start_user: 发起人（参与者表达式 ``originator`` 解析为此值）。
             variables: 流程变量（表单数据/路由条件依据）。
             business_key: 业务关联键（如订单号），供外部对账。
+            major/revision: 显式钉版本启动（spec §6.2）；缺省＝启动事务内
+                SELECT 最新 published（deploy 前旧版、之后新版，变更边界＝deploy 时刻）。
         """
         result: str = self._engine.execute(
-            lambda ctx: self._start(ctx, code, start_user, variables, business_key, None, None)
+            lambda ctx: self._start(
+                ctx, code, start_user, variables, business_key, None, None, major, revision
+            )
         )
         return result
 
@@ -57,7 +63,15 @@ class RuntimeService:
     ) -> str:
         result: str = self._engine.execute(
             lambda ctx: self._start(
-                ctx, code, start_user, variables, None, parent_instance_id, parent_token_id
+                ctx,
+                code,
+                start_user,
+                variables,
+                None,
+                parent_instance_id,
+                parent_token_id,
+                None,
+                None,
             )
         )
         return result
@@ -71,17 +85,20 @@ class RuntimeService:
         business_key: str | None,
         parent_instance_id: str | None,
         parent_token_id: str | None,
+        major: int | None,
+        revision: int | None,
     ) -> str:
         import json
 
         from flowork.persistence.orm import ProcessInstanceRow as _Row
 
-        snapshot = self._engine.repository.get_definition_json(code)
-        definition = self._engine.repository.get_definition(code)
+        snapshot = self._engine.repository.get_definition_json(code, major, revision)
+        definition = self._engine.repository.get_definition(code, major, revision)
         instance = _Row(
             id=uuid.uuid4().hex,
             definition_code=code,
-            definition_version=snapshot["version"],
+            definition_major=snapshot["major"],
+            definition_revision=snapshot["revision"],
             definition_snapshot=json.dumps(snapshot, ensure_ascii=False),
             business_key=business_key,
             state="running",
@@ -257,7 +274,8 @@ def _to_info(instance: ProcessInstanceRow) -> InstanceInfo:
     return InstanceInfo(
         id=instance.id,
         definition_code=instance.definition_code,
-        definition_version=instance.definition_version,
+        definition_major=instance.definition_major,
+        definition_revision=instance.definition_revision,
         business_key=instance.business_key,
         state=instance.state,
         start_user=instance.start_user,

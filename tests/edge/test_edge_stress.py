@@ -33,8 +33,7 @@ def test_file_db_shared_between_engines(tmp_path: Path):
     db = tmp_path / "shared.db"
     definition = _linear("shared_flow").build()
     engine_a = ProcessEngine(EngineConfig(db_file=db))
-    engine_a.repository.save_definition(definition)
-    engine_a.repository.publish("shared_flow")
+    engine_a.repository.deploy(definition)
     instance_id = engine_a.runtime.start_process("shared_flow", start_user="u_s")
     engine_a.close()
 
@@ -57,8 +56,7 @@ def test_double_complete_race_one_wins(tmp_path: Path):
     """同任务并发双提交：恰一个成功，另一侧明确报错（活表状态守卫）。"""
     db = tmp_path / "race.db"
     engine = ProcessEngine(EngineConfig(db_file=db))
-    engine.repository.save_definition(_linear("race").build())
-    engine.repository.publish("race")
+    engine.repository.deploy(_linear("race").build())
     instance_id = engine.runtime.start_process("race", start_user="u_s")
 
     # 模拟并发：两个会话各自读到 ready 后先后提交（引擎单进程内以命令为界）
@@ -77,8 +75,7 @@ def test_two_engines_same_file_same_task(tmp_path: Path):
     """双引擎同库并发办同一任务：先提交者胜，后者收到不可办理。"""
     db = tmp_path / "two.db"
     setup = ProcessEngine(EngineConfig(db_file=db))
-    setup.repository.save_definition(_linear("two").build())
-    setup.repository.publish("two")
+    setup.repository.deploy(_linear("two").build())
     instance_id = setup.runtime.start_process("two", start_user="u_s")
     task = setup.task.list_tasks(instance_id=instance_id)[0]
     setup.close()
@@ -135,8 +132,7 @@ def test_unicode_flow_end_to_end():
         .connect("抄送财务", "结束")
         .build()
     )
-    engine.repository.save_definition(definition)
-    engine.repository.publish("中文流程")
+    engine.repository.deploy(definition)
     instance_id = engine.runtime.start_process(
         "中文流程", start_user="王五", variables={"金额": 1200}
     )
@@ -169,8 +165,7 @@ def test_deep_chain_50_nodes():
         previous = code
     builder.end().connect(previous, "end")
     definition = builder.build()
-    engine.repository.save_definition(definition)
-    engine.repository.publish("deep")
+    engine.repository.deploy(definition)
     instance_id = engine.runtime.start_process("deep", start_user="u_s")
     for _ in range(50):
         tasks = engine.task.list_tasks(instance_id=instance_id)
@@ -211,8 +206,7 @@ def test_timeout_job_skipped_when_task_done_early():
         .connect("t", "end")
         .build()
     )
-    engine.repository.save_definition(definition)
-    engine.repository.publish("compete")
+    engine.repository.deploy(definition)
     instance_id = engine.runtime.start_process("compete", start_user="u_s")
 
     # 人工在第 20 分钟办完
@@ -257,8 +251,7 @@ def test_remove_instance_cascades_jobs_links_incidents():
         .connect("t", "end")
         .build()
     )
-    engine.repository.save_definition(definition)
-    engine.repository.publish("purge")
+    engine.repository.deploy(definition)
     instance_id = engine.runtime.start_process("purge", start_user="u_s")
 
     def _counts(ctx):
@@ -319,8 +312,7 @@ def test_paged_tasks_pagination():
         .connect("a", "end")
         .build()
     )
-    engine.repository.save_definition(definition)
-    engine.repository.publish("page")
+    engine.repository.deploy(definition)
     instance_id = engine.runtime.start_process("page", start_user="u_s")
     for assignee in ("u1", "u2"):
         engine.task.complete(

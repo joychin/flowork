@@ -159,8 +159,7 @@ def test_purchase_timeout_auto_approve():
         .connect("dept_review", "end")
         .build()
     )
-    engine.repository.save_definition(definition)
-    engine.repository.publish("purchase_timeout")
+    engine.repository.deploy(definition)
     instance_id = engine.runtime.start_process(
         "purchase_timeout", start_user="u_zhang", variables={"amount": 1}
     )

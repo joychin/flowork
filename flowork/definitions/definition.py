@@ -31,8 +31,10 @@ __all__ = [
 
 
 class DefinitionStatus(StrEnum):
-    DRAFT = "draft"
+    """v2（spec §6.2）：draft 取消——deploy 即 publish；retired 不接新实例。"""
+
     PUBLISHED = "published"
+    RETIRED = "retired"
 
 
 class NodePosition(BaseModel):
@@ -59,6 +61,9 @@ class ProcessVariable(BaseModel):
     label: str = ""
     # dry-run 取样默认值；类型与 type 一致（list 为任意 JSON 数组）
     sample: Any = None
+    # 可检索（v2 R2/P1-5）：仅 string/number/boolean 可标（校验器把关），
+    # True 时变量值同步进 wf_variable_index
+    searchable: bool = False
 
 
 class InvalidDefinitionData(DefinitionError):
@@ -72,8 +77,14 @@ class ProcessDefinition(BaseModel):
 
     code: str
     name: str = ""
-    version: int = 1
-    status: DefinitionStatus = DefinitionStatus.DRAFT
+    # v2（spec §6）：版本＝code + major + revision；同 code 可对老 major 续发
+    # revision（维护分支）。deploy 时由版本判定覆写，模型默认值仅占位。
+    major: int = 1
+    revision: int = 1
+    status: DefinitionStatus = DefinitionStatus.PUBLISHED
+    # v2（spec §3.2）：input 契约（JSON Schema 2020-12）。None＝无契约；
+    # 有值时发起/任务提交/节点输出三处边界按 schema 校验（P0-6）。
+    input: dict[str, Any] | None = None
     # SerializeAsAny：节点按实例类型（Spec 子类）序列化，否则子类字段会在 dump 时丢失
     nodes: list[SerializeAsAny[FlowNode]] = Field(default_factory=list)
     flows: list[SequenceFlow] = Field(default_factory=list)
@@ -107,7 +118,11 @@ def _resolve_node(raw: dict[str, Any], registry: NodeRegistry) -> FlowNode:
 
 
 def load_definition(data: dict[str, Any] | str, registry: NodeRegistry) -> ProcessDefinition:
-    """从 dict 或 JSON 字符串加载定义：节点经注册表解析为对应 Spec 类。"""
+    """从 dict 或 JSON 字符串加载定义：节点经注册表解析为对应 Spec 类。
+
+    旧版兼容（v2 §6.2 迁移）：``version`` 字段忽略；``status: draft`` 视同
+    published（draft 已取消，编辑态在 git/设计器本地）。
+    """
     if isinstance(data, str):
         try:
             data = json.loads(data)
@@ -115,6 +130,10 @@ def load_definition(data: dict[str, Any] | str, registry: NodeRegistry) -> Proce
             raise InvalidDefinitionData(f"JSON 解析失败：{exc}") from exc
     if not isinstance(data, dict):
         raise InvalidDefinitionData("定义数据必须是 JSON 对象")
+    data = dict(data)
+    data.pop("version", None)
+    if data.get("status") == "draft":
+        data["status"] = DefinitionStatus.PUBLISHED.value
     raw_nodes = data.get("nodes", [])
     if not isinstance(raw_nodes, list):
         raise InvalidDefinitionData("nodes 必须是数组")

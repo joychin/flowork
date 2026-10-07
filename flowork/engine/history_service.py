@@ -107,7 +107,8 @@ class HistoryService:
                 InstanceInfo(
                     id=row.id,
                     definition_code=row.definition_code,
-                    definition_version=row.definition_version,
+                    definition_major=row.definition_major,
+                    definition_revision=row.definition_revision,
                     business_key=row.business_key,
                     state=row.state,
                     start_user=row.start_user,

@@ -3,8 +3,7 @@
 用法::
 
     engine = ProcessEngine()                      # 默认内存 SQLite + 内置节点
-    engine.repository.save_definition(definition) # 存草稿
-    engine.repository.publish("leave")            # 发布（含校验）
+    engine.repository.deploy(definition)          # 部署（校验＋版本判定＋发布）
     instance_id = engine.runtime.start_process("leave", start_user="u1")
     tasks = engine.task.list_tasks(assignee="u_manager")
     engine.task.complete(tasks[0].id, actor="u_manager")

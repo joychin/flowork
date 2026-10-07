@@ -54,8 +54,7 @@ def org_engine() -> ProcessEngine:
 
 
 def publish(engine: ProcessEngine, definition) -> None:
-    engine.repository.save_definition(definition)
-    engine.repository.publish(definition.code)
+    engine.repository.deploy(definition)
 
 
 def complete_first(engine: ProcessEngine, instance_id: str, actor: str) -> None:

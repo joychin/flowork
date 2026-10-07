@@ -48,7 +48,9 @@ def validate(template: Path = typer.Argument(..., help="模板 JSON 文件路径
     definition = load_definition_file(template, registry)
     issues = validate_definition(definition, registry)
     if not issues:
-        console.print(f"[green]✓[/green] {definition.code} v{definition.version} 校验通过")
+        console.print(
+            f"[green]✓[/green] {definition.code} v{definition.major}.{definition.revision} 校验通过"
+        )
         return
     table = Table(title=f"{template.name} 校验结果")
     table.add_column("级别")
@@ -75,8 +77,7 @@ def demo() -> None:
         raise typer.Exit(code=1)
     engine = ProcessEngine()
     definition = load_definition_file(template, create_registry())
-    engine.repository.save_definition(definition)
-    engine.repository.publish(definition.code)
+    engine.repository.deploy(definition)
 
     instance_id = engine.runtime.start_process(
         "simple_approval", start_user="u_zhang", variables={"amount": 500}
@@ -182,8 +183,7 @@ def _publish_full_demo_flow(engine: ProcessEngine) -> None:
         .connect("notify", "end")
         .build()
     )
-    engine.repository.save_definition(definition)
-    engine.repository.publish(definition.code)
+    engine.repository.deploy(definition)
 
 
 def _print_events(engine: ProcessEngine, instance_id: str) -> None:

@@ -23,8 +23,7 @@ def cond(left: str, op: str, right: object) -> FlowCondition:
 
 
 def publish(engine: ProcessEngine, definition) -> None:
-    engine.repository.save_definition(definition)
-    engine.repository.publish(definition.code)
+    engine.repository.deploy(definition)
 
 
 def active_of(engine: ProcessEngine, instance_id: str) -> set[str]:

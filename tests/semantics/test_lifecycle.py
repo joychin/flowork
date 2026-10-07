@@ -23,8 +23,7 @@ def publish_example(engine: ProcessEngine, path) -> None:
     from flowork.runtime.registry import create_registry
 
     definition = load_definition_file(path, create_registry())
-    engine.repository.save_definition(definition)
-    engine.repository.publish(definition.code)
+    engine.repository.deploy(definition)
 
 
 def test_start_to_end_full_chain(engine: ProcessEngine):
@@ -68,8 +67,7 @@ def test_parallel_countersign_all_by_default(engine: ProcessEngine):
         .connect("audit", "end")
         .build()
     )
-    engine.repository.save_definition(definition)
-    engine.repository.publish("countersign")
+    engine.repository.deploy(definition)
     instance_id = engine.runtime.start_process("countersign", start_user="u_starter")
 
     tasks = {t.assignee: t for t in engine.task.list_tasks(instance_id=instance_id)}
@@ -147,8 +145,7 @@ def test_definition_snapshot_isolation(engine: ProcessEngine):
         .connect("finance", "end")
         .build()
     )
-    engine.repository.save_definition(revised)
-    engine.repository.publish("simple_approval")
+    engine.repository.deploy(revised)
 
     task = engine.task.list_tasks(instance_id=instance_id)[0]
     engine.task.complete(task.id, actor="u_manager")

@@ -33,8 +33,7 @@ def _run_flow(engine: ProcessEngine) -> str:
         .connect("a", "end")
         .build()
     )
-    engine.repository.save_definition(definition)
-    engine.repository.publish("evt_flow")
+    engine.repository.deploy(definition)
     instance_id = engine.runtime.start_process("evt_flow", start_user="u_s")
     task = engine.task.list_tasks(instance_id=instance_id)[0]
     engine.task.complete(task.id, actor="u_a")

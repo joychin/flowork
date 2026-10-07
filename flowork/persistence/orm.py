@@ -26,19 +26,29 @@ def _now() -> datetime:
 
 
 class ProcessDefinitionRow(Base):
-    """流程定义（发布后不可变：content 为模板 JSON 快照）。"""
+    """流程定义（发布后不可变：content 为模板 JSON 快照）。
+
+    v2（spec §6/§14）：版本＝code+major+revision（唯一）；draft 取消——deploy 即
+    published；retired 不接新实例。breaking＝该版本是否含破坏性变更（判定依据见
+    definitions/versioning.py）。content_hash 供幂等去重。
+    """
 
     __tablename__ = "wf_process_definition"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     code: Mapped[str] = mapped_column(String(100))
-    version: Mapped[int] = mapped_column(Integer, default=1)
-    status: Mapped[str] = mapped_column(String(16), default="draft")  # draft/published
+    major: Mapped[int] = mapped_column(Integer, default=1)
+    revision: Mapped[int] = mapped_column(Integer, default=1)
+    status: Mapped[str] = mapped_column(String(16), default="published")  # published/retired
+    breaking: Mapped[bool] = mapped_column(Boolean, default=False)
     name: Mapped[str] = mapped_column(String(200), default="")
     content: Mapped[str] = mapped_column(Text)  # 模板 JSON
+    content_hash: Mapped[str] = mapped_column(String(64), default="")
+    published_by: Mapped[str] = mapped_column(String(64), default="system")
+    published_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
-    __table_args__ = (Index("ix_def_code_version", "code", "version", unique=True),)
+    __table_args__ = (Index("ix_def_code_version", "code", "major", "revision", unique=True),)
 
 
 class ProcessInstanceRow(Base):
@@ -48,7 +58,8 @@ class ProcessInstanceRow(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     definition_code: Mapped[str] = mapped_column(String(100))
-    definition_version: Mapped[int] = mapped_column(Integer)
+    definition_major: Mapped[int] = mapped_column(Integer, default=1)
+    definition_revision: Mapped[int] = mapped_column(Integer, default=1)
     definition_snapshot: Mapped[str] = mapped_column(Text)  # 发起时的模板 JSON（不可变）
     business_key: Mapped[str | None] = mapped_column(String(200), nullable=True)
     state: Mapped[str] = mapped_column(String(16), default="running")
@@ -138,6 +149,23 @@ class TaskHistoryRow(Base):
     idempotency_key: Mapped[str | None] = mapped_column(String(100), nullable=True)
     cost_seconds: Mapped[float] = mapped_column(Float, default=0.0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
+class DesignerDraftRow(Base):
+    """设计器工作副本（v2 §6.2：编辑态在设计器本地——不进引擎定义生命周期表）。
+
+    seq＝每 code 单调递增的保存序号（设计器显示的 draft_version）；open＝是否
+    待发布（发布即消费，seq 保留以延续编号）。
+    """
+
+    __tablename__ = "wf_designer_draft"
+
+    code: Mapped[str] = mapped_column(String(100), primary_key=True)
+    name: Mapped[str] = mapped_column(String(200), default="")
+    content: Mapped[str] = mapped_column(Text)
+    seq: Mapped[int] = mapped_column(Integer, default=1)
+    open: Mapped[bool] = mapped_column(Boolean, default=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
 
 class EventOutboxRow(Base):

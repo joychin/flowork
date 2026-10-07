@@ -43,7 +43,8 @@ class InstanceInfo(BaseModel):
 
     id: str
     definition_code: str
-    definition_version: int
+    definition_major: int
+    definition_revision: int
     business_key: str | None = None
     state: str
     start_user: str

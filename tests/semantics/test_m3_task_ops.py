@@ -15,8 +15,7 @@ def engine() -> ProcessEngine:
 
 
 def publish(engine: ProcessEngine, definition) -> None:
-    engine.repository.save_definition(definition)
-    engine.repository.publish(definition.code)
+    engine.repository.deploy(definition)
 
 
 def linear_flow(code: str = "ops") -> FlowBuilder:

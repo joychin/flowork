@@ -35,8 +35,7 @@ def pilot() -> ProcessEngine:
         definition = load_definition(
             (PILOT_DIR / f"{code}.json").read_text(encoding="utf-8"), engine.config.node_registry
         )
-        engine.repository.save_definition(definition)
-        engine.repository.publish(code)
+        engine.repository.deploy(definition)
 
     def make_payment(ctx, params):
         ctx.variables["paid"] = True

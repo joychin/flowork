@@ -132,8 +132,7 @@ class TestRoleEndToEnd:
         config.participant_functions = contrib.org_vocabulary()  # v2.1：词汇由宿主挂
 
         definition = load_definition(DEFINITION, engine.config.node_registry)
-        engine.repository.save_definition(definition)
-        engine.repository.publish("role_vertical")
+        engine.repository.deploy(definition)
 
         east = engine.runtime.start_process("role_vertical", start_user="u_zhang")
         assert len(engine.task.list_tasks(instance_id=east, assignee="u_east_fin")) == 1

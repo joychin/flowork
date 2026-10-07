@@ -126,8 +126,7 @@ def test_contract_version_snapshot_isolation(pilot: ProcessEngine):
         .connect("gm_review", "end")
         .build()
     )
-    pilot.repository.save_definition(revised)
-    pilot.repository.publish("contract_review")
+    pilot.repository.deploy(revised)
 
     # v2 新实例：90000 > 80000 → 需要财务核价
     v2_instance = start_contract(pilot, amount=90000)

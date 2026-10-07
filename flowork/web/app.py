@@ -122,13 +122,14 @@ def create_app(db_file: str | Path | None = None, *, seed: bool = True) -> FastA
             raise HTTPException(status_code=404, detail=f"定义 {code} 不存在")
         published_version = _latest_published_version(code)
         if latest["status"] == "draft":
-            row = _raw_row(code, latest["version"])
+            draft = engine.repository.designer_draft(code)
+            assert draft is not None
             return {
                 "code": code,
                 "name": latest["name"],
                 "draft_version": latest["version"],
                 "published_version": published_version,
-                "spec": json.loads(row["content"]),
+                "spec": draft["spec"],
             }
         # 无草稿：返回已发布内容作为新草稿的基底
         spec = engine.repository.get_definition_json(code)
@@ -142,29 +143,9 @@ def create_app(db_file: str | Path | None = None, *, seed: bool = True) -> FastA
 
     def _latest_published_version(code: str) -> int | None:
         try:
-            return engine.repository.get_definition(code).version
+            return engine.repository.get_definition(code).major
         except FloworkError:
             return None
-
-    def _raw_row(code: str, version: int) -> dict[str, Any]:
-        def _command(ctx: Any) -> Any:
-            from sqlalchemy import select
-
-            from flowork.persistence.orm import ProcessDefinitionRow as Row
-
-            row = ctx.session.scalars(
-                select(Row).where(Row.code == code, Row.version == version)
-            ).first()
-            if row is None:
-                raise HTTPException(status_code=404, detail=f"定义 {code} v{version} 不存在")
-            return {
-                "content": row.content,
-                "status": row.status,
-                "name": row.name,
-            }
-
-        result: dict[str, Any] = engine.execute(_command)
-        return result
 
     @app.put("/api/definitions/{code}")
     def save_draft(code: str, body: dict[str, Any]) -> dict[str, Any]:
@@ -176,9 +157,9 @@ def create_app(db_file: str | Path | None = None, *, seed: bool = True) -> FastA
 
     @app.post("/api/definitions/{code}/publish")
     def publish(code: str) -> dict[str, Any]:
-        """发布最新草稿（发布前强制校验；ERROR 级问题 → 422 + issues）。"""
+        """发布设计器草稿（deploy：校验＋版本判定＋落库＋事件；422＝校验不过）。"""
         try:
-            version = engine.repository.publish(code)
+            verdict = engine.repository.deploy_draft(code)
         except InvalidDefinition as exc:
             raise HTTPException(
                 status_code=422,
@@ -186,7 +167,13 @@ def create_app(db_file: str | Path | None = None, *, seed: bool = True) -> FastA
             ) from exc
         except FloworkError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
-        return {"code": code, "version": version, "status": "published"}
+        return {
+            "code": code,
+            "version": verdict.next_major,
+            "revision": verdict.next_revision,
+            "breaking": verdict.breaking,
+            "status": "published",
+        }
 
     @app.post("/api/validate")
     def validate(body: dict[str, Any]) -> dict[str, Any]:
@@ -246,7 +233,7 @@ def create_app(db_file: str | Path | None = None, *, seed: bool = True) -> FastA
         base = load_definition(base_json, engine.config.node_registry)
         changes = semantic_diff(base, definition)
         return {
-            "base_version": base.version,
+            "base_version": base.major,
             "first_publish": False,
             "has_changes": bool(changes),
             "changes": changes,
@@ -282,7 +269,7 @@ def _seed_examples(engine: ProcessEngine) -> None:
             continue
         engine.repository.update_draft(definition)
         if index == 0:
-            engine.repository.publish(definition.code)
+            engine.repository.deploy(definition, published_by="seed")
 
 
 app = create_app()

@@ -40,8 +40,7 @@ def make_engine_with_directory(tmp_path: Path) -> tuple[ProcessEngine, Directory
     config.org = store
     config.participant_functions = contrib.org_vocabulary()  # v2.1：词汇由宿主挂
     definition = load_definition(DEFINITION, engine.config.node_registry)
-    engine.repository.save_definition(definition)
-    engine.repository.publish("dir_vertical")
+    engine.repository.deploy(definition)
     return engine, store
 
 
