@@ -32,6 +32,16 @@ class TaskCompleteResult(BaseModel):
     next_tasks: list[TaskInfo] = []
 
 
+def _input_schema_of(instance: Any) -> dict[str, Any] | None:
+    """实例钉住的 input 契约（快照原样字段，不做 pydantic 解析）。"""
+    import json as _json
+
+    try:
+        return (_json.loads(instance.definition_snapshot) or {}).get("input")
+    except (ValueError, TypeError):
+        return None
+
+
 class TaskService(TaskOpsMixin):
     """任务服务：办理 / 查询。所有操作带 actor 归因（人 or agent 可区分）。"""
 
@@ -176,6 +186,14 @@ class TaskService(TaskOpsMixin):
         if task.assignee == "":
             raise TaskNotAvailableError("候选任务需先 claim 认领")
         if variables:
+            # input 契约边界②：任务提交 output 后变量全集仍须满足契约（spec §3.2）
+            from flowork.definitions.contract import validate_input_contract
+
+            schema = _input_schema_of(instance)
+            if schema:
+                merged = dict(instance.variables)
+                merged.update(variables)
+                validate_input_contract(schema, merged, boundary="task_output")
             instance.variables.update(variables)
         kernel = self._engine.kernel_for(ctx)
         from flowork.persistence.orm import TokenRow

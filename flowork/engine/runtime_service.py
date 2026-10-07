@@ -152,6 +152,10 @@ class RuntimeService:
 
         snapshot = self._engine.repository.get_definition_json(code, major, revision)
         definition = self._engine.repository.get_definition(code, major, revision)
+        # input 契约边界①：发起时按 schema 拒收（spec §3.2，报错不入库）
+        from flowork.definitions.contract import validate_input_contract
+
+        validate_input_contract(definition.input, dict(variables or {}), boundary="start")
         instance = _Row(
             id=uuid.uuid4().hex,
             definition_code=code,

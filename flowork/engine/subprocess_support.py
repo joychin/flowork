@@ -83,6 +83,13 @@ def sub_process_finished(ctx: RuntimeNodeContext, spec: CallActivitySpec) -> boo
         if child.state == "completed":
             for target, source in spec.output_mappings.items():
                 ctx.variables[target] = (child.variables or {}).get(source)
+    # input 契约边界③：节点输出映射后父变量全集仍须满足契约（spec §3.2）
+    import json
+
+    from flowork.definitions.contract import validate_input_contract
+
+    schema = (json.loads(ctx.instance.definition_snapshot) or {}).get("input")
+    validate_input_contract(schema, dict(ctx.variables), boundary="node_output")
     return True
 
 

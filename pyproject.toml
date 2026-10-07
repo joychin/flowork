@@ -17,6 +17,7 @@ dependencies = [
     "fastapi>=0.142.1",
     "uvicorn[standard]>=0.54.0",
     "cel-python>=0.5.0",
+    "jsonschema>=4.26.0",
 ]
 
 [dependency-groups]
@@ -28,6 +29,7 @@ dev = [
     "types-pyyaml>=6.0.12.20260906",
     "httpx>=0.28.1",
     "import-linter>=2.15",
+    "types-jsonschema>=4.26.0.20261006",
 ]
 
 [build-system]
