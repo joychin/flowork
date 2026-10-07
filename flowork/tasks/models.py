@@ -85,3 +85,16 @@ class TokenInfo(BaseModel):
     approval_exit: str | None = None
     created_at: datetime | None = None
     finished_at: datetime | None = None
+
+
+class AnticipateResult(BaseModel):
+    """anticipate 只读预判（v2.2 spec §11）：照此提交后节点是否出、实例是否完。
+
+    instance_complete 以**当前变量值**近似路由（提交 output 可能改写条件分支）；
+    纯读：不落库、不改任何状态。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    node_exit: bool
+    instance_complete: bool
