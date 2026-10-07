@@ -17,6 +17,7 @@ from typing import TypeVar
 from flowork.engine.config import EngineConfig, resolve_db_url
 from flowork.engine.history_service import HistoryService
 from flowork.engine.kernel import Kernel
+from flowork.engine.message_service import MessageService
 from flowork.engine.ops import CommandContext, execute_command
 from flowork.engine.repository_service import RepositoryService
 from flowork.engine.runtime_service import RuntimeService
@@ -44,6 +45,7 @@ class ProcessEngine:
         self.runtime = RuntimeService(self)
         self.task = TaskService(self)
         self.history = HistoryService(self)
+        self.messages = MessageService(self)
         from flowork.jobs.scheduler import JobScheduler
 
         self.jobs = JobScheduler(self)

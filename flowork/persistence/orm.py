@@ -249,6 +249,47 @@ class JobRow(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
 
+class MessageBufferRow(Base):
+    """消息缓冲区（v2 §7）：先到的消息在此等订阅出现；TTL 过期清理。
+
+    message_id 全局唯一防重（消费端至多收到一次，spec §7）；correlation_key
+    为**求值后**的键值（CEL 求值发生在等待节点登记订阅时）。
+    """
+
+    __tablename__ = "wf_message_buffer"
+    __table_args__ = (
+        Index("uq_message_id", "message_id", unique=True),
+        Index("ix_message_name_key", "name", "correlation_key"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    name: Mapped[str] = mapped_column(String(64))
+    correlation_key: Mapped[str] = mapped_column(String(200), default="")
+    message_id: Mapped[str] = mapped_column(String(100))
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    expires_at: Mapped[datetime] = mapped_column(DateTime)
+    received_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
+class MessageSubscriptionRow(Base):
+    """消息订阅（v2 §7）：等待方登记 (name, correlation_key)；state open/matched。
+
+    节点离开（完成/取消/实例终止）即关（close_subscriptions）；暂停期间保持。
+    """
+
+    __tablename__ = "wf_message_subscription"
+    __table_args__ = (Index("ix_msgsub_name_key_state", "name", "correlation_key", "state"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    instance_id: Mapped[str] = mapped_column(String(36))
+    token_id: Mapped[str] = mapped_column(String(36))
+    node_id: Mapped[str] = mapped_column(String(100))
+    name: Mapped[str] = mapped_column(String(64))
+    correlation_key: Mapped[str] = mapped_column(String(200), default="")
+    state: Mapped[str] = mapped_column(String(16), default="open")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
 class IncidentRow(Base):
     """流程事件（Incident）：需运维关注的异常，修复后实例恢复。"""
 

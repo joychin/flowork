@@ -32,3 +32,6 @@ class DomainEvent(StrEnum):
     DEFINITION_DEPLOYED = "definition_deployed"
     DEFINITION_RETIRED = "definition_retired"
     DEFINITION_PURGED = "definition_purged"
+    # —— v2 消息/信号（spec §7）——
+    MESSAGE_RECEIVED = "message_received"
+    MESSAGE_CORRELATED = "message_correlated"
