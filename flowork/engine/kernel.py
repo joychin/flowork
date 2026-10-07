@@ -291,7 +291,7 @@ class Kernel:
     def complete_instance(
         self, session: Session, instance: ProcessInstanceRow, end_status: str
     ) -> None:
-        if instance.state in ("running", "suspended"):
+        if instance.state in ("running", "suspended", "paused"):
             instance.state = end_status
             instance.finished_at = self.config.now()
             session.flush()

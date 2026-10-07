@@ -26,7 +26,7 @@ from flowork.engine.kernel import EngineExecutionError
 from flowork.engine.ops import CommandContext
 from flowork.errors import TaskNotAvailableError
 from flowork.events.domain import DomainEvent
-from flowork.persistence.orm import JobRow, TaskRow
+from flowork.persistence.orm import JobRow, ProcessInstanceRow, TaskRow
 
 if TYPE_CHECKING:
     from flowork.engine.engine import ProcessEngine
@@ -52,12 +52,14 @@ class JobScheduler:
         moment = now or self._engine.config.now()
 
         def _collect(ctx: CommandContext) -> list[str]:
+            paused_ids = select(ProcessInstanceRow.id).where(ProcessInstanceRow.state == "paused")
             stmt = (
                 select(JobRow.id)
                 .where(
                     JobRow.state == "scheduled",
                     JobRow.run_at <= moment,
                     JobRow.job_kind != "worker",  # worker 类由外部领取-汇报面执行（§5.2）
+                    JobRow.instance_id.not_in(paused_ids),  # 暂停期 timer 冻结（spec §7）
                 )
                 .order_by(JobRow.run_at)
             )

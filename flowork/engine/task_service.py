@@ -183,6 +183,8 @@ class TaskService(TaskOpsMixin):
         ctx.touch(instance)
         if instance.state == "suspended":
             raise TaskNotAvailableError("实例已挂起（Incident 待修复），不可办理")
+        if instance.state == "paused":
+            raise TaskNotAvailableError("实例已暂停，恢复后才可办理")
         if task.assignee == "":
             raise TaskNotAvailableError("候选任务需先 claim 认领")
         if variables:

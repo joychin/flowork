@@ -35,3 +35,7 @@ class DomainEvent(StrEnum):
     # —— v2 消息/信号（spec §7）——
     MESSAGE_RECEIVED = "message_received"
     MESSAGE_CORRELATED = "message_correlated"
+    # —— v2 实例生命周期（spec §7/§10）——
+    PROCESS_PAUSED = "process_paused"
+    PROCESS_RESUMED = "process_resumed"
+    PROCESS_TERMINATED = "process_terminated"

@@ -33,6 +33,8 @@ class InstanceState(StrEnum):
     """流程实例状态。"""
 
     RUNNING = "running"
+    PAUSED = "paused"  # v2（spec §7）：人工暂停——timer 冻结、任务不可办，恢复后顺延
+    TERMINATED = "terminated"  # v2：终止（管理员强杀，终态；与业务取消 cancelled 区分）
     COMPLETED = "completed"
     CANCELLED = "cancelled"
     FAILED = "failed"
