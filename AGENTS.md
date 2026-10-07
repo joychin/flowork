@@ -60,8 +60,14 @@ REST+MCP 双开放、目录（组织/角色/用户/Agent 映射，M-A）与权�
 三面同构（Console/REST+MCP/Skill+CLI）、运行时开放面与数据契约 business_object（M-B）、
 任务页+CLI+docker（M-C）。原二期项（FastAPI 服务层、pyflow-mcp、组织适配器、消息推送、UI）
 并入 v1 主线；M7 实例迁移与 AI 行为包顺延。
-内核 v2（进行中，2026-10-07 定稿，范围权威 `docs/product/kernel-v2/spec.md` v2.2，P0/P1 开工清单）：
-P0-1 已完成（CEL PoC 采用 cel-python，决策记录 p0-1-cel-poc.md，换绑待 P0-2 端口一并落地）；
-P0-7 已完成（all 汇聚改可达性放行，engine/join_gate.py，validator 死等告警随语义移除）；
-下一刀 P0-2（SPI 定稿：OrgDirectory 四方法+contrib+import-linter）。
+内核 v2（P0/P1 全部完成，2026-10-07，范围权威 `docs/product/kernel-v2/spec.md` v2.2）：
+P0-1 CEL PoC（采用 cel-python，决策记录 p0-1-cel-poc.md；换绑 expr/cel.py 待 M 系 REST/MCP 前）｜
+P0-2 SPI 定稿（OrgDirectory 四方法+contrib 词汇+import-linter 入门禁 `lint-imports`）｜
+P0-3 CloudEvents 信封+outbox 消费器（IdempotentSink 按 id 幂等）｜P0-4 major/revision 版本判定
+（deploy 即 publish、R1-R4 破坏性规则、幂等去重、VersionVerdict、设计器草稿独立 wf_designer_draft）｜
+P0-5 启动幂等三策略（reject/return_existing/allow_duplicate，唯一索引兜底）｜P0-6 input 契约三边界｜
+P0-7 all 汇聚可达性放行（engine/join_gate.py）｜P1：消息服务/Job 租约 worker 面/pause-resume-terminate/
+错误二分（resolve 五动作）/wf_variable_index/定义生命周期（retire-purge-drift）/身份快照 actor_context/
+deadline 列表+实例级时限+escalate/anticipate 只读预判。DoD 全链路（单 SQLite 文件零配置）已验证；
+下一程：REST /v2 搜索面（§12）与 MCP 17 工具（§13，M7）、Alembic 基线迁移（§14 尾注）。
 
