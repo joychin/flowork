@@ -208,7 +208,7 @@ def _publish_full_demo_flow(engine: ProcessEngine) -> None:
             ),
             reject_target="manager",
         )
-        .cc_task("notify", "结果传阅", recipients=["originator"])
+        .cc_task("notify", "结果传阅", recipients=["initiator"])
         .end("end", "结束")
         .connect("start", "manager")
         .connect("manager", "route")

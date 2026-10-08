@@ -126,7 +126,7 @@ class CallActivitySpec(FlowNode):
 
 
 class CcTaskSpec(FlowNode):
-    """传阅节点：recipients 为接收人（M4 支持表达式，M1+ 支持显式 id）。"""
+    """传阅节点：recipients 每项为 CEL 表达式（字面人 'u_a' / initiator / 取人函数）。"""
 
     kind: Literal["cc_task"] = KIND_CC_TASK
     recipients: list[str] = Field(default_factory=list)

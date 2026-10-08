@@ -69,7 +69,7 @@ def expense_claim():
             advance_policy="any",
         )
         .user_task("director_review", "总监审批", assignee="'u_chen'")
-        .cc_task("legal_cc", "法务留档传阅", recipients=["u_fa1"])
+        .cc_task("legal_cc", "法务留档传阅", recipients=["'u_fa1'"])
         .service_task("payment", "财务打款", action="make_payment", advance_policy="any")
         .end("end", "结束")
         .connect("start", "supervisor")
@@ -114,7 +114,7 @@ def leave_request():
             reject_target="supervisor",
         )
         .user_task("hr_record", "HR 备案", assignee="'u_hr1'")
-        .cc_task("notify", "结果传阅发起人", recipients=["originator"], advance_policy="any")
+        .cc_task("notify", "结果传阅发起人", recipients=["initiator"], advance_policy="any")
         .end("end", "结束")
         .connect("start", "supervisor")
         .connect("supervisor", "days_route")

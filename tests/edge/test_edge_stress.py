@@ -124,7 +124,7 @@ def test_unicode_flow_end_to_end():
         FlowBuilder("中文流程", "报销——差旅费")
         .start("发起", "提交申请")
         .user_task("主管审批", assignee="'张三'")
-        .cc_task("抄送财务", recipients=["李四"])
+        .cc_task("抄送财务", recipients=["'李四'"])
         .end("结束", "归档")
         .connect("发起", "主管审批")
         .connect("主管审批", "抄送财务")

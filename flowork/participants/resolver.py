@@ -50,12 +50,13 @@ def resolve_subjects(
     functions: Functions | None = None,
     *,
     label: str = "",
+    what: str = "取人",
 ) -> list[str]:
     """对一组取人表达式（CEL）求值 → 具体人列表（保序去重）。
 
-    供解析管线与加签等**重排场景**共用——后者必须存具体人，不能存表达式原文。
+    供解析管线与加签/传阅等场景共用——重排场景必须存具体人，不能存表达式原文。
     语义同取人位：null/空＝查无传播；str/list[str]＝单人/多人；其他类型报错。
-    label 为错误消息里的位置标注（如节点码）。
+    label 为错误消息里的位置标注（如节点码）；what 为错误措辞（取人/传阅接收人）。
     """
     where = f"{label}：" if label else ""
     pool: list[str] = []
@@ -64,7 +65,9 @@ def resolve_subjects(
         try:
             result = evaluate_formula_value(expression, context, functions=functions)
         except FormulaError as exc:
-            raise EngineExecutionError(f"取人公式求值失败（{where}{expression!r}）：{exc}") from exc
+            raise EngineExecutionError(
+                f"{what}公式求值失败（{where}{expression!r}）：{exc}"
+            ) from exc
         if result is None:
             continue  # 查无传播（spec §5.5）
         if isinstance(result, str):
@@ -73,7 +76,7 @@ def resolve_subjects(
             pool.extend(str(user) for user in result)
         else:
             raise NoParticipantError(
-                f"取人公式须返回人或人列表（{where}{expression!r} → {type(result).__name__}，"
+                f"{what}公式须返回人或人列表（{where}{expression!r} → {type(result).__name__}，"
                 "谓词函数属条件位）"
             )
     return _dedupe(pool)

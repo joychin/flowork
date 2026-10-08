@@ -61,7 +61,7 @@ def expense_definition() -> ProcessDefinition:
             assignees=["'u_cfo'", "'u_ceo'"],
             multi_instance=MultiInstance(mode="sequential", approve_exit="all"),
         )
-        .cc_task("cc_fin", "抄送财务总监", recipients=["u_cfo"])
+        .cc_task("cc_fin", "抄送财务总监", recipients=["'u_cfo'"])
         .service_task("pay", "自动打款", action="make_payment")
         .end("expense_end", "报销结束")
         .flow("start", "amount_route")

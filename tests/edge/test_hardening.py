@@ -97,7 +97,7 @@ def _cc() -> FlowBuilder:
     return (
         FlowBuilder("hs_cc")
         .start()
-        .cc_task("cc", recipients=["u_cc"])
+        .cc_task("cc", recipients=["'u_cc'"])
         .end()
         .connect("start", "cc")
         .connect("cc", "end")

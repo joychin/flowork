@@ -39,7 +39,7 @@ def test_builder_matches_json_countersign_branch(registry, examples_dir):
             multi_instance=MultiInstance(mode="parallel", approve_exit=">=50%"),
             reject_target="manager",
         )
-        .cc_task("notify", "结果传阅", recipients=["u_originator"])
+        .cc_task("notify", "结果传阅", recipients=["'u_originator'"])
         .end("end", "结束", advance_policy="any")
         .connect("start", "manager")
         .connect("manager", "route")

@@ -26,7 +26,7 @@ def linear_flow(code: str = "ops") -> FlowBuilder:
         .user_task("a", assignee="'u_a'")
         .user_task("b", candidate_users=["u_c1", "u_c2"])
         .user_task("c", assignees=["'u_p1'", "'u_p2'"])
-        .cc_task("notify", recipients=["u_a"])
+        .cc_task("notify", recipients=["'u_a'"])
         .end()
         .connect("start", "a")
         .connect("a", "b")
@@ -309,3 +309,55 @@ def test_claim_events_emitted(engine: ProcessEngine):
     engine.task.claim(claimable.id, "u_c1")
     names = [e.event_name for e in engine.history.events(instance_id)]
     assert "task_claimed" in names
+
+
+def test_cc_recipients_cel_initiator_and_function(engine: ProcessEngine):
+    """传阅位 CEL（spec §4.2 位点统一）：initiator 标识符与取人函数混排。"""
+    from flowork import contrib
+    from flowork.engine.config import EngineConfig
+    from flowork.participants.org_directory import OrgDirectory
+
+    org = OrgDirectory.from_dict(
+        {
+            "users": {
+                "u_s": {"manager": "u_boss", "roles": ["finance"]},
+                "u_boss": {"roles": []},
+                "u_fin": {"roles": ["finance"]},
+            },
+        }
+    )
+    configured = ProcessEngine(
+        EngineConfig(org=org, expression_functions=contrib.cel_vocabulary(org))
+    )
+    flow = (
+        FlowBuilder("cc_cel")
+        .start()
+        .cc_task("notify", recipients=["initiator", "manager_of(initiator)"])
+        .end()
+        .connect("start", "notify")
+        .connect("notify", "end")
+    )
+    publish(configured, flow.build())
+    instance_id = configured.runtime.start_process("cc_cel", start_user="u_s")
+    recipients = sorted(
+        cc.recipient for cc in configured.task.list_cc_tasks(instance_id=instance_id)
+    )
+    assert recipients == ["u_boss", "u_s"]
+
+
+def test_cc_recipients_formula_error_is_technical_fault():
+    """传阅公式求值错 → 挂起 + 故障单（错误二分，spec §8）。"""
+    from flowork.engine.kernel import EngineExecutionError
+
+    flow = (
+        FlowBuilder("cc_bad")
+        .start()
+        .cc_task("notify", recipients=["nosuchvar"])
+        .end()
+        .connect("start", "notify")
+        .connect("notify", "end")
+    )
+    engine = ProcessEngine()
+    publish(engine, flow.build())
+    with pytest.raises(EngineExecutionError, match="传阅接收人公式求值失败"):
+        engine.runtime.start_process("cc_bad", start_user="u_s")
