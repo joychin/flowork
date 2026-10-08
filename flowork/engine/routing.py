@@ -17,6 +17,7 @@ from collections.abc import Callable, Mapping
 from typing import TYPE_CHECKING, Any, Literal
 
 from flowork.engine.kernel import EngineExecutionError, RouteError
+from flowork.engine.route_audit import RoutingAudit, snapshot_of
 from flowork.expr.cel import FormulaError, references_identifier
 from flowork.expr.conditions import evaluate_condition
 from flowork.expr.context import expression_context
@@ -58,8 +59,26 @@ def select_outgoing(
     variables: dict[str, Any],
     mode: Mode = "all_match",
     functions: Mapping[str, Callable[..., object]] | None = None,
+    *,
+    audit: RoutingAudit | None = None,
 ) -> list[SequenceFlow]:
-    """按模式计算应激活的出边集合。"""
+    """按模式计算应激活的出边集合；带 audit 时旁路记录本次决策（§6/F3）。"""
+    selected = _select(outgoing, variables, mode, functions, audit)
+    if audit is not None:
+        audit.source = outgoing[0].source if outgoing else ""
+        audit.mode = mode
+        audit.selected = [flow.flow_code() for flow in selected]
+        audit.snapshot = snapshot_of(variables, audit.node_calls)
+    return selected
+
+
+def _select(
+    outgoing: list[SequenceFlow],
+    variables: dict[str, Any],
+    mode: Mode,
+    functions: Mapping[str, Callable[..., object]] | None,
+    audit: RoutingAudit | None,
+) -> list[SequenceFlow]:
     unconditional = [flow for flow in outgoing if flow.condition is None]
     conditional = [flow for flow in outgoing if flow.condition is not None]
     defaults = [flow for flow in outgoing if flow.is_default]
@@ -68,7 +87,7 @@ def select_outgoing(
         # 纯无条件出边（含 default 视同无条件）：全部激活（并行/直通）
         return unconditional if not defaults else list(unconditional)
 
-    matched = _match_in_order(conditional, variables, functions)
+    matched = _match_in_order(conditional, variables, functions, audit)
     if mode == "first_match":
         if matched:
             return matched[:1]
@@ -93,6 +112,7 @@ def _match_in_order(
     conditional: list[SequenceFlow],
     variables: dict[str, Any],
     functions: Mapping[str, Callable[..., object]] | None = None,
+    audit: RoutingAudit | None = None,
 ) -> list[SequenceFlow]:
     """按声明顺序求值条件边（单轨 CEL），返回为真者。
 
@@ -103,6 +123,8 @@ def _match_in_order(
     for flow in conditional:
         assert flow.condition is not None  # conditional 分组已过滤
         if "prev_task" not in variables and references_identifier(flow.condition, "prev_task"):
+            if audit is not None:
+                audit.record_edge(flow.flow_code(), flow.condition, "no_fact")
             continue  # 上一站查无：条件按不满足（expression-dataface §3，温和跳过）
         try:
             hit = evaluate_condition(flow.condition, variables, functions=functions)
@@ -110,6 +132,8 @@ def _match_in_order(
             raise EngineExecutionError(
                 f"连线条件公式求值失败（{flow.flow_code()}）：{exc}"
             ) from exc
+        if audit is not None:
+            audit.record_edge(flow.flow_code(), flow.condition, "true" if hit else "false")
         if hit:
             matched.append(flow)
     return matched

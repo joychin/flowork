@@ -96,6 +96,7 @@ class NodeBehavior:
         命中即走（只走第一条真条件）由 BranchBehavior(FIRST_MATCH) 覆写；
         多条入边的等待/竞速由 kernel 推进门（advance_policy）决定，不经本钩子。
         """
+        from flowork.engine.route_audit import RoutingAudit, persist_route_decision
         from flowork.engine.routing import evaluation_variables, select_outgoing
         from flowork.expr.context import expression_functions_of
         from flowork.tasks.facts import attach_node
@@ -103,7 +104,8 @@ class NodeBehavior:
         definition = ctx.kernel.definition_of(ctx.session, ctx.instance)  # type: ignore[attr-defined]
         outgoing = definition.outgoing(ctx.node.code)
         engine = getattr(ctx.kernel, "engine", None)
-        return select_outgoing(
+        audit = RoutingAudit()
+        selected = select_outgoing(
             outgoing,
             evaluation_variables(ctx.instance, ctx.variables, session=ctx.session),  # type: ignore[attr-defined]
             mode="all_match",
@@ -111,8 +113,17 @@ class NodeBehavior:
                 expression_functions_of(getattr(engine, "config", None)),
                 ctx.session,  # type: ignore[attr-defined]
                 ctx.instance.id,  # type: ignore[attr-defined]
+                node_calls=audit.node_calls,
             ),
+            audit=audit,
         )
+        persist_route_decision(
+            ctx.session,  # type: ignore[attr-defined]
+            ctx.instance.id,  # type: ignore[attr-defined]
+            ctx.token.id if ctx.token else None,  # type: ignore[attr-defined]
+            audit,
+        )
+        return selected
 
 
 class InMemoryNodeContext(NodeContext):

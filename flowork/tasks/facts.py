@@ -113,14 +113,22 @@ def node_facts(session: Session, instance_id: str, activity_code: str) -> dict[s
     }
 
 
-def node_lookup(session: Session, instance_id: str) -> Callable[[str], dict[str, Any]]:
-    """CEL 函数 ``node("code")`` 的工厂（引擎注入，非宿主词汇）。"""
+def node_lookup(
+    session: Session, instance_id: str, node_calls: dict[str, Any] | None = None
+) -> Callable[[str], Any]:
+    """CEL 函数 ``node("code")`` 的工厂（引擎注入，非宿主词汇）。
+
+    node_calls 非空时回填取值快照（路由审计 §6：重放解释要钉住 node() 读到的值）。
+    """
 
     def _node(activity_code: str) -> Any:
         from celpy.adapter import json_to_cel
 
+        facts = node_facts(session, instance_id, str(activity_code))
+        if node_calls is not None:
+            node_calls.setdefault(str(activity_code), facts)
         # 原生 dict 不支持 celpy 字段选择，须过 json_to_cel（MapType）
-        return json_to_cel(node_facts(session, instance_id, str(activity_code)))
+        return json_to_cel(facts)
 
     return _node
 
@@ -129,9 +137,10 @@ def attach_node(
     functions: Mapping[str, Callable[..., object]] | None,
     session: Session | None,
     instance_id: str,
+    node_calls: dict[str, Any] | None = None,
 ) -> Mapping[str, Callable[..., object]]:
     """把 node() 合并进函数表（副本；conditions/subjects 位点共用）。"""
     merged: dict[str, Callable[..., object]] = dict(functions or {})
     if session is not None:
-        merged.setdefault("node", node_lookup(session, instance_id))
+        merged.setdefault("node", node_lookup(session, instance_id, node_calls))
     return merged

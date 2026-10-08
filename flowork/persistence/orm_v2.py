@@ -110,3 +110,26 @@ class VariableHistoryRow(Base):
     acted_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
     acted_as_agent: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
+class RouteDecisionRow(Base):
+    """路由决策审计（expression-dataface §6/F3）：一次 select_outgoing 一行。
+
+    edges=[{flow,formula,result}]（result ∈ true/false/no_fact 查无跳过）；
+    selected=最终激活的 flow_code；snapshot={now,prev_task,node:{code:facts}}
+    （求值时刻钉住的取值，重放解释用）。求值失败不落行——故障单消息已含
+    公式与错误（spec §8 错误二分）。
+    """
+
+    __tablename__ = "wf_route_decision"
+    __table_args__ = (Index("ix_route_instance", "instance_id", "created_at"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    instance_id: Mapped[str] = mapped_column(String(36))
+    token_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    source_activity: Mapped[str] = mapped_column(String(100), default="")
+    mode: Mapped[str] = mapped_column(String(16), default="all_match")
+    edges: Mapped[list[Any]] = mapped_column(JSON, default=list)
+    selected: Mapped[list[Any]] = mapped_column(JSON, default=list)
+    snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)

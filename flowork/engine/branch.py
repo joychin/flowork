@@ -34,6 +34,7 @@ class BranchBehavior(NodeBehavior):
         assert isinstance(ctx, RuntimeNodeContext)
         definition = ctx.kernel.definition_of(ctx.session, ctx.instance)
         outgoing = definition.outgoing(ctx.node.code)
+        from flowork.engine.route_audit import RoutingAudit, persist_route_decision
         from flowork.engine.routing import Mode, evaluation_variables, select_outgoing
         from flowork.expr.context import expression_functions_of
         from flowork.tasks.facts import attach_node
@@ -41,7 +42,8 @@ class BranchBehavior(NodeBehavior):
         mode: Mode = (
             "first_match" if self._spec().route_mode == RouteMode.FIRST_MATCH else "all_match"
         )
-        return select_outgoing(
+        audit = RoutingAudit()
+        selected = select_outgoing(
             outgoing,
             evaluation_variables(ctx.instance, ctx.variables, session=ctx.session),
             mode=mode,
@@ -51,5 +53,11 @@ class BranchBehavior(NodeBehavior):
                 ),
                 ctx.session,
                 ctx.instance.id,
+                node_calls=audit.node_calls,
             ),
+            audit=audit,
         )
+        persist_route_decision(
+            ctx.session, ctx.instance.id, ctx.token.id if ctx.token else None, audit
+        )
+        return selected

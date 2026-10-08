@@ -101,6 +101,26 @@ class TokenInfo(BaseModel):
     finished_at: datetime | None = None
 
 
+class RouteDecisionInfo(BaseModel):
+    """一条路由决策审计（expression-dataface §6/F3）：当时为什么走这条边。
+
+    edges 逐条件边记录公式与结果（true/false/no_fact 查无跳过）；selected 为
+    最终激活的连线；snapshot 钉住求值时刻关键取值（now/prev_task/node() 引用值）。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    instance_id: str
+    token_id: str | None = None
+    source_activity: str = ""
+    mode: str = "all_match"
+    edges: list[dict[str, Any]] = []
+    selected: list[str] = []
+    snapshot: dict[str, Any] = {}
+    created_at: datetime | None = None
+
+
 class AnticipateResult(BaseModel):
     """anticipate 只读预判（v2.2 spec §11）：照此提交后节点是否出、实例是否完。
 

@@ -14,7 +14,13 @@ from flowork.persistence.orm import (
     TaskHistoryRow,
     TokenRow,
 )
-from flowork.tasks.models import EventInfo, InstanceInfo, TaskHistoryInfo, TokenInfo
+from flowork.tasks.models import (
+    EventInfo,
+    InstanceInfo,
+    RouteDecisionInfo,
+    TaskHistoryInfo,
+    TokenInfo,
+)
 
 if TYPE_CHECKING:
     from flowork.engine.engine import ProcessEngine
@@ -74,6 +80,34 @@ class HistoryService:
             ]
 
         result: list[EventInfo] = self._engine.execute(_command)
+        return result
+
+    def route_decisions(self, instance_id: str) -> list[RouteDecisionInfo]:
+        """路由决策审计（expression-dataface §6/F3）：重放解释用，按时间正序。"""
+        from flowork.persistence.orm_v2 import RouteDecisionRow
+
+        def _command(ctx: CommandContext) -> Any:
+            stmt = (
+                select(RouteDecisionRow)
+                .where(RouteDecisionRow.instance_id == instance_id)
+                .order_by(RouteDecisionRow.created_at)
+            )
+            return [
+                RouteDecisionInfo(
+                    id=row.id,
+                    instance_id=row.instance_id,
+                    token_id=row.token_id,
+                    source_activity=row.source_activity,
+                    mode=row.mode,
+                    edges=list(row.edges or []),
+                    selected=list(row.selected or []),
+                    snapshot=dict(row.snapshot or {}),
+                    created_at=row.created_at,
+                )
+                for row in ctx.session.scalars(stmt)
+            ]
+
+        result: list[RouteDecisionInfo] = self._engine.execute(_command)
         return result
 
     def task_history(

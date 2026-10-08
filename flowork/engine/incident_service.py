@@ -150,6 +150,7 @@ class IncidentMixin:
 
     def _skip_failed_nodes(self, ctx: CommandContext, instance_id: str, actor: str) -> None:
         """跳过故障节点：未完令牌视为完成，按条件路由激活后继（管理员手术，绕放行门）。"""
+        from flowork.engine.route_audit import RoutingAudit, persist_route_decision
         from flowork.engine.routing import evaluation_variables, select_outgoing
         from flowork.expr.context import expression_functions_of
         from flowork.tasks.facts import attach_node
@@ -158,9 +159,7 @@ class IncidentMixin:
         instance = ctx.session.get(ProcessInstanceRow, instance_id)
         assert instance is not None
         definition = kernel.definition_of(ctx.session, instance)
-        functions = attach_node(
-            expression_functions_of(self._engine.config), ctx.session, instance.id
-        )
+        base_functions = expression_functions_of(self._engine.config)
         for token in kernel.tokens(ctx.session, instance_id, states=(TokenState.UNFINISHED.value,)):
             node = definition.node(token.activity_code)
             kernel.cancel_token(ctx.session, token)
@@ -171,12 +170,17 @@ class IncidentMixin:
             )
             if node is None:
                 continue
+            audit = RoutingAudit()
             outgoing = select_outgoing(
                 definition.outgoing(node.code),
                 evaluation_variables(instance, instance.variables, session=ctx.session),
                 mode="all_match",
-                functions=functions,
+                functions=attach_node(
+                    base_functions, ctx.session, instance.id, node_calls=audit.node_calls
+                ),
+                audit=audit,
             )
+            persist_route_decision(ctx.session, instance_id, token.id, audit)
             for flow in outgoing:
                 target = definition.node(flow.target)
                 if target is not None:
