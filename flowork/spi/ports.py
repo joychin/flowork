@@ -22,7 +22,6 @@ __all__ = [
     "Notifier",
     "OrgDirectory",
     "ResourceProvider",
-    "VariableStore",
     "WorkCalendar",
 ]
 
@@ -111,15 +110,6 @@ class EventSink(Protocol):
     """事件外发（默认=outbox 轮询；webhook 实现挂这）。"""
 
     def emit(self, envelope: dict[str, object]) -> None: ...
-
-
-@runtime_checkable
-class VariableStore(Protocol):
-    """变量存取端口：流程实例的 process 级变量读写（默认实现=库内 JSON 列）。"""
-
-    def load(self, instance_id: str) -> dict[str, Any]: ...
-
-    def save(self, instance_id: str, variables: Mapping[str, Any]) -> None: ...
 
 
 @runtime_checkable

@@ -23,7 +23,7 @@
 | # | 概念 | 业界对标 | 现状 | 动作 |
 |---|---|---|---|---|
 | D1 | FlowSpec 不可变 + 版本化部署 | 四引擎一致；LH `major+revision`，存量实例钉启动版本 | ◐（definitions/definition+builder 有，无版本号语义） | 版本三元组 name+major+revision；**破坏性自动判定抄 LH：必填变量集合或 searchable 变量集合变化→major+1**（对表单字段演进关键） |
-| D2 | 变量契约：input/output schema | LH typed vars（required/searchable 修饰符）；Zeebe JSON 值 | ◐（VariableStore 存 JSON，无 schema 边界） | input=JSON Schema；`.required()`/`.searchable()` 修饰符；提交/节点输出在边界处按 schema 校验拒收 |
+| D2 | 变量契约：input/output schema | LH typed vars（required/searchable 修饰符）；Zeebe JSON 值 | ◐（实例 JSON 列存变量，无 schema 边界） | input=JSON Schema；`.required()`/`.searchable()` 修饰符；提交/节点输出在边界处按 schema 校验拒收 |
 | D3 | 表达式求值 | CEL（K8s/Envoy 事实标准，静态类型可设计时查错） | ◐（expr/conditions+formula 自研） | M7 前置：cel-python 接入 + 设计时 type-check 进 validator；备胎 C++/Rust 绑定 |
 | D4 | 资源引用注册表 | Zeebe deployment 含 form/decision 资源 | ✗ | 插件注册资源类型（`form:`/`policy:`），内核校验引用存在不解语义 |
 | D5 | dry-run / semantic_diff | Temporal 无此物（我们的 AI 护栏差异化） | ✓（definitions/dry_run+semantic_diff） | 保持，CI/MCP 都要用 |
@@ -59,7 +59,6 @@
 | Clock | ✓ | 确定性测试 |
 | WorkCalendar | ✓ | 工时换算（审批 SLA 用） |
 | OrgDirectory | ◐ 扩展 | 现有 manager_of/users_with_role；对齐 SCIM 形状（User/Group/manager 指针），加 roles、delegation |
-| VariableStore | ◐ 改造 | 加 schema 边界校验职责 |
 | Notifier | ◐ 改造 | 改为 outbox 订阅分发（事件已同事务落表） |
 | **ExpressionFunctions**（新增） | ✗ | CEL 自定义函数注册：`manager_of()`/`role()` 等走这里→转 OrgDirectory。这是「语言与词典」的缝 |
 | **ResourceProvider**（新增） | ✗ | D4 资源注册表端口 |
