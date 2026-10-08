@@ -83,7 +83,7 @@
 | target | str | ✓ | — | 终点节点 code |
 | name | str | — | "" | 显示名 |
 | is_default | bool | — | false | 默认边：所有条件边都不命中时走它 |
-| condition | FlowCondition/null | — | null | 路由条件（写法见第 4 章） |
+| condition | str(CEL)/null | — | null | 路由条件：CEL 公式字符串（写法见第 4 章；groups 结构化条件组已退役） |
 | on_take | HandlerRef/null | — | null | 走这条边时触发的钩子（见 2.6 层 1） |
 
 **并行不需要任何特殊配置**：一个节点有多条**不带条件**的出边，令牌就同时走多条（自动并行）。这是规则不是节点。
@@ -136,8 +136,8 @@
 | 字段 | 类型 | 默认 | 说明 |
 |---|---|---|---|
 | mode | parallel/sequential | parallel | 并签（全员同时待办）/串签（一个批完下一个） |
-| approve_exit | str/null | null | 通过出口：`"all"`（全同意）、`">=1"`、`">=50%"` 等比例式 |
-| disapprove_exit | str/null | null | 驳回出口：同上语法 |
+| approve_exit | str/null | null | 通过出口：CEL 布尔公式（task.* 计数快照，见 4.2/C.4；缺省＝该侧全票） |
+| disapprove_exit | str/null | null | 驳回出口：CEL 布尔公式（同上；缺省＝该侧全票） |
 
 出口判定是 CEL 布尔公式（见 4.1/4.2），task.* 注入三计数（基数显式写在公式里）。
 
@@ -326,7 +326,8 @@ git 里的 YAML/JSON 文件      ← 编辑态事实来源：人和 AI 只改这
 
 ### 4.3 CEL 求值语义【v2 改造】
 
-- **变量命名空间**：`input.*`（流程契约输入）、`vars.*`（运行中变量）、`task.*`（任务快照，当前仅超时改派位注入，见 C.4）、`initiator`（发起人 Subject，全位点注入）。
+- **变量命名空间**：`input.*`（流程契约输入）、`vars.*`（运行中变量）、`task.*`（任务快照，超时改派/会签出口位注入，见 C.4）、`initiator`（发起人 Subject，全位点注入）。
+- **判断面事实目录**（expression-dataface F0–F3，2026-10-08 落地）：`now`（求值时刻，统一时钟 naive UTC，一次装配钉一时刻——组内多条公式同刻；全位点）、`prev_task`（上一站已完成任务，条件+取人位；查无不注入，静态预检温和跳过）、`node("code")`（引擎注入函数，点名查节点事实：runs/skipped/最近轮人物与票数；查无＝固定形状）——与变量读写面（§10 variables_updated、§11 变量三方法）互补。词汇目录权威在 `expr/catalog.py`（保留词与位点白名单表驱动），validator 规则名 `*.{name}_unavailable`。路由决策审计落 `wf_route_decision`（§14），查询面 `history.route_decisions`。`instance.*`（id/started_at）为设计文档登记的后续项，未实现。
 - **自定义函数**：经 SPI 端口 `ExpressionFunctions` 注册（第 9 章），**必须声明参数与返回类型**（词汇表 one_user/users/groups/mixed/bool，兼容性检查见 5.5）。**内核函数注册表出厂为空**——取人词汇全部由宿主注册（v2.1 定稿，理由见 5.5）；`flowork.contrib` 便利包提供 `manager_of` / `users_with_role` / `has_role` 三个常见词汇，纯基于 OrgDirectory 端口实现，一行代码挂上。
 - **设计时检查**：`validate` 阶段做 CEL 静态检查（**全位点**，validator_conditions）——
   编译护栏/引用未声明变量/未注册函数与参数个数直接报错（K8s CRD 校验同款体验）；
@@ -578,10 +579,10 @@ class EventSink(Protocol):               # ✗ 事件外发（默认=outbox 轮�
 
 | 组 | 方法 | 现状 |
 |---|---|---|
-| 定义 | `deploy / validate / dry_run / semantic_diff / verdict(预演) / get_definition / list_definitions / retire / purge / definition_drift` | ✓（validate/dry_run/semantic_diff）；deploy ◐（版本判定+幂等去重）；retire/purge/drift/get/list ✗ |
-| 实例 | `start_process(code, variables, initiator, idempotency_key?, reuse?)`；`pause / resume / cancel / terminate / get_instance`；`update_variables(instance_id, updates, *, actor, as_agent?, reason?)` / `variables_of(instance_id)` / `variable_history(instance_id, *, name?, limit, before?)`【变量 I/O 批，2026-10-08】 | start ◐（幂等【v2】）；pause/terminate ✗；变量读写三方法本批落地 |
-| 任务 | `get_task / list_tasks / claim / unclaim / complete / reject / transfer / assist / complete_assist / add_countersigner / list_cc_tasks / mark_cc_read`；`anticipate(task_id, outcome) → {node_exit, instance_complete}`【v2.2 ✗】 | 除 anticipate 外 ✓ 全部 |
-| 系统 | `signal / publish_message`【v2】；`activate_jobs / complete_job / fail_job`【v2】；`list_incidents / resolve_incident / move_token` | move_token/incident ✓，其余 ✗ |
+| 定义 | `deploy / validate / dry_run / semantic_diff / verdict(预演) / get_definition / list_definitions / retire / purge / definition_drift` | ✓ 全部（P0-4/P1-6；get_definition 参数为 code/major/revision） |
+| 实例 | `start_process(code, variables, start_user, business_key?, major?, revision?, idempotency_key?, reuse?)`；`pause / resume / terminate / get_instance`；`update_variables(instance_id, updates, *, actor, as_agent?, reason?)` / `variables_of(instance_id)` / `variable_history(instance_id, *, name?, limit, offset?)`【变量 I/O 批，2026-10-08】 | ✓ 全部（幂等三策略 P0-5；pause/resume/terminate P1-3；分页为 offset 式非游标） |
+| 任务 | `get_task / list_tasks / claim / unclaim / complete / reject / transfer / assist / complete_assist / add_countersigner / list_cc_tasks / mark_cc_read`；`anticipate(task_id, outcome) → {node_exit, instance_complete}` | ✓ 全部（anticipate 只读预判，P1） |
+| 系统 | `signal / publish_message`【v2】；`activate_jobs / complete_job / fail_job`【v2】；`list_incidents / resolve_incident / move_token` | ✓ 全部（消息 P1-1；worker 租约 P1-2；resolve 五动作 P1-4） |
 
 启动幂等三策略：`reject`（撞 key 报错，默认）/ `return_existing`（返回已有实例）/ `allow_duplicate`（明示放弃幂等）。任务完成侧幂等已由历史表 idempotency_key 支撑 ✓。
 
@@ -775,10 +776,13 @@ Subject：`user:{id} | agent:{id} | role:{name} | org:{code}`；ParticipantSet �
 |---|---|
 | input.* | 按 input JSON Schema |
 | vars.* | 运行时（静态检查按声明，未声明按 any 降级为警告） |
-| task.* | **位点相关快照**（静态检查：非可用位引用 task.* 即 ERROR task_unavailable）——超时改派位 ✓：{id, assignee, outcome:null}（fire 时注入，活任务无 outcome）；会签出口位 ✓：{item_count, approve_count, disapprove_count}（每次办理后注入）；条件求值/输出映射位注入为后续项 |
+| task.* | **位点相关快照**（静态检查：非可用位引用 task.* 即 ERROR task_unavailable）——超时改派位 ✓：{id, assignee, outcome:null, created_at, deadline_at}（fire 时注入，活任务无 outcome）；会签出口位 ✓：{item_count, approve_count, disapprove_count}（每次办理后注入）；条件求值/输出映射位注入为后续项（开放问题 C5） |
 | initiator | subject |
+| now | datetime（引擎统一时钟 naive UTC；一次装配钉一时刻，expression-dataface F1） |
+| prev_task | 上一站已完成任务快照 {assignee, outcome, comment, finished_at, used_time}（条件+取人位；查无不注入，F2；used_time 为自然时长口径——暂停剔除待定） |
+| node("code") | 引擎注入函数 → 平铺 {assignee, outcome, comment, finished_at, used_time, runs, skipped, item_count, approve_count, disapprove_count}（runs=已结束轮数；票数取最近轮令牌三计数；查无＝固定形状：人物 null 计数 0，F2） |
 
-contrib 签名（便利包，可选，纯基于 OrgDirectory 端口实现）：`manager_of(one_user)→one_user`（吃 user:/agent: 返回其上级；吃 org: 返回部门负责人；吃 role: 设计期报错）、`users_with_role(string)→users`、`has_role(one_user, string)→bool`。部门类词汇（org_of 等）数据源无端口支撑，由宿主注册。自定义函数注册必须带全签名（参数＋返回，词汇表见 5.5）；内核注册表出厂为空。
+contrib 签名（便利包，可选，纯基于 OrgDirectory 端口实现）：`manager_of(one_user)→one_user`（吃 user:/agent: 返回其上级；吃 org: 返回部门负责人；吃 role: 设计期报错）、`users_with_role(string)→users`、`has_role(one_user, string)→bool`。部门类词汇（org_of 等）数据源无端口支撑，由宿主注册。自定义函数注册必须带全签名（参数＋返回，词汇表见 5.5）；内核注册表出厂为空。词汇目录（标识符＋函数，含中文 label 与位点）权威在 `expr/catalog.py`。
 
 ### C.5 词法与单位规则【v2 定义】
 
