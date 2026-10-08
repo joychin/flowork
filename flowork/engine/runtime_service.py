@@ -11,6 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from flowork.engine.incident_service import IncidentMixin
 from flowork.engine.instance_lifecycle import InstanceLifecycleMixin, _load, _to_info
 from flowork.engine.ops import CommandContext
+from flowork.engine.variable_actions import VariableActionsMixin
 from flowork.errors import DuplicateStartError, InstanceNotFoundError
 from flowork.events.domain import DomainEvent
 from flowork.tasks.models import InstanceInfo
@@ -21,7 +22,7 @@ if TYPE_CHECKING:
 __all__ = ["RuntimeService"]
 
 
-class RuntimeService(InstanceLifecycleMixin, IncidentMixin):
+class RuntimeService(InstanceLifecycleMixin, IncidentMixin, VariableActionsMixin):
     """实例运行时服务。"""
 
     def __init__(self, engine: ProcessEngine) -> None:

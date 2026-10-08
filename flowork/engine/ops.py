@@ -46,6 +46,7 @@ class CommandContext:
     write_source: str = "engine"
     write_actor: str | None = None
     write_as_agent: bool = False
+    write_reason: str | None = None
 
     def touch(self, instance: ProcessInstanceRow) -> None:
         """写命令统一守卫：触碰实例行（updated_at），提交时触发 version 乐观锁。
@@ -131,6 +132,7 @@ def _sync_variable_history(ctx: CommandContext) -> None:
                     {
                         "actor": ctx.write_actor,
                         "as_agent": ctx.write_as_agent,
+                        "reason": ctx.write_reason,
                         "changes": changes,
                     },
                     instance_id,
