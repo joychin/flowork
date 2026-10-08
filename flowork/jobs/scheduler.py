@@ -219,7 +219,7 @@ class JobScheduler:
             snapshot = {"id": task.id, "assignee": task.assignee, "outcome": None}
             variables = expression_context(
                 instance.variables or {},
-                start_user=instance.start_user if instance else None,
+                start_user=instance.start_user,
                 task=snapshot,
             )
             try:
