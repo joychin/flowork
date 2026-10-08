@@ -1,0 +1,226 @@
+"""结构类校验规则（validator 编排件的规则组一，入口 validate_definition 不变）。
+
+变量声明 / 组主体 / 唯一性 / kind 注册 / start-end 结构 / 端点存在 /
+出入边完备 / 可达性 / 分支规则 / 开始条件 / 超时动作。
+规则函数统一接 ``(definition, registry, error, warning[, org_configured])``。
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from typing import TYPE_CHECKING
+
+from flowork.definitions.builtin import (
+    KIND_BRANCH,
+    KIND_END,
+    KIND_START,
+    RouteMode,
+)
+
+if TYPE_CHECKING:
+    from flowork.definitions.definition import ProcessDefinition
+    from flowork.runtime.registry import NodeRegistry
+
+__all__ = [
+    "check_advance_policy",
+    "check_branch_rules",
+    "check_deadlines",
+    "check_structure",
+    "check_variables_and_org",
+]
+
+IssueFn = Callable[..., None]
+
+
+def check_variables_and_org(
+    definition: ProcessDefinition,
+    error: IssueFn,
+    warning: IssueFn,
+    *,
+    org_configured: bool | None = None,
+) -> None:
+    """变量声明检查 + 组主体与目录配置的关系（spec §9）。"""
+    for variable in definition.variables:
+        if variable.searchable and variable.type not in ("string", "number", "boolean"):
+            error(
+                "variables.searchable_type",
+                f"searchable 变量仅限 string/number/boolean（{variable.name}: {variable.type}）",
+                node=variable.name,
+            )
+
+    if org_configured is False:
+        for node in definition.nodes:
+            groups = list(getattr(node, "candidate_groups", None) or [])
+            prefixed = [g for g in groups if g.startswith(("role:", "org:"))]
+            if prefixed:
+                warning(
+                    "participant.group_without_directory",
+                    f"图纸使用组主体 {prefixed} 而组织目录未配置：组待办将无人能认领"
+                    "（EngineConfig.org / 目录见 spec §9）",
+                    node=node.code,
+                )
+
+
+def check_structure(
+    definition: ProcessDefinition,
+    registry: NodeRegistry,
+    error: IssueFn,
+    warning: IssueFn,
+) -> None:
+    """唯一性 / kind 注册 / start-end 结构 / 端点存在 / 出入边完备 / 可达性。"""
+    nodes = {n.code: n for n in definition.nodes}
+
+    # —— 唯一性与编码 ——
+    seen: set[str] = set()
+    for node in definition.nodes:
+        if not node.code:
+            error("node.code.empty", "节点编码为空")
+        if node.code in seen:
+            error("node.code.duplicate", f"节点编码重复：{node.code}", node=node.code)
+        seen.add(node.code)
+
+    # —— kind 注册（G2：未知 kind 设计期拦截）——
+    for node in definition.nodes:
+        if node.kind not in registry:
+            error(
+                "node.kind.unregistered",
+                f"未注册的节点类型 kind={node.kind!r}（已注册：{', '.join(registry.kinds())}）",
+                node=node.code,
+            )
+
+    # —— start/end 结构 ——
+    starts = [n for n in definition.nodes if n.kind == KIND_START]
+    ends = [n for n in definition.nodes if n.kind == KIND_END]
+    if len(starts) != 1:
+        error("structure.start.count", f"必须有且仅有一个 start 节点，当前 {len(starts)} 个")
+    if not ends:
+        error("structure.end.missing", "至少需要一个 end 节点")
+
+    for node in definition.nodes:
+        if node.kind == KIND_START and definition.incoming(node.code):
+            error("structure.start.incoming", "start 节点不允许有入边", node=node.code)
+        if node.kind == KIND_END and definition.outgoing(node.code):
+            error("structure.end.outgoing", "end 节点不允许有出边", node=node.code)
+
+    # —— 连线端点存在性 ——
+    for flow in definition.flows:
+        for end, role in ((flow.source, "source"), (flow.target, "target")):
+            if end not in nodes:
+                error(
+                    "flow.endpoint.missing",
+                    f"连线 {role} 节点不存在：{end}",
+                    flow=flow.flow_code(),
+                )
+
+    # —— 入边/出边完备性 ——
+    for node in definition.nodes:
+        if node.kind == KIND_START:
+            continue
+        if not definition.incoming(node.code):
+            warning("structure.node.unreachable", "节点不可达（无入边）", node=node.code)
+        if node.kind != KIND_END and not definition.outgoing(node.code):
+            error("structure.node.deadend", "非 end 节点必须有出边", node=node.code)
+
+    # —— 从 start 出发的可达性 ——
+    if starts:
+        reachable: set[str] = set()
+        queue = [starts[0].code]
+        while queue:
+            current = queue.pop()
+            if current in reachable:
+                continue
+            reachable.add(current)
+            queue.extend(f.target for f in definition.outgoing(current) if f.target in nodes)
+        for node in definition.nodes:
+            if node.code not in reachable:
+                warning("structure.node.unreachable", "节点从 start 不可达", node=node.code)
+
+
+def check_branch_rules(
+    definition: ProcessDefinition,
+    error: IssueFn,
+    warning: IssueFn,
+) -> None:
+    """条件分支节点的出边规则（默认边/条件完备）。"""
+    for node in definition.nodes:
+        if node.kind != KIND_BRANCH:
+            continue
+        route_mode = getattr(node, "route_mode", RouteMode.FIRST_MATCH)
+        outgoing = definition.outgoing(node.code)
+        defaults = [f for f in outgoing if f.is_default]
+        conditional = [f for f in outgoing if f.condition is not None]
+        if len(outgoing) < 2:
+            warning("branch.single_outgoing", "分支节点出边少于 2 条，仅作透传", node=node.code)
+        if len(defaults) > 1:
+            error("branch.default.duplicate", "分支节点最多一条默认边", node=node.code)
+        for flow in outgoing:
+            if flow.is_default and flow.condition is not None:
+                error(
+                    "branch.default.has_condition",
+                    "默认边不允许再挂条件",
+                    node=node.code,
+                    flow=flow.flow_code(),
+                )
+        if route_mode == RouteMode.FIRST_MATCH:
+            if len(outgoing) > 1 and not defaults and len(conditional) < len(outgoing):
+                error(
+                    "branch.first_match.no_default",
+                    "存在无条件出边且未设置默认边（条件全不满足时无法路由）",
+                    node=node.code,
+                )
+            if outgoing and not defaults and conditional and len(conditional) == len(outgoing):
+                warning(
+                    "branch.first_match.all_conditional",
+                    "出边全部带条件且无默认边：条件不互补时运行期将无法路由",
+                    node=node.code,
+                )
+        else:  # ALL_MATCH：命中的都走
+            for flow in outgoing:
+                if flow.condition is None and not flow.is_default:
+                    warning(
+                        "branch.all_match.unconditional",
+                        "无条件出边恒为真（等价并行分支，可考虑直接多条无条件出边）",
+                        node=node.code,
+                        flow=flow.flow_code(),
+                    )
+
+
+def check_advance_policy(
+    definition: ProcessDefinition,
+    warning: IssueFn,
+) -> None:
+    """多入边节点的开始条件提示（spec §2.3）。"""
+    for node in definition.nodes:
+        if len(definition.incoming(node.code)) < 2:
+            continue
+        policy = getattr(node, "advance_policy", None)
+        if policy is None:
+            warning(
+                "advance.missing",
+                "节点有多条入边但未设置开始条件（缺省按「任一到达即开始」执行）",
+                node=node.code,
+            )
+        # 「all 挂条件分支臂」不再告警：v2 §2.3 可达性放行下未命中臂不阻塞
+        # （包容网关映射 = branch + all 汇聚，见 spec §2.4）
+
+
+def check_deadlines(
+    definition: ProcessDefinition,
+    error: IssueFn,
+) -> None:
+    """超时动作列表（v2.2 §5.1/C.5）。"""
+    for node in definition.nodes:
+        deadlines = list(getattr(node, "deadlines", None) or [])
+        if len(deadlines) > 8:
+            error(
+                "user_task.deadlines.too_many",
+                f"超时动作列表上限 8 条（当前 {len(deadlines)}）",
+                node=node.code,
+            )
+        for deadline in deadlines:
+            if deadline.action == "reassign" and not deadline.reassign_to:
+                error(
+                    "user_task.deadline.reassign_target_missing",
+                    "reassign 动作必须带改派目标（reassign_to）",
+                    node=node.code,
+                )
