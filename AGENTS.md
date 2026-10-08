@@ -131,4 +131,13 @@ assignees 每项一表达式）、传阅（recipients）、超时改派（reassi
 百分比 ceil 语义；缺省＝该侧全票）；countersign.py 重写为 exit_reached（side 参数承载缺省），
 behaviors/anticipate/reject_flow 三点接线；validator 增 exit 位（task.* 在 reassign 与 exit
 位可用）；behaviors 拆出 tasks/deadlines.py 守行数红线。解锁复合条件出口与业务变量法定人数。
+**表达式数据面 F0+F1（2026-10-08，设计=docs/product/kernel-v2/expression-dataface.md，已批）**：
+判断面=精选事实目录（与 variable-io 读写面互补）。F0：`expr/catalog.py` 词汇目录
+（initiator/now/task 条目：类型/中文标签/可用位点/备注）成为保留词与位点白名单的权威，
+validator_conditions 硬编码 frozenset 退役（RESERVED_POSITIONS 表驱动，规则名不变）；
+FunctionSignature 补 `label`（函数目录下发原料）+ contrib.cel_vocabulary 三函数标注。
+F1：`now` 求值时刻全位点注入（expr/context.py 唯一装配点，统一时钟 naive UTC，
+一次装配钉一时刻——routing/resolver 组内多公式同刻；dry-run 模拟面与 web 公式试算面
+同步注入）。575 测试全绿。下一刀 F2：prev_task（token 因果链）/node() 节点事实
+（现查派生、票数最近一轮）+ F3 路由决策审计（合并 P2 遗留）。
 
