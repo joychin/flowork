@@ -85,8 +85,9 @@ class BranchSpec(FlowNode):
 
 
 class UserTaskSpec(FlowNode):
-    """人工审批节点。参与者表达式完整解析在 M4（OrgDirectory + 取人函数），
-    M1 起支持显式用户 id 与发起人标记 ``originator``。
+    """人工审批节点。assignee/assignees 每项为 CEL 表达式（spec §4.2 位点统一）：
+    字面人写 ``'u_a'``，发起人为保留标识符 ``initiator``，取人函数如
+    ``manager_of(initiator)``（词汇经 EngineConfig.expression_functions 注册）。
     """
 
     kind: Literal["user_task"] = KIND_USER_TASK

@@ -174,12 +174,16 @@ def evaluate_formula_value(
     variables: Mapping[str, Any],
     functions: Mapping[str, Callable[..., object]] | None = None,
 ) -> Any:
-    """在 CEL 求值**值表达式**，原样返回结果（不收敛 bool）。
+    """在 CEL 求值**值表达式**，原样返回结果（不做条件位的 bool 收敛）。
 
     值位点（取人/传阅/超时改派/子流程映射/试算）用；条件位继续用
-    :func:`evaluate_formula`。护栏与异常归一两者共享。
+    :func:`evaluate_formula`。护栏与异常归一两者共享；celtypes.BoolType 是
+    int 子类（JSON 序列化会变 1），此处收敛为原生 bool，其余类型原样。
     """
-    return _evaluate(formula, variables, functions)
+    from celpy.celtypes import BoolType
+
+    value = _evaluate(formula, variables, functions)
+    return bool(value) if isinstance(value, BoolType) else value
 
 
 def collect_references(formula: str) -> tuple[set[str], dict[str, set[int]]]:

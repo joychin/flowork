@@ -27,7 +27,6 @@ from flowork.definitions.validator import InvalidDefinition, IssueLevel, Validat
 from flowork.engine.config import EngineConfig
 from flowork.engine.engine import ProcessEngine
 from flowork.errors import DefinitionError, FloworkError, UnknownNodeKind
-from flowork.expr.cel import evaluate_formula
 from flowork.expr.context import expression_functions_of
 
 __all__ = ["app", "create_app"]
@@ -213,15 +212,22 @@ def create_app(db_file: str | Path | None = None, *, seed: bool = True) -> FastA
 
     @app.post("/api/formula/preview")
     def formula_preview(body: dict[str, Any]) -> dict[str, Any]:
-        """公式试算：CEL 对样例变量求值（含引擎配置的自定义函数），返回布尔结果或错误说明。"""
+        """公式试算：CEL 对样例变量求值（含引擎配置的自定义函数），原样返回值或错误说明。
+
+        值语义（位点统一）：条件公式返回 bool，取人/映射公式返回 str/list/数值；
+        样例缺 initiator 时注入占位 ``u_initiator``（试算可引用保留标识符）。
+        """
+        from flowork.expr.cel import evaluate_formula_value
+
         formula = str(body.get("formula") or "")
         raw_vars = body.get("variables")
-        variables = raw_vars if isinstance(raw_vars, dict) else {}
+        variables = dict(raw_vars) if isinstance(raw_vars, dict) else {}
+        variables.setdefault("initiator", "u_initiator")
         try:
             return {
                 "ok": True,
-                "result": evaluate_formula(
-                    formula, dict(variables), functions=expression_functions_of(engine.config)
+                "result": evaluate_formula_value(
+                    formula, variables, functions=expression_functions_of(engine.config)
                 ),
             }
         except FloworkError as exc:

@@ -43,7 +43,7 @@ class RuntimeService(InstanceLifecycleMixin, IncidentMixin):
 
         Args:
             code: 已发布流程定义编码。
-            start_user: 发起人（参与者表达式 ``originator`` 解析为此值）。
+            start_user: 发起人（公式保留标识符 ``initiator`` 解析为此值）。
             variables: 流程变量（表单数据/路由条件依据）。
             business_key: 业务关联键（如订单号），供外部对账。
             major/revision: 显式钉版本启动（spec §6.2）；缺省＝启动事务内

@@ -246,3 +246,9 @@ def test_root_call_none_for_non_call_root():
     assert root_call("initiator") is None
     assert root_call("manager_of(initiator) + extra") is None
     assert root_call("amount > 1 && ok") is None
+
+
+def test_value_formula_bool_is_native_bool():
+    """BoolType（int 子类）收敛为原生 bool——JSON 序列化不能变 1。"""
+    result = evaluate_formula_value("amount > 1", {"amount": 2})
+    assert type(result) is bool and result is True

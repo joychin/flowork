@@ -276,3 +276,20 @@ def test_variables_roundtrip_and_unknown_reference_warning(client: TestClient) -
     # 全部引用都在声明内 → 无该预警（单轨 CEL，无第二格式）
     fine = client.post("/api/validate", json=spec).json()
     assert not any(issue["rule"] == "condition.variable.unknown" for issue in fine["issues"])
+
+
+def test_formula_preview_value_semantics_and_initiator_placeholder(client):
+    """试算面值语义（位点统一）：取人公式返回列表、缺 initiator 注入占位。"""
+    r1 = client.post(
+        "/api/formula/preview", json={"formula": "amount * 2", "variables": {"amount": 21}}
+    ).json()
+    assert r1["ok"] and r1["result"] == 42
+    r2 = client.post(
+        "/api/formula/preview", json={"formula": "manager_of(initiator)", "variables": {}}
+    ).json()
+    assert not r2["ok"]  # 未注册函数：明确报错（诚实分级）
+    r3 = client.post(
+        "/api/formula/preview",
+        json={"formula": "initiator == 'u_initiator'", "variables": {}},
+    ).json()
+    assert r3["ok"] and r3["result"] is True  # 占位 initiator 可引用

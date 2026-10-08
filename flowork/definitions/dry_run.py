@@ -64,11 +64,16 @@ def simulate_route(
 ) -> DryRunResult:
     """按样例变量静态预演路由，返回路径步骤 / 警告 / 阻断。
 
+    模拟面无实例：样例缺 ``initiator`` 时注入占位 ``u_initiator``（条件公式
+    可引用保留标识符，与试算面一致）。
+
     Args:
         functions: 宿主 CEL 自定义函数表（与运行时同一注册来源，预演结果才可信）。
     """
     from flowork.expr.conditions import evaluate_condition
 
+    variables = dict(variables)
+    variables.setdefault("initiator", "u_initiator")  # 模拟面占位（见 docstring）
     result = DryRunResult()
     nodes = {n.code: n for n in definition.nodes}
     start = next((n for n in definition.nodes if n.kind == "start"), None)
