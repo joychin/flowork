@@ -117,9 +117,6 @@ class UserTaskBehavior(NodeBehavior):
             _schedule_timeout(ctx, spec, task.id)
         # 全员自动通过时立即完成节点
         if not resolution.todo:
-            from flowork.persistence.orm import TokenRow
-
-            _ = TokenRow
             self._finish_now(ctx)
 
     def _create_claimable_task(self, ctx: RuntimeNodeContext, spec: UserTaskSpec) -> None:
