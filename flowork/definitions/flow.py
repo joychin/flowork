@@ -1,7 +1,7 @@
 """连线（SequenceFlow）与路由条件模型。
 
 条件单轨化（kernel-v2 §4.1，2026-10-08）：``condition`` 直接存 CEL 公式字符串
-（expr/cel.py 求值；原结构化条件组 groups 已退役，旧 JSON 经 loader shim 翻译）。
+（expr/cel.py 求值；原结构化条件组 groups 已退役——零兼容，存量已迁移）。
 """
 
 from __future__ import annotations

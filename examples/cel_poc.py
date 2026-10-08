@@ -8,7 +8,7 @@
 - 编译期拦截：语法错误在 compile 报 CELParseError；
 - 静态检查现状：未声明变量/未知函数**只在运行期**报 CELEvalError（缺口，需自建薄层）；
 - 健壮性：链式表达式递归悬崖（RecursionError）与数据侧 comprehension 病态；
-- 性能：与现状 asteval 沙箱（flowork.expr.formula）同条件对比。
+- 性能：PoC 时与当时的 asteval 沙箱同条件对比（asteval 基线已随换绑退役，数字仅作历史记录）。
 """
 
 from __future__ import annotations

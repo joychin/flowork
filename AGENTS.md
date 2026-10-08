@@ -29,8 +29,9 @@ flowork/
 ├── definitions/   定义层：node(FlowNode基类) flow(连线/条件) builtin(内置Spec)
 │                  definition(模型+JSON编解码) validator(设计时校验) builder(Python DSL)
 ├── runtime/       运行时：behavior(NodeBehavior+NodeContext) registry(注册表) lifecycle(状态枚举)
-├── expr/          条件求值：conditions(结构化条件组) formula(asteval 公式沙箱)
-├── spi/           端口协议：Clock/WorkCalendar/OrgDirectory/Notifier
+├── expr/          表达式层：cel(CEL 沙箱+静态检查) catalog(词汇目录) context(上下文装配)
+│                  conditions(条件求值薄层)
+├── spi/           端口协议：Clock/WorkCalendar/OrgDirectory/ExpressionFunctions/EventSink/Notifier
 ├── events/        领域事件类型（M1 起随 Command 管线落 outbox）
 ├── tasks/ participants/ persistence/ engine/ jobs/ cli/   # 内核主体（engine 已按职责拆分多文件）
 ├── directory/     目录（M-A）：组织/角色/用户/Agent 映射（agents/roles/store/orm）
