@@ -40,20 +40,26 @@ MAX_BINARY_OPS = 255  # 每个二元节点计一次运算；255 次 ⇒ 256 项
 # 变量序列化上限（间接约束 comprehension 可遍历的集合规模）。
 MAX_VARIABLE_BYTES = 1024 * 1024
 
-# CEL 内建全局函数（标准库 + comprehension 宏）：静态检查免检名单——
+# CEL 内建全局函数（celpy base_functions + comprehension 宏）：静态检查免检名单——
 # 未注册又不在名单内的函数调用才报「未知函数」（validator 侧使用）。
+# 注意 celpy 的真名是 startsWith/endsWith（camelCase），contains/bool/list/null_type
+# 亦是全局可调内建（能力补足 P0-2 批修正，此前 starts/ends 为误写）。
 CEL_BUILTIN_FUNCTIONS = frozenset(
     {
         "size",
         "has",
-        "starts",
-        "ends",
+        "startsWith",
+        "endsWith",
+        "contains",
         "matches",
         "string",
         "double",
         "int",
         "uint",
         "bytes",
+        "bool",
+        "list",
+        "null_type",
         "duration",
         "timestamp",
         "dyn",

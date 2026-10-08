@@ -210,3 +210,72 @@ def test_contrib_cel_vocabulary_callable_semantics():
     assert evaluate_formula('has_role("u_bob", "eng_lead")', {}, functions=table)
     assert not evaluate_formula('has_role("u_zhang", "eng_lead")', {}, functions=table)
     assert evaluate_formula('users_with_role("eng_lead").size() == 1', {}, functions=table)
+
+
+# —— contrib 数值/字符串词汇包（numeric_vocabulary，能力补足 P0-2）——
+
+
+def test_contrib_numeric_vocabulary_port_shape():
+    """numeric_vocabulary 返回 ExpressionFunctions：六词汇且带类型签名与中文 label。"""
+    port = contrib.numeric_vocabulary()
+    table = port.functions()
+    assert set(table) == {"split", "abs", "max", "min", "sort", "sum"}
+    expected = {
+        "split": (("string", "string"), "list", "拆分字符串"),
+        "abs": (("number",), "number", "绝对值"),
+        "max": (("list",), "number", "列表最大值"),
+        "min": (("list",), "number", "列表最小值"),
+        "sort": (("list",), "list", "列表排序"),
+        "sum": (("list",), "number", "列表求和"),
+    }
+    for name, (params, returns, label) in expected.items():
+        assert table[name].signature.params == params
+        assert table[name].signature.returns == returns
+        assert table[name].signature.label == label
+
+
+def test_contrib_numeric_vocabulary_semantics():
+    """CEL 面直测：拆分/绝对值/最值/排序/求和，空列表语义（max/min→null，sum→0）。"""
+    from flowork.expr.cel import evaluate_formula, evaluate_formula_value
+
+    table = {name: item.fn for name, item in contrib.numeric_vocabulary().functions().items()}
+    assert evaluate_formula('split("a,b,c", ",").size() == 3', {}, functions=table)
+    assert evaluate_formula('split("a,b,c", ",")[1] == "b"', {}, functions=table)
+    assert evaluate_formula('split("solo", "") == ["solo"]', {}, functions=table)
+    assert evaluate_formula("abs(0 - 5) == 5", {}, functions=table)
+    assert evaluate_formula("max([3, 1, 2]) == 3", {}, functions=table)
+    assert evaluate_formula("min([3, 1, 2]) == 1", {}, functions=table)
+    assert evaluate_formula("sort([3, 1, 2]) == [1, 2, 3]", {}, functions=table)
+    assert evaluate_formula('sort(["b", "a"]) == ["a", "b"]', {}, functions=table)
+    assert evaluate_formula("sort([3, 1, 2])[0] == 1", {}, functions=table)
+    assert evaluate_formula("sum([1, 2, 3]) == 6", {}, functions=table)
+    assert evaluate_formula("max([]) == null", {}, functions=table)
+    assert evaluate_formula("min([]) == null", {}, functions=table)
+    assert evaluate_formula("sum([]) == 0", {}, functions=table)
+    # 与 comprehension 组合：排序后过滤
+    assert evaluate_formula("sort([3, 1, 2]).filter(x, x > 1) == [2, 3]", {}, functions=table)
+    assert evaluate_formula_value("sum([1, 2])", {}, functions=table) == 3
+
+
+def test_contrib_numeric_min_does_not_shadow_method_form():
+    """注册全局 min 后，celpy 的 [..].min() 方法形态仍可用（同签名共存）。"""
+    from flowork.expr.cel import evaluate_formula
+
+    table = {name: item.fn for name, item in contrib.numeric_vocabulary().functions().items()}
+    assert evaluate_formula("[3, 1].min() == 1", {}, functions=table)
+    assert evaluate_formula("min([5, 2]) == 2", {}, functions=table)
+
+
+def test_contrib_numeric_type_mismatch_is_flowork_error():
+    """类型不符 → FloworkError（经 cel 归一 FormulaError，技术故障语义）。"""
+    from flowork.expr.cel import FormulaError, evaluate_formula
+
+    table = {name: item.fn for name, item in contrib.numeric_vocabulary().functions().items()}
+    with pytest.raises(FormulaError, match="数值"):
+        evaluate_formula('abs("text") == 1', {}, functions=table)
+    with pytest.raises(FormulaError, match="列表"):
+        evaluate_formula("max(3) == 1", {}, functions=table)
+    with pytest.raises(FormulaError, match="字符串"):
+        evaluate_formula("split(1, 2) == []", {}, functions=table)
+    with pytest.raises(FormulaError, match="同为"):
+        evaluate_formula('sort([1, "a"]) == []', {}, functions=table)

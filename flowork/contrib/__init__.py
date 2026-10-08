@@ -24,29 +24,19 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from flowork.contrib._registry import FixedFunctions
+from flowork.contrib.numeric import numeric_vocabulary
 from flowork.errors import FloworkError
 from flowork.spi.ports import ExpressionFunction, ExpressionFunctions, FunctionSignature
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
-
     from flowork.participants.org_directory import OrgDirectoryLike
 
-__all__ = ["ContribDirectoryMissing", "cel_vocabulary"]
+__all__ = ["ContribDirectoryMissing", "cel_vocabulary", "numeric_vocabulary"]
 
 
 class ContribDirectoryMissing(FloworkError):
     """contrib 词汇需要配置组织目录（EngineConfig.org）。"""
-
-
-class _CelVocabulary:
-    """固定注册表的 ExpressionFunctions 实现（cel_vocabulary 返回值）。"""
-
-    def __init__(self, table: Mapping[str, ExpressionFunction]) -> None:
-        self._table = dict(table)
-
-    def functions(self) -> Mapping[str, ExpressionFunction]:
-        return self._table
 
 
 def cel_vocabulary(org: OrgDirectoryLike) -> ExpressionFunctions:
@@ -67,7 +57,7 @@ def cel_vocabulary(org: OrgDirectoryLike) -> ExpressionFunctions:
     def has_role(user: str, role: str) -> bool:
         return bool(role) and org.is_member(user, f"role:{role}")
 
-    return _CelVocabulary(
+    return FixedFunctions(
         {
             "manager_of": ExpressionFunction(
                 FunctionSignature(("one_user",), "one_user", label="取上级"), manager_of

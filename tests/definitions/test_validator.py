@@ -450,3 +450,65 @@ def test_mapping_input_unknown_variable_is_error(registry):
     )
     definition.variables = [ProcessVariable(name="amount", type="number")]
     assert "expression.variable.unknown" in error_rules(definition, registry)
+
+
+# —— CEL 内建免检名单与数值词汇静态对照（能力补足 P0-2）——
+
+
+def test_cel_builtin_camel_case_names_pass(registry):
+    """startsWith/endsWith/contains 是 celpy 真名：全局调用不误报未注册（回归）。"""
+    definition = _cel_flow(
+        registry,
+        formula='startsWith(code, "A") && endsWith(code, "Z") && contains(code, "mid")',
+        declare=("code",),
+    )
+    rules = error_rules(definition, registry)
+    assert "condition.function.unknown" not in rules
+    assert "condition.variable.unknown" not in rules
+
+
+def test_cel_numeric_function_without_registry_warns(registry):
+    """裸内核（无注册表）用 split → WARNING（无法静态核对，词汇归宿主）。"""
+    definition = _cel_flow(registry, formula='split(name, ",").size() > 1', declare=("name",))
+    issues = validate_definition(definition, registry)
+    assert any(
+        i.rule == "condition.function.unknown" and i.level == IssueLevel.WARNING for i in issues
+    )
+
+
+def test_cel_numeric_function_missing_from_registry_is_error(registry):
+    """注册表已配置但不含 split → ERROR（内核零内置，词汇须显式挂载）。"""
+    functions = _registry_with()
+    definition = _cel_flow(registry, formula='split(name, ",").size() > 1', declare=("name",))
+    issues = validate_definition(definition, registry, expression_functions=functions)
+    assert any(
+        i.rule == "condition.function.unknown" and i.level == IssueLevel.ERROR for i in issues
+    )
+
+
+def test_cel_numeric_vocabulary_registered_passes(registry):
+    """挂 numeric_vocabulary 后 split/sum/max 全过（签名对照 + label 齐备）。"""
+    from flowork import contrib
+
+    definition = _cel_flow(
+        registry,
+        formula='split(name, ",").size() > 1 && max(items) >= 3 && sum(items) > 5',
+        declare=("name", "items"),
+    )
+    issues = validate_definition(
+        definition, registry, expression_functions=contrib.numeric_vocabulary()
+    )
+    assert not [
+        i for i in issues if i.rule.startswith("condition.function") and i.level == IssueLevel.ERROR
+    ]
+
+
+def test_cel_numeric_function_arity_mismatch_is_error(registry):
+    """sum 的注册签名是单列表入参：双参调用 → arity ERROR（严格等值）。"""
+    from flowork import contrib
+
+    definition = _cel_flow(registry, formula="sum(items, 2) > 1", declare=("items",))
+    issues = validate_definition(
+        definition, registry, expression_functions=contrib.numeric_vocabulary()
+    )
+    assert any(i.rule == "condition.function.arity" and i.level == IssueLevel.ERROR for i in issues)
