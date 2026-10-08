@@ -8,6 +8,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from flowork.cli.instance import instance_app
 from flowork.definitions.builder import FlowBuilder
 from flowork.definitions.builtin import RouteMode
 from flowork.definitions.definition import load_definition_file
@@ -18,6 +19,7 @@ from flowork.engine.engine import ProcessEngine
 from flowork.runtime.registry import create_registry
 
 app = typer.Typer(help="flowork 流程引擎 CLI", no_args_is_help=True)
+app.add_typer(instance_app, name="instance")
 console = Console()
 
 EXAMPLES = Path(__file__).parent.parent.parent / "examples"

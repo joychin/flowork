@@ -38,6 +38,9 @@ engine.close()
 | `list_incidents(instance_id=None)` | Incident 列表（open/resolved） |
 | `resolve_incident(incident_id, action="resume"\|"cancel", actor="admin")` | 修复挂起实例 |
 | `move_token(token_id, target_activity, actor="admin") -> str` | 管理员令牌直移 |
+| `update_variables(instance_id, updates, *, actor, as_agent=False, reason="") -> dict` | 外部受控改值（PATCH 合并；白名单=声明∪input schema∪既有键、保留键拒、类型对位、≤256KB、终态拒；发 variables_updated） |
+| `variables_of(instance_id) -> dict` | 变量值全集（只读，含运行期键） |
+| `variable_history(instance_id, *, name=None, limit=50, offset=0)` | 变量血缘（改前/改后+写方归因，倒序；全写方覆盖） |
 
 ## TaskService（任务）
 
