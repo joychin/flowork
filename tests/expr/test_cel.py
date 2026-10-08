@@ -221,3 +221,9 @@ def test_value_formula_shares_guardrails():
         evaluate_formula_value("amount", {"blob": "x" * 1_100_000})
     with pytest.raises(FormulaError):
         evaluate_formula_value("nosuchvar", {})
+
+
+def test_non_ascii_variable_names_do_not_poison_evaluation():
+    """中文变量名不可被 CEL 引用，但也不得牵连同上下文的其他求值（celpy Invalid name 规避）。"""
+    assert evaluate_formula("amount > 100", {"amount": 200, "金额": 1200})
+    assert evaluate_formula_value("'张三'", {"金额": 1200}) == "张三"

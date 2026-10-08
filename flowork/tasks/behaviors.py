@@ -28,8 +28,6 @@ __all__ = [
     "register_builtin_behaviors",
 ]
 
-ORIGINATOR = "originator"
-
 
 def register_builtin_behaviors(registry: NodeRegistry) -> None:
     """把内置行为接入注册表（与自定义行为同一入口）。"""

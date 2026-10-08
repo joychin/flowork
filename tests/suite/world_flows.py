@@ -42,14 +42,14 @@ def expense_definition() -> ProcessDefinition:
         .user_task(
             "quick_review",
             "主管快审",
-            assignee="manager_of()",
+            assignee="manager_of(initiator)",
             auto_pass_originator=True,
             reject_target="start",
         )
         .user_task(
             "fin_countersign",
             "财务会签",
-            assignees=["users_with_role(finance_approver)"],
+            assignees=['users_with_role("finance_approver")'],
             multi_instance=MultiInstance(
                 mode="parallel", approve_exit=">=2", disapprove_exit=">=1"
             ),
@@ -58,7 +58,7 @@ def expense_definition() -> ProcessDefinition:
         .user_task(
             "level_sign",
             "逐级签批",
-            assignees=["u_cfo", "u_ceo"],
+            assignees=["'u_cfo'", "'u_ceo'"],
             multi_instance=MultiInstance(mode="sequential", approve_exit="all"),
         )
         .cc_task("cc_fin", "抄送财务总监", recipients=["u_cfo"])
@@ -90,7 +90,7 @@ def supplier_check_definition() -> ProcessDefinition:
     return (
         FlowBuilder("suite_supplier_check", "套件·供应商合规核查")
         .start()
-        .user_task("check", "合规核查", assignee="u_compliance")
+        .user_task("check", "合规核查", assignee="'u_compliance'")
         .end("supplier_end", "核查结束")
         .flow("start", "check")
         .flow("check", "supplier_end")
@@ -125,11 +125,11 @@ def purchase_definition() -> ProcessDefinition:
         .user_task(
             "dept_review",
             "主管审批",
-            assignee="manager_of()",
+            assignee="manager_of(initiator)",
             reject_target="start",
         )
         .branch("fork_route", "并行分流", route_mode="all_match")
-        .user_task("legal_track", "法务通道", assignee="u_ceo")
+        .user_task("legal_track", "法务通道", assignee="'u_ceo'")
         .call_activity(
             "compliance_track",
             "合规子流程",
@@ -140,14 +140,14 @@ def purchase_definition() -> ProcessDefinition:
         .user_task(
             "final_sign",
             "会签收口（等齐）",
-            assignees=["u_cfo", "u_compliance"],
+            assignees=["'u_cfo'", "'u_compliance'"],
             multi_instance=MultiInstance(mode="parallel", approve_exit=">=60%"),
             advance_policy="all",
         )
         .user_task(
             "admin_gate",
             "管理员兜底",
-            assignees=["users_with_role(ghost_role)"],
+            assignees=['users_with_role("ghost_role")'],
             no_participant_policy="to_admins",
         )
         .service_task("pay_order", "采购打款", action="make_payment")

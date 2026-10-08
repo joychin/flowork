@@ -7,7 +7,8 @@
   全不中走默认边，再不中把"非默认无条件边"视为兜底；仍无 → RouteError。
 
 CEL 词汇接线（spec §4.3/§9）：``functions`` 自 EngineConfig.expression_functions
-拍平而来，可选透传至 expr.cel；``initiator`` 为求值保留标识符（P0-1 决策）。
+拍平而来（expr.context.expression_functions_of），可选透传至 expr.cel；
+``initiator`` 为求值保留标识符（P0-1 决策）。
 """
 
 from __future__ import annotations
@@ -23,7 +24,7 @@ from flowork.expr.context import expression_context
 if TYPE_CHECKING:
     from flowork.definitions.flow import SequenceFlow
 
-__all__ = ["evaluation_variables", "expression_functions_of", "select_outgoing"]
+__all__ = ["evaluation_variables", "select_outgoing"]
 
 Mode = Literal["all_match", "first_match"]
 
@@ -34,14 +35,6 @@ def evaluation_variables(instance: Any, variables: Mapping[str, Any]) -> dict[st
     显式声明同名变量时以声明为准（setdefault）；实例无 start_user 时缺省。
     """
     return expression_context(variables, start_user=getattr(instance, "start_user", None))
-
-
-def expression_functions_of(config: Any) -> Mapping[str, Callable[..., object]] | None:
-    """从 EngineConfig 拍平 CEL 函数表（端口 → {名: 可调用}）；未配置返回 None。"""
-    port = getattr(config, "expression_functions", None)
-    if port is None:
-        return None
-    return {name: registered.fn for name, registered in port.functions().items()}
 
 
 def select_outgoing(

@@ -23,7 +23,7 @@ from flowork.events.domain import DomainEvent
 from flowork.persistence.orm import EventOutboxRow, ProcessDefinitionRow
 
 
-def _linear(code: str = "ver", assignee: str = "u_a") -> ProcessDefinition:
+def _linear(code: str = "ver", assignee: str = "'u_a'") -> ProcessDefinition:
     return (
         FlowBuilder(code)
         .start()

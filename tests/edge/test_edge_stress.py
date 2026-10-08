@@ -14,7 +14,7 @@ from flowork.errors import TaskNotAvailableError, UnknownNodeKind
 from flowork.expr.cel import FormulaError, evaluate_formula
 
 
-def _linear(code: str, assignee: str = "u_a") -> FlowBuilder:
+def _linear(code: str, assignee: str = "'u_a'") -> FlowBuilder:
     return (
         FlowBuilder(code)
         .start()
@@ -123,7 +123,7 @@ def test_unicode_flow_end_to_end():
     definition = (
         FlowBuilder("中文流程", "报销——差旅费")
         .start("发起", "提交申请")
-        .user_task("主管审批", assignee="张三")
+        .user_task("主管审批", assignee="'张三'")
         .cc_task("抄送财务", recipients=["李四"])
         .end("结束", "归档")
         .connect("发起", "主管审批")
@@ -159,7 +159,7 @@ def test_deep_chain_50_nodes():
     previous = "start"
     for index in range(50):
         code = f"n{index:02d}"
-        builder.user_task(code, assignee=f"u_{index:02d}")
+        builder.user_task(code, assignee=f"'u_{index:02d}'")
         builder.connect(previous, code)
         previous = code
     builder.end().connect(previous, "end")
@@ -197,7 +197,7 @@ def test_timeout_job_skipped_when_task_done_early():
         .start()
         .user_task(
             "t",
-            assignee="u_a",
+            assignee="'u_a'",
             timeout=TimeoutPolicy(due_minutes=30, strategy="auto_approve"),
         )
         .end()
@@ -305,7 +305,7 @@ def test_paged_tasks_pagination():
     definition = (
         FlowBuilder("page")
         .start()
-        .user_task("a", assignees=["u1", "u2", "u3"])
+        .user_task("a", assignees=["'u1'", "'u2'", "'u3'"])
         .end()
         .connect("start", "a")
         .connect("a", "end")

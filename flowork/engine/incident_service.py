@@ -150,11 +150,8 @@ class IncidentMixin:
 
     def _skip_failed_nodes(self, ctx: CommandContext, instance_id: str, actor: str) -> None:
         """跳过故障节点：未完令牌视为完成，按条件路由激活后继（管理员手术，绕放行门）。"""
-        from flowork.engine.routing import (
-            evaluation_variables,
-            expression_functions_of,
-            select_outgoing,
-        )
+        from flowork.engine.routing import evaluation_variables, select_outgoing
+        from flowork.expr.context import expression_functions_of
 
         kernel = self._engine.kernel_for(ctx)
         instance = ctx.session.get(ProcessInstanceRow, instance_id)

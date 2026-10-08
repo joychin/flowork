@@ -18,8 +18,8 @@ def _flow(code: str = "snap"):
     return (
         FlowBuilder(code)
         .start()
-        .user_task("a", assignee="u_zhang")
-        .user_task("b", assignee="u_bob")
+        .user_task("a", assignee="'u_zhang'")
+        .user_task("b", assignee="'u_bob'")
         .end()
         .connect("start", "a")
         .connect("a", "b")

@@ -86,7 +86,6 @@ def test_org_directory_port_four_methods():
     """OrgDirectoryLike 实现类结构性满足四方法（spec §9 签名）。"""
     for method in ("is_member", "subjects_in", "manager_of", "snapshot"):
         assert callable(getattr(OrgDirectory(), method, None)), f"静态目录缺 {method}"
-        assert callable(getattr(contrib, "org_vocabulary", None))
 
 
 ORG = OrgDirectory.from_dict(
@@ -165,33 +164,23 @@ def test_validate_warns_group_subjects_without_directory():
     }
 
 
-class _FakeInstance:
-    def __init__(self, start_user: str) -> None:
-        self.start_user = start_user
-
-
-class _FakeCtx:
-    """contrib 词汇所需的最小上下文（instance.start_user + variables）。"""
-
-    def __init__(self, start_user: str, variables: dict[str, str] | None = None) -> None:
-        self.instance = _FakeInstance(start_user)
-        self.variables = variables or {}
-
-
 def test_contrib_has_role_predicate():
-    """contrib has_role(one_user, string)→bool：谓词语义（条件位）。"""
-    functions = contrib.org_vocabulary()
-    ctx = _FakeCtx("u_bob")
-    assert functions.call("has_role", ctx, ORG, ["u_bob", "eng_lead"]) is True
-    assert functions.call("has_role", ctx, ORG, ["u_zhang", "eng_lead"]) is False
+    """contrib has_role(one_user, string)→bool：谓词语汇（条件位，CEL 面）。"""
+    from flowork.expr.cel import evaluate_formula
+
+    table = {name: item.fn for name, item in contrib.cel_vocabulary(ORG).functions().items()}
+    assert evaluate_formula('has_role("u_bob", "eng_lead")', {}, functions=table)
+    assert not evaluate_formula('has_role("u_zhang", "eng_lead")', {}, functions=table)
 
 
 @pytest.mark.parametrize("subject", ["role:finance", "role:nope"])
 def test_contrib_manager_of_rejects_role(subject):
-    functions = contrib.org_vocabulary()
-    ctx = _FakeCtx("u_x", {"x": subject})
+    """manager_of 吃 role: 主体 → 报错（贡献包内置守卫，经 CEL 面调用）。"""
+    from flowork.expr.cel import evaluate_formula_value
+
+    table = {name: item.fn for name, item in contrib.cel_vocabulary(ORG).functions().items()}
     with pytest.raises(Exception, match="角色主体"):
-        functions.call("manager_of", ctx, ORG, ["x"])
+        evaluate_formula_value(f'manager_of("{subject}")', {}, functions=table)
 
 
 # —— contrib CEL 注册面（cel_vocabulary，spec §4.3/§9）——

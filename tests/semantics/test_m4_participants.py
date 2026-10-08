@@ -1,4 +1,9 @@
-"""M4 语义测试：组织目录 / 取人函数 / 参与者策略矩阵 / 委托 / 无参与者兜底。"""
+"""M4 语义测试：组织目录 / 取人公式（单轨 CEL）/ 参与者策略矩阵 / 委托 / 兜底。
+
+位点统一（spec §4.2）：assignee/assignees 每项为 CEL 表达式——字面人写
+字符串字面量 ``'u_a'``，函数/变量引用如 ``manager_of(initiator)``。
+求值错（未注册函数/语法/类型）按错误二分包 EngineExecutionError（挂起+故障单）。
+"""
 
 from __future__ import annotations
 
@@ -10,9 +15,7 @@ from flowork import contrib
 from flowork.definitions.builder import FlowBuilder
 from flowork.engine.config import EngineConfig
 from flowork.engine.engine import ProcessEngine
-from flowork.engine.kernel import NoParticipantError
-from flowork.errors import FloworkError
-from flowork.participants.functions import UnknownFunction, parse_expression
+from flowork.engine.kernel import EngineExecutionError, NoParticipantError
 from flowork.participants.org_directory import OrgDirectory
 
 ORG_DATA = {
@@ -44,11 +47,13 @@ def _org_data_no_delegation() -> dict:
 
 @pytest.fixture
 def org_engine() -> ProcessEngine:
-    """无委托的组织目录 + contrib 词汇（委托语义由专门用例验证）。"""
+    """无委托的组织目录 + contrib CEL 词汇（委托语义由专门用例验证）。"""
     return ProcessEngine(
         EngineConfig(
             org=OrgDirectory.from_dict(_org_data_no_delegation()),
-            participant_functions=contrib.org_vocabulary(),
+            expression_functions=contrib.cel_vocabulary(
+                OrgDirectory.from_dict(_org_data_no_delegation())
+            ),
         )
     )
 
@@ -120,30 +125,21 @@ def test_org_from_yaml(examples_dir: Path):
     assert org.admins == ["u_admin"]
 
 
-# —— 取人函数（v2.1：注册表出厂为空，contrib 三词汇 + 宿主自定义）——
+# —— 取人公式（单轨 CEL：contrib 三词汇 + 宿主自定义）——
 
 
-def test_parse_expression_function():
-    call = parse_expression("users_with_role('finance')")
-    assert call is not None and call.name == "users_with_role" and call.args == ["finance"]
-
-
-def test_parse_expression_literal():
-    assert parse_expression("u_alice") is None
-
-
-def test_registry_empty_by_default_without_org():
-    """v2.1：内核注册表出厂为空——目录在而词汇未挂时，函数调用报 UnknownFunction。"""
+def test_registry_empty_by_default_without_vocabulary():
+    """内核注册表出厂为空——目录在而词汇未挂时，公式调用报技术故障（挂起+故障单）。"""
     engine = ProcessEngine(EngineConfig(org=OrgDirectory.from_dict(_org_data_no_delegation())))
     flow = (
         FlowBuilder("f_empty")
         .start()
-        .user_task("a", assignee="manager_of()")
+        .user_task("a", assignee="manager_of(initiator)")
         .end()
         .connect("start", "a")
         .connect("a", "end")
     )
-    with pytest.raises(UnknownFunction):
+    with pytest.raises(EngineExecutionError, match="取人公式求值失败"):
         run_flow(engine, flow)
 
 
@@ -151,21 +147,21 @@ def test_unknown_function_raises(org_engine: ProcessEngine):
     flow = (
         FlowBuilder("f_bad")
         .start()
-        .user_task("a", assignee="no_such_fn()")
+        .user_task("a", assignee="no_such_fn(initiator)")
         .end()
         .connect("start", "a")
         .connect("a", "end")
     )
-    with pytest.raises(UnknownFunction):
+    with pytest.raises(EngineExecutionError, match="取人公式求值失败"):
         run_flow(org_engine, flow)
 
 
-def test_function_originator_literal(org_engine: ProcessEngine):
-    """发起人字面量（等价 CEL 命名空间 initiator，不占注册表）。"""
+def test_initiator_identifier_resolves_start_user(org_engine: ProcessEngine):
+    """发起人＝CEL 保留标识符 initiator（原 originator 魔法词，位点统一后退役）。"""
     flow = (
         FlowBuilder("f1")
         .start()
-        .user_task("a", assignee="originator")
+        .user_task("a", assignee="initiator")
         .end()
         .connect("start", "a")
         .connect("a", "end")
@@ -175,12 +171,12 @@ def test_function_originator_literal(org_engine: ProcessEngine):
     assert [t.assignee for t in tasks] == ["u_zhang"]
 
 
-def test_function_manager_of_no_args(org_engine: ProcessEngine):
-    """manager_of() 无参＝发起人的上级。"""
+def test_function_manager_of_initiator(org_engine: ProcessEngine):
+    """manager_of(initiator)＝发起人的上级。"""
     flow = (
         FlowBuilder("f2")
         .start()
-        .user_task("a", assignee="manager_of()")
+        .user_task("a", assignee="manager_of(initiator)")
         .end()
         .connect("start", "a")
         .connect("a", "end")
@@ -189,24 +185,17 @@ def test_function_manager_of_no_args(org_engine: ProcessEngine):
     assert [t.assignee for t in org_engine.task.list_tasks(instance_id=instance_id)] == ["u_bob"]
 
 
-def test_contrib_requires_directory():
-    """contrib 词汇基于目录端口——未配置目录时报技术性错误（不留静默空结果）。"""
-    functions = contrib.org_vocabulary()
-    with pytest.raises(contrib.ContribDirectoryMissing):
-        functions.call("manager_of", None, None, [])  # type: ignore[arg-type]
-
-
 def test_contrib_manager_of_rejects_role_subject(org_engine: ProcessEngine):
-    """manager_of 吃 role: 主体 → 设计期语义错误（spec §5.5）。"""
+    """manager_of 吃 role: 主体 → 技术故障（设计期语义错误，spec §5.5）。"""
     flow = (
         FlowBuilder("f_role")
         .start()
-        .user_task("a", assignee="manager_of('x')")
+        .user_task("a", assignee="manager_of(x)")
         .end()
         .connect("start", "a")
         .connect("a", "end")
     )
-    with pytest.raises(FloworkError):
+    with pytest.raises(EngineExecutionError):
         run_flow(org_engine, flow, variables={"x": "role:finance"})
 
 
@@ -215,7 +204,7 @@ def test_contrib_manager_of_org_subject_returns_dept_head(org_engine: ProcessEng
     flow = (
         FlowBuilder("f_org")
         .start()
-        .user_task("a", assignee="manager_of('x')")
+        .user_task("a", assignee="manager_of(x)")
         .end()
         .connect("start", "a")
         .connect("a", "end")
@@ -228,7 +217,7 @@ def test_function_users_with_role(org_engine: ProcessEngine):
     flow = (
         FlowBuilder("f4")
         .start()
-        .user_task("a", assignees=["users_with_role('finance')"])
+        .user_task("a", assignees=['users_with_role("finance")'])
         .end()
         .connect("start", "a")
         .connect("a", "end")
@@ -239,10 +228,11 @@ def test_function_users_with_role(org_engine: ProcessEngine):
 
 
 def test_function_variable_argument(org_engine: ProcessEngine):
+    """标识符实参＝变量引用（manager_of(applicant)）。"""
     flow = (
         FlowBuilder("f5")
         .start()
-        .user_task("a", assignee="manager_of('applicant')")
+        .user_task("a", assignee="manager_of(applicant)")
         .end()
         .connect("start", "a")
         .connect("a", "end")
@@ -251,67 +241,86 @@ def test_function_variable_argument(org_engine: ProcessEngine):
     assert [t.assignee for t in org_engine.task.list_tasks(instance_id=instance_id)] == ["u_bob"]
 
 
-def test_host_registered_vocabulary_dept_head(org_engine: ProcessEngine):
-    """宿主自定义词汇演示：dept_head()（部门类词汇归宿主，spec §5.5）。"""
-
-    def _dept_head(ctx, org, department: str = "") -> list[str]:
-        directory = org
-        assert directory is not None
-        dept = str(ctx.variables.get(department, department)) if department else ""
-        if not dept:
-            dept = directory.department_of(ctx.instance.start_user) or ""
-        return [h for h in [directory.department_head(dept)] if h]
-
-    org_engine.config.participant_functions.register("dept_head", _dept_head)
+def test_mixed_literal_and_function_expressions(org_engine: ProcessEngine):
+    """字面人与函数混排：str 与 list 结果归并入池。"""
     flow = (
-        FlowBuilder("f3")
+        FlowBuilder("f_mix")
         .start()
-        .user_task("a", assignee="dept_head()")
+        .user_task(
+            "a",
+            assignee="'u_ceo'",
+            assignees=['users_with_role("finance")', "manager_of(initiator)"],
+        )
         .end()
         .connect("start", "a")
         .connect("a", "end")
     )
-    instance_id = run_flow(org_engine, flow)  # 发起人在 d_eng → 主管 u_bob
-    assert [t.assignee for t in org_engine.task.list_tasks(instance_id=instance_id)] == ["u_bob"]
+    instance_id = run_flow(org_engine, flow)
+    assignees = sorted(t.assignee for t in org_engine.task.list_tasks(instance_id=instance_id))
+    assert assignees == ["u_bob", "u_ceo", "u_fin1", "u_fin2"]
 
 
-def test_host_registered_vocabulary_previous_handlers(org_engine: ProcessEngine):
-    """宿主自定义词汇演示：previous_handlers()（上一节点办理人）。"""
-
-    def _previous_handlers(ctx, org, activity: str = "") -> list[str]:
-        from sqlalchemy import select
-
-        from flowork.persistence.orm import TaskHistoryRow
-
-        assert ctx.token is not None
-        activity_code = activity or ctx.token.source_activity_code or ""
-        if not activity_code:
-            return []
-        rows = ctx.session.scalars(
-            select(TaskHistoryRow).where(
-                TaskHistoryRow.instance_id == ctx.instance.id,
-                TaskHistoryRow.activity_code == activity_code,
-                TaskHistoryRow.outcome != "cancelled",
-            )
-        )
-        return list(dict.fromkeys(row.assignee for row in rows))
-
-    org_engine.config.participant_functions.register("previous_handlers", _previous_handlers)
+def test_predicate_result_rejected_in_participant_position(org_engine: ProcessEngine):
+    """谓词函数误用取人位（bool 结果）→ NoParticipantError 兜底拒绝。"""
     flow = (
-        FlowBuilder("f6")
+        FlowBuilder("f_pred")
         .start()
-        .user_task("a", assignee="u_bob")
-        .user_task("b", assignee="previous_handlers()")
+        .user_task("a", assignee='has_role(initiator, "eng_lead")')
         .end()
         .connect("start", "a")
-        .connect("a", "b")
-        .connect("b", "end")
+        .connect("a", "end")
+    )
+    with pytest.raises(NoParticipantError, match="谓词"):
+        run_flow(org_engine, flow)
+
+
+def test_none_result_propagates_as_empty(org_engine: ProcessEngine):
+    """查无传播（spec §5.5）：表达式求值为 null 贡献空，不报错；空池走兜底。"""
+    flow = (
+        FlowBuilder("f_none")
+        .start()
+        .user_task("a", assignee='manager_of("u_ceo")', no_participant_policy="to_admins")
+        .end()
+        .connect("start", "a")
+        .connect("a", "end")
     )
     instance_id = run_flow(org_engine, flow)
-    a_task = org_engine.task.list_tasks(instance_id=instance_id)[0]
-    org_engine.task.complete(a_task.id, actor="u_bob")
-    b_task = org_engine.task.list_tasks(instance_id=instance_id)[0]
-    assert b_task.assignee == "u_bob"  # 上一节点办理人
+    assert [t.assignee for t in org_engine.task.list_tasks(instance_id=instance_id)] == ["u_admin"]
+
+
+class _HostVocabulary:
+    """宿主自定义词汇注册演示（ExpressionFunctions 端口的最小实现）。"""
+
+    def __init__(self, org: OrgDirectory) -> None:
+        from flowork.spi.ports import ExpressionFunction, FunctionSignature
+
+        def dept_head(user: str) -> str | None:
+            dept = org.department_of(user) or ""
+            return org.department_head(dept)
+
+        self._table = {
+            "dept_head": ExpressionFunction(FunctionSignature(("one_user",), "one_user"), dept_head)
+        }
+
+    def functions(self):
+        return self._table
+
+
+def test_host_registered_vocabulary_dept_head(org_engine: ProcessEngine):
+    """宿主自定义纯读闭包词汇：dept_head(initiator)（发起人部门主管）。"""
+    org_engine.config.expression_functions = _HostVocabulary(
+        OrgDirectory.from_dict(_org_data_no_delegation())
+    )
+    flow = (
+        FlowBuilder("f3")
+        .start()
+        .user_task("a", assignee="dept_head(initiator)")
+        .end()
+        .connect("start", "a")
+        .connect("a", "end")
+    )
+    instance_id = run_flow(org_engine, flow)  # 发起人 u_zhang 在 d_eng → 主管 u_bob
+    assert [t.assignee for t in org_engine.task.list_tasks(instance_id=instance_id)] == ["u_bob"]
 
 
 # —— 策略矩阵（8 例）——
@@ -321,7 +330,7 @@ def test_strategy_auto_pass_originator(org_engine: ProcessEngine):
     flow = (
         FlowBuilder("s1")
         .start()
-        .user_task("a", assignees=["u_zhang", "u_bob"], auto_pass_originator=True)
+        .user_task("a", assignees=["'u_zhang'", "'u_bob'"], auto_pass_originator=True)
         .end()
         .connect("start", "a")
         .connect("a", "end")
@@ -342,7 +351,7 @@ def test_strategy_all_auto_pass_completes_node(org_engine: ProcessEngine):
     flow = (
         FlowBuilder("s2")
         .start()
-        .user_task("a", assignees=["u_zhang"], auto_pass_originator=True)
+        .user_task("a", assignees=["'u_zhang'"], auto_pass_originator=True)
         .end()
         .connect("start", "a")
         .connect("a", "end")
@@ -355,9 +364,9 @@ def test_strategy_auto_pass_previous(org_engine: ProcessEngine):
     flow = (
         FlowBuilder("s3")
         .start()
-        .user_task("a", assignee="u_bob")
-        .user_task("b", assignee="u_bob", auto_pass_previous=True)
-        .user_task("c", assignee="u_ceo")
+        .user_task("a", assignee="'u_bob'")
+        .user_task("b", assignee="'u_bob'", auto_pass_previous=True)
+        .user_task("c", assignee="'u_ceo'")
         .end()
         .connect("start", "a")
         .connect("a", "b")
@@ -375,8 +384,8 @@ def test_strategy_auto_pass_participated(org_engine: ProcessEngine):
     flow = (
         FlowBuilder("s4")
         .start()
-        .user_task("a", assignee="u_ceo")
-        .user_task("b", assignee="u_ceo", auto_pass_participated=True)
+        .user_task("a", assignee="'u_ceo'")
+        .user_task("b", assignee="'u_ceo'", auto_pass_participated=True)
         .end()
         .connect("start", "a")
         .connect("a", "b")
@@ -391,8 +400,8 @@ def test_strategy_off_by_default(org_engine: ProcessEngine):
     flow = (
         FlowBuilder("s5")
         .start()
-        .user_task("a", assignee="u_bob")
-        .user_task("b", assignee="u_bob")
+        .user_task("a", assignee="'u_bob'")
+        .user_task("b", assignee="'u_bob'")
         .end()
         .connect("start", "a")
         .connect("a", "b")
@@ -448,7 +457,7 @@ def test_delegation_replaces_assignee():
     flow = (
         FlowBuilder("d1")
         .start()
-        .user_task("a", assignee="u_bob")
+        .user_task("a", assignee="'u_bob'")
         .end()
         .connect("start", "a")
         .connect("a", "end")
@@ -464,7 +473,7 @@ def test_delegation_in_multi_instance():
     flow = (
         FlowBuilder("d2")
         .start()
-        .user_task("a", assignees=["u_bob", "u_fin1"])
+        .user_task("a", assignees=["'u_bob'", "'u_fin1'"])
         .end()
         .connect("start", "a")
         .connect("a", "end")
@@ -482,7 +491,7 @@ def test_delegation_expired_keeps_assignee():
     flow = (
         FlowBuilder("d3")
         .start()
-        .user_task("a", assignee="u_bob")
+        .user_task("a", assignee="'u_bob'")
         .end()
         .connect("start", "a")
         .connect("a", "end")
@@ -499,7 +508,7 @@ def test_delegation_not_configured_is_noop():
     flow = (
         FlowBuilder("d4")
         .start()
-        .user_task("a", assignee="u_bob")
+        .user_task("a", assignee="'u_bob'")
         .end()
         .connect("start", "a")
         .connect("a", "end")
@@ -509,15 +518,15 @@ def test_delegation_not_configured_is_noop():
     assert [t.assignee for t in engine.task.list_tasks(instance_id=instance_id)] == ["u_bob"]
 
 
-# —— 简化模式回退（无组织目录，2 例）——
+# —— 无目录路径（2 例：同一条 CEL 求值路径，仅无委托/兜底）——
 
 
-def test_simple_fallback_without_org():
+def test_cel_without_org():
     engine = ProcessEngine()
     flow = (
         FlowBuilder("x1")
         .start()
-        .user_task("a", assignee="originator")
+        .user_task("a", assignee="initiator")
         .end()
         .connect("start", "a")
         .connect("a", "end")
@@ -527,7 +536,17 @@ def test_simple_fallback_without_org():
     assert [t.assignee for t in engine.task.list_tasks(instance_id=instance_id)] == ["u_me"]
 
 
-def test_functions_registry_custom():
-    functions = contrib.org_vocabulary()
-    functions.register("pick_boss", lambda ctx, org: ["u_chair"])
-    assert "pick_boss" in functions.names()
+def test_cel_error_without_org_suspends():
+    """无目录同样包技术故障：字面裸 id 是未声明变量 → 挂起 + 故障单。"""
+    engine = ProcessEngine()
+    flow = (
+        FlowBuilder("x2")
+        .start()
+        .user_task("a", assignee="u_bob")  # 未引号的裸 id：标识符=变量，非字面人
+        .end()
+        .connect("start", "a")
+        .connect("a", "end")
+    )
+    publish(engine, flow.build())
+    with pytest.raises(EngineExecutionError, match="取人公式求值失败"):
+        engine.runtime.start_process("x2", start_user="u_me")

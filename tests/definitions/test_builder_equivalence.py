@@ -13,8 +13,8 @@ def test_builder_matches_json_simple(registry, examples_dir):
     built = (
         FlowBuilder("simple_approval", "串行审批（示例 01）")
         .start("start", "发起")
-        .user_task("manager", "经理审批", assignee="u_manager")
-        .user_task("finance", "财务复核", assignee="u_finance")
+        .user_task("manager", "经理审批", assignee="'u_manager'")
+        .user_task("finance", "财务复核", assignee="'u_finance'")
         .end("end", "结束")
         .connect("start", "manager")
         .connect("manager", "finance")
@@ -30,12 +30,12 @@ def test_builder_matches_json_countersign_branch(registry, examples_dir):
     built = (
         FlowBuilder("countersign_branch", "条件分支 + 会签（示例 02）")
         .start("start", "发起")
-        .user_task("manager", "经理审批", assignee="u_manager")
+        .user_task("manager", "经理审批", assignee="'u_manager'")
         .branch("route", "按金额分流", route_mode=RouteMode.FIRST_MATCH)
         .user_task(
             "director",
             "总监会签",
-            assignees=["u_alice", "u_bob"],
+            assignees=["'u_alice'", "'u_bob'"],
             multi_instance=MultiInstance(mode="parallel", approve_exit=">=50%"),
             reject_target="manager",
         )

@@ -197,12 +197,12 @@ def _publish_full_demo_flow(engine: ProcessEngine) -> None:
     definition = (
         FlowBuilder("full_demo", "全流程演示")
         .start("start", "发起")
-        .user_task("manager", "经理审批", assignee="u_manager")
+        .user_task("manager", "经理审批", assignee="'u_manager'")
         .branch("route", "金额分流", route_mode=RouteMode.FIRST_MATCH)
         .user_task(
             "director",
             "总监会签",
-            assignees=["u_alice", "u_bob"],
+            assignees=["'u_alice'", "'u_bob'"],
             multi_instance=MultiInstance(
                 mode="parallel", approve_exit="all", disapprove_exit=">=1"
             ),

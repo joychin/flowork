@@ -40,8 +40,8 @@ def _role_gate_flow() -> ProcessDefinition:
         FlowBuilder("cel_gate")
         .start()
         .branch("gate")
-        .user_task("lead_review", assignee="u_bob")
-        .user_task("normal_review", assignee="u_zhang")
+        .user_task("lead_review", assignee="'u_bob'")
+        .user_task("normal_review", assignee="'u_zhang'")
         .end()
         .connect("start", "gate")
         .flow(

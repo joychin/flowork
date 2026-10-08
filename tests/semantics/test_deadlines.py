@@ -68,7 +68,7 @@ def test_multi_level_notify_fires_in_order():
         .start()
         .user_task(
             "a",
-            assignee="u_a",
+            assignee="'u_a'",
             deadlines=[
                 TaskDeadline(after_minutes=10, action="notify"),
                 TaskDeadline(after_minutes=20, action="notify"),
@@ -99,7 +99,7 @@ def test_auto_approve_stops_remaining_deadlines():
         .start()
         .user_task(
             "a",
-            assignee="u_a",
+            assignee="'u_a'",
             deadlines=[
                 TaskDeadline(after_minutes=30, action="auto_approve"),
                 TaskDeadline(after_minutes=60, action="notify"),
@@ -127,7 +127,7 @@ def test_reassign_deadline_transfers_task():
         .start()
         .user_task(
             "a",
-            assignee="u_a",
+            assignee="'u_a'",
             deadlines=[TaskDeadline(after_minutes=15, action="reassign", reassign_to="u_backup")],
         )
         .end()
@@ -155,7 +155,7 @@ def test_escalate_goes_to_manager_and_no_manager_raises_incident():
         .start()
         .user_task(
             "a",
-            assignee="u_a",
+            assignee="'u_a'",
             deadlines=[TaskDeadline(after_minutes=15, action="escalate")],
         )
         .end()
@@ -176,7 +176,7 @@ def test_escalate_goes_to_manager_and_no_manager_raises_incident():
         .start()
         .user_task(
             "b",
-            assignee="u_b",
+            assignee="'u_b'",
             deadlines=[TaskDeadline(after_minutes=15, action="escalate")],
         )
         .end()
@@ -200,7 +200,7 @@ def test_legacy_timeout_field_equivalent():
         FlowBuilder("legacy_t")
         .start()
         .user_task(
-            "a", assignee="u_a", timeout=TimeoutPolicy(due_minutes=120, strategy="auto_approve")
+            "a", assignee="'u_a'", timeout=TimeoutPolicy(due_minutes=120, strategy="auto_approve")
         )
         .end()
         .connect("start", "a")
@@ -215,7 +215,7 @@ def test_legacy_timeout_field_equivalent():
         .start()
         .user_task(
             "a",
-            assignee="u_a",
+            assignee="'u_a'",
             deadlines=[TaskDeadline(after_minutes=120, action="auto_approve")],
         )
         .end()
@@ -233,7 +233,9 @@ def test_legacy_timeout_field_equivalent():
             FlowBuilder("same")
             .start()
             .user_task(
-                "a", assignee="u_a", timeout=TimeoutPolicy(due_minutes=120, strategy="auto_approve")
+                "a",
+                assignee="'u_a'",
+                timeout=TimeoutPolicy(due_minutes=120, strategy="auto_approve"),
             )
             .end()
             .connect("start", "a")
@@ -248,7 +250,7 @@ def test_legacy_timeout_field_equivalent():
             .start()
             .user_task(
                 "a",
-                assignee="u_a",
+                assignee="'u_a'",
                 deadlines=[TaskDeadline(after_minutes=120, action="auto_approve")],
             )
             .end()
@@ -272,7 +274,7 @@ def test_instance_deadline_mark_cancel_terminate():
         definition = (
             FlowBuilder(f"ins_{strategy}")
             .start()
-            .user_task("a", assignee="u_a")
+            .user_task("a", assignee="'u_a'")
             .end()
             .connect("start", "a")
             .connect("a", "end")
@@ -300,7 +302,7 @@ def test_instance_deadline_silent_after_completion():
     definition = (
         FlowBuilder("ins_done")
         .start()
-        .user_task("a", assignee="u_a")
+        .user_task("a", assignee="'u_a'")
         .end()
         .connect("start", "a")
         .connect("a", "end")
@@ -322,7 +324,7 @@ def test_instance_deadline_cancel_emits_terminal_event():
     definition = (
         FlowBuilder("ins_evt")
         .start()
-        .user_task("a", assignee="u_a")
+        .user_task("a", assignee="'u_a'")
         .end()
         .connect("start", "a")
         .connect("a", "end")

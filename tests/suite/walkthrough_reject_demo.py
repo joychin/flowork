@@ -92,9 +92,9 @@ def scenario_parallel_reject_cancels_sibling() -> None:
     engine.repository.deploy(
         FlowBuilder("demo_sibling")
         .start()
-        .user_task("a", "支路A", assignee="u_a", reject_target="start")
-        .user_task("b", "支路B", assignee="u_b")
-        .user_task("j", "汇聚", assignee="u_j")
+        .user_task("a", "支路A", assignee="'u_a'", reject_target="start")
+        .user_task("b", "支路B", assignee="'u_b'")
+        .user_task("j", "汇聚", assignee="'u_j'")
         .end()
         .connect("start", "a")
         .connect("start", "b")

@@ -9,7 +9,6 @@ from pathlib import Path
 
 from flowork.clock import utc_now
 from flowork.events.domain import DomainEvent
-from flowork.participants.functions import ParticipantFunctions
 from flowork.participants.org_directory import OrgDirectoryLike
 from flowork.runtime.registry import NodeRegistry, create_registry
 from flowork.spi.ports import ExpressionFunctions
@@ -45,9 +44,8 @@ class EngineConfig:
     now: Callable[[], datetime] = _system_now
     notifier: Callable[[str, dict[str, object]], None] = _noop_notifier
     db_file: str | Path | None = None  # CLI 便利字段：设置后覆盖 db_url
-    org: OrgDirectoryLike | None = None  # M4：组织目录（缺省走简化参与者解析）
-    participant_functions: ParticipantFunctions | None = None
-    expression_functions: ExpressionFunctions | None = None  # CEL 词汇（spec §4.3/§9）
+    org: OrgDirectoryLike | None = None  # 组织目录（委托替换/to_admins 兜底/取人词汇数据源）
+    expression_functions: ExpressionFunctions | None = None  # CEL 词汇（全表达式位，spec §4.3/§9）
 
 
 def resolve_db_url(config: EngineConfig) -> str:

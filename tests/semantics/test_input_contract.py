@@ -29,8 +29,8 @@ def _engine_with_contract() -> ProcessEngine:
     definition = (
         FlowBuilder("contract_flow")
         .start()
-        .user_task("a", assignee="u_a")
-        .user_task("b", assignee="u_b")
+        .user_task("a", assignee="'u_a'")
+        .user_task("b", assignee="'u_b'")
         .end()
         .connect("start", "a")
         .connect("a", "b")
@@ -102,7 +102,7 @@ def test_definition_without_contract_unaffected():
     definition = (
         FlowBuilder("free_flow")
         .start()
-        .user_task("a", assignee="u_a")
+        .user_task("a", assignee="'u_a'")
         .end()
         .connect("start", "a")
         .connect("a", "end")
@@ -121,7 +121,7 @@ def test_subprocess_output_mapping_boundary(tmp_path):
     child = (
         FlowBuilder("contract_child")
         .start()
-        .user_task("c", assignee="u_c")
+        .user_task("c", assignee="'u_c'")
         .end()
         .connect("start", "c")
         .connect("c", "end")
@@ -131,7 +131,7 @@ def test_subprocess_output_mapping_boundary(tmp_path):
     parent = (
         FlowBuilder("contract_parent")
         .start()
-        .user_task("a", assignee="u_a")
+        .user_task("a", assignee="'u_a'")
         .call_activity(
             "sub",
             "子流程",

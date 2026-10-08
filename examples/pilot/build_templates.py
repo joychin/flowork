@@ -54,21 +54,21 @@ def expense_claim():
         .user_task(
             "supervisor",
             "直属主管审批",
-            assignee="manager_of()",
+            assignee="manager_of(initiator)",
             reject_target="start",
         )
         .branch("amount_route", "金额分流", route_mode=RouteMode.FIRST_MATCH)
         .user_task(
             "finance_review",
             "财务会签",
-            assignees=["u_cai1", "u_cai2"],
+            assignees=["'u_cai1'", "'u_cai2'"],
             multi_instance=MultiInstance(
                 mode="parallel", approve_exit=">=50%", disapprove_exit=">=1"
             ),
             reject_target="supervisor",
             advance_policy="any",
         )
-        .user_task("director_review", "总监审批", assignee="u_chen")
+        .user_task("director_review", "总监审批", assignee="'u_chen'")
         .cc_task("legal_cc", "法务留档传阅", recipients=["u_fa1"])
         .service_task("payment", "财务打款", action="make_payment", advance_policy="any")
         .end("end", "结束")
@@ -99,7 +99,7 @@ def leave_request():
         .user_task(
             "supervisor",
             "主管审批",
-            assignee="manager_of()",
+            assignee="manager_of(initiator)",
             auto_pass_originator=True,
             reject_target="start",
         )
@@ -107,13 +107,13 @@ def leave_request():
         .user_task(
             "hr_sequential",
             "HR 串行会签",
-            assignees=["u_hr1", "u_hr2"],
+            assignees=["'u_hr1'", "'u_hr2'"],
             multi_instance=MultiInstance(
                 mode="sequential", approve_exit="all", disapprove_exit=">=1"
             ),
             reject_target="supervisor",
         )
-        .user_task("hr_record", "HR 备案", assignee="u_hr1")
+        .user_task("hr_record", "HR 备案", assignee="'u_hr1'")
         .cc_task("notify", "结果传阅发起人", recipients=["originator"], advance_policy="any")
         .end("end", "结束")
         .connect("start", "supervisor")
@@ -132,7 +132,7 @@ def supplier_compliance():
     return (
         FlowBuilder("supplier_compliance", "供应商合规检查")
         .start("start", "发起")
-        .user_task("verify", "合规核验", assignee="u_fa1", reject_target="start")
+        .user_task("verify", "合规核验", assignee="'u_fa1'", reject_target="start")
         .end("end", "完成")
         .connect("start", "verify")
         .connect("verify", "end")
@@ -152,17 +152,17 @@ def purchase_order():
     return (
         FlowBuilder("purchase_order", "采购申请")
         .start("start", "提交")
-        .user_task("dept_review", "部门主管审批", assignee="manager_of()", reject_target="start")
+        .user_task("dept_review", "部门主管审批", assignee="manager_of(initiator)", reject_target="start")
         .branch("amount_route", "金额分流", route_mode=RouteMode.ALL_MATCH)
-        .user_task("legal_review", "法务核验", assignee="u_fa1")
+        .user_task("legal_review", "法务核验", assignee="'u_fa1'")
         .user_task(
             "finance_pricing",
             "财务核价",
-            assignee="u_cai1",
+            assignee="'u_cai1'",
             reject_target="dept_review",
         )
         .branch("big_route", "大额分流", route_mode=RouteMode.FIRST_MATCH, advance_policy="all")
-        .user_task("gm_review", "总经理审批", assignee="u_yang")
+        .user_task("gm_review", "总经理审批", assignee="'u_yang'")
         .call_activity(
             "supplier_check",
             "供应商合规子流程",
@@ -198,10 +198,10 @@ def contract_review():
     return (
         FlowBuilder("contract_review", "合同评审")
         .start("start", "提交")
-        .user_task("legal_review", "法务审查", assignee="u_fa1", reject_target="start")
+        .user_task("legal_review", "法务审查", assignee="'u_fa1'", reject_target="start")
         .branch("risk_route", "风险分流", route_mode=RouteMode.ALL_MATCH)
-        .user_task("finance_review", "财务核价", assignee="u_cai1", reject_target="legal_review")
-        .user_task("gm_review", "总经理终审", assignee="u_yang", reject_target="legal_review")
+        .user_task("finance_review", "财务核价", assignee="'u_cai1'", reject_target="legal_review")
+        .user_task("gm_review", "总经理终审", assignee="'u_yang'", reject_target="legal_review")
         .end("end", "完成", advance_policy="any")
         .connect("start", "legal_review")
         .connect("legal_review", "risk_route")

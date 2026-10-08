@@ -27,7 +27,7 @@ def deploy_counterset(engine: ProcessEngine) -> None:
         .start()
         .user_task(
             "sign",
-            assignees=["u1", "u2", "u3"],
+            assignees=["'u1'", "'u2'", "'u3'"],
             multi_instance=MultiInstance(mode="parallel", approve_exit=">=50%"),
         )
         .end()
@@ -91,8 +91,8 @@ def test_anticipate_reject_routes_to_human_target(engine: ProcessEngine):
     engine.repository.deploy(
         FlowBuilder("rj_flow")
         .start()
-        .user_task("fill", assignee="u_f")
-        .user_task("mgr", assignee="u_m", reject_target="fill")
+        .user_task("fill", assignee="'u_f'")
+        .user_task("mgr", assignee="'u_m'", reject_target="fill")
         .end()
         .connect("start", "fill")
         .connect("fill", "mgr")
@@ -116,7 +116,7 @@ def test_anticipate_reject_blocked_until_ratio(engine: ProcessEngine):
         .start()
         .user_task(
             "sign",
-            assignees=["u1", "u2", "u3"],
+            assignees=["'u1'", "'u2'", "'u3'"],
             multi_instance=MultiInstance(
                 mode="parallel", approve_exit="all", disapprove_exit=">=2"
             ),

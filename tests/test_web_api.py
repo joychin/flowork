@@ -151,8 +151,8 @@ def _branch_spec() -> dict:
         "nodes": [
             {"code": "start", "name": "发起", "kind": "start"},
             {"code": "branch", "name": "金额判断", "kind": "branch", "route_mode": "first_match"},
-            {"code": "big", "name": "大额审批", "kind": "user_task", "assignee": "u1"},
-            {"code": "small", "name": "小额审批", "kind": "user_task", "assignee": "u2"},
+            {"code": "big", "name": "大额审批", "kind": "user_task", "assignee": "'u1'"},
+            {"code": "small", "name": "小额审批", "kind": "user_task", "assignee": "'u2'"},
             {"code": "end", "name": "结束", "kind": "end"},
         ],
         "flows": [
@@ -197,8 +197,8 @@ def test_dry_run_parallel_and_blocked(client: TestClient) -> None:
         "name": "并行预演",
         "nodes": [
             {"code": "start", "name": "发起", "kind": "start"},
-            {"code": "a", "name": "左支", "kind": "user_task", "assignee": "u1"},
-            {"code": "b", "name": "右支", "kind": "user_task", "assignee": "u2"},
+            {"code": "a", "name": "左支", "kind": "user_task", "assignee": "'u1'"},
+            {"code": "b", "name": "右支", "kind": "user_task", "assignee": "'u2'"},
             {"code": "end", "name": "结束", "kind": "end"},
         ],
         "flows": [

@@ -26,9 +26,9 @@ from flowork.definitions.semantic_diff import semantic_diff
 from flowork.definitions.validator import InvalidDefinition, IssueLevel, ValidateIssue
 from flowork.engine.config import EngineConfig
 from flowork.engine.engine import ProcessEngine
-from flowork.engine.routing import expression_functions_of
 from flowork.errors import DefinitionError, FloworkError, UnknownNodeKind
 from flowork.expr.cel import evaluate_formula
+from flowork.expr.context import expression_functions_of
 
 __all__ = ["app", "create_app"]
 

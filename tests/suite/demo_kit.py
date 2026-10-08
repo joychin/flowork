@@ -27,7 +27,7 @@ def make_store_engine(tmp: Path, clock: FakeClock | None = None) -> ProcessEngin
         EngineConfig(
             now=clock or FakeClock(),
             org=build_directory_store(tmp / "demo_org.db"),
-            participant_functions=contrib.org_vocabulary(),
+            expression_functions=contrib.cel_vocabulary(build_directory_store(tmp / "demo_org.db")),
         )
     )
     deploy_world(engine, STORE_WORLD_CODES)
@@ -38,7 +38,9 @@ def make_store_engine(tmp: Path, clock: FakeClock | None = None) -> ProcessEngin
 def make_static_engine() -> ProcessEngine:
     engine = ProcessEngine(
         EngineConfig(
-            now=FakeClock(), org=build_static_org(), participant_functions=contrib.org_vocabulary()
+            now=FakeClock(),
+            org=build_static_org(),
+            expression_functions=contrib.cel_vocabulary(build_static_org()),
         )
     )
     deploy_world(engine, STATIC_WORLD_CODES)

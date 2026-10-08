@@ -23,7 +23,7 @@ def _run_simple(engine: ProcessEngine) -> str:
     definition = (
         FlowBuilder("q")
         .start()
-        .user_task("a", assignee="u_a")
+        .user_task("a", assignee="'u_a'")
         .end()
         .connect("start", "a")
         .connect("a", "end")

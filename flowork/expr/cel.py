@@ -12,6 +12,7 @@ validator 侧对照 input 契约与 ExpressionFunctions 注册表使用。
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Callable, Mapping
 from typing import Any, cast
 
@@ -69,6 +70,9 @@ _COMPREHENSION_MACROS = frozenset({"all", "exists", "exists_one", "map", "filter
 # 计入链项护栏的二元运算符（Token 值精确匹配；字面量 Token 带引号不会撞上）。
 # lark 的 addition/multiplication 是每个操作数都套一层的前缀级联规则，不能数节点。
 _BINARY_OPERATORS = frozenset({"+", "-", "*", "/", "%", "&&", "||"})
+
+# activation 合法键＝CEL 标识符语法（ASCII）；中文等变量名不可被公式引用，装载即拒收。
+_CEL_IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
 class FormulaError(ConditionError):
@@ -134,7 +138,11 @@ def _evaluate(
         raise FormulaError(f"变量序列化失败：{exc}") from exc
     if size > MAX_VARIABLE_BYTES:
         raise FormulaError(f"变量序列化超限（{size} > {MAX_VARIABLE_BYTES}B）")
-    activation = {key: json_to_cel(value) for key, value in payload.items()}
+    # 非 ASCII 键（如中文变量名）在 CEL 标识符语法内本就不可引用，装进 activation
+    # 反而会被 celpy 的 NameContainer 拒收（Invalid name）——静默跳过，其余求值不受牵连。
+    activation = {
+        key: json_to_cel(value) for key, value in payload.items() if _CEL_IDENT.match(key)
+    }
     env = celpy.Environment()
     program = env.program(tree, functions=cast(Any, dict(functions)) if functions else None)
     try:

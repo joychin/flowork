@@ -74,11 +74,8 @@ class AnticipateMixin:
             return AnticipateResult(node_exit=False, instance_complete=False)
 
         # 节点将出：按当前变量近似路由，看是否无需再等任何人工/子流程即到 end
-        from flowork.engine.routing import (
-            evaluation_variables,
-            expression_functions_of,
-            select_outgoing,
-        )
+        from flowork.engine.routing import evaluation_variables, select_outgoing
+        from flowork.expr.context import expression_functions_of
 
         variables = evaluation_variables(instance, instance.variables)
         functions = expression_functions_of(self._engine.config)

@@ -61,7 +61,7 @@ def test_parallel_countersign_all_by_default(engine: ProcessEngine):
     definition = (
         FlowBuilder("countersign")
         .start()
-        .user_task("audit", "会签", assignees=["u_a", "u_b"])
+        .user_task("audit", "会签", assignees=["'u_a'", "'u_b'"])
         .end()
         .connect("start", "audit")
         .connect("audit", "end")
@@ -137,8 +137,8 @@ def test_definition_snapshot_isolation(engine: ProcessEngine):
     revised = (
         FlowBuilder("simple_approval", "串行审批 v2")
         .start("start", "发起")
-        .user_task("manager", "经理审批", assignee="u_manager")
-        .user_task("finance", "财务复核", assignee="u_new_finance")
+        .user_task("manager", "经理审批", assignee="'u_manager'")
+        .user_task("finance", "财务复核", assignee="'u_new_finance'")
         .end("end", "结束")
         .connect("start", "manager")
         .connect("manager", "finance")

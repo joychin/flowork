@@ -23,9 +23,9 @@ def linear_flow(code: str = "ops") -> FlowBuilder:
     return (
         FlowBuilder(code)
         .start()
-        .user_task("a", assignee="u_a")
+        .user_task("a", assignee="'u_a'")
         .user_task("b", candidate_users=["u_c1", "u_c2"])
-        .user_task("c", assignees=["u_p1", "u_p2"])
+        .user_task("c", assignees=["'u_p1'", "'u_p2'"])
         .cc_task("notify", recipients=["u_a"])
         .end()
         .connect("start", "a")
@@ -284,8 +284,8 @@ def test_withdraw_rejected_task_rejected(engine: ProcessEngine):
     definition = (
         FlowBuilder("wd")
         .start()
-        .user_task("a", assignee="u_a")
-        .user_task("b", assignee="u_b")
+        .user_task("a", assignee="'u_a'")
+        .user_task("b", assignee="'u_b'")
         .end()
         .connect("start", "a")
         .connect("a", "b")

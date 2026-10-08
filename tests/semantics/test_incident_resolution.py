@@ -18,9 +18,9 @@ def _engine_with_failing_action() -> ProcessEngine:
     definition = (
         FlowBuilder("incident_flow")
         .start()
-        .user_task("a", assignee="u_a")
+        .user_task("a", assignee="'u_a'")
         .service_task("boom", "会炸的步骤", action="explode", params={})
-        .user_task("after", assignee="u_b")
+        .user_task("after", assignee="'u_b'")
         .end()
         .connect("start", "a")
         .connect("a", "boom")
@@ -107,7 +107,7 @@ def test_business_failure_produces_no_incident():
     definition = (
         FlowBuilder("biz_flow")
         .start()
-        .user_task("a", assignee="u_a")
+        .user_task("a", assignee="'u_a'")
         .end()
         .connect("start", "a")
         .connect("a", "end")

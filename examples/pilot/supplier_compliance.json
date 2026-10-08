@@ -32,7 +32,7 @@
         "on_fail": null
       },
       "properties": {},
-      "assignee": "u_fa1",
+      "assignee": "'u_fa1'",
       "reject_target": "start"
     },
     {

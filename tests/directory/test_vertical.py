@@ -19,7 +19,12 @@ DEFINITION = {
     "name": "目录竖切（主管审批）",
     "nodes": [
         {"code": "start", "name": "发起", "kind": "start"},
-        {"code": "mgr", "name": "主管审批", "kind": "user_task", "assignee": "manager_of()"},
+        {
+            "code": "mgr",
+            "name": "主管审批",
+            "kind": "user_task",
+            "assignee": "manager_of(initiator)",
+        },
         {"code": "end", "name": "结束", "kind": "end"},
     ],
     "flows": [
@@ -38,7 +43,7 @@ def make_engine_with_directory(tmp_path: Path) -> tuple[ProcessEngine, Directory
     store.create_user("u_zhang", name="张三", org_unit_code="d_eng")
     store.create_user("u_bob", name="李主管", org_unit_code="d_eng")
     config.org = store
-    config.participant_functions = contrib.org_vocabulary()  # v2.1：词汇由宿主挂
+    config.expression_functions = contrib.cel_vocabulary(config.org)  # 位点统一：CEL 词汇
     definition = load_definition(DEFINITION, engine.config.node_registry)
     engine.repository.deploy(definition)
     return engine, store

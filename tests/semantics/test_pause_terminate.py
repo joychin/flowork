@@ -42,7 +42,7 @@ def build_engine() -> tuple[ProcessEngine, FakeClock]:
         .start()
         .user_task(
             "a",
-            assignee="u_a",
+            assignee="'u_a'",
             timeout=TimeoutPolicy(due_minutes=120, strategy="auto_approve"),
         )
         .end()

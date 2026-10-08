@@ -32,7 +32,7 @@
         "on_fail": null
       },
       "properties": {},
-      "assignee": "manager_of()",
+      "assignee": "manager_of(initiator)",
       "reject_target": "start"
     },
     {
@@ -62,8 +62,8 @@
       },
       "properties": {},
       "assignees": [
-        "u_cai1",
-        "u_cai2"
+        "'u_cai1'",
+        "'u_cai2'"
       ],
       "multi_instance": {
         "mode": "parallel",
@@ -84,7 +84,7 @@
         "on_fail": null
       },
       "properties": {},
-      "assignee": "u_chen"
+      "assignee": "'u_chen'"
     },
     {
       "code": "legal_cc",

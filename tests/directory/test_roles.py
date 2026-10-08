@@ -101,7 +101,7 @@ DEFINITION = {
             "code": "fin",
             "name": "财务审批",
             "kind": "user_task",
-            "assignee": "users_with_role('finance')",
+            "assignee": 'users_with_role("finance")',
         },
         {"code": "end", "name": "结束", "kind": "end"},
     ],
@@ -129,7 +129,7 @@ class TestRoleEndToEnd:
         store.assign_role("u_east_fin", "finance", org_unit_code="d_east")
         store.assign_role("u_global_fin", "finance")
         config.org = store
-        config.participant_functions = contrib.org_vocabulary()  # v2.1：词汇由宿主挂
+        config.expression_functions = contrib.cel_vocabulary(config.org)  # 位点统一：CEL 词汇
 
         definition = load_definition(DEFINITION, engine.config.node_registry)
         engine.repository.deploy(definition)

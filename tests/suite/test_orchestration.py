@@ -30,7 +30,7 @@ def test_any_sign_first_vote_exits_and_auto_passes_rest() -> None:
         .user_task(
             "vote",
             "或签",
-            assignees=["u_a", "u_b", "u_c"],
+            assignees=["'u_a'", "'u_b'", "'u_c'"],
             multi_instance=MultiInstance(mode="parallel", approve_exit="any"),
         )
         .end()
@@ -108,9 +108,9 @@ def test_unconditional_fork_and_any_join_absorbs_sibling() -> None:
     engine.repository.deploy(
         FlowBuilder("adhoc_race")
         .start()
-        .user_task("a", "支路A", assignee="u_a")
-        .user_task("b", "支路B", assignee="u_b")
-        .user_task("j", "先到先得", assignee="u_j")
+        .user_task("a", "支路A", assignee="'u_a'")
+        .user_task("b", "支路B", assignee="'u_b'")
+        .user_task("j", "先到先得", assignee="'u_j'")
         .end()
         .connect("start", "a")
         .connect("start", "b")
@@ -141,8 +141,8 @@ def test_formula_condition_routes_by_expression() -> None:
         FlowBuilder("adhoc_formula")
         .start()
         .branch("gate")
-        .user_task("big", "大额", assignee="u_a")
-        .user_task("small", "小额", assignee="u_b")
+        .user_task("big", "大额", assignee="'u_a'")
+        .user_task("small", "小额", assignee="'u_b'")
         .end()
         .flow("start", "gate")
         .flow("gate", "big", condition="amount > 100 && urgent")
@@ -170,7 +170,7 @@ def test_originator_expression_resolves_to_start_user() -> None:
     engine.repository.deploy(
         FlowBuilder("adhoc_originator")
         .start()
-        .user_task("back", "回发起人", assignee="originator")
+        .user_task("back", "回发起人", assignee="initiator")
         .end()
         .connect("start", "back")
         .connect("back", "end")
@@ -187,9 +187,9 @@ def test_reject_cancels_unfinished_sibling_branches() -> None:
     engine.repository.deploy(
         FlowBuilder("adhoc_sibling")
         .start()
-        .user_task("a", "支路A", assignee="u_a", reject_target="start")
-        .user_task("b", "支路B", assignee="u_b")
-        .user_task("j", "汇聚", assignee="u_j")
+        .user_task("a", "支路A", assignee="'u_a'", reject_target="start")
+        .user_task("b", "支路B", assignee="'u_b'")
+        .user_task("j", "汇聚", assignee="'u_j'")
         .end()
         .connect("start", "a")
         .connect("start", "b")
@@ -248,8 +248,8 @@ def test_withdraw_rebuilds_task_at_original_node() -> None:
     engine.repository.deploy(
         FlowBuilder("adhoc_withdraw")
         .start()
-        .user_task("a", "第一环", assignee="u_a")
-        .user_task("b", "第二环", assignee="u_b")
+        .user_task("a", "第一环", assignee="'u_a'")
+        .user_task("b", "第二环", assignee="'u_b'")
         .end()
         .connect("start", "a")
         .connect("a", "b")

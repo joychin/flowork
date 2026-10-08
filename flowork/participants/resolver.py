@@ -1,28 +1,38 @@
-"""参与者解析管线（M4 完整版）。
+"""参与者解析管线（单轨 CEL，kernel-v2 §4.2 位点统一）。
 
-管线：表达式求值 → 手动选人覆盖 → 委托替换 → 去重策略（自动通过）
+管线：手动选人覆盖 → CEL 公式求值 → 委托替换 → 去重策略（自动通过）
 → 无参与者兜底。产出 ``ParticipantResolution(todo, skipped)``：
 skipped 为策略命中者（记 auto_pass 历史并计入同意数）。
 
-未配置组织目录时回退到 participants.simple 的简化规则。
+assignee/assignees 每项为 **CEL 表达式**：字面人写字符串字面量 ``'u_a'``，
+函数/变量引用如 ``manager_of(initiator)``、``users_with_role("finance")``。
+查无传播（spec §5.5）：表达式求值为 null/空列表时贡献空，不报错；
+求值错（FormulaError）按错误二分包 EngineExecutionError（挂起+故障单，§8）。
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from flowork.engine.kernel import NoParticipantError
-from flowork.participants.functions import ParticipantFunctions, parse_expression
-from flowork.participants.simple import resolve_simple
+from flowork.engine.kernel import EngineExecutionError, NoParticipantError
+from flowork.expr.cel import FormulaError, evaluate_formula_value
+from flowork.expr.context import expression_context
 
 if TYPE_CHECKING:
     from flowork.definitions.builtin import UserTaskSpec
     from flowork.engine.context import RuntimeNodeContext
-    from flowork.participants.functions import ParticipantFunctions
     from flowork.participants.org_directory import OrgDirectoryLike
 
-__all__ = ["ParticipantResolution", "resolve_participants"]
+__all__ = [
+    "ParticipantResolution",
+    "resolve_participants",
+    "resolve_subjects",
+    "resolve_with_delegation",
+]
+
+Functions = Mapping[str, Callable[..., object]]
 
 
 @dataclass
@@ -33,21 +43,53 @@ class ParticipantResolution:
     skipped: list[str] = field(default_factory=list)
 
 
+def resolve_subjects(
+    expressions: list[str],
+    variables: Mapping[str, Any],
+    start_user: str | None,
+    functions: Functions | None = None,
+    *,
+    label: str = "",
+) -> list[str]:
+    """对一组取人表达式（CEL）求值 → 具体人列表（保序去重）。
+
+    供解析管线与加签等**重排场景**共用——后者必须存具体人，不能存表达式原文。
+    语义同取人位：null/空＝查无传播；str/list[str]＝单人/多人；其他类型报错。
+    label 为错误消息里的位置标注（如节点码）。
+    """
+    where = f"{label}：" if label else ""
+    pool: list[str] = []
+    context = expression_context(variables, start_user=start_user)
+    for expression in expressions:
+        try:
+            result = evaluate_formula_value(expression, context, functions=functions)
+        except FormulaError as exc:
+            raise EngineExecutionError(f"取人公式求值失败（{where}{expression!r}）：{exc}") from exc
+        if result is None:
+            continue  # 查无传播（spec §5.5）
+        if isinstance(result, str):
+            pool.append(str(result))
+        elif isinstance(result, list):
+            pool.extend(str(user) for user in result)
+        else:
+            raise NoParticipantError(
+                f"取人公式须返回人或人列表（{where}{expression!r} → {type(result).__name__}，"
+                "谓词函数属条件位）"
+            )
+    return _dedupe(pool)
+
+
 def resolve_participants(
     ctx: RuntimeNodeContext,
     spec: UserTaskSpec,
-    org: OrgDirectoryLike | None,
-    functions: ParticipantFunctions | None = None,
+    functions: Functions | None = None,
 ) -> ParticipantResolution:
-    """完整解析管线。"""
-    if org is None:
-        return ParticipantResolution(todo=resolve_simple(ctx, spec))
-
+    """完整解析管线（单轨 CEL；委托与兜底由 resolve_with_delegation/调用方叠加）。"""
     manual = (ctx.token.manual_participants or {}).get(spec.code) if ctx.token else None
     if manual:
         return ParticipantResolution(todo=_dedupe(manual))
 
-    pool = _evaluate_expressions(ctx, spec, org, functions or ParticipantFunctions())
+    pool = _evaluate_expressions(ctx, spec, functions)
     todo, skipped = _apply_strategies(ctx, spec, pool)
     return ParticipantResolution(todo=_dedupe(todo), skipped=_dedupe(skipped))
 
@@ -55,26 +97,13 @@ def resolve_participants(
 def _evaluate_expressions(
     ctx: RuntimeNodeContext,
     spec: UserTaskSpec,
-    org: OrgDirectoryLike,
-    functions: ParticipantFunctions,
+    functions: Functions | None,
 ) -> list[str]:
-    pool: list[str] = []
+    """解析管线内用：assignee/assignees 表达式 → 人池（错误消息带节点码）。"""
     expressions = ([spec.assignee] if spec.assignee else []) + list(spec.assignees)
-    for expression in expressions:
-        call = parse_expression(expression)
-        if call is None:
-            if expression == "originator":
-                pool.append(ctx.instance.start_user)
-            else:
-                pool.append(expression)
-        else:
-            result = functions.call(call.name, ctx, org, call.args)
-            if not isinstance(result, list):
-                raise NoParticipantError(
-                    f"取人函数 {call.name!r} 在参与人位须返回人列表（谓词函数属条件位）"
-                )
-            pool.extend(str(user) for user in result)
-    return _dedupe(pool)
+    return resolve_subjects(
+        expressions, ctx.variables, ctx.instance.start_user, functions, label=spec.code
+    )
 
 
 def _apply_strategies(
@@ -116,10 +145,10 @@ def resolve_with_delegation(
     ctx: RuntimeNodeContext,
     spec: UserTaskSpec,
     org: OrgDirectoryLike,
-    functions: ParticipantFunctions | None = None,
+    functions: Functions | None = None,
 ) -> tuple[ParticipantResolution, dict[str, str]]:
     """解析 + 委托替换（供行为层使用）。"""
-    resolution = resolve_participants(ctx, spec, org, functions)
+    resolution = resolve_participants(ctx, spec, functions)
     todo, mapping = _delegation_replace(resolution.todo, org)
     return ParticipantResolution(todo=todo, skipped=resolution.skipped), mapping
 

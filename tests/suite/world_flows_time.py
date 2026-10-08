@@ -38,7 +38,7 @@ def deadline_notify_definition() -> ProcessDefinition:
         .user_task(
             "hold",
             "限时审批",
-            assignee="u_dev_liu",
+            assignee="'u_dev_liu'",
             reject_target="start",
             deadlines=[
                 TaskDeadline(after_minutes=5, action="notify"),
@@ -60,7 +60,7 @@ def deadline_reassign_definition() -> ProcessDefinition:
         .user_task(
             "gate",
             "改派闸口",
-            assignee="u_dev_liu",
+            assignee="'u_dev_liu'",
             deadlines=[
                 TaskDeadline(after_minutes=5, action="reassign", reassign_to="u_lead_be"),
                 TaskDeadline(after_minutes=10, action="auto_approve"),
@@ -81,7 +81,7 @@ def deadline_auto_definition() -> ProcessDefinition:
         .user_task(
             "gate",
             "自动闸口",
-            assignee="u_dev_liu",
+            assignee="'u_dev_liu'",
             deadlines=[
                 TaskDeadline(after_minutes=5, action="notify"),
                 TaskDeadline(after_minutes=10, action="auto_approve"),
@@ -101,7 +101,7 @@ def deadline_reject_definition() -> ProcessDefinition:
         .user_task(
             "gate",
             "限时闸口",
-            assignee="u_dev_liu",
+            assignee="'u_dev_liu'",
             reject_target="start",
             deadlines=[TaskDeadline(after_minutes=10, action="auto_reject")],
         )
@@ -117,7 +117,7 @@ def instance_deadline_definition(strategy: str) -> ProcessDefinition:
     return (
         FlowBuilder(f"suite_deadline_{strategy}", f"套件·实例时限·{strategy}")
         .start()
-        .user_task("hold", "滞留节点", assignee="u_dev_wu")
+        .user_task("hold", "滞留节点", assignee="'u_dev_wu'")
         .end("instance_end", "实例时限流程结束")
         .flow("start", "hold")
         .flow("hold", "instance_end")
@@ -140,7 +140,7 @@ def message_definition() -> ProcessDefinition:
     return (
         FlowBuilder("suite_message", "套件·消息关联")
         .start()
-        .user_task("await_paid", "等待回款", assignee="u_buyer")
+        .user_task("await_paid", "等待回款", assignee="'u_buyer'")
         .service_task("echo", "回款回执", action="echo_paid")
         .end("message_end", "消息流程结束")
         .flow("start", "await_paid")
@@ -158,10 +158,10 @@ def lifecycle_definition() -> ProcessDefinition:
         .user_task(
             "first_task",
             "第一环",
-            assignee="u_dev_wu",
+            assignee="'u_dev_wu'",
             deadlines=[TaskDeadline(after_minutes=30, action="notify")],
         )
-        .user_task("second_task", "第二环", assignee="u_cto")
+        .user_task("second_task", "第二环", assignee="'u_cto'")
         .end("lifecycle_end", "生命周期流程结束")
         .flow("start", "first_task")
         .flow("first_task", "second_task")
@@ -174,9 +174,9 @@ def fragile_definition() -> ProcessDefinition:
     return (
         FlowBuilder("suite_fragile", "套件·脆弱链路")
         .start()
-        .user_task("submit", "提交", assignee="u_dev_wu")
+        .user_task("submit", "提交", assignee="'u_dev_wu'")
         .service_task("boom", "外部调用", action="explode")
-        .user_task("after", "善后", assignee="u_cto")
+        .user_task("after", "善后", assignee="'u_cto'")
         .end("fragile_end", "脆弱链路结束")
         .flow("start", "submit")
         .flow("submit", "boom")

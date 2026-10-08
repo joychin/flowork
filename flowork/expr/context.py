@@ -3,14 +3,16 @@
 变量命名空间（spec §4.3）：``input.*``（契约入参，存法由调用方约定）、
 ``vars``（实例变量，现状拍平存）、``initiator``（发起人 Subject 保留标识符）、
 ``task``（任务快照，超时求值等位点可用，spec C.4 固定形状）。
+函数表拍平（``expression_functions_of``）也住这里——expr 是叶子模块，
+engine/participants/tasks 各面引用无环。
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import Any
 
-__all__ = ["expression_context"]
+__all__ = ["expression_context", "expression_functions_of"]
 
 
 def expression_context(
@@ -31,3 +33,11 @@ def expression_context(
     if task is not None:
         payload.setdefault("task", dict(task))
     return payload
+
+
+def expression_functions_of(config: Any) -> Mapping[str, Callable[..., object]] | None:
+    """从 EngineConfig 拍平 CEL 函数表（端口 → {名: 可调用}）；未配置返回 None。"""
+    port = getattr(config, "expression_functions", None)
+    if port is None:
+        return None
+    return {name: registered.fn for name, registered in port.functions().items()}

@@ -26,7 +26,7 @@ def _spec_with(condition: object) -> dict:
         "nodes": [
             {"code": "start", "kind": "start"},
             {"code": "gate", "kind": "branch"},
-            {"code": "a", "kind": "user_task", "assignee": "u1"},
+            {"code": "a", "kind": "user_task", "assignee": "'u1'"},
             {"code": "end", "kind": "end"},
         ],
         "flows": [

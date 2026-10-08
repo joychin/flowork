@@ -32,7 +32,7 @@
         "on_fail": null
       },
       "properties": {},
-      "assignee": "manager_of()",
+      "assignee": "manager_of(initiator)",
       "reject_target": "start"
     },
     {
@@ -61,7 +61,7 @@
         "on_fail": null
       },
       "properties": {},
-      "assignee": "u_fa1"
+      "assignee": "'u_fa1'"
     },
     {
       "code": "finance_pricing",
@@ -75,7 +75,7 @@
         "on_fail": null
       },
       "properties": {},
-      "assignee": "u_cai1",
+      "assignee": "'u_cai1'",
       "reject_target": "dept_review"
     },
     {
@@ -104,7 +104,7 @@
         "on_fail": null
       },
       "properties": {},
-      "assignee": "u_yang"
+      "assignee": "'u_yang'"
     },
     {
       "code": "supplier_check",

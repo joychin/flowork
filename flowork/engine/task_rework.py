@@ -79,7 +79,18 @@ class TaskReworkMixin:
         node = kernel.definition_of(ctx.session, instance).node(task.activity_code)
         base_participants: list[str] = []
         if isinstance(node, UserTaskSpec):
-            base_participants = ([node.assignee] if node.assignee else []) + list(node.assignees)
+            # 名单口径对齐：节点表达式先解析为具体人（manual_participants 存人，不存表达式原文）
+            from flowork.expr.context import expression_functions_of
+            from flowork.participants.resolver import resolve_subjects
+
+            expressions = ([node.assignee] if node.assignee else []) + list(node.assignees)
+            base_participants = resolve_subjects(
+                expressions,
+                instance.variables or {},
+                instance.start_user,
+                expression_functions_of(self._engine.config),
+                label=task.activity_code,
+            )
         existing = list((token.manual_participants or {}).get(task.activity_code, []))
         merged = list(dict.fromkeys([*base_participants, *existing, *users]))
         token.manual_participants[task.activity_code] = merged

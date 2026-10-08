@@ -41,7 +41,7 @@ def _publish_parent_and_child(engine: ProcessEngine) -> None:
     child = (
         FlowBuilder("compliance_check", "合规检查")
         .start()
-        .user_task("verify", assignee="u_compliance")
+        .user_task("verify", assignee="'u_compliance'")
         .end()
         .connect("start", "verify")
         .connect("verify", "end")
@@ -51,7 +51,7 @@ def _publish_parent_and_child(engine: ProcessEngine) -> None:
     parent = (
         FlowBuilder("parent_flow", "主流程")
         .start()
-        .user_task("apply", assignee="u_maker")
+        .user_task("apply", assignee="'u_maker'")
         .call_activity(
             "sub",
             name="合规子流程",
@@ -118,7 +118,7 @@ def test_service_task_runs_handler(engine: ProcessEngine):
         FlowBuilder("svc")
         .start()
         .service_task("score", action="grade")
-        .user_task("confirm", assignee="u_user")
+        .user_task("confirm", assignee="'u_user'")
         .end()
         .connect("start", "score")
         .connect("score", "confirm")
@@ -144,7 +144,7 @@ def _timeout_engine(strategy: str) -> tuple[ProcessEngine, FakeClock]:
         .start()
         .user_task(
             "slow",
-            assignee="u_slow",
+            assignee="'u_slow'",
             timeout=TimeoutPolicy(due_minutes=60, strategy=strategy),
         )
         .end()
@@ -175,10 +175,10 @@ def test_timeout_auto_reject_redirects():
     flow = (
         FlowBuilder("to_ar")
         .start()
-        .user_task("first", assignee="u_first")
+        .user_task("first", assignee="'u_first'")
         .user_task(
             "slow",
-            assignee="u_slow",
+            assignee="'u_slow'",
             timeout=__import__(
                 "flowork.definitions.node", fromlist=["TimeoutPolicy"]
             ).TimeoutPolicy(due_minutes=30, strategy="auto_reject"),
@@ -234,7 +234,7 @@ def test_job_strategy_error_suspends_with_incident(engine: ProcessEngine):
         .start()
         .user_task(
             "t",
-            assignee="u_x",
+            assignee="'u_x'",
             timeout=TimeoutPolicy(due_minutes=10, strategy="auto_approve"),
         )
         .branch("route")

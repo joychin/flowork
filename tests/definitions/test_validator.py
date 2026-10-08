@@ -40,7 +40,7 @@ def _valid_base() -> FlowBuilder:
 
 def test_missing_start(registry):
     definition = (
-        FlowBuilder("t").user_task("a", assignee="u1").end().connect("a", "end").build(registry)
+        FlowBuilder("t").user_task("a", assignee="'u1'").end().connect("a", "end").build(registry)
     )
     assert "structure.start.count" in error_rules(definition, registry)
 
@@ -74,8 +74,8 @@ def test_duplicate_node_code(registry):
     definition = (
         FlowBuilder("t")
         .start()
-        .user_task("a", assignee="u1")
-        .user_task("a", assignee="u2")
+        .user_task("a", assignee="'u1'")
+        .user_task("a", assignee="'u2'")
         .end()
         .connect("start", "a")
         .connect("a", "end")
@@ -90,8 +90,8 @@ def test_first_match_branch_without_default(registry):
         FlowBuilder("t")
         .start()
         .branch("g")
-        .user_task("a", assignee="u1")
-        .user_task("b", assignee="u2")
+        .user_task("a", assignee="'u1'")
+        .user_task("b", assignee="'u2'")
         .end()
         .connect("start", "g")
         .flow("g", "a", condition="x == 1")
@@ -110,8 +110,8 @@ def test_advance_all_on_exclusive_arm_no_warning(registry):
         FlowBuilder("t")
         .start()
         .branch("g")
-        .user_task("a", assignee="u1")
-        .user_task("m", assignee="u2", advance_policy="all")
+        .user_task("a", assignee="'u1'")
+        .user_task("m", assignee="'u2'", advance_policy="all")
         .end()
         .connect("start", "g")
         .flow("g", "a", condition="x == 1")
@@ -130,7 +130,7 @@ def test_deadend_node(registry):
     definition = (
         FlowBuilder("t")
         .start()
-        .user_task("a", assignee="u1")
+        .user_task("a", assignee="'u1'")
         .end()
         .connect("start", "a")
         .connect("a", "end")
@@ -161,7 +161,7 @@ def test_reject_target_missing(registry):
     definition = (
         FlowBuilder("t")
         .start()
-        .user_task("a", assignee="u1", reject_target="ghost")
+        .user_task("a", assignee="'u1'", reject_target="ghost")
         .end()
         .connect("start", "a")
         .connect("a", "end")
@@ -172,7 +172,7 @@ def test_reject_target_missing(registry):
 
 def test_assert_valid_raises_with_all_errors(registry):
     definition = (
-        FlowBuilder("t").user_task("a", assignee="u1").end().connect("a", "end").build(registry)
+        FlowBuilder("t").user_task("a", assignee="'u1'").end().connect("a", "end").build(registry)
     )
     with pytest.raises(InvalidDefinition) as excinfo:
         assert_valid(definition, registry)
@@ -189,8 +189,8 @@ def _cel_flow(registry, *, formula=None, declare=("amount", "urgent")):
         FlowBuilder("cel")
         .start()
         .branch("gate")
-        .user_task("big", assignee="u_boss")
-        .user_task("small", assignee="u_clerk")
+        .user_task("big", assignee="'u_boss'")
+        .user_task("small", assignee="'u_clerk'")
         .end()
         .connect("start", "gate")
         .flow("gate", "big", condition=formula)

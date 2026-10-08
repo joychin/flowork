@@ -28,7 +28,9 @@ def pilot() -> ProcessEngine:
     engine = ProcessEngine(
         EngineConfig(
             org=OrgDirectory.from_yaml(PILOT_DIR / "org.yaml"),
-            participant_functions=contrib.org_vocabulary(),  # v2.1：词汇由宿主挂
+            expression_functions=contrib.cel_vocabulary(
+                OrgDirectory.from_yaml(PILOT_DIR / "org.yaml")
+            ),
         )
     )
     for code in TEMPLATES:

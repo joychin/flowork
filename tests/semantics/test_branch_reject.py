@@ -71,10 +71,10 @@ def test_first_match_condition_branch(engine: ProcessEngine):
     definition = (
         FlowBuilder("ex")
         .start()
-        .user_task("apply", assignee="u_user")
+        .user_task("apply", assignee="'u_user'")
         .branch("route")
-        .user_task("high", assignee="u_boss")
-        .user_task("low", assignee="u_clerk")
+        .user_task("high", assignee="'u_boss'")
+        .user_task("low", assignee="'u_clerk'")
         .end()
         .connect("start", "apply")
         .connect("apply", "route")
@@ -101,8 +101,8 @@ def test_first_match_no_match_no_default_raises(engine: ProcessEngine):
         FlowBuilder("ex2")
         .start()
         .branch("route")
-        .user_task("a", assignee="u_a")
-        .user_task("b", assignee="u_b")
+        .user_task("a", assignee="'u_a'")
+        .user_task("b", assignee="'u_b'")
         .end()
         .connect("start", "route")
         .flow("route", "a", condition=cond("x", "eq", 1))
@@ -124,9 +124,9 @@ def test_parallel_split_and_join(engine: ProcessEngine):
     definition = (
         FlowBuilder("par")
         .start()
-        .user_task("hr", assignee="u_hr")
-        .user_task("it", assignee="u_it")
-        .user_task("final", assignee="u_boss", advance_policy="all")
+        .user_task("hr", assignee="'u_hr'")
+        .user_task("it", assignee="'u_it'")
+        .user_task("final", assignee="'u_boss'", advance_policy="all")
         .end()
         .connect("start", "hr")
         .connect("start", "it")
@@ -165,11 +165,11 @@ def test_all_match_race_cancels_sibling_branch(engine: ProcessEngine):
     definition = (
         FlowBuilder("inc")
         .start()
-        .user_task("apply", assignee="u_user")
+        .user_task("apply", assignee="'u_user'")
         .branch("fork", route_mode=RouteMode.ALL_MATCH)
-        .user_task("fast", assignee="u_fast")
-        .user_task("slow", assignee="u_slow")
-        .user_task("final", assignee="u_boss", advance_policy="any")
+        .user_task("fast", assignee="'u_fast'")
+        .user_task("slow", assignee="'u_slow'")
+        .user_task("final", assignee="'u_boss'", advance_policy="any")
         .end()
         .connect("start", "apply")
         .connect("apply", "fork")
@@ -231,8 +231,8 @@ def test_formula_via_branch(engine: ProcessEngine):
         FlowBuilder("fm")
         .start()
         .branch("route")
-        .user_task("big", assignee="u_boss")
-        .user_task("small", assignee="u_clerk")
+        .user_task("big", assignee="'u_boss'")
+        .user_task("small", assignee="'u_clerk'")
         .end()
         .connect("start", "route")
         .flow("route", "big", condition="amount > 5000 && urgent == true")
@@ -256,7 +256,7 @@ def test_condition_error_wrapped(engine: ProcessEngine):
         FlowBuilder("cerr")
         .start()
         .branch("route")
-        .user_task("a", assignee="u_a")
+        .user_task("a", assignee="'u_a'")
         .end()
         .connect("start", "route")
         .flow("route", "a", condition=cond("ghost", "eq", 1))
@@ -283,7 +283,7 @@ def test_sequential_countersign_one_by_one(engine: ProcessEngine):
         .start()
         .user_task(
             "audit",
-            assignees=["u_1", "u_2", "u_3"],
+            assignees=["'u_1'", "'u_2'", "'u_3'"],
             multi_instance=MultiInstance(mode="sequential", approve_exit="all"),
         )
         .end()
@@ -314,9 +314,9 @@ def test_reject_back_then_original_handler_gets_task_again(engine: ProcessEngine
     definition = (
         FlowBuilder("rj")
         .start()
-        .user_task("step1", assignee="u_maker")
-        .user_task("step2", assignee="u_checker")
-        .user_task("step3", assignee="u_boss")
+        .user_task("step1", assignee="'u_maker'")
+        .user_task("step2", assignee="'u_checker'")
+        .user_task("step3", assignee="'u_boss'")
         .end()
         .connect("start", "step1")
         .connect("step1", "step2")
@@ -355,9 +355,9 @@ def test_reject_to_explicit_target(engine: ProcessEngine):
     definition = (
         FlowBuilder("rj2")
         .start()
-        .user_task("a", assignee="u_a")
-        .user_task("b", assignee="u_b")
-        .user_task("c", assignee="u_c", reject_target="a")
+        .user_task("a", assignee="'u_a'")
+        .user_task("b", assignee="'u_b'")
+        .user_task("c", assignee="'u_c'", reject_target="a")
         .end()
         .connect("start", "a")
         .connect("a", "b")
@@ -380,10 +380,10 @@ def test_countersign_reject_by_one_vote(engine: ProcessEngine):
     definition = (
         FlowBuilder("rj3")
         .start()
-        .user_task("first", assignee="u_maker")
+        .user_task("first", assignee="'u_maker'")
         .user_task(
             "panel",
-            assignees=["u_p1", "u_p2"],
+            assignees=["'u_p1'", "'u_p2'"],
             multi_instance=MultiInstance(
                 mode="parallel", approve_exit="all", disapprove_exit=">=1"
             ),
@@ -422,7 +422,7 @@ def test_dead_loop_guard(engine: ProcessEngine):
         .start()
         .user_task(
             "again",
-            assignee="u_loop",
+            assignee="'u_loop'",
         )
         .branch("route")
         .end()

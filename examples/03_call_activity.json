@@ -4,22 +4,48 @@
   "version": 1,
   "status": "published",
   "nodes": [
-    { "code": "start", "name": "发起", "kind": "start" },
-    { "code": "manager", "name": "经理审批", "kind": "user_task", "assignee": "u_manager" },
+    {
+      "code": "start",
+      "name": "发起",
+      "kind": "start"
+    },
+    {
+      "code": "manager",
+      "name": "经理审批",
+      "kind": "user_task",
+      "assignee": "'u_manager'"
+    },
     {
       "code": "sub_check",
       "name": "合规子流程",
       "kind": "call_activity",
       "process_code": "compliance_check",
       "is_synchronous": true,
-      "input_mappings": { "amount": "amount" },
-      "output_mappings": { "compliance_result": "compliance_result" }
+      "input_mappings": {
+        "amount": "amount"
+      },
+      "output_mappings": {
+        "compliance_result": "compliance_result"
+      }
     },
-    { "code": "end", "name": "结束", "kind": "end" }
+    {
+      "code": "end",
+      "name": "结束",
+      "kind": "end"
+    }
   ],
   "flows": [
-    { "source": "start", "target": "manager" },
-    { "source": "manager", "target": "sub_check" },
-    { "source": "sub_check", "target": "end" }
+    {
+      "source": "start",
+      "target": "manager"
+    },
+    {
+      "source": "manager",
+      "target": "sub_check"
+    },
+    {
+      "source": "sub_check",
+      "target": "end"
+    }
   ]
 }

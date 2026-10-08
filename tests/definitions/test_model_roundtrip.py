@@ -36,4 +36,4 @@ def test_nodes_resolved_to_spec_classes(registry, examples_dir):
     manager = definition.node("manager")
     assert manager is not None
     assert type(manager) is UserTaskSpec
-    assert manager.assignee == "u_manager"
+    assert manager.assignee == "'u_manager'"  # CEL 字符串字面量

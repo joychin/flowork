@@ -45,7 +45,7 @@ def _linear(code: str) -> FlowBuilder:
     return (
         FlowBuilder(code)
         .start()
-        .user_task("a", assignee="u_a")
+        .user_task("a", assignee="'u_a'")
         .end()
         .connect("start", "a")
         .connect("a", "end")
@@ -56,8 +56,8 @@ def _chain() -> FlowBuilder:
     return (
         FlowBuilder("hs_chain")
         .start()
-        .user_task("a", assignee="u_a")
-        .user_task("b", assignee="u_b")
+        .user_task("a", assignee="'u_a'")
+        .user_task("b", assignee="'u_b'")
         .end()
         .connect("start", "a")
         .connect("a", "b")
@@ -82,7 +82,7 @@ def _sign() -> FlowBuilder:
         .start()
         .user_task(
             "s",
-            assignees=["u1", "u2"],
+            assignees=["'u1'", "'u2'"],
             multi_instance=MultiInstance(
                 mode="parallel", approve_exit="all", disapprove_exit=">=1"
             ),
@@ -110,7 +110,7 @@ def _timeout(code: str, strategy: str) -> FlowBuilder:
         .start()
         .user_task(
             "slow",
-            assignee="u_slow",
+            assignee="'u_slow'",
             timeout=TimeoutPolicy(due_minutes=60, strategy=strategy),
         )
         .end()

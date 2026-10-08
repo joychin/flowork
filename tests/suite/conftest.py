@@ -62,7 +62,7 @@ def suite_engine(clock: FakeClock, org_store: DirectoryStore) -> ProcessEngine:
         EngineConfig(
             now=clock,
             org=org_store,
-            participant_functions=contrib.org_vocabulary(),
+            expression_functions=contrib.cel_vocabulary(org_store),
         )
     )
     deploy_world(engine, STORE_WORLD_CODES)
@@ -78,7 +78,7 @@ def static_engine(clock: FakeClock) -> ProcessEngine:
         EngineConfig(
             now=clock,
             org=org,
-            participant_functions=contrib.org_vocabulary(),
+            expression_functions=contrib.cel_vocabulary(org),
         )
     )
     deploy_world(engine, STATIC_WORLD_CODES)

@@ -142,7 +142,9 @@ def test_purchase_timeout_auto_approve():
     engine = ProcessEngine(
         EngineConfig(
             org=OrgDirectory.from_yaml(PILOT_DIR / "org.yaml"),
-            participant_functions=contrib.org_vocabulary(),
+            expression_functions=contrib.cel_vocabulary(
+                OrgDirectory.from_yaml(PILOT_DIR / "org.yaml")
+            ),
             now=clock,
         )
     )
@@ -151,7 +153,7 @@ def test_purchase_timeout_auto_approve():
         .start()
         .user_task(
             "dept_review",
-            assignee="manager_of()",
+            assignee="manager_of(initiator)",
             timeout=TimeoutPolicy(due_minutes=120, strategy="auto_approve"),
         )
         .end()

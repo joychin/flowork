@@ -13,7 +13,7 @@
       "code": "manager",
       "name": "经理审批",
       "kind": "user_task",
-      "assignee": "u_manager"
+      "assignee": "'u_manager'"
     },
     {
       "code": "route",
@@ -26,8 +26,8 @@
       "name": "总监会签",
       "kind": "user_task",
       "assignees": [
-        "u_alice",
-        "u_bob"
+        "'u_alice'",
+        "'u_bob'"
       ],
       "multi_instance": {
         "mode": "parallel",

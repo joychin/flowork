@@ -28,7 +28,7 @@ def engine() -> ProcessEngine:
     definition = (
         FlowBuilder("msg_flow")
         .start()
-        .user_task("a", assignee="u_a")
+        .user_task("a", assignee="'u_a'")
         .end()
         .connect("start", "a")
         .connect("a", "end")

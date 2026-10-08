@@ -25,7 +25,7 @@ def engine() -> ProcessEngine:
     definition = (
         FlowBuilder("idem_flow")
         .start()
-        .user_task("a", assignee="u_a")
+        .user_task("a", assignee="'u_a'")
         .end()
         .connect("start", "a")
         .connect("a", "end")
@@ -76,7 +76,7 @@ def test_same_key_different_definitions_do_not_collide(engine: ProcessEngine):
     other = (
         FlowBuilder("idem_other")
         .start()
-        .user_task("b", assignee="u_b")
+        .user_task("b", assignee="'u_b'")
         .end()
         .connect("start", "b")
         .connect("b", "end")
@@ -96,7 +96,7 @@ def _file_engine(tmp_path) -> ProcessEngine:
     definition = (
         FlowBuilder("idem_flow")
         .start()
-        .user_task("a", assignee="u_a")
+        .user_task("a", assignee="'u_a'")
         .end()
         .connect("start", "a")
         .connect("a", "end")

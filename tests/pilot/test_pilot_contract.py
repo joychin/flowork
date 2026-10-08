@@ -101,10 +101,10 @@ def test_contract_version_snapshot_isolation(pilot: ProcessEngine):
     revised = (
         FlowBuilder("contract_review", "合同评审 v2")
         .start("start", "提交")
-        .user_task("legal_review", "法务审查", assignee="u_fa1", reject_target="start")
+        .user_task("legal_review", "法务审查", assignee="'u_fa1'", reject_target="start")
         .branch("risk_route", "风险分流", route_mode=RouteMode.ALL_MATCH)
-        .user_task("finance_review", "财务核价", assignee="u_cai1", reject_target="legal_review")
-        .user_task("gm_review", "总经理终审", assignee="u_yang", reject_target="legal_review")
+        .user_task("finance_review", "财务核价", assignee="'u_cai1'", reject_target="legal_review")
+        .user_task("gm_review", "总经理终审", assignee="'u_yang'", reject_target="legal_review")
         .end("end", "完成", advance_policy="any")
         .connect("start", "legal_review")
         .connect("legal_review", "risk_route")

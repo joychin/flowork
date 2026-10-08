@@ -96,24 +96,26 @@ class TaskRecordsMixin:
         return list(session.scalars(stmt))
 
     def resolve_participants(self, ctx: RuntimeNodeContext, spec: UserTaskSpec) -> Any:
-        """参与者解析入口：返回 ParticipantResolution（todo + skipped）。"""
+        """参与者解析入口：返回 ParticipantResolution（todo + skipped）。
+
+        单轨 CEL（spec §4.2）：函数表自 EngineConfig.expression_functions 拍平；
+        有组织目录叠加委托替换与 to_admins 兜底，无目录走同一条 CEL 求值路径。
+        """
+        from flowork.expr.context import expression_functions_of
         from flowork.participants.resolver import (
-            ParticipantResolution,
             fallback_when_empty,
+            resolve_participants,
             resolve_with_delegation,
         )
 
-        org = self.engine.config.org if self.engine else None
-        if org is not None:
-            resolution, _delegation = resolve_with_delegation(
-                ctx, spec, org, self.engine.config.participant_functions
-            )
+        config = self.engine.config if self.engine else None
+        functions = expression_functions_of(config)
+        if config is not None and config.org is not None:
+            resolution, _delegation = resolve_with_delegation(ctx, spec, config.org, functions)
             if not resolution.todo and not resolution.skipped:
-                return fallback_when_empty(ctx, spec, org)
+                return fallback_when_empty(ctx, spec, config.org)
             return resolution
-        from flowork.participants.simple import resolve_simple
-
-        return ParticipantResolution(todo=resolve_simple(ctx, spec))
+        return resolve_participants(ctx, spec, functions=functions)
 
     def handled_assignees(self, session: Session, token_id: str) -> list[str]:
         """令牌下已实际办理过的人（排除被取消的任务）。"""

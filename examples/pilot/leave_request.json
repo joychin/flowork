@@ -32,7 +32,7 @@
         "on_fail": null
       },
       "properties": {},
-      "assignee": "manager_of()",
+      "assignee": "manager_of(initiator)",
       "reject_target": "start",
       "auto_pass_originator": true
     },
@@ -63,8 +63,8 @@
       },
       "properties": {},
       "assignees": [
-        "u_hr1",
-        "u_hr2"
+        "'u_hr1'",
+        "'u_hr2'"
       ],
       "multi_instance": {
         "mode": "sequential",
@@ -85,7 +85,7 @@
         "on_fail": null
       },
       "properties": {},
-      "assignee": "u_hr1"
+      "assignee": "'u_hr1'"
     },
     {
       "code": "notify",
