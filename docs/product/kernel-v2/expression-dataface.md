@@ -5,7 +5,7 @@
 | 对应 spec | [spec.md](./spec.md) §4.2（位点清单）、§4.3（求值语义）、C.4（task.* 快照）、§12/§13（投影登记） |
 | 关联设计 | [variable-io-api.md](./variable-io-api.md)（读写面，2026-10-08 已批六批）——本设计只管**判断面**，互补不重叠 |
 | 日期 | 2026-10-08 |
-| 状态 | **已批准**（2026-10-08）；**F0+F1+F2 已落地**（§8 前三批；F3–F5 按批排期），范围变更已记《本期建设边界》backlog |
+| 状态 | **已批准**（2026-10-08）；**F0–F3 已落地**（判断面词汇 + 节点事实 + 路由审计；F4 设计器/下发、F5 spec 收口待排），范围变更已记《本期建设边界》backlog |
 | 决策 | 判断面 = 精选事实目录（现查派生、位点分家、版本化）；`now` 由引擎经 Clock 注入；路由决策审计同批补齐 |
 
 ## 0. 一句话与五词口诀
@@ -116,7 +116,15 @@
 
 ## 6. 路由决策审计（配套，合并既有 P2 遗留）
 
-判断面开放后，"当时为什么走这条边"必须可回答。每次路由决策记录：**公式原文、求值结果、命中连线、关键取值快照**（now、引用的节点事实值/摘要）。落点：wf_token 扩列或独立路由日志表（实现批定）；查询随 /v2 与 Console。
+判断面开放后，"当时为什么走这条边"必须可回答。每次路由决策记录：**公式原文、求值结果、命中连线、关键取值快照**（now、引用的节点事实值/摘要）。
+
+**F3 落地口径（2026-10-08）**：落点＝独立表 `wf_route_decision`（一次 select_outgoing
+一行：edges 逐条件边 {flow, formula, result ∈ true/false/no_fact}、selected=最终激活
+连线、snapshot={now, prev_task, node:{code:facts}}，datetime→ISO/timedelta→秒）。
+三个真实路由入口持久化（behavior/branch/incident skip，与路由同事务）；**无条件路由
+也落行**（edges 空、selected 记激活）；**anticipate 预判与 dry-run 模拟面不审计**
+（只读预演）；**求值失败不落行**——错误二分下故障单消息已含公式与错误原文。
+查询面＝HistoryService.route_decisions(instance_id)（Python API 先行，REST 随 /v2 批）。
 
 ## 7. 与既有工作的关系
 
@@ -131,7 +139,7 @@
 | **F0 目录地基** | 目录对象 + FunctionSignature 补 label + validator 表驱动化 | validator 规则由目录生成；既有测试全绿 | 小 |
 | **F1 now 注入** | expression_context + Clock 接线 + 保留词 + 装配点透传（可与 F0 同刀） | §9 案例集 A2/A4/E5 全过（Clock 冻结断言） | 小 |
 | **F2 节点事实（核心）** | 事实查询模块（现查聚合）+ prev_task 因果链 + node() + 位点矩阵 + 查无语义 + 改派/出口快照补字段 | **已落地（2026-10-08）**：§9 A1/B1/B2/B3/C1–C3/D1/D5 共 10 例过（tests/semantics/test_node_facts.py）；C5→开放问题、D2/D3 由"最近完成"语义经 B1/J1 覆盖（专用加签/改派流程用例随 suite 补） | 中 |
-| **F3 路由审计** | 决策记录（公式/结果/取值快照）+ 落库 + 查询 | §9 案例集 F 组全过；与 wf_variable_history 同事务语义对齐 | 中 |
+| **F3 路由审计** | 决策记录（公式/结果/取值快照）+ 落库 + 查询 | **已落地（2026-10-08）**：§9 F 组 4 例过（tests/semantics/test_route_audit.py）；wf_route_decision 表 + HistoryService.route_decisions | 中 |
 | **F4 设计器与下发** | 目录下发端点 + 变量树五分组 + 公式编辑器提示（时效用 duration 字面量等） | 设计器无后端硬编码词汇；下拉与 validator 同源 | 小 |
 | **F5 文档收口** | spec §4.2/§4.3/C.4 修订 + 边界 backlog 记账 + API.md | 五道门全绿；spec 与实现一致 | 小 |
 

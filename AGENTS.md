@@ -149,5 +149,12 @@ incident/anticipate/cc/rework，resolver._evaluate_expressions 为取人咽喉�
 泛化 `*.{name}_unavailable` 位点规则 + 引擎函数目录对照（arity/位点，无注册表不误报）；
 改派位 task.* 补 created_at/deadline_at。设计文档 B2 口径修正（重报后查驳回须用
 node()，prev_task 因果链语义由 D 组承担）；C5 exit assignees 记开放问题。
-590 测试全绿。剩余 F3 路由审计（合并 P2 遗留）/F4 设计器目录下发/F5 spec 收口。
+**表达式数据面 F3（2026-10-08 同日，路由审计=合并 P2 遗留「路由决策无记录」）**：
+`wf_route_decision` 表（orm_v2）一行一次路由——edges 逐条件边 {flow,formula,result
+∈true/false/no_fact}、selected 激活连线、snapshot={now,prev_task,node 取值}（datetime
+→ISO/timedelta→秒）；`engine/route_audit.py` RoutingAudit 收集器（routing 旁路填充，
+attach_node 的 node_calls 回填 node() 读值）；三真实入口持久化（behavior/branch/
+incident skip 同事务），无条件路由也落行；anticipate/dry-run 只读预演不审计；求值
+失败不落行（故障单已含公式与错误）。查询面 HistoryService.route_decisions。
+594 测试全绿。剩余 F4 设计器目录下发/F5 spec 收口。
 
