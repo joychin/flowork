@@ -568,18 +568,18 @@ class EventSink(Protocol):               # ✗ 事件外发（默认=outbox 轮�
 
 ## 10. 领域事件
 
-现有 14 个 ✓（process_started/completed/cancelled；node_entered/exited/cancelled/failed；task_created/completed/rejected/claimed/transferred；incident_raised；job_dead_lettered）。【v2】增补 14 个：process_paused / process_resumed / process_terminated / definition_deployed / definition_retired / definition_purged / task_delegated / task_resolved / task_escalated / incident_resolved / timer_fired / instance_deadline_reached【v2.2】 / message_received / message_correlated。幂等部署（内容哈希相同）不发 definition_deployed（降噪）。
+现有 14 个 ✓（process_started/completed/cancelled；node_entered/exited/cancelled/failed；task_created/completed/rejected/claimed/transferred；incident_raised；job_dead_lettered）。【v2】增补 14 个：process_paused / process_resumed / process_terminated / definition_deployed / definition_retired / definition_purged / task_delegated / task_resolved / task_escalated / incident_resolved / timer_fired / instance_deadline_reached【v2.2】 / message_received / message_correlated。【变量 I/O 批，2026-10-08】增补 variables_updated（仅外部变量更新命令发射，payload 含 actor 与逐键改前/改后值）。幂等部署（内容哈希相同）不发 definition_deployed（降噪）。
 
 - **信封**：CloudEvents 1.0.2——type=事件名，id=outbox 行 id（UUID，消费端按 id 去重），source=`flowork://{engine_id}`，data=事件字段。
 - **交付保证**：事件与业务变更**同一个数据库事务**写入 outbox（transactional outbox，库形态独有优势）；分发为至少一次，消费端需幂等。
-- **不发什么**：变量值变化不发事件（防刷屏）；传阅已读不发（查询可得）。
+- **不发什么**：引擎内部写变量不发事件（防刷屏——任务提交/钩子/映射的变量变更走 wf_variable_history 留痕表，见 14 章；血缘查询可得）；外部变量更新命令例外，发 variables_updated（低频高关注）；传阅已读不发（查询可得）。
 
 ## 11. Python API（进程内调用，四组）
 
 | 组 | 方法 | 现状 |
 |---|---|---|
 | 定义 | `deploy / validate / dry_run / semantic_diff / verdict(预演) / get_definition / list_definitions / retire / purge / definition_drift` | ✓（validate/dry_run/semantic_diff）；deploy ◐（版本判定+幂等去重）；retire/purge/drift/get/list ✗ |
-| 实例 | `start_process(code, variables, initiator, idempotency_key?, reuse?)`；`pause / resume / cancel / terminate / get_instance` | start ◐（幂等【v2】）；pause/terminate ✗ |
+| 实例 | `start_process(code, variables, initiator, idempotency_key?, reuse?)`；`pause / resume / cancel / terminate / get_instance`；`update_variables(instance_id, updates, *, actor, as_agent?, reason?)` / `variables_of(instance_id)` / `variable_history(instance_id, *, name?, limit, before?)`【变量 I/O 批，2026-10-08】 | start ◐（幂等【v2】）；pause/terminate ✗；变量读写三方法本批落地 |
 | 任务 | `get_task / list_tasks / claim / unclaim / complete / reject / transfer / assist / complete_assist / add_countersigner / list_cc_tasks / mark_cc_read`；`anticipate(task_id, outcome) → {node_exit, instance_complete}`【v2.2 ✗】 | 除 anticipate 外 ✓ 全部 |
 | 系统 | `signal / publish_message`【v2】；`activate_jobs / complete_job / fail_job`【v2】；`list_incidents / resolve_incident / move_token` | move_token/incident ✓，其余 ✗ |
 
@@ -593,11 +593,12 @@ class EventSink(Protocol):               # ✗ 事件外发（默认=outbox 轮�
 - tasks 过滤维度：state × assignee × candidate × flow_code × instance_id × priority × due_before（后两项依赖 wf_task 新列，第 14 章）。
 - 动作：`POST /v2/tasks/{id}/{claim|unclaim|complete|reject|transfer|assist|complete_assist}`；`POST /v2/instances/{id}/{pause|resume|cancel|terminate|signal}`；`POST /v2/messages/publish`；`POST /v2/jobs/activate`（长轮询：request_timeout 参数）；`POST /v2/jobs/{id}/{complete|fail}`；`POST /v2/definitions/deploy`；`POST /v2/definitions/{code}/retire`；`GET /v2/definitions/{code}?major=&revision=`（purge 仅 CLI，不出 REST）。
 - 只读预判【v2.2】：`POST /v2/tasks/{id}/anticipate`（body 携带假想 outcome，返回 `{node_exit, instance_complete}`，不落库不改状态）。
+- 变量读写【变量 I/O 批登记，随 /v2 批实施】：`GET /v2/instances/{id}/variables`（值全集）；`PATCH /v2/instances/{id}/variables`（body 为 `{name: value}` 合并写，校验三门槛：白名单/类型/非终态，语义见 docs/product/kernel-v2/variable-io-api.md）；`GET /v2/instances/{id}/variables/history`（游标分页，可按 name 过滤）。写需 scope `instances:variables`（engine-v1 02-权限模型）。
 - 错误体统一 `{"error": {code, message, details}}`。
 
 ## 13. MCP 工具（M7 落地）
 
-首批 17 个：validate_spec / dry_run / deploy / **definition_drift**（AI/CI 对账，6.5）/ list_definitions / start_instance / query_instance / signal_instance / publish_message / list_my_tasks / claim_task / complete_task / reject_task / **anticipate_task**（AI 预判提交后果，只读，v2.2）/ pause_instance / list_incidents / resolve_incident。入参出参直接复用第 11 章的 pydantic DTO（tasks/models.py 已为 MCP 预留 typed DTO ✓）。
+首批 18 个：validate_spec / dry_run / deploy / **definition_drift**（AI/CI 对账，6.5）/ list_definitions / start_instance / query_instance / signal_instance / publish_message / **update_instance_variables**（外部改值，随 M7 落地，入参出参复用 §11）/ list_my_tasks / claim_task / complete_task / reject_task / **anticipate_task**（AI 预判提交后果，只读，v2.2）/ pause_instance / list_incidents / resolve_incident。入参出参直接复用第 11 章的 pydantic DTO（tasks/models.py 已为 MCP 预留 typed DTO ✓）。
 
 ## Part C：实施层（怎么开工）
 
@@ -616,6 +617,7 @@ class EventSink(Protocol):               # ✗ 事件外发（默认=outbox 轮�
 | wf_message_buffer（新表） | name, correlation_key, message_id（唯一）, payload, expires_at, received_at |
 | wf_message_subscription（新表） | instance_id, node_id, name, correlation_key, state(open/matched) |
 | wf_variable_index（新表） | instance_id, name, value_text, value_num |
+| wf_variable_history（新表，变量 I/O 批 2026-10-08） | instance_id, name, old_value, new_value, source, acted_by, acted_as_agent, created_at；追加只写，全写方覆盖（任务提交/钩子/外部命令），命令尾 diff 产生，值相等跳过 |
 
 迁移走 Alembic 基线（与多副本欠账合并排期）。
 
