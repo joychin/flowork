@@ -23,7 +23,7 @@ __all__ = [
 ]
 
 
-MAX_FORMULA_LENGTH = 4096
+MAX_FORMULA_LENGTH = 2048  # spec §4.3：CEL 公式 2KB 上限（P0-1 决策，原 asteval 期 4096）
 
 
 class ConditionOperator(StrEnum):
