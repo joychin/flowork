@@ -70,13 +70,13 @@ def cel_vocabulary(org: OrgDirectoryLike) -> ExpressionFunctions:
     return _CelVocabulary(
         {
             "manager_of": ExpressionFunction(
-                FunctionSignature(("one_user",), "one_user"), manager_of
+                FunctionSignature(("one_user",), "one_user", label="取上级"), manager_of
             ),
             "users_with_role": ExpressionFunction(
-                FunctionSignature(("string",), "users"), users_with_role
+                FunctionSignature(("string",), "users", label="按角色取人"), users_with_role
             ),
             "has_role": ExpressionFunction(
-                FunctionSignature(("one_user", "string"), "bool"), has_role
+                FunctionSignature(("one_user", "string"), "bool", label="判断角色成员"), has_role
             ),
         }
     )

@@ -21,6 +21,7 @@ from flowork.definitions.builtin import (
     KIND_USER_TASK,
 )
 from flowork.definitions.flow import MAX_FORMULA_LENGTH
+from flowork.expr.catalog import identifier_entries, reserved_identifiers
 
 if TYPE_CHECKING:
     from flowork.definitions.definition import ProcessDefinition
@@ -35,11 +36,12 @@ __all__ = [
 
 IssueFn = Callable[..., None]
 
-# 求值上下文注入的保留标识符：可引用，不可声明为流程变量。
-RESERVED_IDENTIFIERS = frozenset({"initiator", "task"})
+# 求值上下文注入的保留标识符（expr.catalog 表驱动）：可引用，不可声明为流程变量。
+RESERVED_IDENTIFIERS = reserved_identifiers()
 
-# task.* 快照当前仅超时改派位提供（fire 时注入，spec C.4）；其余位点引用即错。
-TASK_KINDS = frozenset({"reassign", "exit"})
+# 各保留词的可用位点（expr.catalog 表驱动）：task.* 仅 reassign/exit 位提供
+# （spec C.4 快照注入位）；initiator/now 全位点。
+RESERVED_POSITIONS = {entry.name: entry.positions for entry in identifier_entries()}
 
 # 位点 kind → 规则名前缀（连线位沿用既有 condition.* 规则名，节点位用 expression.*）
 _RULE_PREFIX = {
@@ -184,9 +186,10 @@ def check_variable_references(
 ) -> None:
     """变量引用与函数调用（声明了流程变量时启用，全位点单轨 CEL）。
 
-    - 保留字声明（initiator/task）→ ERROR（求值上下文冲突）；
+    - 保留字声明（expr.catalog：initiator/now/task）→ ERROR（求值上下文冲突）；
     - 公式引用未声明变量 → ERROR（静态检查，K8s CRD 体验）；
-      ``task.*`` 仅超时改派位可引用（快照注入位，spec C.4），其余位点即错；
+      保留词按目录位点放行——``task.*`` 仅超时改派/会签出口位（快照注入位，
+      spec C.4），其余位点引用即错；initiator/now 全位点；
     - 公式调用未注册函数：有注册表 → ERROR（含参数个数）；无注册表 → WARNING；
     - 取人/改派位根调用 returns 非 one_user/users → ERROR（谓词误用提前拦）。
     """
@@ -195,8 +198,9 @@ def check_variable_references(
         if variable.name in RESERVED_IDENTIFIERS:
             error(
                 "variables.reserved_name",
-                f"{variable.name} 为求值保留标识符（initiator=发起人、task=任务快照，"
-                "由引擎注入），不可声明为流程变量",
+                f"{variable.name} 为求值保留标识符（"
+                + "、".join(f"{entry.name}={entry.label}" for entry in identifier_entries())
+                + "，由引擎注入），不可声明为流程变量",
                 node=variable.name,
             )
     if not declared:
@@ -228,17 +232,16 @@ def check_variable_references(
         for name in idents:
             if name in declared:
                 continue
-            if name == "task" and kind in TASK_KINDS:
-                continue  # task.* 快照该位点可用
             if name in RESERVED_IDENTIFIERS:
+                if kind in RESERVED_POSITIONS[name]:
+                    continue  # 该位点可用（task 窄位点方言 / initiator·now 全位点）
                 if name == "task":
                     error(
                         f"{rule}.task_unavailable",
-                        f"公式引用 {name}.*：任务快照当前仅超时改派位提供（spec C.4）",
+                        "公式引用 task.*：任务快照仅超时改派/会签出口位提供（spec C.4）",
                         flow=where,
                     )
-                    continue
-                continue  # initiator 全位点可用
+                continue
             unknown.add(name)
         if unknown:
             error(

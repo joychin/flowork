@@ -70,10 +70,12 @@ def simulate_route(
     Args:
         functions: 宿主 CEL 自定义函数表（与运行时同一注册来源，预演结果才可信）。
     """
+    from flowork.clock import utc_now
     from flowork.expr.conditions import evaluate_condition
 
     variables = dict(variables)
     variables.setdefault("initiator", "u_initiator")  # 模拟面占位（见 docstring）
+    variables.setdefault("now", utc_now())  # 与运行时同一注入（expression-dataface §2.1）
     result = DryRunResult()
     nodes = {n.code: n for n in definition.nodes}
     start = next((n for n in definition.nodes if n.kind == "start"), None)

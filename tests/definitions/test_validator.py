@@ -287,6 +287,19 @@ def test_reserved_identifier_initiator_cannot_be_declared(registry):
     assert "variables.reserved_name" in error_rules(definition, registry)
 
 
+def test_reserved_identifier_now_cannot_be_declared(registry):
+    """expression-dataface E3：now 由引擎注入，不可声明为流程变量。"""
+    definition = _cel_flow(registry, formula="amount > 1", declare=("amount", "now"))
+    assert "variables.reserved_name" in error_rules(definition, registry)
+
+
+def test_now_reference_needs_no_declaration(registry):
+    """now 为全位点保留词：未声明也不算 unknown（目录表驱动放行）。"""
+    definition = _cel_flow(registry, formula="now > timestamp('2000-01-01T00:00:00Z')")
+    issues = validate_definition(definition, registry)
+    assert not any(issue.rule == "condition.variable.unknown" for issue in issues)
+
+
 # —— 位点统一静态检查（spec §4.2：取人/改派/映射位与连线同一套检查）——
 
 

@@ -15,6 +15,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from flowork.clock import utc_now
 from flowork.definitions.definition import (
     InvalidDefinitionData,
     ProcessDefinition,
@@ -215,7 +216,8 @@ def create_app(db_file: str | Path | None = None, *, seed: bool = True) -> FastA
         """公式试算：CEL 对样例变量求值（含引擎配置的自定义函数），原样返回值或错误说明。
 
         值语义（位点统一）：条件公式返回 bool，取人/映射公式返回 str/list/数值；
-        样例缺 initiator 时注入占位 ``u_initiator``（试算可引用保留标识符）。
+        样例缺 initiator 时注入占位 ``u_initiator``，缺 now 时注入统一时钟
+        （试算可引用保留标识符，与运行时同一注入面）。
         """
         from flowork.expr.cel import evaluate_formula_value
 
@@ -223,6 +225,7 @@ def create_app(db_file: str | Path | None = None, *, seed: bool = True) -> FastA
         raw_vars = body.get("variables")
         variables = dict(raw_vars) if isinstance(raw_vars, dict) else {}
         variables.setdefault("initiator", "u_initiator")
+        variables.setdefault("now", utc_now())
         try:
             return {
                 "ok": True,

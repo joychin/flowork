@@ -71,10 +71,12 @@ class FunctionSignature:
 
     类型词汇（spec §5.5）：one_user / users / groups / mixed / bool，
     另含 CEL 原生标量 string/number/boolean/list/map。
+    label 为中文标签（函数目录树下发/设计器函数树，expression-dataface §5）。
     """
 
     params: tuple[str, ...]
     returns: str
+    label: str = ""
 
 
 class ExpressionFunction(NamedTuple):
