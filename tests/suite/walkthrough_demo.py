@@ -1,9 +1,7 @@
-"""手动走查演示：实际运行套件测试数据，一个审批节点一个审批节点地查看流程。
+"""手动走查演示（顺路场景）：实际运行套件测试数据，一个审批节点一个审批节点地查看。
 
 运行：``uv run python -m tests.suite.walkthrough_demo``
-
-每一步先经 walkthrough.expect_position 硬校验位置（错即抛错终止），再打印
-人可读快照（实例状态 / 活跃节点 / 待办归属）；三个场景跑完输出审批动作汇总。
+驳回与拒收专场见 ``walkthrough_reject_demo``；时限与故障专场见 ``walkthrough_fault_demo``。
 """
 
 from __future__ import annotations
@@ -11,78 +9,18 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
-from flowork import contrib
-from flowork.engine.config import EngineConfig
 from flowork.engine.engine import ProcessEngine
-from tests.suite.conftest import deploy_world, register_world_actions
-from tests.suite.walkthrough import (
-    active_nodes,
-    complete_of,
-    entered_activities,
-    expect_position,
-    ready_pairs,
-    reject_of,
+from tests.suite.demo_kit import (
+    archived,
+    make_static_engine,
+    make_store_engine,
+    step,
+    who,
 )
-from tests.suite.world_catalog import STATIC_WORLD_CODES, STORE_WORLD_CODES
-from tests.suite.world_org import USERS, build_directory_store, build_static_org
-
-NAME_OF = {user_id: name for user_id, name, _dept in USERS}
+from tests.suite.walkthrough import complete_of, entered_activities, reject_of
 
 
-def make_store_engine(tmp: Path) -> ProcessEngine:
-    engine = ProcessEngine(
-        EngineConfig(
-            org=build_directory_store(tmp / "demo_org.db"),
-            participant_functions=contrib.org_vocabulary(),
-        )
-    )
-    deploy_world(engine, STORE_WORLD_CODES)
-    register_world_actions(engine)
-    return engine
-
-
-def make_static_engine() -> ProcessEngine:
-    engine = ProcessEngine(
-        EngineConfig(org=build_static_org(), participant_functions=contrib.org_vocabulary())
-    )
-    deploy_world(engine, STATIC_WORLD_CODES)
-    register_world_actions(engine)
-    return engine
-
-
-def who(user: str) -> str:
-    return f"{NAME_OF.get(user, user)}({user})"
-
-
-def snapshot(engine: ProcessEngine, iid: str) -> None:
-    info = engine.runtime.get_instance(iid)
-    nodes = sorted(active_nodes(engine, iid))
-    print(f"    ▶ 实例状态={info.state:<9} 活跃节点={nodes if nodes else '∅（已到终点）'}")
-    for activity, assignee in sorted(ready_pairs(engine, iid)):
-        print(f"        待办｜{activity} → {who(assignee)}")
-
-
-def step(
-    engine: ProcessEngine, iid: str, title: str, *, nodes=None, tasks=None, state=None
-) -> None:
-    print(f"  [{title}]")
-    expect_position(engine, iid, nodes=nodes, tasks=tasks, state=state, note=title)
-    snapshot(engine, iid)
-
-
-def archived(engine: ProcessEngine, iid: str) -> str:
-    row = engine.history.task_history(instance_id=iid)[-1]
-    return f"{row.activity_code} · {who(row.assignee)} · {row.outcome}"
-
-
-def history_report(engine: ProcessEngine, iid: str) -> list[tuple[str, str, str]]:
-    return [
-        (row.activity_code, row.assignee, row.outcome)
-        for row in engine.history.task_history(instance_id=iid)
-    ]
-
-
-def scenario_expense_high_lane(engine: ProcessEngine) -> list[tuple[str, str, str]]:
+def scenario_expense_high_lane(engine: ProcessEngine) -> None:
     print("\n场景 A｜报销 8000 元——高额道：财务会签 → 逐级签批 → 传阅 → 自动打款")
     iid = engine.runtime.start_process(
         "suite_expense",
@@ -143,10 +81,9 @@ def scenario_expense_high_lane(engine: ProcessEngine) -> list[tuple[str, str, st
     entered = entered_activities(engine, iid)
     assert entered == expected, f"节点序列不符：{entered}"
     print(f"    ✓ 节点进入序列与预期一致：{' → '.join(expected)}")
-    return history_report(engine, iid)
 
 
-def scenario_expense_reject_reroute(engine: ProcessEngine) -> list[tuple[str, str, str]]:
+def scenario_expense_reject_reroute(engine: ProcessEngine) -> None:
     print("\n场景 B｜报销驳回重提改道——高额被驳 → 改 900 元重提 → 分支复算走快道")
     iid = engine.runtime.start_process(
         "suite_expense",
@@ -188,10 +125,9 @@ def scenario_expense_reject_reroute(engine: ProcessEngine) -> list[tuple[str, st
     step(engine, iid, "第 4 步 主管王工快审通过 → 完结", nodes=set(), state="completed")
     entered = set(entered_activities(engine, iid))
     assert {"fin_countersign", "start", "amount_route", "quick_review"} <= entered
-    return history_report(engine, iid)
 
 
-def scenario_purchase_parallel(engine: ProcessEngine) -> list[tuple[str, str, str]]:
+def scenario_purchase_parallel(engine: ProcessEngine) -> None:
     print("\n场景 C｜采购 50000 高风险——并行分叉 → 合规子流程 → 等齐收口 → 管理员兜底")
     iid = engine.runtime.start_process(
         "suite_purchase",
@@ -267,25 +203,18 @@ def scenario_purchase_parallel(engine: ProcessEngine) -> list[tuple[str, str, st
     assert variables["compliance"] == "passed", "子流程 output_mappings 应回传"
     assert variables["paid_amount"] == 50000, "打款动作应记录预算金额"
     print("    ✓ 子流程回传 compliance=passed；打款 paid_amount=50000")
-    return history_report(engine, iid)
 
 
 def main() -> None:
     print("═" * 72)
-    print("flowork 套件测试数据·实际运行走查（每步位置快照 + 硬校验）")
+    print("flowork 走查演示·顺路场景（每步位置快照 + 硬校验）")
     print("═" * 72)
-    reports: list[tuple[str, str, str]] = []
     with tempfile.TemporaryDirectory() as tmp_name:
         store_engine = make_store_engine(Path(tmp_name))
-        reports += scenario_expense_high_lane(store_engine)
-        reports += scenario_expense_reject_reroute(store_engine)
-    reports += scenario_purchase_parallel(make_static_engine())
-
-    print("\n" + "═" * 72)
-    print(f"审批节点走查汇总（{len(reports)} 个审批动作，全部按预期落位）")
-    print("═" * 72)
-    for activity, assignee, outcome in reports:
-        print(f"  {activity:<18} {who(assignee):<18} {outcome}")
+        scenario_expense_high_lane(store_engine)
+        scenario_expense_reject_reroute(store_engine)
+    scenario_purchase_parallel(make_static_engine())
+    print("\n顺路场景全部通过（后续专场：walkthrough_reject_demo / walkthrough_fault_demo）")
 
 
 if __name__ == "__main__":
