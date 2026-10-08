@@ -84,7 +84,9 @@ def _sign() -> FlowBuilder:
             "s",
             assignees=["'u1'", "'u2'"],
             multi_instance=MultiInstance(
-                mode="parallel", approve_exit="all", disapprove_exit=">=1"
+                mode="parallel",
+                approve_exit="task.approve_count >= task.item_count",
+                disapprove_exit="task.disapprove_count >= 1",
             ),
         )
         .end()

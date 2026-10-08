@@ -284,7 +284,9 @@ def test_sequential_countersign_one_by_one(engine: ProcessEngine):
         .user_task(
             "audit",
             assignees=["'u_1'", "'u_2'", "'u_3'"],
-            multi_instance=MultiInstance(mode="sequential", approve_exit="all"),
+            multi_instance=MultiInstance(
+                mode="sequential", approve_exit="task.approve_count >= task.item_count"
+            ),
         )
         .end()
         .connect("start", "audit")
@@ -385,7 +387,9 @@ def test_countersign_reject_by_one_vote(engine: ProcessEngine):
             "panel",
             assignees=["'u_p1'", "'u_p2'"],
             multi_instance=MultiInstance(
-                mode="parallel", approve_exit="all", disapprove_exit=">=1"
+                mode="parallel",
+                approve_exit="task.approve_count >= task.item_count",
+                disapprove_exit="task.disapprove_count >= 1",
             ),
             reject_target="first",
         )

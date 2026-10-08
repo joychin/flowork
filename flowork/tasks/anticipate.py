@@ -42,9 +42,11 @@ class AnticipateMixin:
 
     def _anticipate(self, ctx: CommandContext, task_id: str, outcome: str) -> AnticipateResult:
         from flowork.definitions.builtin import CallActivitySpec, EndSpec, UserTaskSpec
+        from flowork.engine.routing import evaluation_variables, select_outgoing
+        from flowork.expr.context import expression_functions_of
         from flowork.persistence.orm import TaskRow as _TaskRow
         from flowork.persistence.orm import TokenRow as _TokenRow
-        from flowork.tasks.countersign import evaluate_exit
+        from flowork.tasks.countersign import exit_reached
 
         task = ctx.session.get(_TaskRow, task_id)
         if task is None or task.state != "ready":
@@ -58,15 +60,38 @@ class AnticipateMixin:
         assert node is not None
         spec = node if isinstance(node, UserTaskSpec) else None
         mi = spec.multi_instance if spec else None
+        variables = evaluation_variables(instance, instance.variables)
+        functions = expression_functions_of(self._engine.config)
+
+        def _exit(expr: str | None, *, approve: int, disapprove: int, side: str) -> bool:
+            """假想计数下的出口判定（缺省全票语义下沉在 exit_reached）。"""
+            return exit_reached(
+                expr,
+                side=side,  # type: ignore[arg-type]
+                item_count=token.item_count,
+                approve_count=approve,
+                disapprove_count=disapprove,
+                variables=variables,
+                start_user=instance.start_user,
+                functions=functions,
+            )
 
         if outcome == "reject":
-            disapproves = token.disapprove_count + 1
-            node_exit = evaluate_exit(
-                mi.disapprove_exit if mi else ">=1", token.item_count, disapproves
+            # 假想 +1 票否决：非会签节点任一否决即出口（原 >=1 语义）；会签未配＝全员否决
+            expr = mi.disapprove_exit if mi is not None else "task.disapprove_count >= 1"
+            node_exit = _exit(
+                expr,
+                approve=token.approve_count,
+                disapprove=token.disapprove_count + 1,
+                side="disapprove",
             )
         elif outcome == "agree":
-            approves = token.approve_count + 1
-            node_exit = evaluate_exit(mi.approve_exit if mi else None, token.item_count, approves)
+            node_exit = _exit(
+                mi.approve_exit if mi else None,
+                approve=token.approve_count + 1,
+                disapprove=token.disapprove_count,
+                side="approve",
+            )
         else:
             raise ValueError(f"假想 outcome 仅支持 agree/reject：{outcome!r}")
 
@@ -74,11 +99,6 @@ class AnticipateMixin:
             return AnticipateResult(node_exit=False, instance_complete=False)
 
         # 节点将出：按当前变量近似路由，看是否无需再等任何人工/子流程即到 end
-        from flowork.engine.routing import evaluation_variables, select_outgoing
-        from flowork.expr.context import expression_functions_of
-
-        variables = evaluation_variables(instance, instance.variables)
-        functions = expression_functions_of(self._engine.config)
         if outcome == "reject" and spec is not None:
             reject_target = spec.reject_target or token.source_activity_code or ""
             targets = [reject_target] if reject_target else []

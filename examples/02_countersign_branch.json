@@ -31,7 +31,7 @@
       ],
       "multi_instance": {
         "mode": "parallel",
-        "approve_exit": ">=50%"
+        "approve_exit": "task.approve_count * 100 >= task.item_count * 50"
       },
       "reject_target": "manager"
     },

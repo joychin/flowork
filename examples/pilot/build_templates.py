@@ -63,7 +63,9 @@ def expense_claim():
             "财务会签",
             assignees=["'u_cai1'", "'u_cai2'"],
             multi_instance=MultiInstance(
-                mode="parallel", approve_exit=">=50%", disapprove_exit=">=1"
+                mode="parallel",
+                approve_exit="task.approve_count * 100 >= task.item_count * 50",
+                disapprove_exit="task.disapprove_count >= 1",
             ),
             reject_target="supervisor",
             advance_policy="any",
@@ -109,7 +111,9 @@ def leave_request():
             "HR 串行会签",
             assignees=["'u_hr1'", "'u_hr2'"],
             multi_instance=MultiInstance(
-                mode="sequential", approve_exit="all", disapprove_exit=">=1"
+                mode="sequential",
+                approve_exit="task.approve_count >= task.item_count",
+                disapprove_exit="task.disapprove_count >= 1",
             ),
             reject_target="supervisor",
         )

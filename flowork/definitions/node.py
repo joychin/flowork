@@ -48,7 +48,11 @@ class MultiInstance(BaseModel):
     """会签（多人参与）配置。
 
     mode：parallel=并签（全员同时待办）/ sequential=串行（逐人待办）。
-    出口为比例表达式字符串，M2 由出口判定器求值（如 ">=50%"、"all"、">=1"）。
+    出口为 **CEL 布尔公式**（spec §4.2 位点统一），上下文注入 task.* 会签计数
+    （item_count/approve_count/disapprove_count，spec C.4）；缺省＝全员
+    （approve_exit 全员同意 / disapprove_exit 全员否决）。旧专用语法等价：
+    "all"→task.approve_count >= task.item_count；">=N%"→整数乘法
+    task.approve_count * 100 >= task.item_count * N。
     """
 
     model_config = ConfigDict(extra="forbid")

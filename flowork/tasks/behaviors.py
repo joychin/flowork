@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from flowork.definitions.builtin import (
     CallActivitySpec,
     CcTaskSpec,
@@ -14,9 +16,11 @@ from flowork.definitions.builtin import (
 )
 from flowork.engine.context import RuntimeNodeContext
 from flowork.engine.kernel import EngineExecutionError, NoParticipantError
+from flowork.expr.context import expression_functions_of
 from flowork.runtime.behavior import NodeBehavior, NodeContext
 from flowork.runtime.registry import NodeRegistry
-from flowork.tasks.countersign import evaluate_exit
+from flowork.tasks.countersign import exit_reached
+from flowork.tasks.deadlines import schedule_deadline_jobs
 
 __all__ = [
     "CallActivityBehavior",
@@ -112,7 +116,7 @@ class UserTaskBehavior(NodeBehavior):
         targets = [resolution.todo[0]] if sequential and resolution.todo else resolution.todo
         created = [ctx.create_task(assignee=assignee) for assignee in targets]
         for task in created:
-            _schedule_timeout(ctx, spec, task.id)
+            schedule_deadline_jobs(ctx, spec, task.id)
         # 全员自动通过时立即完成节点
         if not resolution.todo:
             self._finish_now(ctx)
@@ -127,7 +131,7 @@ class UserTaskBehavior(NodeBehavior):
         ctx.token.item_count = 1
         ctx.token_updated()
         task = ctx.create_task(assignee="")
-        _schedule_timeout(ctx, spec, task.id)  # 超时策略同样适用于认领场景
+        schedule_deadline_jobs(ctx, spec, task.id)  # 超时策略同样适用于认领场景
         candidates = list(spec.candidate_users) + list(spec.candidate_groups)
         for candidate in dict.fromkeys(candidates):
             ctx.session.add(
@@ -191,13 +195,23 @@ class UserTaskBehavior(NodeBehavior):
         token = ctx.token
         assert token is not None
         mi = spec.multi_instance
-        if evaluate_exit(mi.approve_exit if mi else None, token.item_count, token.approve_count):
+        counts: dict[str, Any] = {
+            "item_count": token.item_count,
+            "approve_count": token.approve_count,
+            "disapprove_count": token.disapprove_count,
+            "variables": ctx.variables,
+            "start_user": ctx.instance.start_user,
+            "functions": expression_functions_of(
+                ctx.kernel.engine.config if ctx.kernel.engine else None
+            ),
+        }
+        if exit_reached(mi.approve_exit if mi else None, side="approve", **counts):
             token.approval_exit = "agree"
             return True
         if (
             mi is not None
             and mi.disapprove_exit
-            and evaluate_exit(mi.disapprove_exit, token.item_count, token.disapprove_count)
+            and exit_reached(mi.disapprove_exit, side="disapprove", **counts)
         ):
             token.approval_exit = "reject"
             return True
@@ -255,44 +269,3 @@ class CcTaskBehavior(NodeBehavior):
         spec = self.spec
         assert isinstance(spec, CcTaskSpec)
         create_cc_items(ctx, spec)
-
-
-def _schedule_timeout(ctx: RuntimeNodeContext, spec: UserTaskSpec, task_id: str) -> None:
-    """按节点超时配置创建 timer Job（v2.2：deadlines 列表逐条建 Job，≤8 条）。
-
-    首条到期时刻物化进 task.due_at（due_before 过滤与排序，spec §5.1）；
-    auto_approve/auto_reject 终结等待后剩余 Job 因任务已完自然跳过。
-    """
-    from flowork.definitions.node import effective_deadlines
-
-    deadlines = effective_deadlines(spec)
-    if not deadlines:
-        return
-    import uuid
-    from datetime import timedelta
-
-    from flowork.persistence.orm import JobRow, TaskRow
-
-    now = ctx.kernel.config.now()
-    for index, deadline in enumerate(deadlines):
-        ctx.session.add(
-            JobRow(
-                id=uuid.uuid4().hex,
-                job_type="timer",
-                state="scheduled",
-                run_at=now + timedelta(minutes=deadline.after_minutes),
-                instance_id=ctx.instance.id,
-                payload={
-                    "task_id": task_id,
-                    "activity_code": spec.code,
-                    "kind": "task_deadline",
-                    "strategy": deadline.action.value,
-                    "after_minutes": deadline.after_minutes,
-                    "deadline_index": index,
-                    **({"reassign_to": deadline.reassign_to} if deadline.reassign_to else {}),
-                },
-            )
-        )
-    task = ctx.session.get(TaskRow, task_id)
-    if task is not None:
-        task.due_at = now + timedelta(minutes=deadlines[0].after_minutes)

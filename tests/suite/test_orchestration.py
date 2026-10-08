@@ -31,7 +31,7 @@ def test_any_sign_first_vote_exits_and_auto_passes_rest() -> None:
             "vote",
             "或签",
             assignees=["'u_a'", "'u_b'", "'u_c'"],
-            multi_instance=MultiInstance(mode="parallel", approve_exit="any"),
+            multi_instance=MultiInstance(mode="parallel", approve_exit="task.approve_count >= 1"),
         )
         .end()
         .connect("start", "vote")

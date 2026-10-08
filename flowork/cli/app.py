@@ -204,7 +204,9 @@ def _publish_full_demo_flow(engine: ProcessEngine) -> None:
             "总监会签",
             assignees=["'u_alice'", "'u_bob'"],
             multi_instance=MultiInstance(
-                mode="parallel", approve_exit="all", disapprove_exit=">=1"
+                mode="parallel",
+                approve_exit="task.approve_count >= task.item_count",
+                disapprove_exit="task.disapprove_count >= 1",
             ),
             reject_target="manager",
         )

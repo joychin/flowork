@@ -51,7 +51,9 @@ def expense_definition() -> ProcessDefinition:
             "财务会签",
             assignees=['users_with_role("finance_approver")'],
             multi_instance=MultiInstance(
-                mode="parallel", approve_exit=">=2", disapprove_exit=">=1"
+                mode="parallel",
+                approve_exit="task.approve_count >= 2",
+                disapprove_exit="task.disapprove_count >= 1",
             ),
             reject_target="start",
         )
@@ -59,7 +61,9 @@ def expense_definition() -> ProcessDefinition:
             "level_sign",
             "逐级签批",
             assignees=["'u_cfo'", "'u_ceo'"],
-            multi_instance=MultiInstance(mode="sequential", approve_exit="all"),
+            multi_instance=MultiInstance(
+                mode="sequential", approve_exit="task.approve_count >= task.item_count"
+            ),
         )
         .cc_task("cc_fin", "抄送财务总监", recipients=["'u_cfo'"])
         .service_task("pay", "自动打款", action="make_payment")
@@ -141,7 +145,9 @@ def purchase_definition() -> ProcessDefinition:
             "final_sign",
             "会签收口（等齐）",
             assignees=["'u_cfo'", "'u_compliance'"],
-            multi_instance=MultiInstance(mode="parallel", approve_exit=">=60%"),
+            multi_instance=MultiInstance(
+                mode="parallel", approve_exit="task.approve_count * 100 >= task.item_count * 60"
+            ),
             advance_policy="all",
         )
         .user_task(

@@ -80,7 +80,6 @@ class RejectMixin:
         from flowork.definitions.builtin import UserTaskSpec
         from flowork.engine.kernel import RejectTargetMissing
         from flowork.persistence.orm import TokenRow as _TokenRow
-        from flowork.tasks.countersign import evaluate_exit
 
         task = ctx.session.get(TaskRow, task_id)
         if task is None or task.state != "ready":
@@ -117,11 +116,23 @@ class RejectMixin:
         node = kernel.definition_of(ctx.session, instance).node(task.activity_code)
         assert node is not None
         spec = node if isinstance(node, UserTaskSpec) else None
-        disapprove_exit = (
-            spec.multi_instance.disapprove_exit if spec and spec.multi_instance else ">=1"
+        mi = spec.multi_instance if spec else None
+        # 出口判定（单轨 CEL）：会签未配＝全员否决；非会签＝任一否决即出口（原 >=1 语义）
+        from flowork.expr.context import expression_functions_of
+        from flowork.tasks.countersign import exit_reached
+
+        expr = mi.disapprove_exit if mi is not None else "task.disapprove_count >= 1"
+        exit_hit = exit_reached(
+            expr,
+            side="disapprove",
+            item_count=token.item_count,
+            approve_count=token.approve_count,
+            disapprove_count=token.disapprove_count,
+            variables=instance.variables,
+            start_user=instance.start_user,
+            functions=expression_functions_of(self._engine.config),
         )
-        exit_reached = evaluate_exit(disapprove_exit, token.item_count, token.disapprove_count)
-        if not exit_reached:
+        if not exit_hit:
             from flowork.engine.context import RuntimeNodeContext
 
             node_ctx = RuntimeNodeContext(kernel, ctx.session, instance, node, token)

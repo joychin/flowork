@@ -67,8 +67,8 @@
       ],
       "multi_instance": {
         "mode": "parallel",
-        "approve_exit": ">=50%",
-        "disapprove_exit": ">=1"
+        "approve_exit": "task.approve_count * 100 >= task.item_count * 50",
+        "disapprove_exit": "task.disapprove_count >= 1"
       },
       "reject_target": "supervisor"
     },

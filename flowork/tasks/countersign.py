@@ -1,56 +1,59 @@
-"""会签出口判定：比例表达式求值（纯函数，语义对齐 对标产品 三计数模型）。
+"""会签出口判定：CEL 布尔公式（位点统一收官，kernel-v2 §4.1/§4.2）。
 
-表达式语法（approve_exit / disapprove_exit）：
-- ``all``       全员同意（默认）
-- ``any``       任一人（>=1）
-- ``>=N%``      达到 N%（向上取整，如 3 人 50% 需 2 人）
-- ``>=N``       至少 N 人
+approve_exit / disapprove_exit 为 **CEL 公式**，求值上下文注入 ``task.*``
+会签计数快照（item_count / approve_count / disapprove_count，spec C.4 位点
+相关形状）与实例变量 + ``initiator``；求值错按错误二分包 EngineExecutionError
+（挂起+故障单，§8）。旧专用语法等价翻译（整数乘法，百分比 ceil 精确等价）：
+
+- ``all``      → ``task.approve_count >= task.item_count``
+- ``any``      → ``task.approve_count >= 1``
+- ``>=N``      → ``task.approve_count >= N``
+- ``>=N%``     → ``task.approve_count * 100 >= task.item_count * N``
+
+``expr`` 缺省（None/空）＝该侧全票：side=approve 全员同意、side=disapprove
+全员否决（缺省语义与专用语法时代一致，不强制写公式）。
 """
 
 from __future__ import annotations
 
-import re
+from collections.abc import Callable, Mapping
+from typing import Any, Literal
 
-from flowork.errors import FloworkError
+from flowork.expr.cel import FormulaError, evaluate_formula
+from flowork.expr.context import expression_context
 
-__all__ = ["evaluate_exit", "parse_exit_expr"]
+__all__ = ["exit_reached"]
 
-
-class InvalidExitExpression(FloworkError):
-    """出口表达式非法。"""
-
-
-_RATIO = re.compile(r"^>=(\d+)%$")
-_COUNT = re.compile(r"^>=(\d+)$")
+Side = Literal["approve", "disapprove"]
 
 
-def parse_exit_expr(expr: str | None) -> tuple[str, int | None]:
-    """解析出口表达式 → (语义, 阈值)。all/any 返回 (语义, None)。"""
-    if expr is None or expr.strip() == "" or expr.strip() == "all":
-        return "all", None
-    token = expr.strip()
-    if token == "any":
-        return "any", None
-    if match := _RATIO.match(token):
-        percent = int(match.group(1))
-        if not 1 <= percent <= 100:
-            raise InvalidExitExpression(f"比例超出范围（1-100）：{expr}")
-        return "ratio", percent
-    if match := _COUNT.match(token):
-        return "count", int(match.group(1))
-    raise InvalidExitExpression(f"无法解析出口表达式：{expr!r}（支持 all/any/>=N%/>=N）")
+def exit_reached(
+    expr: str | None,
+    *,
+    side: Side,
+    item_count: int,
+    approve_count: int,
+    disapprove_count: int,
+    variables: Mapping[str, Any] | None = None,
+    start_user: str | None = None,
+    functions: Mapping[str, Callable[..., object]] | None = None,
+) -> bool:
+    """求值会签出口公式；expr 缺省＝该侧全票（task.* = 三计数快照）。"""
+    if not expr:
+        done = approve_count if side == "approve" else disapprove_count
+        return done >= item_count
+    from flowork.engine.kernel import EngineExecutionError
 
-
-def evaluate_exit(expr: str | None, item_count: int, done_count: int) -> bool:
-    """判定出口是否达成。done_count 为同意数（或否决数，视表达式位置）。"""
-    kind, threshold = parse_exit_expr(expr)
-    if item_count <= 0:
-        return True  # 无应办人视为达成（如全员自动通过）
-    if kind == "all":
-        return done_count >= item_count
-    if kind == "any":
-        return done_count >= 1
-    if kind == "ratio":
-        needed = -(-item_count * (threshold or 0) // 100)  # 向上取整
-        return done_count >= needed
-    return done_count >= (threshold or 0)
+    context = expression_context(
+        variables or {},
+        start_user=start_user,
+        task={
+            "item_count": item_count,
+            "approve_count": approve_count,
+            "disapprove_count": disapprove_count,
+        },
+    )
+    try:
+        return evaluate_formula(expr, context, functions=functions)
+    except FormulaError as exc:
+        raise EngineExecutionError(f"会签出口公式求值失败（{expr!r}）：{exc}") from exc

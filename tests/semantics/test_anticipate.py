@@ -28,7 +28,9 @@ def deploy_counterset(engine: ProcessEngine) -> None:
         .user_task(
             "sign",
             assignees=["'u1'", "'u2'", "'u3'"],
-            multi_instance=MultiInstance(mode="parallel", approve_exit=">=50%"),
+            multi_instance=MultiInstance(
+                mode="parallel", approve_exit="task.approve_count * 100 >= task.item_count * 50"
+            ),
         )
         .end()
         .connect("start", "sign")
@@ -118,7 +120,9 @@ def test_anticipate_reject_blocked_until_ratio(engine: ProcessEngine):
             "sign",
             assignees=["'u1'", "'u2'", "'u3'"],
             multi_instance=MultiInstance(
-                mode="parallel", approve_exit="all", disapprove_exit=">=2"
+                mode="parallel",
+                approve_exit="task.approve_count >= task.item_count",
+                disapprove_exit="task.disapprove_count >= 2",
             ),
         )
         .end()

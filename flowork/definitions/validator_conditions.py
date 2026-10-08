@@ -39,13 +39,14 @@ IssueFn = Callable[..., None]
 RESERVED_IDENTIFIERS = frozenset({"initiator", "task"})
 
 # task.* 快照当前仅超时改派位提供（fire 时注入，spec C.4）；其余位点引用即错。
-TASK_KINDS = frozenset({"reassign"})
+TASK_KINDS = frozenset({"reassign", "exit"})
 
 # 位点 kind → 规则名前缀（连线位沿用既有 condition.* 规则名，节点位用 expression.*）
 _RULE_PREFIX = {
     "condition": "condition",
     "subjects": "expression",
     "reassign": "expression",
+    "exit": "expression",
     "mapping_input": "expression",
     "mapping_output": "expression",
 }
@@ -55,8 +56,9 @@ def iter_expression_positions(definition: ProcessDefinition) -> Iterator[tuple[s
     """遍历全部表达式位：yield (kind, where, expression, node)。
 
     kind ∈ condition（连线条件）/ subjects（取人：assignee·assignees·recipients）/
-    reassign（超时改派）/ mapping_input·mapping_output（子流程映射值，后者在子
-    上下文求值——父定义静态不可知其变量，跳过未声明变量检查）。
+    reassign（超时改派）/ exit（会签出口 approve_exit·disapprove_exit）/
+    mapping_input·mapping_output（子流程映射值，后者在子上下文求值——父定义
+    静态不可知其变量，跳过未声明变量检查）。task.* 在 reassign 与 exit 位可用。
     """
     for flow in definition.flows:
         if flow.condition:
@@ -68,6 +70,22 @@ def iter_expression_positions(definition: ProcessDefinition) -> Iterator[tuple[s
                 yield "subjects", f"{node.code}.assignee", assignee, node.code
             for index, expression in enumerate(getattr(node, "assignees", None) or []):
                 yield "subjects", f"{node.code}.assignees[{index}]", expression, node.code
+            mi = getattr(node, "multi_instance", None)
+            if mi is not None:
+                if mi.approve_exit:
+                    yield (
+                        "exit",
+                        f"{node.code}.multi_instance.approve_exit",
+                        mi.approve_exit,
+                        node.code,
+                    )
+                if mi.disapprove_exit:
+                    yield (
+                        "exit",
+                        f"{node.code}.multi_instance.disapprove_exit",
+                        mi.disapprove_exit,
+                        node.code,
+                    )
         if node.kind == KIND_CC_TASK:
             for index, expression in enumerate(getattr(node, "recipients", None) or []):
                 yield "subjects", f"{node.code}.recipients[{index}]", expression, node.code
