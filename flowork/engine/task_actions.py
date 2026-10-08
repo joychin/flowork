@@ -1,6 +1,7 @@
-"""任务操作集（M3）：认领 / 转办 / 协办 / 传阅 / 加签 / 撤回 / 管理员操作。
+"""任务操作集核心（M3）：认领 / 转办 / 协办 + 共享助手。
 
 以 Mixin 形式并入 TaskService（保持四服务 API：engine.task.*）。
+传阅/加签撤回/管理员操作拆至 task_cc.py / task_rework.py / task_admin.py（入口不变）。
 """
 
 from __future__ import annotations
@@ -11,13 +12,9 @@ from flowork.engine.ops import CommandContext
 from flowork.errors import InstanceNotFoundError, TaskNotAvailableError
 from flowork.events.domain import DomainEvent
 from flowork.persistence.orm import (
-    CcItemRow,
     IdentityLinkRow,
-    TaskHistoryRow,
     TaskRow,
-    TokenRow,
 )
-from flowork.runtime.lifecycle import TokenState
 from flowork.tasks.models import TaskInfo
 
 if TYPE_CHECKING:
@@ -25,26 +22,7 @@ if TYPE_CHECKING:
     from flowork.persistence.orm import ProcessInstanceRow
     from flowork.persistence.orm import TaskRow as _TaskRowT
 
-__all__ = ["CcItemInfo", "TaskOpsMixin"]
-
-from datetime import datetime
-
-from pydantic import BaseModel, ConfigDict
-
-
-class CcItemInfo(BaseModel):
-    """一条传阅件。"""
-
-    model_config = ConfigDict(extra="forbid")
-
-    id: str
-    instance_id: str
-    activity_code: str
-    recipient: str
-    title: str
-    is_read: bool = False
-    read_at: datetime | None = None
-    created_at: datetime | None = None
+__all__ = ["TaskOpsMixin"]
 
 
 class TaskOpsMixin:
@@ -98,7 +76,7 @@ class TaskOpsMixin:
         ctx.session.flush()
         return self._task_info(task)
 
-    # —— 转办 ——;
+    # —— 转办 ——
 
     def transfer(self, task_id: str, to_user: str, actor: str, comment: str = "") -> TaskInfo:
         """转办：当前任务归档（outcome=transfer），同令牌为 to_user 生成新待办。"""
@@ -118,7 +96,7 @@ class TaskOpsMixin:
         kernel.archive_task(ctx.session, task, outcome="transfer", comment=comment, actor=actor)
         return self._task_info(new_task)
 
-    # —— 协办 ——;
+    # —— 协办 ——
 
     def assist(
         self, task_id: str, users: list[str], actor: str, comment: str = ""
@@ -154,230 +132,7 @@ class TaskOpsMixin:
 
         self._engine.execute(_command)
 
-    # —— 传阅 ——;
-
-    def list_cc_tasks(
-        self, *, recipient: str | None = None, instance_id: str | None = None
-    ) -> list[CcItemInfo]:
-        """查询传阅件（可按收件人/实例过滤）。"""
-        from sqlalchemy import select
-
-        def _command(ctx: CommandContext) -> list[CcItemInfo]:
-            stmt = select(CcItemRow).order_by(CcItemRow.created_at)
-            if recipient:
-                stmt = stmt.where(CcItemRow.recipient == recipient)
-            if instance_id:
-                stmt = stmt.where(CcItemRow.instance_id == instance_id)
-            return [self._cc_info(row) for row in ctx.session.scalars(stmt)]
-
-        return self._engine.execute(_command)
-
-    def mark_cc_read(self, cc_id: str, user: str) -> None:
-        """标记传阅件已读。"""
-
-        def _command(ctx: CommandContext) -> None:
-            row = ctx.session.get(CcItemRow, cc_id)
-            if row is None or row.recipient != user:
-                raise TaskNotAvailableError(f"传阅件不存在或不属于 {user}：{cc_id}")
-            ctx.touch(self._instance(ctx, row.instance_id))
-            row.is_read = True
-            row.read_at = ctx.engine.config.now()
-
-        self._engine.execute(_command)
-
-    # —— 加签 ——;
-
-    def add_countersigner(
-        self, task_id: str, users: list[str], actor: str, comment: str = ""
-    ) -> list[TaskInfo]:
-        """加签：向当前令牌追加会签人（item_count 同步增加，新待办立即生成）。
-
-        前加签/后加签在并签池中语义等价（均需完成）；串行场景按剩余顺序排队。
-        """
-        result: list[TaskInfo] = self._engine.execute(
-            lambda ctx: self._add_countersigner(ctx, task_id, users, actor, comment)
-        )
-        return result
-
-    def _add_countersigner(
-        self, ctx: CommandContext, task_id: str, users: list[str], actor: str, comment: str
-    ) -> list[TaskInfo]:
-        from flowork.definitions.builtin import UserTaskSpec
-
-        task = self._ready_task(ctx, task_id)
-        token = ctx.session.get(TokenRow, task.token_id)
-        assert token is not None
-        # 名单口径对齐：节点原名单 ∪ 已有手动名单 ∪ 新人 → item_count 与可办名单一致
-        kernel = self._engine.kernel_for(ctx)
-        instance = self._instance(ctx, task.instance_id)
-        ctx.touch(instance)
-        node = kernel.definition_of(ctx.session, instance).node(task.activity_code)
-        base_participants: list[str] = []
-        if isinstance(node, UserTaskSpec):
-            base_participants = ([node.assignee] if node.assignee else []) + list(node.assignees)
-        existing = list((token.manual_participants or {}).get(task.activity_code, []))
-        merged = list(dict.fromkeys([*base_participants, *existing, *users]))
-        token.manual_participants[task.activity_code] = merged
-        token.item_count = len(merged)
-        ctx.session.flush()
-        kernel = self._engine.kernel_for(ctx)
-        kernel.record_event(
-            "task_countersigner_added",
-            {"task_id": task_id, "users": users, "actor": actor, "comment": comment},
-            task.instance_id,
-        )
-        created = [self._clone_task(ctx, task, assignee=user) for user in users]
-        return [self._task_info(t) for t in created]
-
-    # —— 撤回 ——;
-
-    def withdraw(self, task_id: str, actor: str, comment: str = "") -> TaskInfo:
-        """撤回本人已办任务：取消其后已激活的下游令牌，并在原节点重建待办。"""
-        result: TaskInfo = self._engine.execute(
-            lambda ctx: self._withdraw(ctx, task_id, actor, comment)
-        )
-        return result
-
-    def _withdraw(self, ctx: CommandContext, task_id: str, actor: str, comment: str) -> TaskInfo:
-        from sqlalchemy import select
-
-        history = ctx.session.scalars(
-            select(TaskHistoryRow).where(TaskHistoryRow.task_id == task_id)
-        ).first()
-        if history is None or history.outcome != "agree" or history.acted_by != actor:
-            raise TaskNotAvailableError(f"任务不可撤回（未办理/非本人/非同意）：{task_id}")
-        instance = self._instance(ctx, history.instance_id)
-        if instance.state != "running":
-            raise TaskNotAvailableError("实例已结束，不可撤回")
-        ctx.touch(instance)
-        kernel = self._engine.kernel_for(ctx)
-        # 取消该办理之后产生的全部未完令牌（简化：撤回即回退到当前节点）
-        for token in kernel.tokens(ctx.session, instance.id, states=(TokenState.UNFINISHED.value,)):
-            kernel.cancel_token(ctx.session, token)
-        # 原节点重建：新令牌 + 原办理人待办
-        definition = kernel.definition_of(ctx.session, instance)
-        node = definition.node(history.activity_code)
-        assert node is not None
-        token = kernel.activate(
-            ctx.session,
-            instance,
-            node,
-            source_activity_code=None,
-            manual_participants={node.code: [history.assignee]},
-        )
-        kernel.record_event(
-            "task_withdrawn",
-            {"task_id": task_id, "actor": actor, "comment": comment, "new_token": token.id},
-            instance.id,
-        )
-        tasks = kernel.tasks(ctx.session, instance.id, token_id=token.id)
-        return self._task_info(tasks[0])
-
-    # —— 管理员操作 ——;
-
-    def activate_node(
-        self,
-        instance_id: str,
-        activity_code: str,
-        actor: str,
-        participants: list[str] | None = None,
-    ) -> str:
-        """管理员激活任意节点（可指定参与者），返回新令牌 ID。"""
-
-        def _command(ctx: CommandContext) -> str:
-            instance = self._instance(ctx, instance_id)
-            ctx.touch(instance)
-            kernel = self._engine.kernel_for(ctx)
-            node = kernel.definition_of(ctx.session, instance).node(activity_code)
-            assert node is not None, f"节点不存在：{activity_code}"
-            manual = {activity_code: participants} if participants else None
-            token = kernel.activate(ctx.session, instance, node, manual_participants=manual)
-            kernel.record_event(
-                "node_activated_by_admin",
-                {"activity_code": activity_code, "actor": actor},
-                instance_id,
-            )
-            return token.id
-
-        return self._engine.execute(_command)
-
-    def cancel_node(self, instance_id: str, activity_code: str, actor: str) -> None:
-        """管理员取消指定节点的全部未完令牌。"""
-
-        def _command(ctx: CommandContext) -> None:
-            ctx.touch(self._instance(ctx, instance_id))
-            kernel = self._engine.kernel_for(ctx)
-            tokens = kernel.tokens(ctx.session, instance_id, states=(TokenState.UNFINISHED.value,))
-            for token in tokens:
-                if token.activity_code == activity_code:
-                    kernel.cancel_token(ctx.session, token)
-            kernel.record_event(
-                "node_cancelled_by_admin",
-                {"activity_code": activity_code, "actor": actor},
-                instance_id,
-            )
-
-        self._engine.execute(_command)
-
-    def finish_instance(self, instance_id: str, actor: str) -> None:
-        """管理员强制完成实例（未完令牌置 finished）。"""
-
-        def _command(ctx: CommandContext) -> None:
-            instance = self._instance(ctx, instance_id)
-            ctx.touch(instance)
-            kernel = self._engine.kernel_for(ctx)
-            for token in kernel.tokens(
-                ctx.session, instance_id, states=(TokenState.UNFINISHED.value,)
-            ):
-                for task in kernel.tasks(ctx.session, instance_id, token_id=token.id):
-                    kernel.archive_task(
-                        ctx.session,
-                        task,
-                        outcome="auto_pass",
-                        comment="实例强制完成",
-                        actor=actor,
-                    )
-                kernel.finish_token(ctx.session, token)
-            kernel.complete_instance(ctx.session, instance, "completed")
-            kernel.record_event("process_finished_by_admin", {"actor": actor}, instance_id)
-
-        self._engine.execute(_command)
-
-    def remove_instance(self, instance_id: str, actor: str) -> None:
-        """删除实例及其全部运行时数据（含身份关联/Job/Incident，不可恢复）。"""
-
-        def _command(ctx: CommandContext) -> None:
-            from sqlalchemy import delete, select
-
-            from flowork.persistence.orm import (
-                EventOutboxRow,
-                IncidentRow,
-                JobRow,
-                ProcessInstanceRow,
-            )
-
-            # 身份关联经 task_id 挂靠，先于任务删除
-            ctx.session.execute(
-                delete(IdentityLinkRow).where(
-                    IdentityLinkRow.task_id.in_(
-                        select(TaskRow.id).where(TaskRow.instance_id == instance_id)
-                    )
-                )
-            )
-            for row_type in (TaskRow, TaskHistoryRow, TokenRow, CcItemRow, JobRow):
-                ctx.session.execute(delete(row_type).where(row_type.instance_id == instance_id))
-            ctx.session.execute(
-                delete(EventOutboxRow).where(EventOutboxRow.instance_id == instance_id)
-            )
-            ctx.session.execute(delete(IncidentRow).where(IncidentRow.instance_id == instance_id))
-            instance = ctx.session.get(ProcessInstanceRow, instance_id)
-            if instance is None:
-                raise InstanceNotFoundError(f"实例不存在：{instance_id}")
-            ctx.session.delete(instance)
-
-        self._engine.execute(_command)
-
-    # —— 共享助手 ——
+    # —— 共享助手（task_rework/task_cc/task_admin 及 task_service 交叉使用）——
 
     def _instance(self, ctx: CommandContext, instance_id: str) -> ProcessInstanceRow:
         from flowork.persistence.orm import ProcessInstanceRow as _Row
@@ -447,18 +202,6 @@ class TaskOpsMixin:
             priority=task.priority,
             due_at=task.due_at,
             created_at=task.created_at,
-        )
-
-    def _cc_info(self, row: CcItemRow) -> CcItemInfo:
-        return CcItemInfo(
-            id=row.id,
-            instance_id=row.instance_id,
-            activity_code=row.activity_code,
-            recipient=row.recipient,
-            title=row.title,
-            is_read=row.is_read,
-            read_at=row.read_at,
-            created_at=row.created_at,
         )
 
     def _emit_task_event(

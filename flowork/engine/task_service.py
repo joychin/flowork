@@ -7,6 +7,9 @@ from typing import TYPE_CHECKING, Any
 from flowork.engine.context import RuntimeNodeContext
 from flowork.engine.ops import CommandContext
 from flowork.engine.task_actions import TaskOpsMixin
+from flowork.engine.task_admin import TaskAdminMixin
+from flowork.engine.task_cc import TaskCcMixin
+from flowork.engine.task_rework import TaskReworkMixin
 from flowork.errors import TaskNotAvailableError
 from flowork.events.domain import DomainEvent
 from flowork.persistence.orm import TaskHistoryRow, TaskRow
@@ -43,7 +46,7 @@ def _input_schema_of(instance: Any) -> dict[str, Any] | None:
         return None
 
 
-class TaskService(TaskOpsMixin, AnticipateMixin):
+class TaskService(TaskOpsMixin, TaskReworkMixin, TaskAdminMixin, TaskCcMixin, AnticipateMixin):
     """任务服务：办理 / 查询。所有操作带 actor 归因（人 or agent 可区分）。"""
 
     def __init__(self, engine: ProcessEngine) -> None:
