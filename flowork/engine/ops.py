@@ -41,15 +41,40 @@ class CommandContext:
     session: Session
     events: list[tuple[str, dict[str, Any], str | None]] = field(default_factory=list)
     instances_touched: set[str] = field(default_factory=set)
+    # —— 变量留痕（变量 I/O 批）：before 快照 + 命令级写方归因 ——
+    variable_before: dict[str, dict[str, Any]] = field(default_factory=dict)
+    write_source: str = "engine"
+    write_actor: str | None = None
+    write_as_agent: bool = False
 
     def touch(self, instance: ProcessInstanceRow) -> None:
         """写命令统一守卫：触碰实例行（updated_at），提交时触发 version 乐观锁。
 
         所有修改实例域内数据（任务/令牌/传阅/Job 副作用）的写命令都必须调用，
-        使并发写在同一实例行上串行化；同时纳入 Incident 归因集合。
+        使并发写在同一实例行上串行化；同时纳入 Incident 归因集合与变量留痕快照。
         """
         instance.updated_at = self.engine.config.now()
         self.instances_touched.add(instance.id)
+        self.snapshot_variables(instance.id, row=instance)
+
+    def snapshot_variables(
+        self, instance_id: str, *, row: ProcessInstanceRow | None = None
+    ) -> None:
+        """首次触及实例时留存变量改前快照（留痕 diff 的 before 侧，幂等）。
+
+        咽喉点两处：``touch``（服务级写命令）与 ``Kernel.record_event``
+        （钩子路径不经过 touch，双覆盖才完整）。deepcopy 防原地写污染快照，
+        开销受实例变量 1MB 约束。
+        """
+        if instance_id in self.variable_before:
+            return
+        if row is None:
+            from flowork.persistence.orm import ProcessInstanceRow
+
+            row = self.session.get(ProcessInstanceRow, instance_id)
+        import copy
+
+        self.variable_before[instance_id] = copy.deepcopy(dict(row.variables)) if row else {}
 
 
 def _sync_variable_index(ctx: CommandContext) -> None:
@@ -61,6 +86,56 @@ def _sync_variable_index(ctx: CommandContext) -> None:
         instance = ctx.session.get(ProcessInstanceRow, instance_id)
         if instance is not None:
             sync_variable_index(ctx.session, instance)
+
+
+def _sync_variable_history(ctx: CommandContext) -> None:
+    """变量留痕（变量 I/O 批，spec §14）：触及实例逐键 diff → wf_variable_history。
+
+    全写方覆盖（发起/任务提交/钩子/消息/映射/外部命令），值相等跳过；
+    仅外部更新命令（write_source=external_update）追发 variables_updated 事件
+    （spec §10：引擎内部写变量不发——防刷屏，血缘走表）。
+    """
+    import uuid
+
+    from flowork.events.domain import DomainEvent
+    from flowork.persistence.orm import ProcessInstanceRow, VariableHistoryRow
+
+    for instance_id in sorted(ctx.instances_touched):
+        instance = ctx.session.get(ProcessInstanceRow, instance_id)
+        if instance is None:
+            continue
+        before = ctx.variable_before.get(instance_id, {})
+        after = dict(instance.variables or {})
+        changes: list[dict[str, Any]] = []
+        for name in sorted(set(before) | set(after)):
+            old, new = before.get(name), after.get(name)
+            if old == new:
+                continue
+            ctx.session.add(
+                VariableHistoryRow(
+                    id=uuid.uuid4().hex,
+                    instance_id=instance_id,
+                    name=name,
+                    old_value=old,
+                    new_value=new,
+                    source=ctx.write_source,
+                    acted_by=ctx.write_actor,
+                    acted_as_agent=ctx.write_as_agent,
+                )
+            )
+            changes.append({"name": name, "old": old, "new": new})
+        if changes and ctx.write_source == "external_update":
+            ctx.events.append(
+                (
+                    DomainEvent.VARIABLES_UPDATED,
+                    {
+                        "actor": ctx.write_actor,
+                        "as_agent": ctx.write_as_agent,
+                        "changes": changes,
+                    },
+                    instance_id,
+                )
+            )
 
 
 def _flush_history(ctx: CommandContext) -> None:
@@ -103,6 +178,7 @@ def _run_once(engine: ProcessEngine, command: Callable[[CommandContext], T]) -> 
         with session.begin():
             result = command(ctx)
             _sync_variable_index(ctx)
+            _sync_variable_history(ctx)
             _flush_history(ctx)
         return result
     except EngineExecutionError as error:

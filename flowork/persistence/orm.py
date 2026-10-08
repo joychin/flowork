@@ -276,5 +276,8 @@ from flowork.persistence.orm_v2 import (
     MessageSubscriptionRow as MessageSubscriptionRow,
 )
 from flowork.persistence.orm_v2 import (
+    VariableHistoryRow as VariableHistoryRow,
+)
+from flowork.persistence.orm_v2 import (
     VariableIndexRow as VariableIndexRow,
 )

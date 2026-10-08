@@ -210,12 +210,13 @@ class MessageService:
 
         instance = ctx.session.get(ProcessInstanceRow, subscription.instance_id)
         if instance is not None:
+            # touch 先于载荷合并：变量留痕 before 快照须在写入前留存
+            ctx.touch(instance)
             merged = dict(instance.variables)
             merged.update(payload)
             schema = (json.loads(instance.definition_snapshot) or {}).get("input")
             validate_input_contract(schema, merged, boundary="node_output")
             instance.variables.update(payload)
-            ctx.touch(instance)
         subscription.state = "matched"
         subscription.message_id = message_id  # 防重定格（只按 message_id 判）
         kernel = self._engine.kernel_for(ctx)

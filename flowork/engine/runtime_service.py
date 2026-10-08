@@ -171,6 +171,8 @@ class RuntimeService(InstanceLifecycleMixin, IncidentMixin):
             parent_token_id=parent_token_id,
         )
         ctx.session.add(instance)
+        # 变量留痕：出生 before 显式播种为空——发起变量记 birth 行（old=None）
+        ctx.variable_before[instance.id] = {}
         # v2.2（spec §7）：实例时限物化——按 after_minutes 折算 deadline_at（自然时间）
         if definition.deadline is not None:
             from datetime import timedelta

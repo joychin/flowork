@@ -90,6 +90,8 @@ class Kernel(TaskRecordsMixin, TokenRecordsMixin):
         self.events.append((name, payload, instance_id))
         if instance_id and self.command_ctx is not None:
             self.command_ctx.instances_touched.add(instance_id)
+            # 变量留痕：钩子路径不经过 touch，此处补 before 快照（幂等）
+            self.command_ctx.snapshot_variables(instance_id)
 
     # —— 实例 ——
 

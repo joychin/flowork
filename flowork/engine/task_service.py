@@ -130,6 +130,10 @@ class TaskService(
             raise TaskNotAvailableError("协办任务请用 complete_assist 完成")
         instance = self._instance(ctx, task.instance_id)
         ctx.touch(instance)
+        # 变量留痕归因：本命令内的变量变化（任务 output + 后续钩子写）记 task_output
+        ctx.write_source = "task_output"
+        ctx.write_actor = actor
+        ctx.write_as_agent = as_agent
         if instance.state == "suspended":
             raise TaskNotAvailableError("实例已挂起（Incident 待修复），不可办理")
         if instance.state == "paused":

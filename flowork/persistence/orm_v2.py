@@ -88,3 +88,25 @@ class VariableIndexRow(Base):
     name: Mapped[str] = mapped_column(String(100))
     value_text: Mapped[str | None] = mapped_column(String(500), nullable=True)
     value_num: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+
+class VariableHistoryRow(Base):
+    """变量留痕（变量 I/O 批，spec §14）：全写方逐键改前/改后，追加只写。
+
+    命令尾 diff 产生（值相等跳过）；source=external_update / task_output /
+    task_reject / engine（发起·钩子·消息·映射）。old_value=None 表示新建键（birth）。
+    归因是命令级的：同一条命令内的全部变化共享 source/acted_by。
+    """
+
+    __tablename__ = "wf_variable_history"
+    __table_args__ = (Index("ix_varhist_instance", "instance_id", "name", "created_at"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    instance_id: Mapped[str] = mapped_column(String(36))
+    name: Mapped[str] = mapped_column(String(100))
+    old_value: Mapped[Any] = mapped_column(JSON, nullable=True)
+    new_value: Mapped[Any] = mapped_column(JSON, nullable=True)
+    source: Mapped[str] = mapped_column(String(32), default="engine")
+    acted_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    acted_as_agent: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)

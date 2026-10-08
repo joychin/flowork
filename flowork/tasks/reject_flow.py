@@ -86,6 +86,10 @@ class RejectMixin:
             raise TaskNotAvailableError(f"任务不可驳回（不存在或已处理）：{task_id}")
         instance = self._instance(ctx, task.instance_id)
         ctx.touch(instance)
+        # 变量留痕归因：驳回携带的 variables 与驳回复活路径写变量记 task_reject
+        ctx.write_source = "task_reject"
+        ctx.write_actor = actor
+        ctx.write_as_agent = as_agent
         if instance.state == "suspended":
             raise TaskNotAvailableError("实例已挂起（Incident 待修复），不可驳回")
         if instance.state == "paused":
