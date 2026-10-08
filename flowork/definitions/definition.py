@@ -139,93 +139,12 @@ def _resolve_node(raw: dict[str, Any], registry: NodeRegistry) -> FlowNode:
     return spec_cls.model_validate(raw)
 
 
-# 旧结构化条件组（groups，已退役）→ CEL 的操作符翻译表：
-# 与设计器「点选生成公式」将共用的同一张映射（kernel-v2 §4.1 单轨化）。
-_LEGACY_CONDITION_OPS = {
-    "eq": ("==", "scalar"),
-    "ne": ("!=", "scalar"),
-    "gt": (">", "number"),
-    "ge": (">=", "number"),
-    "lt": ("<", "number"),
-    "le": ("<=", "number"),
-    "in": ("in", "list"),
-    "not_in": ("not_in", "list"),
-    "contains": ("contains", "method"),
-    "starts_with": ("startsWith", "method"),
-    "is_empty": ("is_empty", "unary"),
-    "is_not_empty": ("is_not_empty", "unary"),
-}
-
-
-def _cel_literal(value: Any) -> str:
-    """值 → CEL 字面量（字符串双引号、布尔/空小写、列表递归）。"""
-    if value is None:
-        return "null"
-    if value is True:
-        return "true"
-    if value is False:
-        return "false"
-    if isinstance(value, (int, float)):
-        return str(value)
-    if isinstance(value, str):
-        return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
-    if isinstance(value, list):
-        return "[" + ", ".join(_cel_literal(v) for v in value) + "]"
-    raise InvalidDefinitionData(f"旧条件值无法翻译为 CEL 字面量：{value!r}（请手工迁移公式）")
-
-
-def _cel_item(item: dict[str, Any]) -> str:
-    left = str(item.get("left", ""))
-    op = str(item.get("operator", ""))
-    right = item.get("right")
-    spec = _LEGACY_CONDITION_OPS.get(op)
-    if spec is None:
-        raise InvalidDefinitionData(f"旧条件操作符无法翻译：{op!r}（连线 {left}，请手工迁移公式）")
-    kind = spec[1]
-    if kind == "unary":
-        empty = f'{left} == null || {left} == "" || {left}.size() == 0'
-        return f"!({empty})" if op == "is_not_empty" else f"({empty})"
-    if kind == "method":
-        return f"{left}.{spec[0]}({_cel_literal(right)})"
-    if kind == "list":
-        lit = _cel_literal(right)
-        return f"{left} in {lit}" if op == "in" else f"!({left} in {lit})"
-    if kind == "number" and (isinstance(right, bool) or not isinstance(right, (int, float))):
-        raise InvalidDefinitionData(f"旧条件右值非数值（{left} {op} {right!r}），请手工迁移公式")
-    return f"{left} {spec[0]} {_cel_literal(right)}"
-
-
-def _translate_legacy_condition(raw: Any) -> Any:
-    """旧 FlowCondition dict → CEL 公式字符串（单轨化兼容 shim，§4.1）。
-
-    groups（组间 OR、组内 AND）机械翻译；formula 直取；空条件归 None。
-    翻译不了的值/操作符明确报错，不静默。
-    """
-    if raw is None or isinstance(raw, str):
-        return raw
-    if not isinstance(raw, dict):
-        raise InvalidDefinitionData(f"连线条件形态非法：{raw!r}")
-    formula = raw.get("formula")
-    if formula:
-        return formula
-    groups = raw.get("groups") or []
-    clauses: list[str] = []
-    for group in groups:
-        parts = [_cel_item(item) for item in group]
-        if not parts:
-            continue
-        clauses.append(parts[0] if len(parts) == 1 else "(" + " && ".join(parts) + ")")
-    if not clauses:
-        return None
-    return " || ".join(clauses)
-
-
 def load_definition(data: dict[str, Any] | str, registry: NodeRegistry) -> ProcessDefinition:
     """从 dict 或 JSON 字符串加载定义：节点经注册表解析为对应 Spec 类。
 
     旧版兼容（v2 §6.2 迁移）：``version`` 字段忽略；``status: draft`` 视同
-    published（draft 已取消，编辑态在 git/设计器本地）；连线的旧结构化条件组
-    （groups）翻译为 CEL 公式（单轨化 shim，见 _translate_legacy_condition）。
+    published（draft 已取消，编辑态在 git/设计器本地）。连线条件单轨 CEL
+    （spec §4.1 v2.3）——不做旧格式翻译（系统早期零兼容，存量已迁移）。
     """
     if isinstance(data, str):
         try:
@@ -238,11 +157,6 @@ def load_definition(data: dict[str, Any] | str, registry: NodeRegistry) -> Proce
     data.pop("version", None)
     if data.get("status") == "draft":
         data["status"] = DefinitionStatus.PUBLISHED.value
-    raw_flows = data.get("flows")
-    if isinstance(raw_flows, list):
-        for flow in raw_flows:
-            if isinstance(flow, dict) and "condition" in flow:
-                flow["condition"] = _translate_legacy_condition(flow["condition"])
     raw_nodes = data.get("nodes", [])
     if not isinstance(raw_nodes, list):
         raise InvalidDefinitionData("nodes 必须是数组")

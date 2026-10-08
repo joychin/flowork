@@ -160,7 +160,7 @@ def _branch_spec() -> dict:
             {
                 "source": "branch",
                 "target": "big",
-                "condition": {"groups": [[{"left": "amount", "operator": "gt", "right": 10000}]]},
+                "condition": "amount > 10000",
             },
             {"source": "branch", "target": "small", "is_default": True},
             {"source": "big", "target": "end"},
@@ -269,16 +269,10 @@ def test_variables_roundtrip_and_unknown_reference_warning(client: TestClient) -
 
     # 声明了变量、条件引用未声明变量 → 校验预警
     warned = json.loads(json.dumps(spec))
-    warned["flows"][1]["condition"]["groups"] = [[{"left": "qty", "operator": "gt", "right": 5}]]
+    warned["flows"][1]["condition"] = "qty > 5"
     result = client.post("/api/validate", json=warned).json()
     assert any(issue["rule"] == "condition.variable.unknown" for issue in result["issues"])
 
-    # 公式同样受检
-    warned_formula = json.loads(json.dumps(spec))
-    warned_formula["flows"][1]["condition"] = {"groups": [], "formula": "qty > 5"}
-    result_formula = client.post("/api/validate", json=warned_formula).json()
-    assert any(issue["rule"] == "condition.variable.unknown" for issue in result_formula["issues"])
-
-    # 全部引用都在声明内 → 无该预警
+    # 全部引用都在声明内 → 无该预警（单轨 CEL，无第二格式）
     fine = client.post("/api/validate", json=spec).json()
     assert not any(issue["rule"] == "condition.variable.unknown" for issue in fine["issues"])
