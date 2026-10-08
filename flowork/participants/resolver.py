@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from flowork.engine.kernel import EngineExecutionError, NoParticipantError
-from flowork.expr.cel import FormulaError, evaluate_formula_value
+from flowork.expr.cel import FormulaError, evaluate_formula_value, references_identifier
 from flowork.expr.context import expression_context
 
 if TYPE_CHECKING:
@@ -62,6 +62,8 @@ def resolve_subjects(
     pool: list[str] = []
     context = expression_context(variables, start_user=start_user)
     for expression in expressions:
+        if "prev_task" not in context and references_identifier(expression, "prev_task"):
+            continue  # 上一站查无：贡献空（expression-dataface §3，对齐 §5.5）
         try:
             result = evaluate_formula_value(expression, context, functions=functions)
         except FormulaError as exc:
@@ -102,10 +104,21 @@ def _evaluate_expressions(
     spec: UserTaskSpec,
     functions: Functions | None,
 ) -> list[str]:
-    """解析管线内用：assignee/assignees 表达式 → 人池（错误消息带节点码）。"""
+    """解析管线内用：assignee/assignees 表达式 → 人池（错误消息带节点码）。
+
+    取人位判断面接线（expression-dataface §2.2/§2.3）：变量带 prev_task 快照、
+    函数表并入 node()——InMemoryNodeContext（无 session）裸跑不受影响。
+    """
     expressions = ([spec.assignee] if spec.assignee else []) + list(spec.assignees)
+    from flowork.tasks.facts import attach_node, with_prev_task
+
+    session = getattr(ctx, "session", None)
     return resolve_subjects(
-        expressions, ctx.variables, ctx.instance.start_user, functions, label=spec.code
+        expressions,
+        with_prev_task(session, ctx.instance.id, ctx.variables),
+        ctx.instance.start_user,
+        attach_node(functions, session, ctx.instance.id),
+        label=spec.code,
     )
 
 

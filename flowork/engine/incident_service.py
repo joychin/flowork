@@ -152,12 +152,15 @@ class IncidentMixin:
         """跳过故障节点：未完令牌视为完成，按条件路由激活后继（管理员手术，绕放行门）。"""
         from flowork.engine.routing import evaluation_variables, select_outgoing
         from flowork.expr.context import expression_functions_of
+        from flowork.tasks.facts import attach_node
 
         kernel = self._engine.kernel_for(ctx)
         instance = ctx.session.get(ProcessInstanceRow, instance_id)
         assert instance is not None
         definition = kernel.definition_of(ctx.session, instance)
-        functions = expression_functions_of(self._engine.config)
+        functions = attach_node(
+            expression_functions_of(self._engine.config), ctx.session, instance.id
+        )
         for token in kernel.tokens(ctx.session, instance_id, states=(TokenState.UNFINISHED.value,)):
             node = definition.node(token.activity_code)
             kernel.cancel_token(ctx.session, token)
@@ -170,7 +173,7 @@ class IncidentMixin:
                 continue
             outgoing = select_outgoing(
                 definition.outgoing(node.code),
-                evaluation_variables(instance, instance.variables),
+                evaluation_variables(instance, instance.variables, session=ctx.session),
                 mode="all_match",
                 functions=functions,
             )

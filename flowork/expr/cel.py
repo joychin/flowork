@@ -30,6 +30,7 @@ __all__ = [
     "collect_references",
     "evaluate_formula",
     "evaluate_formula_value",
+    "references_identifier",
     "root_call",
 ]
 
@@ -245,6 +246,19 @@ def collect_references(formula: str) -> tuple[set[str], dict[str, set[int]]]:
 
     visit(tree)
     return identifiers - bound, functions
+
+
+def references_identifier(formula: str, name: str) -> bool:
+    """公式是否引用标识符 ``name``（静态；编译错返回 False，交由求值路径报错）。
+
+    判断面查无预检用（expression-dataface §3）：如 prev_task 未注入而被引用，
+    条件位按不满足跳过、取人位贡献空——温和处理不产生技术故障。
+    """
+    try:
+        identifiers, _ = collect_references(formula)
+    except FormulaError:
+        return False
+    return name in identifiers
 
 
 def root_call(formula: str) -> tuple[str, int] | None:

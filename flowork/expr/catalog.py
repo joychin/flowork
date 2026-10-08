@@ -14,11 +14,14 @@ reassign（超时改派）/ exit（会签出口）/ mapping_input·mapping_outpu
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 __all__ = [
     "ALL_POSITIONS",
+    "FunctionEntry",
     "IdentifierEntry",
+    "engine_functions",
     "identifier_entries",
     "positions_of",
     "reserved_identifiers",
@@ -40,7 +43,19 @@ class IdentifierEntry:
     note: str = ""
 
 
-# 判断面词汇 v1（expression-dataface §2）：instance.*/prev_task/node() 随 F2 入册。
+@dataclass(frozen=True)
+class FunctionEntry:
+    """一个引擎注入函数（非宿主词汇）：签名/中文标签/可用位点/备注。"""
+
+    name: str
+    params: tuple[str, ...]
+    returns: str
+    label: str
+    positions: frozenset[str]
+    note: str = ""
+
+
+# 判断面词汇 v1（expression-dataface §2）：instance.* 随 F2 后续项入册。
 IDENTIFIER_CATALOG: tuple[IdentifierEntry, ...] = (
     IdentifierEntry(
         name="initiator",
@@ -57,11 +72,33 @@ IDENTIFIER_CATALOG: tuple[IdentifierEntry, ...] = (
         note="引擎经统一时钟注入（naive UTC）；一次求值钉一个时刻",
     ),
     IdentifierEntry(
+        name="prev_task",
+        type="map",
+        label="上一站",
+        positions=frozenset({"condition", "subjects"}),
+        note="最近一条已完成任务（含会签最后一票/加签/改派后的办理人）；"
+        "查无＝条件不满足/贡献空（预检温和）",
+    ),
+    IdentifierEntry(
         name="task",
         type="map",
         label="当前任务快照",
         positions=frozenset({"reassign", "exit"}),
-        note="同名不同方言：改派位=id/assignee/outcome；出口位=三计数",
+        note="同名不同方言：改派位=id/assignee/outcome/created_at/deadline_at；出口位=三计数",
+    ),
+)
+
+# 引擎注入函数（判断面 v1）：读引擎内部数据的访问器，宿主 ExpressionFunctions
+# 注册面之外的第二个函数来源（validator 静态检查对照本表）。
+ENGINE_FUNCTION_CATALOG: tuple[FunctionEntry, ...] = (
+    FunctionEntry(
+        name="node",
+        params=("string",),
+        returns="map",
+        label="点名查节点事实",
+        positions=frozenset({"condition", "subjects"}),
+        note='node("code")：runs/skipped/最近轮 assignee·outcome·comment·'
+        "finished_at·used_time/最近轮票数；查无＝固定形状（人物 null、计数 0）",
     ),
 )
 
@@ -82,3 +119,8 @@ def positions_of(name: str) -> frozenset[str]:
         if entry.name == name:
             return entry.positions
     return frozenset()
+
+
+def engine_functions() -> Mapping[str, FunctionEntry]:
+    """引擎注入函数目录（name → 条目）。"""
+    return {entry.name: entry for entry in ENGINE_FUNCTION_CATALOG}

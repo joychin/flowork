@@ -60,8 +60,12 @@ class AnticipateMixin:
         assert node is not None
         spec = node if isinstance(node, UserTaskSpec) else None
         mi = spec.multi_instance if spec else None
-        variables = evaluation_variables(instance, instance.variables)
-        functions = expression_functions_of(self._engine.config)
+        variables = evaluation_variables(instance, instance.variables, session=ctx.session)
+        from flowork.tasks.facts import attach_node
+
+        functions = attach_node(
+            expression_functions_of(self._engine.config), ctx.session, instance.id
+        )
 
         def _exit(expr: str | None, *, approve: int, disapprove: int, side: str) -> bool:
             """假想计数下的出口判定（缺省全票语义下沉在 exit_reached）。"""

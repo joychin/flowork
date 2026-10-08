@@ -82,13 +82,14 @@ class TaskReworkMixin:
             # 名单口径对齐：节点表达式先解析为具体人（manual_participants 存人，不存表达式原文）
             from flowork.expr.context import expression_functions_of
             from flowork.participants.resolver import resolve_subjects
+            from flowork.tasks.facts import attach_node, with_prev_task
 
             expressions = ([node.assignee] if node.assignee else []) + list(node.assignees)
             base_participants = resolve_subjects(
                 expressions,
-                instance.variables or {},
+                with_prev_task(ctx.session, instance.id, instance.variables or {}),
                 instance.start_user,
-                expression_functions_of(self._engine.config),
+                attach_node(expression_functions_of(self._engine.config), ctx.session, instance.id),
                 label=task.activity_code,
             )
         existing = list((token.manual_participants or {}).get(task.activity_code, []))

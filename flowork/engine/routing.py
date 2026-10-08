@@ -17,11 +17,13 @@ from collections.abc import Callable, Mapping
 from typing import TYPE_CHECKING, Any, Literal
 
 from flowork.engine.kernel import EngineExecutionError, RouteError
-from flowork.expr.cel import FormulaError
+from flowork.expr.cel import FormulaError, references_identifier
 from flowork.expr.conditions import evaluate_condition
 from flowork.expr.context import expression_context
 
 if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
+
     from flowork.definitions.flow import SequenceFlow
 
 __all__ = ["evaluation_variables", "select_outgoing"]
@@ -29,12 +31,26 @@ __all__ = ["evaluation_variables", "select_outgoing"]
 Mode = Literal["all_match", "first_match"]
 
 
-def evaluation_variables(instance: Any, variables: Mapping[str, Any]) -> dict[str, Any]:
+def evaluation_variables(
+    instance: Any,
+    variables: Mapping[str, Any],
+    *,
+    session: Session | None = None,
+) -> dict[str, Any]:
     """构造求值上下文（expr.context.expression_context 的实例版薄包装）。
 
     显式声明同名变量时以声明为准（setdefault）；实例无 start_user 时缺省。
+    带 session 时注入 ``prev_task`` 上一站快照（expression-dataface §2.2，
+    查无＝不注入，引用预检在 select_outgoing 内温和跳过）。
     """
-    return expression_context(variables, start_user=getattr(instance, "start_user", None))
+    prev_task = None
+    if session is not None:
+        from flowork.tasks.facts import prev_task_snapshot
+
+        prev_task = prev_task_snapshot(session, instance.id)
+    return expression_context(
+        variables, start_user=getattr(instance, "start_user", None), prev_task=prev_task
+    )
 
 
 def select_outgoing(
@@ -86,6 +102,8 @@ def _match_in_order(
     matched: list[SequenceFlow] = []
     for flow in conditional:
         assert flow.condition is not None  # conditional 分组已过滤
+        if "prev_task" not in variables and references_identifier(flow.condition, "prev_task"):
+            continue  # 上一站查无：条件按不满足（expression-dataface §3，温和跳过）
         try:
             hit = evaluate_condition(flow.condition, variables, functions=functions)
         except FormulaError as exc:

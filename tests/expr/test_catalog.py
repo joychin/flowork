@@ -17,15 +17,30 @@ from flowork.spi.ports import FunctionSignature
 
 
 def test_catalog_reserved_identifiers_and_positions():
-    assert reserved_identifiers() == frozenset({"initiator", "now", "task"})
+    assert reserved_identifiers() == frozenset({"initiator", "now", "prev_task", "task"})
     assert positions_of("task") == frozenset({"reassign", "exit"})
+    assert positions_of("prev_task") == frozenset({"condition", "subjects"})
     assert positions_of("initiator") == positions_of("now")
     assert positions_of("amount") == frozenset()  # 非保留词
 
 
+def test_engine_function_catalog():
+    """F2：引擎注入函数目录（node）——validator 静态检查的对照源。"""
+    from flowork.expr.catalog import engine_functions
+
+    entry = engine_functions()["node"]
+    assert entry.params == ("string",) and entry.returns == "map"
+    assert entry.positions == frozenset({"condition", "subjects"})
+
+
 def test_catalog_entries_carry_chinese_labels():
     labels = {entry.name: entry.label for entry in identifier_entries()}
-    assert labels == {"initiator": "发起人", "now": "求值时刻", "task": "当前任务快照"}
+    assert labels == {
+        "initiator": "发起人",
+        "now": "求值时刻",
+        "prev_task": "上一站",
+        "task": "当前任务快照",
+    }
 
 
 def test_function_signature_label_defaults_empty():

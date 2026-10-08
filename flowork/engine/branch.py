@@ -36,15 +36,20 @@ class BranchBehavior(NodeBehavior):
         outgoing = definition.outgoing(ctx.node.code)
         from flowork.engine.routing import Mode, evaluation_variables, select_outgoing
         from flowork.expr.context import expression_functions_of
+        from flowork.tasks.facts import attach_node
 
         mode: Mode = (
             "first_match" if self._spec().route_mode == RouteMode.FIRST_MATCH else "all_match"
         )
         return select_outgoing(
             outgoing,
-            evaluation_variables(ctx.instance, ctx.variables),
+            evaluation_variables(ctx.instance, ctx.variables, session=ctx.session),
             mode=mode,
-            functions=expression_functions_of(
-                getattr(getattr(ctx.kernel, "engine", None), "config", None)
+            functions=attach_node(
+                expression_functions_of(
+                    getattr(getattr(ctx.kernel, "engine", None), "config", None)
+                ),
+                ctx.session,
+                ctx.instance.id,
             ),
         )

@@ -216,7 +216,13 @@ class JobScheduler:
             instance = ctx.session.get(ProcessInstanceRow, job.instance_id)
             if instance is None:
                 raise EngineExecutionError(f"reassign 实例不存在（job={job.id}）")
-            snapshot = {"id": task.id, "assignee": task.assignee, "outcome": None}
+            snapshot = {
+                "id": task.id,
+                "assignee": task.assignee,
+                "outcome": None,
+                "created_at": task.created_at,
+                "deadline_at": task.due_at,  # 首条 deadline 到期时刻（未配＝null）
+            }
             variables = expression_context(
                 instance.variables or {},
                 start_user=instance.start_user,

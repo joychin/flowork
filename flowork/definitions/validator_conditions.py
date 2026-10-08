@@ -21,7 +21,11 @@ from flowork.definitions.builtin import (
     KIND_USER_TASK,
 )
 from flowork.definitions.flow import MAX_FORMULA_LENGTH
-from flowork.expr.catalog import identifier_entries, reserved_identifiers
+from flowork.expr.catalog import (
+    engine_functions,
+    identifier_entries,
+    reserved_identifiers,
+)
 
 if TYPE_CHECKING:
     from flowork.definitions.definition import ProcessDefinition
@@ -234,13 +238,13 @@ def check_variable_references(
                 continue
             if name in RESERVED_IDENTIFIERS:
                 if kind in RESERVED_POSITIONS[name]:
-                    continue  # 该位点可用（task 窄位点方言 / initiator·now 全位点）
-                if name == "task":
-                    error(
-                        f"{rule}.task_unavailable",
-                        "公式引用 task.*：任务快照仅超时改派/会签出口位提供（spec C.4）",
-                        flow=where,
-                    )
+                    continue  # 该位点可用（task 窄位点方言 / prev_task 条件+取人位 / 全位点词）
+                error(
+                    f"{rule}.{name}_unavailable",
+                    f"公式引用 {name}.*：该标识符仅 {'/'.join(sorted(RESERVED_POSITIONS[name]))}"
+                    " 位提供（expression-dataface §2）",
+                    flow=where,
+                )
                 continue
             unknown.add(name)
         if unknown:
@@ -251,8 +255,25 @@ def check_variable_references(
                 f"（{', '.join(sorted(RESERVED_IDENTIFIERS))} 为内置标识符）",
                 flow=where,
             )
+        engine_fns = engine_functions()
         for name, arities in functions.items():
             if name in CEL_BUILTIN_FUNCTIONS:
+                continue
+            if name in engine_fns:  # 引擎注入函数（node 等）：目录对照位点与参数个数
+                entry = engine_fns[name]
+                if kind not in entry.positions:
+                    error(
+                        f"{rule}.function.position",
+                        f"函数 {name}(...) 仅 {'/'.join(sorted(entry.positions))} 位点可用",
+                        flow=where,
+                    )
+                elif any(arity != len(entry.params) for arity in arities):
+                    error(
+                        f"{rule}.function.arity",
+                        f"函数 {name} 期望 {len(entry.params)} 个参数，"
+                        f"调用处为 {'/'.join(str(a) for a in sorted(arities))} 个",
+                        flow=where,
+                    )
                 continue
             if signatures is None:
                 warning(

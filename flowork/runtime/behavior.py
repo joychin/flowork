@@ -98,15 +98,20 @@ class NodeBehavior:
         """
         from flowork.engine.routing import evaluation_variables, select_outgoing
         from flowork.expr.context import expression_functions_of
+        from flowork.tasks.facts import attach_node
 
         definition = ctx.kernel.definition_of(ctx.session, ctx.instance)  # type: ignore[attr-defined]
         outgoing = definition.outgoing(ctx.node.code)
         engine = getattr(ctx.kernel, "engine", None)
         return select_outgoing(
             outgoing,
-            evaluation_variables(ctx.instance, ctx.variables),  # type: ignore[attr-defined]
+            evaluation_variables(ctx.instance, ctx.variables, session=ctx.session),  # type: ignore[attr-defined]
             mode="all_match",
-            functions=expression_functions_of(getattr(engine, "config", None)),
+            functions=attach_node(
+                expression_functions_of(getattr(engine, "config", None)),
+                ctx.session,  # type: ignore[attr-defined]
+                ctx.instance.id,  # type: ignore[attr-defined]
+            ),
         )
 
 

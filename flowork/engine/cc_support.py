@@ -22,13 +22,14 @@ def create_cc_items(ctx: RuntimeNodeContext, spec: CcTaskSpec) -> None:
     """为接收人生成传阅件（recipients 逐项 CEL 求值，null/空=查无传播）。"""
     from flowork.expr.context import expression_functions_of
     from flowork.persistence.orm import CcItemRow
+    from flowork.tasks.facts import attach_node, with_prev_task
 
     config = ctx.kernel.engine.config if ctx.kernel.engine else None
     recipients = resolve_subjects(
         list(spec.recipients),
-        ctx.variables,
+        with_prev_task(ctx.session, ctx.instance.id, ctx.variables),
         ctx.instance.start_user,
-        expression_functions_of(config),
+        attach_node(expression_functions_of(config), ctx.session, ctx.instance.id),
         label=spec.code,
         what="传阅接收人",
     )

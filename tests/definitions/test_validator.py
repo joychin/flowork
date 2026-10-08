@@ -300,6 +300,51 @@ def test_now_reference_needs_no_declaration(registry):
     assert not any(issue.rule == "condition.variable.unknown" for issue in issues)
 
 
+# —— F2 节点事实（expression-dataface §2.2/§2.3）：prev_task 与 node() ——
+
+
+def test_prev_task_declared_as_variable_rejected(registry):
+    definition = _cel_flow(registry, formula="amount > 1", declare=("amount", "prev_task"))
+    assert "variables.reserved_name" in error_rules(definition, registry)
+
+
+def test_prev_task_unavailable_outside_condition_and_subjects(registry):
+    """位点白名单：改派位引用 prev_task → ERROR（目录驱动）。"""
+    from flowork.definitions.definition import ProcessVariable
+    from flowork.definitions.node import TaskDeadline
+
+    definition = (
+        FlowBuilder("re")
+        .start()
+        .user_task(
+            "a",
+            assignee="'u_a'",
+            deadlines=[
+                TaskDeadline(after_minutes=30, action="reassign", reassign_to="prev_task.assignee")
+            ],
+        )
+        .end()
+        .connect("start", "a")
+        .connect("a", "end")
+        .build()
+    )
+    # 引用检查仅在声明了流程变量时启用（spec §3.2）：声明一个触发检查
+    definition.variables = [ProcessVariable(name="amount", type="number")]
+    assert "expression.prev_task_unavailable" in error_rules(definition, registry)
+
+
+def test_node_function_known_without_registry(registry):
+    """node() 在引擎函数目录：无注册表也不报 unknown/不告警。"""
+    definition = _cel_flow(registry, formula='node("gate").runs > 1')
+    issues = validate_definition(definition, registry)
+    assert not any(issue.rule.startswith("condition.function") for issue in issues)
+
+
+def test_node_function_arity_checked(registry):
+    definition = _cel_flow(registry, formula='node("gate", "x").runs > 1')
+    assert "condition.function.arity" in error_rules(definition, registry)
+
+
 # —— 位点统一静态检查（spec §4.2：取人/改派/映射位与连线同一套检查）——
 
 
