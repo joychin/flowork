@@ -368,11 +368,6 @@ function EdgeForm({ flow, onChange }: {
   const formula = typeof flow.condition === 'string' ? flow.condition : ''
   const [preview, setPreview] = useState<{ ok: boolean; text: string } | null>(null)
 
-  // 变量选项:声明的流程变量(点选优先,手输兜底)
-  const variableOptions = useMemo(() => {
-    return (spec?.variables ?? []).map((v) => ({ name: v.name, label: v.label || VAR_TYPE_LABELS[v.type] }))
-  }, [spec])
-
   const setFormula = (text: string) => {
     onChange({ condition: text.trim() ? text : null })
   }
@@ -431,11 +426,6 @@ function EdgeForm({ flow, onChange }: {
             onChange={(e) => setFormula(e.target.value)}
           />
           <div className="formula-actions">
-            <datalist id="fk-cond-vars">
-              {variableOptions.map((o) => (
-                <option key={o.name} value={o.name}>{o.label}</option>
-              ))}
-            </datalist>
             <button className="mini-btn" type="button" onClick={() => void runPreview()}>▶ 按样例值试算</button>
           </div>
           {preview && (
