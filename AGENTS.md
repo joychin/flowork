@@ -92,7 +92,7 @@ deadline 列表+实例级时限+escalate/anticipate 只读预判。DoD 全链路
 ≤300 行）。残留超标（既有债务，非本轮引入）：kernel.py 534、task_actions.py 470、task_service.py 364、
 validator.py 368——拆解随 M 系 REST/MCP 前的重构刀处理。
 
-当前快照（2026-10-08）：**564 个测试全绿**；web API（`flowork/web`）与设计器前端（`designer/`）已可用；
+当前快照（2026-10-08）：**624 个测试全绿**；web API（`flowork/web`）与设计器前端（`designer/`）已可用；
 黑盒验收套件 `tests/suite`（82 例，含驳回/异常走查 demo）落地。
 **变量读写接口批（2026-10-08，spec §10/§11/§12/§13/§14 + variable-io-api.md，REST 随 /v2 批、MCP 随 M7 仅登记）**：
 RuntimeService 变量面（update_variables 三门槛：白名单=声明∪input schema∪既有键、保留键拒、类型对位、
@@ -158,3 +158,18 @@ incident skip 同事务），无条件路由也落行；anticipate/dry-run 只�
 失败不落行（故障单已含公式与错误）。查询面 HistoryService.route_decisions。
 594 测试全绿。剩余 F4 设计器目录下发/F5 spec 收口。
 
+**能力补足 P0 批（2026-10-08，依据 docs_research 能力基准调研的差距清单）**：
+① `test(edge)` 用户动作并发竞态套件（8 例：complete×2 单引擎/双副本、complete vs
+reject 真线程+双确定性交错、submit vs timer fire、pause vs 推进、多 worker 抢批+
+易主 JobStateError；tests/edge/conftest.py 收敛文件库引擎工厂——同名即同库）。
+② `contrib/numeric.py` numeric_vocabulary 六散件（split/abs/max/min/sort/sum，
+签名+中文 label；max/min 空列表 null、sum 空列表 0、类型错→FloworkError 技术故障；
+注册全局 min 与 celpy [.].min() 共存；contrib/_registry.py 抽共享 FixedFunctions）；
+`expr/cel.py` CEL_BUILTIN_FUNCTIONS 修正 startsWith/endsWith 真名+补
+contains/bool/list/null_type（此前全局调用误报未注册 ERROR）。
+③ `definitions/graph.py` 图遍历共享件（upstream_basin 自 join_gate 下沉 +
+forward_reachable/can_reach_end）+ `validator_graph.py` 图级 lint 两规则（全 WARNING
+不拦发布）：graph.subgraph.no_exit 封闭子图、join.arm.unreachable all 汇聚死臂；
+判据与运行时放行门同源（join_gate 改 import 复用，语义零变化），条件未命中臂
+不告警（不复活已移除的 advance.all_conditional_arm）。④ docs/integration.md 新增
+「并发模型」声明节（一句话串行化模型 + 竞态测试矩阵证据索引）。624 测试全绿。

@@ -42,6 +42,41 @@ uv run flowork demo-full                  # 全流程 DoD 演示（事件回放�
 认领、策略执行与结果落库在同一事务：进程崩溃整体回滚（Job 回到 scheduled），
 不存在滞留 running 的中间态；失败按 30s 起步指数退避重试，超限进 dead-letter。
 
+## 并发模型
+
+一句话声明：**同实例串行化靠实例行乐观锁；跨实例天然并行；Job 恰一次靠 CAS 认领。**
+部署多副本（多个 web 进程 / 独立 tick worker / 多外部 worker）无需额外分布式锁组件。
+
+- **同实例串行化**：每个写命令单事务执行，且统一触碰实例行（`CommandContext.touch`
+  → `version` 乐观锁）。同实例的两个并发命令，后提交者在版本冲突时自动重试
+  `EngineConfig.lock_retries`（默认 3）次，仍冲突则抛 `LockConflictError` 明确拒绝
+  ——**绝不静默覆盖**。汇聚可达性判定与路由决策在同一事务内完成（读的是本事务
+  一致性视图），不存在计数错位的窗口。
+- **跨实例并行**：不同实例互不触碰对方行，天然并行；部署新版本经
+  `definition_snapshot` 快照钉版，在途实例与并发部署零交互。
+- **Job 恰一次**：内部调度 tick 逐 Job CAS 认领（条件 UPDATE 原子抢占），多副本
+  同时 tick 同一 Job 只有一个副本执行；外部 worker 走租约协议
+  （`activate_jobs` / `complete_job` / `fail_job`，同样是 CAS 认领 + 租约易主）。
+- **启动幂等**：同 `idempotency_key` 并发到达，按 `reuse` 策略
+  （reject / return_existing / allow_duplicate）收敛，数据库唯一索引兜底。
+
+### 竞态测试矩阵（上述声明的证据索引）
+
+| 竞态窗口 | 机制 | 证据测试 |
+|---|---|---|
+| 同任务并发 complete×2（单引擎/多副本） | 活表状态守卫 + 乐观锁 | `tests/edge/test_action_races.py` |
+| complete vs reject | 活表状态守卫（后到者 `TaskNotAvailableError`） | 同上（真线程 + 双确定性交错） |
+| 人工办理 vs 超时自动通过 | Job 执行时复查任务状态（skip） | 同上（恰一结局，不重试不死信） |
+| 暂停 vs 推进 | 实例状态门（暂停拦截办理） | 同上（互斥生效，恢复后放行） |
+| 多 worker 抢同一批 Job | 租约 CAS 认领互斥 | 同上（易主汇报 `JobStateError`） |
+| 多副本并发 tick 同一 Job | CAS 认领 | `tests/edge/test_hardening.py` |
+| 同 key 并发启动 | 幂等三策略 + 唯一索引 | `tests/semantics/test_start_idempotency.py` |
+| 旧快照并发写（丢失更新） | 乐观锁 `StaleDataError` | `tests/edge/test_hardening.py` |
+
+> SQLite 默认部署（WAL）下单写者进一步天然串行；生产多副本换 PostgreSQL 时，
+> 上述机制不变，仅需关注 `touch` 冲突在所选隔离级别下的重试表现
+> （Alembic 基线迁移随 /v2 批落地）。
+
 ## 与后续系统对接（二期入口已预留）
 
 - **HTTP 服务**：四服务方法即 FastAPI 路由（一一映射，无需改动内核）。
