@@ -1,8 +1,10 @@
-"""CEL 公式求值（kernel-v2 §4.3/§4.1）：``SequenceFlow.condition`` 的运行时实现。
+"""CEL 公式求值（kernel-v2 §4.3/§4.1）：全表达式位的运行时实现。
 
 cel-python（模块名 ``celpy``）执行，P0-1 决策记录的落地缓解四件套：
 **2KB 限长 / 二元运算链 ≤256 项 / 变量序列化 ≤1MB / 全异常归一 FormulaError**
 （celpy 无进程内硬超时——非图灵完备 + 三护栏间接约束，升级路径为子进程隔离）。
+两个入口：``evaluate_formula``（条件位，bool 收敛）与 ``evaluate_formula_value``
+（值位：取人/传阅/改派/映射/试算，原样返回）。
 静态检查原料由 :func:`collect_references` 提供（标识符 + 函数名→参数个数），
 validator 侧对照 input 契约与 ExpressionFunctions 注册表使用。
 """
@@ -26,6 +28,7 @@ __all__ = [
     "FormulaError",
     "collect_references",
     "evaluate_formula",
+    "evaluate_formula_value",
 ]
 
 # 二元运算链项数上限：PoC 实测 350 项（1747B）触发 celpy 递归悬崖，256 留余量。
@@ -117,18 +120,12 @@ def _parse(formula: str) -> celpy.Expression[Any]:
         raise FormulaError(f"公式语法错误：{formula!r}（{exc}）") from exc
 
 
-def evaluate_formula(
+def _evaluate(
     formula: str,
     variables: Mapping[str, Any],
     functions: Mapping[str, Callable[..., object]] | None = None,
-) -> bool:
-    """在 CEL 求值公式，返回布尔结果（celtypes.BoolType 收敛为 Python bool）。
-
-    Args:
-        formula: CEL 表达式（``&& / || / ! / true / false / null / in [...] / .size()``）。
-        variables: 变量上下文（JSON 兼容；入参经 json_to_cel 支持字段选择）。
-        functions: 自定义函数注册表（宿主经 ExpressionFunctions 端口拍平后传入）。
-    """
+) -> Any:
+    """共享求值核：护栏全过，返回原值（bool 收敛由条件位变体自理）。"""
     tree = _parse(formula)
     payload = dict(variables)
     try:
@@ -141,12 +138,39 @@ def evaluate_formula(
     env = celpy.Environment()
     program = env.program(tree, functions=cast(Any, dict(functions)) if functions else None)
     try:
-        result = program.evaluate(activation)
+        return program.evaluate(activation)
     except FormulaError:
         raise
     except Exception as exc:  # CELEvalError / RecursionError 兜底归一
         raise FormulaError(f"公式求值错误：{formula!r}（{exc}）") from exc
-    return bool(result)
+
+
+def evaluate_formula(
+    formula: str,
+    variables: Mapping[str, Any],
+    functions: Mapping[str, Callable[..., object]] | None = None,
+) -> bool:
+    """在 CEL 求值公式，返回布尔结果（celtypes.BoolType 收敛为 Python bool）。
+
+    Args:
+        formula: CEL 表达式（``&& / || / ! / true / false / null / in [...] / .size()``）。
+        variables: 变量上下文（JSON 兼容；入参经 json_to_cel 支持字段选择）。
+        functions: 自定义函数注册表（宿主经 ExpressionFunctions 端口拍平后传入）。
+    """
+    return bool(_evaluate(formula, variables, functions))
+
+
+def evaluate_formula_value(
+    formula: str,
+    variables: Mapping[str, Any],
+    functions: Mapping[str, Callable[..., object]] | None = None,
+) -> Any:
+    """在 CEL 求值**值表达式**，原样返回结果（不收敛 bool）。
+
+    值位点（取人/传阅/超时改派/子流程映射/试算）用；条件位继续用
+    :func:`evaluate_formula`。护栏与异常归一两者共享。
+    """
+    return _evaluate(formula, variables, functions)
 
 
 def collect_references(formula: str) -> tuple[set[str], dict[str, set[int]]]:

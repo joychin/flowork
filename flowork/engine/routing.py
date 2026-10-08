@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Any, Literal
 from flowork.engine.kernel import EngineExecutionError, RouteError
 from flowork.expr.cel import FormulaError
 from flowork.expr.conditions import evaluate_condition
+from flowork.expr.context import expression_context
 
 if TYPE_CHECKING:
     from flowork.definitions.flow import SequenceFlow
@@ -28,15 +29,11 @@ Mode = Literal["all_match", "first_match"]
 
 
 def evaluation_variables(instance: Any, variables: Mapping[str, Any]) -> dict[str, Any]:
-    """构造求值上下文：变量副本 + ``initiator`` 保留标识符。
+    """构造求值上下文（expr.context.expression_context 的实例版薄包装）。
 
     显式声明同名变量时以声明为准（setdefault）；实例无 start_user 时缺省。
     """
-    payload = dict(variables)
-    start_user = getattr(instance, "start_user", None)
-    if start_user:
-        payload.setdefault("initiator", start_user)
-    return payload
+    return expression_context(variables, start_user=getattr(instance, "start_user", None))
 
 
 def expression_functions_of(config: Any) -> Mapping[str, Callable[..., object]] | None:

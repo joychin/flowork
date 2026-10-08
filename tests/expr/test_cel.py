@@ -13,6 +13,7 @@ from flowork.expr.cel import (
     FormulaError,
     collect_references,
     evaluate_formula,
+    evaluate_formula_value,
 )
 
 # —— 基本语法与语义 ——
@@ -180,3 +181,43 @@ def test_collect_has_macro():
 def test_collect_parse_error_raises():
     with pytest.raises(FormulaError):
         collect_references("amount >")
+
+
+# —— evaluate_formula_value（值位点：映射/取人/试算，不收敛 bool）——
+
+
+@pytest.mark.parametrize(
+    ("formula", "variables", "expected"),
+    [
+        ("'u_manager'", {}, "u_manager"),  # 字符串字面量（取人位字面 id 形态）
+        ("amount", {"amount": 2000}, 2000),  # 标识符直取（映射位同名直传）
+        ("amount * 2", {"amount": 21}, 42),  # 运算表达式
+        ("['u_a', 'u_b']", {}, ["u_a", "u_b"]),  # 列表字面量（取人位多解）
+        ("x", {"x": None}, None),  # null 原样返回
+    ],
+)
+def test_value_formula_returns_raw(formula, variables, expected):
+    assert evaluate_formula_value(formula, variables) == expected
+
+
+def test_value_formula_custom_function_list_passthrough():
+    """注入函数返回列表原样透出（取人位 users 词汇的运行形态）。"""
+    result = evaluate_formula_value(
+        'users_with_role("finance")', {}, functions={"users_with_role": lambda r: ["u_a", "u_b"]}
+    )
+    assert result == ["u_a", "u_b"]
+
+
+def test_value_and_condition_diverge_on_non_bool():
+    """同一公式：条件位 bool 收敛，值位返回原值（两变体的本质差异）。"""
+    assert evaluate_formula("amount", {"amount": 2000}) is True
+    assert evaluate_formula_value("amount", {"amount": 2000}) == 2000
+
+
+def test_value_formula_shares_guardrails():
+    with pytest.raises(FormulaError, match="长度"):
+        evaluate_formula_value("1 + " * 700 + "1", {})
+    with pytest.raises(FormulaError, match="变量"):
+        evaluate_formula_value("amount", {"blob": "x" * 1_100_000})
+    with pytest.raises(FormulaError):
+        evaluate_formula_value("nosuchvar", {})
