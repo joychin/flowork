@@ -39,6 +39,20 @@ class TaskHistoryInfo(TaskInfo):
     actor_context: dict[str, Any] = {}  # v2.1 身份快照（spec §5.6）
 
 
+class TaskCompleteResult(BaseModel):
+    """complete/reject 的返回：结果 + 下一步可办任务（行动提示式返回）。
+
+    从 task_service 迁入 models（reject_flow 拆分需要，避免 engine↔tasks 循环导入）。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    task_id: str
+    outcome: str
+    instance_state: str
+    next_tasks: list[TaskInfo] = []
+
+
 class InstanceInfo(BaseModel):
     """流程实例概要。"""
 

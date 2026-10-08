@@ -11,11 +11,24 @@ from typing import Any
 
 from flowork.errors import FloworkError
 
-__all__ = ["InputContractError", "validate_input_contract"]
+__all__ = ["InputContractError", "input_schema_of", "validate_input_contract"]
 
 
 class InputContractError(FloworkError):
     """input 契约校验失败（边界拒收，spec §8 业务失败——不产生故障单）。"""
+
+
+def input_schema_of(instance: Any) -> dict[str, Any] | None:
+    """实例钉住的 input 契约（快照原样字段，不做 pydantic 解析）。
+
+    从 task_service._input_schema_of 迁入：complete 与 reject 两路共用。
+    """
+    import json as _json
+
+    try:
+        return (_json.loads(instance.definition_snapshot) or {}).get("input")
+    except (ValueError, TypeError):
+        return None
 
 
 def validate_input_contract(
