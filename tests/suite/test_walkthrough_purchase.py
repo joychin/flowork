@@ -147,7 +147,7 @@ def test_default_lane_walkthrough(static_engine: ProcessEngine) -> None:
     drive_final_sign_and_gate(engine, iid)
 
 
-@covers("join.all_gate", "route.structured_conditions")
+@covers("join.all_gate", "route.formula")
 def test_partial_parallel_lane_waits_then_releases(static_engine: ProcessEngine) -> None:
     """仅大额命中：法务道独行，等齐门在子流程道不可达时放行。"""
     engine = static_engine

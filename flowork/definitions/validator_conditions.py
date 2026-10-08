@@ -66,7 +66,7 @@ def check_condition_legality(
     error: IssueFn,
     warning: IssueFn,
 ) -> None:
-    """条件合法性：groups/formula 互斥、长度上限、空条件、CEL 编译、分支臂缺条件。"""
+    """条件合法性（单轨 CEL）：空公式、长度上限、编译与护栏、分支臂缺条件。"""
     from flowork.expr.cel import FormulaError, collect_references
 
     nodes = {n.code: n for n in definition.nodes}
@@ -74,27 +74,21 @@ def check_condition_legality(
         condition = flow.condition
         if condition is None:
             continue
-        if condition.groups and condition.formula:
-            error(
-                "condition.both_set",
-                "条件组与公式只允许其一（条件组优先，公式易被忽略）",
-                flow=flow.flow_code(),
-            )
-        if condition.formula and len(condition.formula) > MAX_FORMULA_LENGTH:
-            error(
-                "condition.formula.too_long",
-                f"公式长度 {len(condition.formula)} 超过上限 {MAX_FORMULA_LENGTH}",
-                flow=flow.flow_code(),
-            )
-        if not condition.groups and not condition.formula:
+        if not condition.strip():
             error(
                 "condition.empty",
-                "条件为空（groups 与 formula 均未设置）",
+                "条件公式为空字符串（无条件请置 null）",
                 flow=flow.flow_code(),
             )
-        if condition.formula:
+        elif len(condition) > MAX_FORMULA_LENGTH:
+            error(
+                "condition.formula.too_long",
+                f"公式长度 {len(condition)} 超过上限 {MAX_FORMULA_LENGTH}",
+                flow=flow.flow_code(),
+            )
+        else:
             try:  # 编译 + 护栏 + 引用收集一次完成（语法错在发布前拦截）
-                collect_references(condition.formula)
+                collect_references(condition)
             except FormulaError as exc:
                 error(
                     "condition.formula.invalid",
@@ -119,11 +113,10 @@ def check_variable_references(
     *,
     expression_functions: ExpressionFunctions | None = None,
 ) -> None:
-    """变量引用与函数调用（声明了流程变量时启用）。
+    """变量引用与函数调用（声明了流程变量时启用，单轨 CEL）。
 
     - 保留字声明（initiator）→ ERROR（求值上下文冲突）；
-    - groups 引用未声明变量 → WARNING（启发式，原语义）；
-    - 公式（CEL）引用未声明变量 → ERROR（静态检查，K8s CRD 体验）；
+    - 公式引用未声明变量 → ERROR（静态检查，K8s CRD 体验）；
     - 公式调用未注册函数：有注册表 → ERROR（含参数个数）；无注册表 → WARNING（无法核对）。
     """
     declared = {v.name for v in definition.variables}
@@ -147,58 +140,43 @@ def check_variable_references(
 
     for flow in definition.flows:
         condition = flow.condition
-        if condition is None:
+        if condition is None or not condition.strip():
             continue
-        refs: set[str] = set()
-        for group in condition.groups:
-            for item in group:
-                root = item.left.split(".", 1)[0]
-                if root and root not in declared and root not in RESERVED_IDENTIFIERS:
-                    refs.add(root)
-        if condition.formula:
-            try:
-                idents, functions = collect_references(condition.formula)
-            except FormulaError:
-                idents, functions = set(), {}  # 语法问题已由 condition.formula.invalid 报告
-            unknown = {
-                name for name in idents if name not in declared and name not in RESERVED_IDENTIFIERS
-            }
-            if unknown:
-                error(
-                    "condition.variable.unknown",
-                    "公式引用了未声明的流程变量："
-                    f"{', '.join(sorted(unknown))}"
-                    f"（{', '.join(sorted(RESERVED_IDENTIFIERS))} 为内置标识符）",
-                    flow=flow.flow_code(),
-                )
-            for name, arities in functions.items():
-                if name in CEL_BUILTIN_FUNCTIONS:
-                    continue
-                if signatures is None:
-                    warning(
-                        "condition.function.unknown",
-                        f"公式调用函数 {name}(...)：未配置表达式函数注册表"
-                        "（EngineConfig.expression_functions），无法静态核对",
-                        flow=flow.flow_code(),
-                    )
-                elif name not in signatures:
-                    error(
-                        "condition.function.unknown",
-                        f"公式调用未注册的函数：{name}(...)（已注册："
-                        f"{', '.join(sorted(signatures))}）",
-                        flow=flow.flow_code(),
-                    )
-                elif any(arity != signatures[name] for arity in arities):
-                    error(
-                        "condition.function.arity",
-                        f"函数 {name} 期望 {signatures[name]} 个参数，"
-                        f"调用处为 {'/'.join(str(a) for a in sorted(arities))} 个",
-                        flow=flow.flow_code(),
-                    )
-        if refs:
-            warning(
+        try:
+            idents, functions = collect_references(condition)
+        except FormulaError:
+            continue  # 语法问题已由 condition.formula.invalid 报告
+        unknown = {
+            name for name in idents if name not in declared and name not in RESERVED_IDENTIFIERS
+        }
+        if unknown:
+            error(
                 "condition.variable.unknown",
-                "条件组引用了未声明的流程变量："
-                f"{', '.join(sorted(refs))}（可在「流程设置」中声明）",
+                "公式引用了未声明的流程变量："
+                f"{', '.join(sorted(unknown))}"
+                f"（{', '.join(sorted(RESERVED_IDENTIFIERS))} 为内置标识符）",
                 flow=flow.flow_code(),
             )
+        for name, arities in functions.items():
+            if name in CEL_BUILTIN_FUNCTIONS:
+                continue
+            if signatures is None:
+                warning(
+                    "condition.function.unknown",
+                    f"公式调用函数 {name}(...)：未配置表达式函数注册表"
+                    "（EngineConfig.expression_functions），无法静态核对",
+                    flow=flow.flow_code(),
+                )
+            elif name not in signatures:
+                error(
+                    "condition.function.unknown",
+                    f"公式调用未注册的函数：{name}(...)（已注册：{', '.join(sorted(signatures))}）",
+                    flow=flow.flow_code(),
+                )
+            elif any(arity != signatures[name] for arity in arities):
+                error(
+                    "condition.function.arity",
+                    f"函数 {name} 期望 {signatures[name]} 个参数，"
+                    f"调用处为 {'/'.join(str(a) for a in sorted(arities))} 个",
+                    flow=flow.flow_code(),
+                )

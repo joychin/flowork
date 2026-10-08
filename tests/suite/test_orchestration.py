@@ -5,7 +5,6 @@ from __future__ import annotations
 import pytest
 
 from flowork.definitions.builder import FlowBuilder
-from flowork.definitions.flow import FlowCondition
 from flowork.definitions.node import MultiInstance
 from flowork.engine.engine import ProcessEngine
 from flowork.errors import TaskNotAvailableError
@@ -146,7 +145,7 @@ def test_formula_condition_routes_by_expression() -> None:
         .user_task("small", "小额", assignee="u_b")
         .end()
         .flow("start", "gate")
-        .flow("gate", "big", condition=FlowCondition(formula="amount > 100 && urgent"))
+        .flow("gate", "big", condition="amount > 100 && urgent")
         .flow("gate", "small", default=True)
         .flow("big", "end")
         .flow("small", "end")

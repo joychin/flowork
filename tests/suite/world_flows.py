@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from flowork.definitions.builder import FlowBuilder
 from flowork.definitions.definition import ProcessDefinition, ProcessVariable
-from flowork.definitions.flow import ConditionItem, ConditionOperator, FlowCondition
 from flowork.definitions.node import MultiInstance
 
 HIGH_AMOUNT = 5000  # 报销高额阈值（分支依据）
@@ -66,15 +65,7 @@ def expense_definition() -> ProcessDefinition:
         .service_task("pay", "自动打款", action="make_payment")
         .end("expense_end", "报销结束")
         .flow("start", "amount_route")
-        .flow(
-            "amount_route",
-            "fin_countersign",
-            condition=FlowCondition(
-                groups=[
-                    [ConditionItem(left="amount", operator=ConditionOperator.GE, right=HIGH_AMOUNT)]
-                ]
-            ),
-        )
+        .flow("amount_route", "fin_countersign", condition=f"amount >= {HIGH_AMOUNT}")
         .flow("amount_route", "quick_review", default=True)
         .flow("quick_review", "cc_fin")
         .flow("fin_countersign", "level_sign")
@@ -163,20 +154,8 @@ def purchase_definition() -> ProcessDefinition:
         .end("purchase_end", "采购结束")
         .flow("start", "dept_review")
         .flow("dept_review", "fork_route")
-        .flow(
-            "fork_route",
-            "legal_track",
-            condition=FlowCondition(
-                groups=[[ConditionItem(left="budget", operator=ConditionOperator.GT, right=20000)]]
-            ),
-        )
-        .flow(
-            "fork_route",
-            "compliance_track",
-            condition=FlowCondition(
-                groups=[[ConditionItem(left="risk", operator=ConditionOperator.EQ, right="high")]]
-            ),
-        )
+        .flow("fork_route", "legal_track", condition="budget > 20000")
+        .flow("fork_route", "compliance_track", condition='risk == "high"')
         .flow("fork_route", "final_sign", default=True)
         .flow("legal_track", "final_sign")
         .flow("compliance_track", "final_sign")

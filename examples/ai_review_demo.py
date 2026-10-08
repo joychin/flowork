@@ -15,7 +15,6 @@ from typing import Any
 
 from flowork.definitions.builder import FlowBuilder
 from flowork.definitions.definition import ProcessDefinition
-from flowork.definitions.flow import FlowCondition
 from flowork.definitions.node import FlowNode
 from flowork.definitions.validator import IssueLevel, validate_definition
 from flowork.expr.conditions import evaluate_condition
@@ -65,9 +64,7 @@ def _mock_llm(prompt: str, variables: dict[str, Any]) -> dict[str, Any]:
 
 def build_definition(registry: NodeRegistry | None = None) -> ProcessDefinition:
     """构建含 ai_review 节点的模板（经 builder，与 JSON 同构）。"""
-    high_confidence = FlowCondition(
-        groups=[[{"left": "ai_confidence", "operator": "ge", "right": 0.8}]]
-    )
+    high_confidence = "ai_confidence >= 0.8"
     return (
         FlowBuilder("ai_review_flow", "AI 预审 + 人工升级")
         .start()

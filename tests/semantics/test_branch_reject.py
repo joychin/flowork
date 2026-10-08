@@ -8,11 +8,9 @@ import pytest
 
 from flowork.definitions.builder import FlowBuilder
 from flowork.definitions.builtin import RouteMode
-from flowork.definitions.flow import FlowCondition
 from flowork.definitions.node import MultiInstance
 from flowork.engine.engine import ProcessEngine
 from flowork.engine.kernel import DeadLoopError, RouteError
-from flowork.errors import ConditionError
 from flowork.expr.cel import FormulaError, evaluate_formula
 
 
@@ -21,9 +19,23 @@ def engine() -> ProcessEngine:
     return ProcessEngine()
 
 
-def cond(left: str, op: str, right: object) -> FlowCondition:
-    """便捷：单项条件组。"""
-    return FlowCondition(groups=[[{"left": left, "operator": op, "right": right}]])
+_OPS = {"eq": "==", "ne": "!=", "gt": ">", "ge": ">=", "lt": "<", "le": "<="}
+
+
+def cond(left: str, op: str, right: object) -> str:
+    """便捷：单条件 → CEL 公式（条件单轨化）。"""
+    lit = (
+        "true"
+        if right is True
+        else "false"
+        if right is False
+        else "null"
+        if right is None
+        else f'"{right}"'
+        if isinstance(right, str)
+        else str(right)
+    )
+    return f"{left} {_OPS[op]} {lit}"
 
 
 def publish(engine: ProcessEngine, definition) -> None:
@@ -223,7 +235,7 @@ def test_formula_via_branch(engine: ProcessEngine):
         .user_task("small", assignee="u_clerk")
         .end()
         .connect("start", "route")
-        .flow("route", "big", condition=FlowCondition(formula="amount > 5000 && urgent == true"))
+        .flow("route", "big", condition="amount > 5000 && urgent == true")
         .flow("route", "small", default=True)
         .connect("big", "end")
         .connect("small", "end")
@@ -236,7 +248,10 @@ def test_formula_via_branch(engine: ProcessEngine):
 
 
 def test_condition_error_wrapped(engine: ProcessEngine):
-    """条件引用未定义变量 → 命令失败并回滚（实例保持 running 前状态）。"""
+    """公式引用未提供变量 → 技术故障：命令失败回滚（实例行不落库）+ 故障单（单轨语义，spec §8）。"""
+    from flowork.engine.kernel import EngineExecutionError
+    from flowork.errors import InstanceNotFoundError
+
     definition = (
         FlowBuilder("cerr")
         .start()
@@ -250,8 +265,12 @@ def test_condition_error_wrapped(engine: ProcessEngine):
         .build()
     )
     publish(engine, definition)
-    with pytest.raises(ConditionError):
+    with pytest.raises(EngineExecutionError, match="公式求值失败"):
         engine.runtime.start_process("cerr", start_user="u_user", variables={})
+    incidents = engine.runtime.list_incidents()
+    assert incidents and incidents[0]["state"] == "open"  # 独立事务记录的故障单
+    with pytest.raises(InstanceNotFoundError):
+        engine.runtime.get_instance(incidents[0]["instance_id"])  # 启动命令已回滚
 
 
 # —— 串行会签 ——

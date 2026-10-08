@@ -15,7 +15,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from flowork.definitions.builder import FlowBuilder
 from flowork.definitions.builtin import RouteMode
 from flowork.definitions.definition import dump_definition
-from flowork.definitions.flow import FlowCondition
 from flowork.definitions.node import MultiInstance
 from flowork.definitions.validator import IssueLevel, validate_definition
 from flowork.runtime.registry import create_registry
@@ -23,8 +22,22 @@ from flowork.runtime.registry import create_registry
 OUT = Path(__file__).parent
 
 
-def cond(left: str, op: str, right: object) -> FlowCondition:
-    return FlowCondition(groups=[[{"left": left, "operator": op, "right": right}]])
+_OPS = {"eq": "==", "ne": "!=", "gt": ">", "ge": ">=", "lt": "<", "le": "<="}
+
+
+def cond(left: str, op: str, right: object) -> str:
+    """单条件 → CEL 公式（条件单轨化，spec §4.1）；值按 CEL 字面量归一。"""
+    if right is True:
+        lit = "true"
+    elif right is False:
+        lit = "false"
+    elif right is None:
+        lit = "null"
+    elif isinstance(right, str):
+        lit = f'"{right}"'
+    else:
+        lit = str(right)
+    return f"{left} {_OPS[op]} {lit}"
 
 
 def expense_claim():

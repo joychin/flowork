@@ -96,7 +96,7 @@ def test_searchable_variable_index_queries(suite_engine: ProcessEngine) -> None:
         assert instances_by_variable(session, "note") == []  # 非 searchable 变量不入索引
 
 
-@covers("route.structured_conditions")
+@covers("route.formula")
 def test_data_driven_routing_threshold_flip(suite_engine: ProcessEngine) -> None:
     """同一份数据契约下的路由翻转：阈值两侧走不同支路。"""
     below = start_expense(suite_engine, amount=4999)

@@ -62,17 +62,7 @@
     {
       "source": "route",
       "target": "director",
-      "condition": {
-        "groups": [
-          [
-            {
-              "left": "amount",
-              "operator": "gt",
-              "right": 10000
-            }
-          ]
-        ]
-      }
+      "condition": "amount > 10000"
     },
     {
       "source": "route",

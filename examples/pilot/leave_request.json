@@ -1,8 +1,11 @@
 {
   "code": "leave_request",
   "name": "请假申请",
-  "version": 1,
-  "status": "draft",
+  "major": 1,
+  "revision": 1,
+  "status": "published",
+  "input": null,
+  "deadline": null,
   "nodes": [
     {
       "code": "start",
@@ -136,18 +139,7 @@
       "target": "hr_sequential",
       "name": "",
       "is_default": false,
-      "condition": {
-        "groups": [
-          [
-            {
-              "left": "days",
-              "operator": "gt",
-              "right": 3
-            }
-          ]
-        ],
-        "formula": null
-      },
+      "condition": "days > 3",
       "on_take": null
     },
     {

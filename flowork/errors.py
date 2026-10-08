@@ -34,19 +34,7 @@ class UnknownHandler(FloworkError):
 
 
 class ConditionError(FloworkError):
-    """条件求值错误（类型不匹配、路径非法等）。"""
-
-
-class VariableNotDefined(ConditionError):
-    """条件引用了未定义的变量。"""
-
-    def __init__(self, path: str) -> None:
-        self.path = path
-        super().__init__(f"条件引用了未定义的变量：{path!r}")
-
-
-class FormulaNotSupported(ConditionError):
-    """公式条件在当前版本尚未启用（M2 提供沙箱求值）。"""
+    """条件求值错误（CEL 公式的语法/护栏/求值错，见 expr.cel.FormulaError）。"""
 
 
 class NotFoundError(FloworkError):

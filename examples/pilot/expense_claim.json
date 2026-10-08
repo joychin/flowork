@@ -1,8 +1,11 @@
 {
   "code": "expense_claim",
   "name": "报销申请",
-  "version": 1,
-  "status": "draft",
+  "major": 1,
+  "revision": 1,
+  "status": "published",
+  "input": null,
+  "deadline": null,
   "nodes": [
     {
       "code": "start",
@@ -149,18 +152,7 @@
       "target": "director_review",
       "name": "",
       "is_default": false,
-      "condition": {
-        "groups": [
-          [
-            {
-              "left": "amount",
-              "operator": "gt",
-              "right": 10000
-            }
-          ]
-        ],
-        "formula": null
-      },
+      "condition": "amount > 10000",
       "on_take": null
     },
     {
@@ -168,18 +160,7 @@
       "target": "finance_review",
       "name": "",
       "is_default": false,
-      "condition": {
-        "groups": [
-          [
-            {
-              "left": "amount",
-              "operator": "ge",
-              "right": 1000
-            }
-          ]
-        ],
-        "formula": null
-      },
+      "condition": "amount >= 1000",
       "on_take": null
     },
     {
@@ -203,18 +184,7 @@
       "target": "legal_cc",
       "name": "",
       "is_default": false,
-      "condition": {
-        "groups": [
-          [
-            {
-              "left": "amount",
-              "operator": "gt",
-              "right": 10000
-            }
-          ]
-        ],
-        "formula": null
-      },
+      "condition": "amount > 10000",
       "on_take": null
     },
     {

@@ -55,7 +55,7 @@ def test_quick_lane_walkthrough(suite_engine: ProcessEngine) -> None:
 
 
 @covers(
-    "route.structured_conditions",
+    "route.formula",
     "countersign.parallel",
     "countersign.sequential",
     "countersign.approve_all",

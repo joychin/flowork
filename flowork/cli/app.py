@@ -11,7 +11,6 @@ from rich.table import Table
 from flowork.definitions.builder import FlowBuilder
 from flowork.definitions.builtin import RouteMode
 from flowork.definitions.definition import load_definition_file
-from flowork.definitions.flow import FlowCondition
 from flowork.definitions.node import MultiInstance
 from flowork.definitions.validator import IssueLevel, validate_definition
 from flowork.engine.config import EngineConfig
@@ -195,7 +194,6 @@ def demo_full() -> None:
 
 
 def _publish_full_demo_flow(engine: ProcessEngine) -> None:
-    high_amount = FlowCondition(groups=[[{"left": "amount", "operator": "gt", "right": 10000}]])
     definition = (
         FlowBuilder("full_demo", "全流程演示")
         .start("start", "发起")
@@ -214,7 +212,7 @@ def _publish_full_demo_flow(engine: ProcessEngine) -> None:
         .end("end", "结束")
         .connect("start", "manager")
         .connect("manager", "route")
-        .flow("route", "director", condition=high_amount)
+        .flow("route", "director", condition="amount > 10000")
         .flow("route", "notify", default=True)
         .connect("director", "notify")
         .connect("notify", "end")

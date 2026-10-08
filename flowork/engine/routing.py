@@ -88,11 +88,10 @@ def _match_in_order(
     variables: dict[str, Any],
     functions: Mapping[str, Callable[..., object]] | None = None,
 ) -> list[SequenceFlow]:
-    """按声明顺序求值条件边，返回为真者。
+    """按声明顺序求值条件边（单轨 CEL），返回为真者。
 
-    CEL 求值错（FormulaError）按错误二分归**技术故障**（spec §8）：包成
-    EngineExecutionError → 命令管线挂起实例 + 故障单；groups 支的
-    ConditionError（未定义变量等定义缺陷）维持直抛语义不变。
+    求值错（FormulaError）按错误二分归**技术故障**（spec §8）：包成
+    EngineExecutionError → 命令管线挂起实例 + 故障单。
     """
     matched: list[SequenceFlow] = []
     for flow in conditional:

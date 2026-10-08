@@ -1,4 +1,4 @@
-"""CEL 公式求值（kernel-v2 §4.3）：``FlowCondition.formula`` 的运行时实现。
+"""CEL 公式求值（kernel-v2 §4.3/§4.1）：``SequenceFlow.condition`` 的运行时实现。
 
 cel-python（模块名 ``celpy``）执行，P0-1 决策记录的落地缓解四件套：
 **2KB 限长 / 二元运算链 ≤256 项 / 变量序列化 ≤1MB / 全异常归一 FormulaError**

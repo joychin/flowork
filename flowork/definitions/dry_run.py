@@ -15,7 +15,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from flowork.errors import ConditionError, VariableNotDefined
+from flowork.errors import ConditionError
 
 if TYPE_CHECKING:
     from flowork.definitions.definition import ProcessDefinition
@@ -51,28 +51,9 @@ class DryRunResult:
         return not self.blocked
 
 
-def _condition_text(item: Any) -> str:
-    """单个条件项的可读摘要（与设计器画布摘要一致的简版）。"""
-    right = item.right
-    if item.operator in ("is_empty", "is_not_empty"):
-        return f"{item.left} {item.operator}"
-    if isinstance(right, list):
-        shown = f"[{', '.join(str(r) for r in right)}]"
-    elif isinstance(right, str):
-        shown = f'"{right}"'
-    else:
-        shown = str(right)
-    return f"{item.left} {item.operator} {shown}"
-
-
 def _edge_text(flow: Any) -> str:
-    """一条边的条件摘要：组间 OR、组内 AND。"""
-    condition = flow.condition
-    if condition is None:
-        return ""
-    if condition.formula:
-        return str(condition.formula)
-    return " 或 ".join(" 且 ".join(_condition_text(i) for i in group) for group in condition.groups)
+    """一条边的条件摘要（单轨 CEL：公式原文）。"""
+    return str(flow.condition) if flow.condition else ""
 
 
 def simulate_route(
@@ -95,25 +76,22 @@ def simulate_route(
         result.blocked.append("缺少 start 节点，无法预演")
         return result
 
-    warned_vars: set[str] = set()
+    warned_conditions: set[str] = set()
 
     def _eval(flow: Any) -> bool:
-        """求值一条边条件；缺样例值/求值失败按不满足处理并告警一次。"""
+        """求值一条边条件（CEL）；缺样例值/求值失败按不满足处理并告警一次。"""
         condition = flow.condition
         if condition is None:
             return True
         try:
             return evaluate_condition(condition, variables, functions=functions)
-        except VariableNotDefined as exc:
-            name = str(exc)
-            if name not in warned_vars:
-                warned_vars.add(name)
-                result.warnings.append(f"变量 {name} 未提供样例值，相关条件按不满足处理")
         except ConditionError as exc:
             text = _edge_text(flow) or "条件"
-            if text not in warned_vars:
-                warned_vars.add(text)
-                result.warnings.append(f"条件求值失败（{exc}），按不满足处理：{text}")
+            if text not in warned_conditions:
+                warned_conditions.add(text)
+                result.warnings.append(
+                    f"条件求值失败（{exc}；多为样例变量缺失），按不满足处理：{text}"
+                )
         return False
 
     queue: list[tuple[str, str | None, str, str]] = [(start.code, None, "", "")]

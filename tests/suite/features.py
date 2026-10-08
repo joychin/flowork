@@ -23,7 +23,6 @@ FEATURES: dict[str, tuple[str, ...]] = {
         "route.first_match",
         "route.all_match",
         "route.default_edge",
-        "route.structured_conditions",
         "route.formula",
         "route.parallel_fork",
         "join.any_absorb",

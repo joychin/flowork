@@ -9,7 +9,6 @@ import pytest
 
 from flowork.definitions.builder import FlowBuilder
 from flowork.definitions.builtin import RouteMode
-from flowork.definitions.flow import FlowCondition
 from flowork.engine.engine import ProcessEngine
 
 
@@ -18,8 +17,23 @@ def engine() -> ProcessEngine:
     return ProcessEngine()
 
 
-def cond(left: str, op: str, right: object) -> FlowCondition:
-    return FlowCondition(groups=[[{"left": left, "operator": op, "right": right}]])
+_OPS = {"eq": "==", "ne": "!=", "gt": ">", "ge": ">=", "lt": "<", "le": "<="}
+
+
+def cond(left: str, op: str, right: object) -> str:
+    """单条件 → CEL 公式（条件单轨化）。"""
+    lit = (
+        "true"
+        if right is True
+        else "false"
+        if right is False
+        else "null"
+        if right is None
+        else f'"{right}"'
+        if isinstance(right, str)
+        else str(right)
+    )
+    return f"{left} {_OPS[op]} {lit}"
 
 
 def publish(engine: ProcessEngine, definition) -> None:

@@ -1,8 +1,11 @@
 {
   "code": "supplier_compliance",
   "name": "供应商合规检查",
-  "version": 1,
-  "status": "draft",
+  "major": 1,
+  "revision": 1,
+  "status": "published",
+  "input": null,
+  "deadline": null,
   "nodes": [
     {
       "code": "start",

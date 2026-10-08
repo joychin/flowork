@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING, Any
 
 from flowork.definitions.builtin import KIND_BRANCH, RouteMode
 from flowork.definitions.definition import DefinitionStatus, ProcessDefinition
-from flowork.definitions.flow import FlowCondition, SequenceFlow
+from flowork.definitions.flow import SequenceFlow
 from flowork.definitions.node import FlowNode, MultiInstance
 
 if TYPE_CHECKING:
@@ -118,7 +118,7 @@ class FlowBuilder:
         target: str,
         *,
         name: str = "",
-        condition: FlowCondition | None = None,
+        condition: str | None = None,
         default: bool = False,
         **fields: Any,
     ) -> FlowBuilder:

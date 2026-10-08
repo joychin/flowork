@@ -1,8 +1,11 @@
 {
   "code": "purchase_order",
   "name": "采购申请",
-  "version": 1,
-  "status": "draft",
+  "major": 1,
+  "revision": 1,
+  "status": "published",
+  "input": null,
+  "deadline": null,
   "nodes": [
     {
       "code": "start",
@@ -173,18 +176,7 @@
       "target": "legal_review",
       "name": "",
       "is_default": false,
-      "condition": {
-        "groups": [
-          [
-            {
-              "left": "amount",
-              "operator": "ge",
-              "right": 100000
-            }
-          ]
-        ],
-        "formula": null
-      },
+      "condition": "amount >= 100000",
       "on_take": null
     },
     {
@@ -192,18 +184,7 @@
       "target": "finance_pricing",
       "name": "",
       "is_default": false,
-      "condition": {
-        "groups": [
-          [
-            {
-              "left": "amount",
-              "operator": "ge",
-              "right": 100000
-            }
-          ]
-        ],
-        "formula": null
-      },
+      "condition": "amount >= 100000",
       "on_take": null
     },
     {
@@ -235,18 +216,7 @@
       "target": "gm_review",
       "name": "",
       "is_default": false,
-      "condition": {
-        "groups": [
-          [
-            {
-              "left": "amount",
-              "operator": "ge",
-              "right": 500000
-            }
-          ]
-        ],
-        "formula": null
-      },
+      "condition": "amount >= 500000",
       "on_take": null
     },
     {

@@ -1,69 +1,25 @@
 """连线（SequenceFlow）与路由条件模型。
 
-条件两层表达（FlowCondition）：
-- 结构化条件组 groups：组间 OR、组内 AND —— 推荐方式，可校验、可可视化；
-- 公式 formula：CEL 表达式（kernel-v2 §4.3，expr/cel.py 求值；原 asteval 已退役）。
+条件单轨化（kernel-v2 §4.1，2026-10-08）：``condition`` 直接存 CEL 公式字符串
+（expr/cel.py 求值；原结构化条件组 groups 已退役，旧 JSON 经 loader shim 翻译）。
 """
 
 from __future__ import annotations
 
-from enum import StrEnum
-from typing import Any
-
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
 from flowork.definitions.node import HandlerRef
 
 __all__ = [
     "MAX_FORMULA_LENGTH",
-    "ConditionItem",
-    "ConditionOperator",
-    "FlowCondition",
     "SequenceFlow",
 ]
-
 
 MAX_FORMULA_LENGTH = 2048  # spec §4.3：CEL 公式 2KB 上限（P0-1 决策，原 asteval 期 4096）
 
 
-class ConditionOperator(StrEnum):
-    """结构化条件操作符白名单。"""
-
-    EQ = "eq"
-    NE = "ne"
-    GT = "gt"
-    GE = "ge"
-    LT = "lt"
-    LE = "le"
-    IN = "in"
-    NOT_IN = "not_in"
-    CONTAINS = "contains"
-    STARTS_WITH = "starts_with"
-    IS_EMPTY = "is_empty"
-    IS_NOT_EMPTY = "is_not_empty"
-
-
-class ConditionItem(BaseModel):
-    """单个条件：left 为变量路径（点号取子字段），right 为常量（in/not_in 时为列表）。"""
-
-    model_config = ConfigDict(extra="forbid")
-
-    left: str
-    operator: ConditionOperator
-    right: Any = None
-
-
-class FlowCondition(BaseModel):
-    """路由条件：groups 与 formula 二选一（校验器强制）。"""
-
-    model_config = ConfigDict(extra="forbid")
-
-    groups: list[list[ConditionItem]] = Field(default_factory=list)
-    formula: str | None = None
-
-
 class SequenceFlow(BaseModel):
-    """流程图的边：source → target，可带条件、默认标记与 on_take 钩子。"""
+    """流程图的边：source → target，可带 CEL 公式条件、默认标记与 on_take 钩子。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -71,7 +27,7 @@ class SequenceFlow(BaseModel):
     target: str
     name: str = ""
     is_default: bool = False
-    condition: FlowCondition | None = None
+    condition: str | None = None
     on_take: HandlerRef | None = None
 
     def flow_code(self) -> str:

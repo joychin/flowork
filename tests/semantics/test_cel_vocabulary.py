@@ -13,7 +13,6 @@ import pytest
 from flowork import contrib
 from flowork.definitions.builder import FlowBuilder
 from flowork.definitions.definition import ProcessDefinition, ProcessVariable
-from flowork.definitions.flow import FlowCondition
 from flowork.definitions.validator import IssueLevel, validate_definition
 from flowork.engine.config import EngineConfig
 from flowork.engine.engine import ProcessEngine
@@ -48,7 +47,7 @@ def _role_gate_flow() -> ProcessDefinition:
         .flow(
             "gate",
             "lead_review",
-            condition=FlowCondition(formula='has_role(initiator, "eng_lead")'),
+            condition='has_role(initiator, "eng_lead")',
         )
         .flow("gate", "normal_review", default=True)
         .connect("lead_review", "end")
@@ -104,9 +103,7 @@ def test_validate_catches_unregistered_function_with_registry(engine: ProcessEng
         flow.model_copy(
             update={
                 "condition": (
-                    FlowCondition(formula="nosuchfn(initiator)")
-                    if flow.condition is not None
-                    else flow.condition
+                    "nosuchfn(initiator)" if flow.condition is not None else flow.condition
                 )
             }
         )

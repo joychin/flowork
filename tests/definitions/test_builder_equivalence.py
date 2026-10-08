@@ -5,7 +5,6 @@ from __future__ import annotations
 from flowork.definitions.builder import FlowBuilder
 from flowork.definitions.builtin import RouteMode
 from flowork.definitions.definition import load_definition_file
-from flowork.definitions.flow import FlowCondition
 from flowork.definitions.node import MultiInstance
 
 
@@ -27,7 +26,7 @@ def test_builder_matches_json_simple(registry, examples_dir):
 
 def test_builder_matches_json_countersign_branch(registry, examples_dir):
     definition = load_definition_file(examples_dir / "02_countersign_branch.json", registry)
-    high_amount = FlowCondition(groups=[[{"left": "amount", "operator": "gt", "right": 10000}]])
+    high_amount = "amount > 10000"
     built = (
         FlowBuilder("countersign_branch", "条件分支 + 会签（示例 02）")
         .start("start", "发起")

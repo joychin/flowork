@@ -85,7 +85,6 @@ def test_duplicate_node_code(registry):
 
 
 def test_first_match_branch_without_default(registry):
-    from flowork.definitions.flow import FlowCondition
 
     definition = (
         FlowBuilder("t")
@@ -95,11 +94,7 @@ def test_first_match_branch_without_default(registry):
         .user_task("b", assignee="u2")
         .end()
         .connect("start", "g")
-        .flow(
-            "g",
-            "a",
-            condition=FlowCondition(groups=[[{"left": "x", "operator": "eq", "right": 1}]]),
-        )
+        .flow("g", "a", condition="x == 1")
         .flow("g", "b")  # 无条件且无默认 → 命中即走无法路由
         .connect("a", "end")
         .connect("b", "end")
@@ -110,7 +105,6 @@ def test_first_match_branch_without_default(registry):
 
 def test_advance_all_on_exclusive_arm_no_warning(registry):
     """v2 §2.3 可达性放行：all 汇聚挂「命中即走」分支臂不再死等告警（规则已移除）。"""
-    from flowork.definitions.flow import FlowCondition
 
     definition = (
         FlowBuilder("t")
@@ -120,11 +114,7 @@ def test_advance_all_on_exclusive_arm_no_warning(registry):
         .user_task("m", assignee="u2", advance_policy="all")
         .end()
         .connect("start", "g")
-        .flow(
-            "g",
-            "a",
-            condition=FlowCondition(groups=[[{"left": "x", "operator": "eq", "right": 1}]]),
-        )
+        .flow("g", "a", condition="x == 1")
         .flow("g", "m", default=True)
         .connect("a", "m")
         .connect("m", "end")
@@ -150,8 +140,8 @@ def test_deadend_node(registry):
     assert "structure.node.deadend" in error_rules(definition, registry)
 
 
-def test_condition_groups_and_formula_both_set(registry):
-    from flowork.definitions.flow import FlowCondition
+def test_condition_is_plain_formula(registry):
+    """单轨化后条件就是 CEL 字符串：合法公式不再有 both_set/互斥类问题。"""
 
     definition = (
         FlowBuilder("t")
@@ -159,17 +149,12 @@ def test_condition_groups_and_formula_both_set(registry):
         .branch("g")
         .end()
         .connect("start", "g")
-        .flow(
-            "g",
-            "end",
-            condition=FlowCondition(
-                groups=[[{"left": "x", "operator": "eq", "right": 1}]], formula="x == 1"
-            ),
-        )
+        .flow("g", "end", condition="x == 1")
         .flow("g", "end", default=True)
         .build(registry)
     )
-    assert "condition.both_set" in error_rules(definition, registry)
+    rules = error_rules(definition, registry)
+    assert "condition.formula.invalid" not in rules  # 单轨：合法公式零问题
 
 
 def test_reject_target_missing(registry):
@@ -199,7 +184,6 @@ def test_assert_valid_raises_with_all_errors(registry):
 
 def _cel_flow(registry, *, formula=None, declare=("amount", "urgent")):
     from flowork.definitions.definition import ProcessVariable
-    from flowork.definitions.flow import FlowCondition
 
     definition = (
         FlowBuilder("cel")
@@ -209,7 +193,7 @@ def _cel_flow(registry, *, formula=None, declare=("amount", "urgent")):
         .user_task("small", assignee="u_clerk")
         .end()
         .connect("start", "gate")
-        .flow("gate", "big", condition=FlowCondition(formula=formula))
+        .flow("gate", "big", condition=formula)
         .flow("gate", "small", default=True)
         .connect("big", "end")
         .connect("small", "end")

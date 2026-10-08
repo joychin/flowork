@@ -97,7 +97,6 @@ def test_contract_version_snapshot_isolation(pilot: ProcessEngine):
     assert pilot.runtime.get_instance(v1_instance).state == "completed"  # v1: 无需财务
 
     # 发布 v2：阈值降到 80000
-    from flowork.definitions.flow import FlowCondition
 
     revised = (
         FlowBuilder("contract_review", "合同评审 v2")
@@ -109,18 +108,8 @@ def test_contract_version_snapshot_isolation(pilot: ProcessEngine):
         .end("end", "完成", advance_policy="any")
         .connect("start", "legal_review")
         .connect("legal_review", "risk_route")
-        .flow(
-            "risk_route",
-            "finance_review",
-            condition=FlowCondition(
-                groups=[[{"left": "amount", "operator": "gt", "right": 80000}]]
-            ),
-        )
-        .flow(
-            "risk_route",
-            "gm_review",
-            condition=FlowCondition(groups=[[{"left": "urgent", "operator": "eq", "right": True}]]),
-        )
+        .flow("risk_route", "finance_review", condition="amount > 80000")
+        .flow("risk_route", "gm_review", condition="urgent == true")
         .flow("risk_route", "end", default=True)
         .connect("finance_review", "end")
         .connect("gm_review", "end")

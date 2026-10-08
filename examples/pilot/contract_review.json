@@ -1,8 +1,11 @@
 {
   "code": "contract_review",
   "name": "合同评审",
-  "version": 1,
-  "status": "draft",
+  "major": 1,
+  "revision": 1,
+  "status": "published",
+  "input": null,
+  "deadline": null,
   "nodes": [
     {
       "code": "start",
@@ -112,18 +115,7 @@
       "target": "finance_review",
       "name": "",
       "is_default": false,
-      "condition": {
-        "groups": [
-          [
-            {
-              "left": "amount",
-              "operator": "gt",
-              "right": 100000
-            }
-          ]
-        ],
-        "formula": null
-      },
+      "condition": "amount > 100000",
       "on_take": null
     },
     {
@@ -131,18 +123,7 @@
       "target": "gm_review",
       "name": "",
       "is_default": false,
-      "condition": {
-        "groups": [
-          [
-            {
-              "left": "urgent",
-              "operator": "eq",
-              "right": true
-            }
-          ]
-        ],
-        "formula": null
-      },
+      "condition": "urgent == true",
       "on_take": null
     },
     {

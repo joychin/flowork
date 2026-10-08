@@ -219,14 +219,13 @@ def test_timeout_not_due_yet_noop():
     assert eng.task.list_tasks(instance_id=instance_id) != []
 
 
-def test_job_retries_then_dead_letter(engine: ProcessEngine):
+def test_job_strategy_error_suspends_with_incident(engine: ProcessEngine):
     """策略执行持续失败（路由缺变量）→ 退避重试 → dead_letter。"""
     clock = FakeClock()
     from flowork.engine.config import EngineConfig as _Cfg
 
     eng = ProcessEngine(_Cfg(now=clock))
     from flowork.definitions.builder import FlowBuilder
-    from flowork.definitions.flow import FlowCondition
     from flowork.definitions.node import TimeoutPolicy
     from flowork.persistence.orm import JobRow
 
@@ -242,11 +241,7 @@ def test_job_retries_then_dead_letter(engine: ProcessEngine):
         .end()
         .connect("start", "t")
         .connect("t", "route")
-        .flow(
-            "route",
-            "end",
-            condition=FlowCondition(groups=[[{"left": "ghost", "operator": "eq", "right": 1}]]),
-        )
+        .flow("route", "end", condition="ghost == 1")
         .build()
     )
     publish(eng, flow)
@@ -258,14 +253,12 @@ def test_job_retries_then_dead_letter(engine: ProcessEngine):
         return list(ctx.session.scalars(select(JobRow)))
 
     clock.advance_minutes(11)
-    eng.jobs.tick()  # auto_approve → 路由缺 ghost 变量 → 失败重试
-    jobs = eng.execute(_collect_jobs)
-    assert jobs[0].retry_count == 1 and jobs[0].state == "scheduled"
-    for _ in range(3):
-        clock.advance_minutes(120)
-        eng.jobs.tick()
-    jobs = eng.execute(_collect_jobs)
-    assert jobs[0].state == "dead_letter"
+    eng.jobs.tick()  # auto_approve → 公式缺 ghost 变量 → 技术故障（单轨语义，spec §8）
+    instance = eng.runtime.get_instance(_instance_id)
+    assert instance.state == "suspended"  # 命令失败挂起 + 故障单，替代死信耗尽路径
+    incidents = eng.runtime.list_incidents(instance_id=_instance_id)
+    assert incidents and incidents[0]["state"] == "open"
+    assert "公式求值失败" in incidents[0]["message"]
 
 
 def test_dead_letter_job_can_be_requeued(engine: ProcessEngine):
