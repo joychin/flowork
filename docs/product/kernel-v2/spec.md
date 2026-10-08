@@ -139,7 +139,7 @@
 | approve_exit | str/null | null | 通过出口：`"all"`（全同意）、`">=1"`、`">=50%"` 等比例式 |
 | disapprove_exit | str/null | null | 驳回出口：同上语法 |
 
-出口判定是**专用语法**（不是 CEL，见 4.1），比例基数＝参与人数。
+出口判定是 CEL 布尔公式（见 4.1/4.2），task.* 注入三计数（基数显式写在公式里）。
 
 ### 2.6 怎么加一种新节点（两层扩展，全部不用改内核）
 
@@ -288,12 +288,11 @@ git 里的 YAML/JSON 文件      ← 编辑态事实来源：人和 AI 只改这
 
 > 本章回答「条件写在哪些地方、每种地方用什么写法」。后面所有章节（连线、取人、超时、消息、子流程映射）一律引用本章，不再各自定义语法。
 
-### 4.1 两种写法，各管一摊【v2.3 单轨化定稿，2026-10-08】
+### 4.1 一种写法：CEL【v2.3 单轨化 + 位点统一 + 会签出口统一，2026-10-08】
 
 | 写法 | 用在哪 | 现状→v2 |
 |---|---|---|
-| **CEL 公式**（`SequenceFlow.condition` 及取人/超时/关联键/映射表达式） | 连线路由条件（**单轨**：condition 直接存公式字符串）；以及所有「需要一个值」的地方 | ✓ 全位点已接线（**位点统一批，2026-10-08**：取人/传阅/超时改派/子流程映射均 CEL，见 4.2；关联键随等待节点） |
-| **专用出口语法**（`">=50%"` / `"all"` / `">=1"`） | 仅会签 approve_exit/disapprove_exit | ✓ 保留（比例基数＝参与人数，CEL 表达不了百分比语义，不硬套） |
+| **CEL 公式** | 全部表达式位：连线条件、取人、传阅、超时改派、会签出口、子流程映射（见 4.2）；关联键随等待节点 | ✓ 全位点已接线（含会签出口——原专用语法 `">=50%"/"all"/">=1"` 退役，整数乘法精确等价：`>=N%` ≡ `task.approve_count * 100 >= task.item_count * N`；缺省不配＝该侧全票） |
 
 **单轨化决策**（结构化条件组 groups 退役，理由成文）：
 - flowork 的用户画像＝开发者+AI agent（engine-v1 三面同构），非低代码业务人员——
@@ -309,6 +308,10 @@ git 里的 YAML/JSON 文件      ← 编辑态事实来源：人和 AI 只改这
   子流程映射（输入父上下文/输出子上下文；裸变量名是 CEL 子集零迁移）全部换绑
   evaluate_formula_value；取人/传阅/改派/映射求值错同样挂起+故障单；ParticipantFunctions
   双注册面退役，ExpressionFunctions（cel_vocabulary）成唯一注册面。
+- **会签出口统一**（同日补刀）：原「CEL 表达不了百分比语义」的豁免理由不成立
+  （`ceil(item×N/100) ≤ done ⟺ done×100 ≥ item×N`，整数乘法精确等价）——专用出口语法
+  退役，task.* 计数快照注入后 approve_exit/disapprove_exit 即 CEL 布尔公式，且解锁
+  复合条件（≥2 同意且 0 反对）与业务变量法定人数；缺省不配＝该侧全票（语义不变）。
 
 ### 4.2 CEL 的使用位置清单（全篇唯一清单）
 
@@ -317,6 +320,7 @@ git 里的 YAML/JSON 文件      ← 编辑态事实来源：人和 AI 只改这
 | 连线条件 | flows[].condition（CEL 字符串） | `input.amount > 300 && input.urgency == "high"` | ✓ |
 | 取人 | user_task/cc_task 的 assignee/assignees/recipients（每项一表达式） | `'u_chen'`、`manager_of(initiator)`、`users_with_role("finance")`（函数来自 contrib 或宿主注册，见 5.5；null/空=查无传播） | ✓ |
 | 超时改派 | deadlines[].action=reassign 时的 reassign_to | `manager_of(task.assignee)`（fire 时求值，task.* 见 C.4；结果须单个非空人） | ✓ |
+| 会签出口 | multi_instance 的 approve_exit/disapprove_exit | `task.approve_count * 100 >= task.item_count * 50`、`task.approve_count >= 2 && task.disapprove_count == 0`（task.* 计数快照，见 C.4；缺省＝该侧全票） | ✓ |
 | 消息关联键 | 等待节点的 correlation_key | `"input.order_no"`（求值结果用于匹配） | 随等待节点 |
 | 子流程映射 | input_mappings/output_mappings 的右侧 | `input.amount * 1.0`（输入在父上下文、输出在子上下文求值；裸标识符缺键→None） | ✓ |
 
@@ -341,7 +345,7 @@ git 里的 YAML/JSON 文件      ← 编辑态事实来源：人和 AI 只改这
 **怎么算完成**：
 
 - 单人节点：assignee 调 complete（带 output，按 3.2 契约校验后写入变量）→ 令牌离开。
-- 会签节点：按 approve_exit/disapprove_exit 判定（专用语法，4.1）——比如 approve_exit=">=50%" 且 3 人中 2 人同意即过；驳回出口同理。
+- 会签节点：按 approve_exit/disapprove_exit 判定（CEL 公式，4.2）——比如 `task.approve_count * 100 >= task.item_count * 50` 且 3 人中 2 人同意即过；驳回出口同理；缺省不配＝该侧全票。
 - 驳回：outcome=reject，令牌按 reject_target 回退（未配则回上一人工节点）；被驳回的任务复活=生成**新**任务行，旧行进历史（cause_token_id 关联）✓。**驳回落点豁免自动通过【v2.2 成文】**：驳回产生的令牌、经 manual_participants 定格的参与者**不应用** auto_pass_* 策略——否则「发起人驳回→重新提交→又被 auto_pass 跳过」原地打转；现状由解析器 manual 短路隐式实现（participants/resolver.py），此处升格为语义保证，防未来重构丢掉（对标产品 doOnRejectedActivity 同规则）。
 
 **任务动作全集（每个都是 API，详见第 11 章）**：claim（从候选里认领）/ unclaim / complete / reject / transfer（转办，保持待办换人）/ assist（委派：生成 task_type=assist 的子任务，root_task_id 指回原任务，原任务保留在负责人名下）/ complete_assist（受托人交还）/ add_countersigner（加签）。
@@ -451,7 +455,7 @@ register("approvers_of", fn, params=["one_user"], returns="mixed")
 | 超时 reassign/升级 | 重新求值（可用 task.*，见 C.4） | 重新求值 |
 | 条件求值 | 即时比较 | 走谓词即时 |
 
-（位点统一注：assignee/assignees/recipients 为**进入节点**逐项 CEL 求值；子流程输入映射在子实例启动时按父上下文求值、输出映射在子完结时按子上下文求值；静态检查对全位点同一套——见 4.3。）
+（位点统一注：assignee/assignees/recipients 为**进入节点**逐项 CEL 求值；会签出口在**每次办理后**以当前计数求值；子流程输入映射在子实例启动时按父上下文求值、输出映射在子完结时按子上下文求值；静态检查对全位点同一套——见 4.3。）
 
 ### 5.6 身份快照（actor_context）【v2.1 新增：审计的严肃性要求】
 
@@ -769,7 +773,7 @@ Subject：`user:{id} | agent:{id} | role:{name} | org:{code}`；ParticipantSet �
 |---|---|
 | input.* | 按 input JSON Schema |
 | vars.* | 运行时（静态检查按声明，未声明按 any 降级为警告） |
-| task.* | 固定形状：task.id:string、task.assignee:subject、task.outcome:string——超时策略求值可用（✓ 已实现，fire 时注入；活任务 outcome=null）；节点离开时的条件求值/输出映射注入为后续项（静态检查：非改派位引用 task.* 即 ERROR task_unavailable） |
+| task.* | **位点相关快照**（静态检查：非可用位引用 task.* 即 ERROR task_unavailable）——超时改派位 ✓：{id, assignee, outcome:null}（fire 时注入，活任务无 outcome）；会签出口位 ✓：{item_count, approve_count, disapprove_count}（每次办理后注入）；条件求值/输出映射位注入为后续项 |
 | initiator | subject |
 
 contrib 签名（便利包，可选，纯基于 OrgDirectory 端口实现）：`manager_of(one_user)→one_user`（吃 user:/agent: 返回其上级；吃 org: 返回部门负责人；吃 role: 设计期报错）、`users_with_role(string)→users`、`has_role(one_user, string)→bool`。部门类词汇（org_of 等）数据源无端口支撑，由宿主注册。自定义函数注册必须带全签名（参数＋返回，词汇表见 5.5）；内核注册表出厂为空。
@@ -779,7 +783,7 @@ contrib 签名（便利包，可选，纯基于 OrgDirectory 端口实现）：`
 - code：`^[a-z][a-z0-9-]{0,99}$`；Subject：`^(user|role|agent|org):[A-Za-z0-9_@.\-+]+$`；id 一律 UUID 字符串。
 - searchable 变量仅限 string/number/boolean（object/array 标 searchable → validate 报错）。
 - correlation_key 表达式必须求值为 string（否则设计期报错）。
-- 会签出口 BNF：`exit := "all" | "any" | ">=" 整数 | ">=" 整数 "%"`（any≡">=1"；比例基数＝实际参与人数）。
+- 会签出口＝CEL 布尔公式（4.2；缺省＝该侧全票），旧专用语法 BNF 已随位点统一退役。
 - 单位：时长一律分钟（after_minutes、WorkCalendar），落盘秒数；金额无单位纯数值；时区全 UTC。
 - deadlines：after_minutes 必须为正整数；同一节点上限 8 条；顶层实例时限 deadline 为单对象（非列表）。
 - priority 取值 0–100（小→大＝低→高），默认 50。

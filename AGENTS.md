@@ -120,4 +120,9 @@ assignees 每项一表达式）、传阅（recipients）、超时改派（reassi
 发布期拦（cel.root_call 根调用 returns 对位）；validator 静态检查扩至全位点（iter_expression_positions，
 连线位 condition.* / 节点位 expression.* 规则名；task.* 仅改派位可用；输出映射跳过父侧未声明变量检查）；
 加签重排存具体人（resolver.resolve_subjects 共用件）。范围变更已记《本期建设边界》backlog。
+**会签出口统一（2026-10-08 补刀，spec §4.1 收敛「一种写法」）**：approve_exit/disapprove_exit
+专用语法（all/any/>=N/>=N%）退役→CEL 布尔公式（task.* 注入三计数快照，整数乘法精确等价
+百分比 ceil 语义；缺省＝该侧全票）；countersign.py 重写为 exit_reached（side 参数承载缺省），
+behaviors/anticipate/reject_flow 三点接线；validator 增 exit 位（task.* 在 reassign 与 exit
+位可用）；behaviors 拆出 tasks/deadlines.py 守行数红线。解锁复合条件出口与业务变量法定人数。
 
