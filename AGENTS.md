@@ -11,11 +11,16 @@ uv run pytest --cov=flowork --cov-report=term-missing   # 覆盖率（内核包�
 uv run ruff check flowork tests examples  # 静态检查
 uv run ruff format flowork tests examples # 格式化（提交前）
 uv run mypy flowork                       # 类型检查（strict）
+uv run lint-imports                       # 分层契约门禁（内核禁止 import contrib）
 uv run python examples/ai_review_demo.py  # 自定义节点 demo
+
+# web API + 设计器前端（开发模式；详见 designer/README.md）
+FLOWORK_DB=/tmp/f.db uv run uvicorn flowork.web.app:app --port 8901   # 后端，空库自动灌 examples/
+cd designer && npm install && npm run dev   # 前端 http://localhost:5173，/api 代理到 8901
 ```
 
 提交规范：conventional commits（`feat:` / `fix:` / `test:` / `docs:` / `chore:`），每任务一提交。
-**四道门全绿才允许提交：pytest + ruff check + ruff format --check + mypy。**
+**五道门全绿才允许提交：pytest + ruff check + ruff format --check + mypy + lint-imports。**
 
 ## 包结构地图（一屏）
 
@@ -24,14 +29,23 @@ flowork/
 ├── definitions/   定义层：node(FlowNode基类) flow(连线/条件) builtin(内置Spec)
 │                  definition(模型+JSON编解码) validator(设计时校验) builder(Python DSL)
 ├── runtime/       运行时：behavior(NodeBehavior+NodeContext) registry(注册表) lifecycle(状态枚举)
-├── expr/          条件求值：conditions(结构化条件组；M2 增公式沙箱)
+├── expr/          条件求值：conditions(结构化条件组) formula(asteval 公式沙箱)
 ├── spi/           端口协议：Clock/WorkCalendar/OrgDirectory/VariableStore/Notifier
 ├── events/        领域事件类型（M1 起随 Command 管线落 outbox）
-├── tasks/ participants/ persistence/ engine/ jobs/ cli/   # M1+ 各里程碑填充
+├── tasks/ participants/ persistence/ engine/ jobs/ cli/   # 内核主体（engine 已按职责拆分多文件）
+├── directory/     目录（M-A）：组织/角色/用户/Agent 映射（agents/roles/store/orm）
+├── web/           薄 FastAPI 传输层（app.py，无业务逻辑，与 RepositoryService 一一映射）
+├── contrib/       官方插件包——内核禁止 import 它（import-linter 契约强制）
+├── clock.py       时间戳统一 naive UTC 的唯一出口
 ├── errors.py      异常体系
-tests/             definitions/(模型/校验/DSL等价) runtime/(注册表) + 顶层条件/演示测试
-examples/          3 个模板 JSON + ai_review_demo.py
+tests/             definitions/ runtime/ semantics/(内核语义逐项) suite/(黑盒验收+三个走查 demo)
+                   edge/ pilot/ directory/ + 顶层（web_api/outbox/spi/conditions）
+examples/          3 个模板 JSON + org.yaml + ai_review_demo.py + cel_poc.py + pilot/
+designer/          流程设计器前端（React Flow + zustand + Vite；详见 designer/README.md：
+                   Spec 唯一事实源、schema 驱动表单、registry 驱动调色板、校验闭环）
 ```
+
+根目录 `designer.db*`（含 -shm/-wal/.bak-*）是 web/设计器本地运行产物，由 `FLOWORK_DB` 指定，不要提交。
 
 ## 硬约束（违反即打回）
 
@@ -44,10 +58,13 @@ examples/          3 个模板 JSON + ai_review_demo.py
 6. 单文件 ≤ 300 行；测试先行于实现（会签/驳回/推进门等难块）。
 7. 范围变化一律记入《本期建设边界》backlog 附录，不直接扩期。
 
-## 设计文档（benchmark_refs/out/，只读）
+## 设计文档（只读，改敏感区前先读）
 
-边界（范围权威）→ 实施规划 → 命名规范 → 节点抽象与扩展设计 → AI友好设计 → 主流流程引擎借鉴分析。
-语义参考：benchmark_refs/out/基准材料/（对标产品 行为基准源码，clean-room：只对齐行为，不搬代码/命名）。
+- 仓库内：`docs/product/engine-v1/`（产品 v1 范围权威，11 篇）、`docs/product/kernel-v2/spec.md`（内核 v2 范围权威）、
+  `docs/API.md`（四服务 API 参考）、`docs/integration.md`（集成部署：表结构/超时调度/运维）。
+- 仓库外（同级目录 `../benchmark_refs/out/`，**不在本仓库内**）：边界（范围权威）→ 实施规划 → 命名规范 →
+  节点抽象与扩展设计 → AI友好设计 → 主流流程引擎借鉴分析；
+  语义参考 基准材料/（对标产品 行为基准源码，clean-room：只对齐行为，不搬代码/命名）。
 
 ## 当前里程碑
 
@@ -74,4 +91,17 @@ deadline 列表+实例级时限+escalate/anticipate 只读预判。DoD 全链路
 拦截/驳回契约/时限终态事件/文件拆分（repository·runtime·incident·anticipate·orm_v2，engine 主文件回归
 ≤300 行）。残留超标（既有债务，非本轮引入）：kernel.py 534、task_actions.py 470、task_service.py 364、
 validator.py 368——拆解随 M 系 REST/MCP 前的重构刀处理。
+
+当前快照（2026-10-08）：**525 个测试全绿**；web API（`flowork/web`）与设计器前端（`designer/`）已可用；
+黑盒验收套件 `tests/suite`（80 例，含驳回/异常走查 demo）落地。
+**重构刀清账（2026-10-08）**：kernel.py 534→281（token_records/task_records Mixin）、task_actions.py 470→213
+（task_admin/task_cc/task_rework）、task_service.py 364→199（tasks/reject_flow + contract.input_schema_of）、
+validator.py 368→113（validator_rules/validator_conditions）——全仓单文件 ≤300 行达成。
+**CEL 换绑批（2026-10-08，P0-1 决策落地）**：`expr/cel.py`（cel-python，四护栏：2KB/链项≤256/变量≤1MB/
+异常归一 FormulaError）+ `collect_references` 静态薄层原料；`ExpressionFunctions` 端口接线
+（FunctionSignature 签名注册、EngineConfig 字段、routing 透传、initiator 保留标识符注入）；
+validator 设计时静态检查（未声明变量 ERROR/未注册函数有注册表 ERROR 无注册表 WARNING）；
+`contrib.cel_vocabulary` 三取人词汇；asteval 依赖退役、`expr/formula.py` 删除；
+路由期 CEL 求值错按错误二分包 EngineExecutionError（挂起+故障单），groups 支直抛语义不变。
+公式语法＝CEL（`&&/||/true/false/null/in [..]/.size()`），上限 2048 单源 definitions/flow.py。
 
