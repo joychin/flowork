@@ -46,4 +46,5 @@
 - P0-2（SPI 定稿）：`ExpressionFunctions.functions()` 返回的注册表**必须带签名**，
   否则静态薄层无从对照——端口形状按 spec §9，实现侧补 `FunctionSignature` 数据类。
 - 换绑本身（`expr/cel.py` 替换 `expr/formula.py` 的 asteval 一支）**不在 P0-1 交付**，
-  与 P0-2 端口一并落地；`groups` 结构化条件不动。
+  与 P0-2 端口一并落地（2026-10-08 完成）；原「`groups` 结构化条件不动」已被
+  v2.3 单轨化决策取代（groups 退役，见 spec §4.1）。

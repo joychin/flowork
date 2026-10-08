@@ -104,4 +104,9 @@ validator 设计时静态检查（未声明变量 ERROR/未注册函数有注册
 `contrib.cel_vocabulary` 三取人词汇；asteval 依赖退役、`expr/formula.py` 删除；
 路由期 CEL 求值错按错误二分包 EngineExecutionError（挂起+故障单），groups 支直抛语义不变。
 公式语法＝CEL（`&&/||/true/false/null/in [..]/.size()`），上限 2048 单源 definitions/flow.py。
+**条件单轨化（2026-10-08，spec §4.1 v2.3）**：结构化条件组 groups 退役，`SequenceFlow.condition`
+直存 CEL 公式字符串（FlowCondition/ConditionItem/ConditionOperator 三类已删）；旧 JSON 经
+loader shim 机械翻译（definitions.definition，12 操作符映射表）；**条件求值错误语义统一为技术
+故障**（FormulaError→EngineExecutionError→挂起+故障单，groups 支直抛回滚语义退役）；设计器
+EdgeForm 单轨公式编辑。范围变更已记《本期建设边界》backlog 附录。
 

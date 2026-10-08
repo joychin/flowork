@@ -245,7 +245,7 @@ node_registry.register("http_request", HttpRequestSpec, HttpRequestBehavior,
     {"source": "start1", "target": "fill"},
     {"source": "fill",   "target": "check"},
     {"source": "check",  "target": "mgr",
-     "condition": {"groups": [[{"left": "input.amount", "operator": "gt", "right": 300}]]}},
+     "condition": "input.amount > 300"},
     {"source": "check",  "target": "end1", "is_default": true},
     {"source": "mgr",    "target": "notify"},
     {"source": "notify", "target": "end1"}
@@ -288,21 +288,28 @@ git 里的 YAML/JSON 文件      ← 编辑态事实来源：人和 AI 只改这
 
 > 本章回答「条件写在哪些地方、每种地方用什么写法」。后面所有章节（连线、取人、超时、消息、子流程映射）一律引用本章，不再各自定义语法。
 
-### 4.1 三种写法，各管一摊
+### 4.1 两种写法，各管一摊【v2.3 单轨化定稿，2026-10-08】
 
 | 写法 | 用在哪 | 现状→v2 |
 |---|---|---|
-| **结构化条件组**（`FlowCondition.groups`） | 连线路由条件（推荐方式：可校验、可可视化） | ✓ 保留不动 |
-| **CEL 公式**（`FlowCondition.formula` 及取人/超时/关联键/映射表达式） | 连线条件二选一（与 groups 互斥，校验器强制）；以及所有「需要一个值」的地方 | ✓ 求值器已换 **CEL**（cel-python，expr/cel.py，2026-10-08 落地；取人/超时/关联键/映射表达式位仍待各自功能面接入，见 4.2） |
+| **CEL 公式**（`SequenceFlow.condition` 及取人/超时/关联键/映射表达式） | 连线路由条件（**单轨**：condition 直接存公式字符串）；以及所有「需要一个值」的地方 | ✓ 求值器已换 **CEL**（cel-python，expr/cel.py；取人/超时/关联键/映射表达式位仍待各自功能面接入，见 4.2） |
 | **专用出口语法**（`">=50%"` / `"all"` / `">=1"`） | 仅会签 approve_exit/disapprove_exit | ✓ 保留（比例基数＝参与人数，CEL 表达不了百分比语义，不硬套） |
 
-**结构化条件组**（✓ 现状，flow.py）：`groups: list[list[ConditionItem]]`，组间「或」、组内「且」。`ConditionItem = {left: 变量路径（点号取子字段）, operator: 12 种白名单（eq/ne/gt/ge/lt/le/in/not_in/contains/starts_with/is_empty/is_not_empty）, right: 常量}`。
+**单轨化决策**（结构化条件组 groups 退役，理由成文）：
+- flowork 的用户画像＝开发者+AI agent（engine-v1 三面同构），非低代码业务人员——
+  groups 的核心受益人不在目标用户内；主流开源引擎（Flowable/Camunda 7 的 UEL、
+  Zeebe 的 FEEL）均为单一表达式语言，无双轨存储格式。
+- CEL 静态检查（§4.3）已追平 groups「天然合法」的可靠性优势。
+- AI 生成 Spec 时写一行 CEL 比嵌套 groups 结构更自然。
+- 可视化点选体验不丢：设计器将以下拉拼装**生成 CEL 文本**（辅助输入而非第二存储语言）。
+- 兼容：旧 JSON 的 groups 经 loader shim 机械翻译为 CEL（definitions.definition，
+  12 操作符映射表，不可翻译明确报错）；错误语义统一为求值错→技术故障（挂起+故障单）。
 
 ### 4.2 CEL 的使用位置清单（全篇唯一清单）
 
 | 位置 | 字段 | 示例 |
 |---|---|---|
-| 连线条件 | flows[].condition.formula | `input.amount > 300 && input.urgency == "high"` |
+| 连线条件 | flows[].condition（CEL 字符串） | `input.amount > 300 && input.urgency == "high"` |
 | 取人 | user_task/cc_task 的 assignee/recipients | `manager_of(initiator)`、`users_with_role("finance")`（函数来自 contrib 或宿主注册，见 5.5） |
 | 超时改派 | deadlines[].action=reassign 时的目标 | `manager_of(task.assignee)`（超时求值可用 task.*，见 C.4） |
 | 消息关联键 | 等待节点的 correlation_key | `"input.order_no"`（求值结果用于匹配） |
@@ -313,7 +320,7 @@ git 里的 YAML/JSON 文件      ← 编辑态事实来源：人和 AI 只改这
 - **变量命名空间**：`input.*`（流程契约输入）、`vars.*`（运行中变量）、`task.*`（任务上下文）、`initiator`（发起人 Subject）。
 - **自定义函数**：经 SPI 端口 `ExpressionFunctions` 注册（第 9 章），**必须声明参数与返回类型**（词汇表 one_user/users/groups/mixed/bool，兼容性检查见 5.5）。**内核函数注册表出厂为空**——取人词汇全部由宿主注册（v2.1 定稿，理由见 5.5）；`flowork.contrib` 便利包提供 `manager_of` / `users_with_role` / `has_role` 三个常见词汇，纯基于 OrgDirectory 端口实现，一行代码挂上。
 - **设计时检查**：`validate` 阶段做 CEL 静态类型检查——引用未声明变量、类型不匹配直接报错（K8s CRD 校验同款体验）。
-- **运行时限制**：非图灵完备；求值超时默认 1 秒（可配）；表达式长度上限 2KB（结构化条件无此限制）。
+- **运行时限制**：非图灵完备；表达式长度上限 2KB、二元运算链 ≤256 项、变量序列化 ≤1MB（P0-1 决策护栏；进程内硬超时为已知缺口）。
 - **P0-1 先做 PoC**：cel-python 的函数注册/类型检查/性能验证；不达标换 cel-expr-python（C++ 绑定），本章接口不变。
 
 ## 5. 任务：人工任务与系统任务（定义清楚，不许含糊）
@@ -611,7 +618,7 @@ class EventSink(Protocol):               # ✗ 事件外发（默认=outbox 轮�
 ```
 flowork/
   definitions/          # + versioning.py（major/revision 判定）
-  expr/cel.py           # ✓ CEL 求值（已替换 asteval；groups 结构化条件不动；formula.py 已删除）
+  expr/cel.py           # ✓ CEL 求值（已替换 asteval；formula.py 已删除；条件单轨化后 groups 亦退役，§4.1）
   engine/
     message_service.py  # ✗ 第 7 章消息
     job_service.py      # ✗ 5.2 领取-汇报

@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>flowork 控制台 · 审批网关 v1 原型</title>
+<style>
+  :root{
+    --bg:#f4f5f7; --panel:#ffffff; --line:#e5e7eb; --line2:#f3f4f6;
+    --ink:#111827; --ink2:#4b5563; --ink3:#9ca3af;
+    --accent:#4f46e5; --accent-bg:#eef2ff;
+    --crit:#dc2626; --crit-bg:#fef2f2; --high:#ea580c; --high-bg:#fff7ed;
+    --med:#b45309; --med-bg:#fffbeb; --low:#15803d; --low-bg:#f0fdf4;
+    --auto:#1d4ed8; --auto-bg:#eff6ff;
+    --ai:#7c3aed; --ai-bg:#f5f3ff;
+    --ok:#059669; --ok-bg:#ecfdf5;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",system-ui,sans-serif;background:var(--bg);color:var(--ink);font-size:14px}
+  .app{display:flex;min-height:100vh}
+  /* ---------- sidebar ---------- */
+  .side{width:216px;background:#111827;color:#9ca3af;display:flex;flex-direction:column;position:fixed;top:0;bottom:0;left:0}
+  .brand{padding:20px 18px 14px;border-bottom:1px solid #1f2937}
+  .brand .logo{display:flex;align-items:center;gap:8px;color:#fff;font-weight:700;font-size:16px}
+  .brand .logo .mark{width:22px;height:22px;border-radius:6px;background:linear-gradient(135deg,#6366f1,#8b5cf6);display:flex;align-items:center;justify-content:center;font-size:12px;color:#fff}
+  .brand .sub{font-size:11px;color:#6b7280;margin-top:6px}
+  nav{padding:10px 8px;flex:1}
+  nav .grp{font-size:11px;color:#4b5563;padding:12px 10px 4px;letter-spacing:.05em}
+  nav a{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;color:#d1d5db;text-decoration:none;font-size:13.5px;margin:1px 0}
+  nav a:hover{background:#1f2937;color:#fff}
+  nav a.on{background:var(--accent);color:#fff;font-weight:500}
+  nav a .ic{width:16px;text-align:center;opacity:.9}
+  .side .foot{padding:14px 18px;border-top:1px solid #1f2937;font-size:11px;color:#6b7280;line-height:1.6}
+  /* ---------- main ---------- */
+  .main{flex:1;margin-left:216px;display:flex;flex-direction:column}
+  .top{background:var(--panel);border-bottom:1px solid var(--line);padding:12px 28px;display:flex;align-items:center;gap:14px;position:sticky;top:0;z-index:20}
+  .top h1{font-size:16px;font-weight:600}
+  .pill{font-size:11px;padding:3px 10px;border-radius:999px;background:var(--med-bg);color:var(--med);border:1px solid #fde68a}
+  .top .sp{flex:1}
+  .btn{border:1px solid var(--line);background:var(--panel);color:var(--ink2);border-radius:8px;padding:7px 14px;font-size:13px;cursor:pointer}
+  .btn:hover{border-color:#d1d5db;color:var(--ink)}
+  .btn.pri{background:var(--accent);border-color:var(--accent);color:#fff}
+  .btn.pri:hover{background:#4338ca}
+  .btn.danger{color:var(--crit);border-color:#fecaca}
+  .btn.sm{padding:4px 10px;font-size:12px;border-radius:6px}
+  .view{padding:24px 28px;max-width:1200px;width:100%}
+  .hide{display:none!important}
+  /* ---------- badges/chips ---------- */
+  .bdg{display:inline-flex;align-items:center;gap:4px;font-size:11.5px;padding:2px 9px;border-radius:999px;border:1px solid transparent;white-space:nowrap}
+  .b-crit{background:var(--crit-bg);color:var(--crit);border-color:#fecaca}
+  .b-high{background:var(--high-bg);color:var(--high);border-color:#fed7aa}
+  .b-med{background:var(--med-bg);color:var(--med);border-color:#fde68a}
+  .b-low{background:var(--low-bg);color:var(--low);border-color:#bbf7d0}
+  .b-auto{background:var(--auto-bg);color:var(--auto);border-color:#bfdbfe}
+  .b-ai{background:var(--ai-bg);color:var(--ai);border-color:#ddd6fe}
+  .b-ok{background:var(--ok-bg);color:var(--ok);border-color:#a7f3d0}
+  .b-mut{background:var(--line2);color:var(--ink3)}
+  .chip{display:inline-block;font-size:11px;background:var(--line2);border:1px solid var(--line);color:var(--ink2);padding:1px 8px;border-radius:6px;font-family:var(--mono)}
+  /* ---------- cards/panels ---------- */
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px}
+  .card .hd{padding:14px 18px;border-bottom:1px solid var(--line2);display:flex;align-items:center;gap:10px}
+  .card .hd h3{font-size:14px;font-weight:600}
+  .card .bd{padding:16px 18px}
+  .muted{color:var(--ink3);font-size:12px}
+  /* ---------- inbox ---------- */
+  .inbox{display:grid;grid-template-columns:400px 1fr;gap:16px;align-items:start}
+  .reqrow{padding:13px 16px;border-bottom:1px solid var(--line2);cursor:pointer;display:flex;flex-direction:column;gap:7px}
+  .reqrow:hover{background:#fafafa}
+  .reqrow.on{background:var(--accent-bg);box-shadow:inset 3px 0 0 var(--accent)}
+  .reqrow .l1{display:flex;align-items:center;gap:8px}
+  .reqrow .act{font-weight:600;font-size:13.5px;font-family:var(--mono)}
+  .reqrow .l2{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink2)}
+  .reqrow .l2 .amt{font-weight:600;color:var(--ink)}
+  .sla{height:4px;border-radius:2px;background:var(--line2);overflow:hidden;margin-top:2px}
+  .sla i{display:block;height:100%;border-radius:2px}
+  .reqrow.done{opacity:.55;cursor:default}
+  .kv{display:grid;grid-template-columns:96px 1fr;gap:7px 12px;font-size:13px}
+  .kv dt{color:var(--ink3)}
+  .kv dd{color:var(--ink)}
+  .steps{display:flex;flex-direction:column;gap:0;margin-top:6px}
+  .step{display:flex;gap:12px;position:relative;padding-bottom:18px}
+  .step::before{content:"";position:absolute;left:11px;top:24px;bottom:0;width:2px;background:var(--line)}
+  .step:last-child::before{display:none}
+  .step .dot{width:24px;height:24px;border-radius:50%;border:2px solid var(--line);background:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0;z-index:1}
+  .step.ok .dot{border-color:var(--ok);color:var(--ok)}
+  .step.pend .dot{border-color:#c7d2fe;background:var(--accent-bg)}
+  .step.ai .dot{border-color:var(--ai);color:var(--ai)}
+  .step .what{font-size:13px}
+  .step .meta{font-size:11.5px;color:var(--ink3);margin-top:2px}
+  .actions{display:flex;gap:10px;margin-top:14px}
+  /* ---------- IM card mock ---------- */
+  .imwrap{margin-top:16px}
+  .imcard{border:1px solid var(--line);border-radius:12px;overflow:hidden;max-width:430px;font-size:13px}
+  .imcard .imhead{background:#f0f2ff;padding:9px 14px;font-size:12px;color:#4338ca;display:flex;align-items:center;gap:6px;font-weight:600}
+  .imcard .imbd{padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+  .imcard .row{display:flex;justify-content:space-between;gap:12px}
+  .imcard .row .k{color:var(--ink3);font-size:12px;flex-shrink:0}
+  .imcard .row .v{font-weight:500;text-align:right}
+  .imcard .imft{display:flex;gap:10px;padding:10px 14px;border-top:1px solid var(--line2);background:#fafbfc}
+  .imcard .imft .btn{flex:1}
+  .imcard.flipped .imft{display:none}
+  .imcard .flipnote{padding:10px 14px;background:var(--ok-bg);color:var(--ok);font-size:12.5px;display:none}
+  .imcard.flipped .flipnote{display:block}
+  /* ---------- tables ---------- */
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{text-align:left;font-size:12px;color:var(--ink3);font-weight:500;padding:9px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
+  td{padding:11px 12px;border-bottom:1px solid var(--line2);vertical-align:middle}
+  tr:hover td{background:#fafafa}
+  .mono{font-family:var(--mono);font-size:12.5px}
+  /* ---------- policy ---------- */
+  .polgrid{display:grid;grid-template-columns:1fr 320px;gap:16px;align-items:start}
+  .diff{font-family:var(--mono);font-size:12.5px;line-height:1.7}
+  .diff .add{background:var(--low-bg);color:var(--low);display:block;padding:0 8px;border-radius:4px}
+  .diff .del{background:var(--crit-bg);color:var(--crit);display:block;padding:0 8px;border-radius:4px;text-decoration:line-through}
+  .diff .ctx{color:var(--ink3);display:block;padding:0 8px}
+  .simline{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+  .simout{border:1px dashed #c7d2fe;background:var(--accent-bg);border-radius:10px;padding:12px 14px;font-size:13px;margin-top:10px}
+  .pathchip{display:inline-flex;align-items:center;gap:6px;background:#fff;border:1px solid var(--line);border-radius:8px;padding:5px 10px;font-size:12.5px;margin:3px 4px 3px 0}
+  /* ---------- audit ---------- */
+  .audgrid{display:grid;grid-template-columns:360px 1fr;gap:16px;align-items:start}
+  select,input[type=text],input[type=number],textarea{border:1px solid var(--line);border-radius:8px;padding:7px 10px;font-size:13px;background:#fff;color:var(--ink);font-family:inherit}
+  textarea{width:100%;resize:vertical}
+  /* ---------- modal ---------- */
+  .mask{position:fixed;inset:0;background:rgba(17,24,39,.45);display:flex;align-items:center;justify-content:center;z-index:50}
+  .modal{background:#fff;border-radius:14px;width:560px;max-width:92vw;max-height:86vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.2)}
+  .modal .mh{padding:16px 20px;border-bottom:1px solid var(--line2);font-weight:600;display:flex;justify-content:space-between;align-items:center}
+  .modal .mb{padding:18px 20px}
+  .x{cursor:pointer;color:var(--ink3);font-size:18px;line-height:1}
+  pre{background:#0f172a;color:#e2e8f0;border-radius:10px;padding:14px 16px;font-family:var(--mono);font-size:12.5px;line-height:1.75;overflow:auto;position:relative}
+  pre .cm{color:#64748b}
+  pre .str{color:#a5e8b7}
+  pre .kw{color:#93c5fd}
+  /* toast */
+  #toast{position:fixed;bottom:26px;left:50%;transform:translateX(-50%) translateY(20px);background:#111827;color:#fff;padding:10px 18px;border-radius:10px;font-size:13px;opacity:0;transition:.25s;z-index:99;pointer-events:none}
+  #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .stat{display:flex;gap:14px;margin-bottom:18px}
+  .stat .s{flex:1;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:13px 16px}
+  .stat .n{font-size:22px;font-weight:700;margin-top:3px}
+  .stat .n small{font-size:12px;color:var(--ink3);font-weight:400}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="brand">
+      <div class="logo"><span class="mark">F</span>flowork 控制台</div>
+      <div class="sub">组织授权层 · 审批网关 v1</div>
+    </div>
+    <nav id="nav">
+      <div class="grp">审批</div>
+      <a data-v="inbox" class="on"><span class="ic">📥</span>审批收件箱 <span id="navBadge" class="chip" style="margin-left:auto">3</span></a>
+      <a data-v="apply"><span class="ic">📝</span>申请中心</a>
+      <div class="grp">治理</div>
+      <a data-v="agents"><span class="ic">🤖</span>Agent 名册</a>
+      <a data-v="policy"><span class="ic">📐</span>策略中心</a>
+      <a data-v="audit"><span class="ic">🔍</span>审计回放</a>
+      <div class="grp">系统</div>
+      <a onclick="toast('原型中未开放：对接企业真实目录（v1.1）')"><span class="ic">🏢</span>组织目录</a>
+      <a onclick="toast('原型中未开放：设置（凭证/留存/通知渠道）')"><span class="ic">⚙️</span>设置</a>
+    </nav>
+    <div class="foot">产品原型 · 演示数据<br>policy v12 · 单实例自托管</div>
+  </aside>
+
+  <div class="main">
+    <div class="top">
+      <h1 id="viewTitle">审批收件箱</h1>
+      <span class="pill">原型 · 非真实数据</span>
+      <span class="sp"></span>
+      <button class="btn" onclick="openAccess()">接入示例</button>
+      <button class="btn pri" onclick="toast('演示环境：无需注册，直接体验')">+ 注册 Agent</button>
+    </div>
+
+    <!-- ================= INBOX ================= -->
+    <section class="view" id="v-inbox">
+      <div class="stat">
+        <div class="s"><span class="muted">待我审批</span><div class="n" id="statPending">4</div></div>
+        <div class="s"><span class="muted">今日自动通过</span><div class="n">38 <small>/ 41 笔</small></div></div>
+        <div class="s"><span class="muted">平均审批用时</span><div class="n">9<small> 分钟</small></div></div>
+        <div class="s"><span class="muted">超时升级</span><div class="n">1<small> 笔今日</small></div></div>
+      </div>
+      <div class="inbox">
+        <div class="card">
+          <div class="hd"><h3>待办列表</h3><span class="sp" style="flex:1"></span><span class="muted">按风险 × SLA 排序</span></div>
+          <div id="reqList"></div>
+        </div>
+        <div class="card" id="reqDetail"><div class="bd muted">← 选择左侧待办查看详情</div></div>
+      </div>
+    </section>
+
+    <!-- ================= APPLY ================= -->
+    <section class="view hide" id="v-apply">
+      <div class="polgrid">
+        <div class="card">
+          <div class="hd"><h3>发起申请</h3><span style="flex:1"></span><span class="muted">与 Agent 请求同一条管道：同一收件箱 / 卡片 / 审计</span></div>
+          <div class="bd">
+            <div class="simline">
+              <select id="appType" style="flex:1" onchange="renderAppForm()">
+                <option value="expense">报销申请（模板 v3）</option>
+                <option value="leave">请假申请（模板 v1）</option>
+              </select>
+            </div>
+            <div id="appForm"></div>
+            <div style="display:flex;gap:10px;margin-top:14px;align-items:center">
+              <button class="btn" onclick="toast('原型：附件上传为演示占位')">📎 附件</button>
+              <button class="btn pri" onclick="submitApplication()">提交申请</button>
+              <span class="muted">提交人：小陈（市场部）· acted_by 留痕</span>
+            </div>
+          </div>
+        </div>
+        <div>
+          <div class="card">
+            <div class="hd"><h3>我的申请</h3><span style="flex:1"></span><span class="muted">点卡片跳转证据链</span></div>
+            <div id="myApps"></div>
+          </div>
+          <div class="card" style="margin-top:16px">
+            <div class="hd"><h3>为什么人和 AI 走同一条管道？</h3></div>
+            <div class="bd muted" style="line-height:2">
+              ① 审批人一个收件箱：不区分"人提的"还是"AI 提的"，习惯只养一次；<br>
+              ② 审计一条证据链：出事时"谁提的、谁批的"同一口径；<br>
+              ③ Agent 到来之前，组织已有的报销/请假流量让这套系统先跑起来。
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= AGENTS ================= -->
+    <section class="view hide" id="v-agents">
+      <div class="card">
+        <div class="hd"><h3>Agent 名册（上岗证）</h3><span style="flex:1"></span>
+          <span class="muted">上岗证 = 身份 + 权限边界 + 信任档；停用即时生效</span></div>
+        <div class="bd" style="padding:0">
+          <table>
+            <thead><tr><th>Agent</th><th>身份</th><th>负责人</th><th>状态</th><th>信任档</th><th>自动通过额度</th><th>今日动作</th><th>当前策略</th><th>操作</th></tr></thead>
+            <tbody id="agentRows"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card" style="margin-top:16px">
+        <div class="hd"><h3>信任档说明</h3></div>
+        <div class="bd" style="display:flex;gap:14px;flex-wrap:wrap">
+          <span class="pathchip"><b>T0 试用</b>：单笔 ≤ ¥500 人审外全拒</span>
+          <span class="pathchip"><b>T1 标准</b>：低风险动作自动通过</span>
+          <span class="pathchip"><b>T2 成熟</b>：额度提升 + 白名单动作放开</span>
+          <span class="pathchip">连续 3 笔驳回未整改 → 自动降档并告警（v1.1）</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= POLICY ================= -->
+    <section class="view hide" id="v-policy">
+      <div class="polgrid">
+        <div>
+          <div class="card">
+            <div class="hd"><h3>风险策略 · 当前版本 v12</h3>
+              <span style="flex:1"></span>
+              <select id="polVer" onchange="renderPolicyView()" style="font-size:12px">
+                <option value="v12">v12（线上）</option>
+                <option value="v13">v13（草稿）</option>
+              </select>
+              <button class="btn sm" onclick="toast('跳转 diff 预览（见下方版本对比）')">预览 diff</button>
+              <button class="btn sm pri" onclick="toast('发布需二次确认：在途请求按 v12 完成，新请求按 v13（快照隔离）')">发布…</button>
+            </div>
+            <div class="bd" style="padding:0"><table id="ruleTable"></table></div>
+          </div>
+          <div class="card" style="margin-top:16px">
+            <div class="hd"><h3>版本对比 v11 → v12</h3></div>
+            <div class="bd"><div class="diff" id="diffBox"></div></div>
+          </div>
+        </div>
+        <div>
+          <div class="card">
+            <div class="hd"><h3>策略模拟器</h3></div>
+            <div class="bd">
+              <div class="muted" style="margin-bottom:10px">发布前预演：这条请求会走哪条链？不产生真实实例。</div>
+              <div class="simline">
+                <select id="simAct" style="flex:1">
+                  <option value="refund.customer">refund.customer</option>
+                  <option value="infra.prod_migration">infra.prod_migration</option>
+                  <option value="data.pii_read">data.pii_read</option>
+                </select>
+                <input type="number" id="simAmt" placeholder="金额 ¥" style="width:110px" value="86000">
+              </div>
+              <div class="simline">
+                <select id="simAgent" style="flex:1">
+                  <option value="agent_cs07">客服Agent-07（T2）</option>
+                  <option value="agent_sales_b">销售Agent-B（T0 试用）</option>
+                </select>
+                <button class="btn sm pri" onclick="simulate()">模拟路由</button>
+              </div>
+              <div id="simOut"></div>
+            </div>
+          </div>
+          <div class="card" style="margin-top:16px">
+            <div class="hd"><h3>版本时间线</h3></div>
+            <div class="bd" id="verList"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= AUDIT ================= -->
+    <section class="view hide" id="v-audit">
+      <div class="card" style="margin-bottom:16px">
+        <div class="bd" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+          <select id="aAgent"><option value="">全部 Agent</option><option>客服Agent-07</option><option>CodingAgent-CC</option><option>销售Agent-B</option></select>
+          <select id="aAction"><option value="">全部动作</option><option>refund.customer</option><option>infra.prod_migration</option><option>data.pii_read</option></select>
+          <select id="aStatus"><option value="">全部状态</option><option>pending</option><option>approved</option><option>rejected</option><option>auto_approved</option></select>
+          <input type="text" id="aQ" placeholder="搜索 request_id / 审批人…">
+          <button class="btn sm pri" onclick="toast('检索完成：4 条（演示数据固定）')">检索</button>
+          <span style="flex:1"></span>
+          <button class="btn sm" onclick="toast('已导出 audit_export_20261003.csv（含 CS108 审计字段映射）')">导出 CSV</button>
+          <button class="btn sm" onclick="toast('PDF 合规报告生成中…（异步任务，完成后通知）')">导出 PDF</button>
+        </div>
+      </div>
+      <div class="audgrid">
+        <div class="card"><div class="hd"><h3>请求台账</h3></div><div id="audList"></div></div>
+        <div class="card"><div class="hd"><h3>证据链回放</h3><span style="flex:1"></span><span class="muted">只读 · 只追加 · 含制度版本</span></div>
+          <div class="bd" id="audDetail"></div></div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<!-- ============ modal: reject ============ -->
+<div class="mask hide" id="mReject">
+  <div class="modal" style="width:460px">
+    <div class="mh">驳回审批<span class="x" onclick="closeM('mReject')">×</span></div>
+    <div class="mb">
+      <div style="margin-bottom:8px;font-size:13px">驳回意见（必填，将回传给 Agent 用于整改）</div>
+      <textarea id="rjComment" rows="3" placeholder="例：金额超门店权限，请附区域总监书面同意"></textarea>
+      <div style="margin:12px 0 6px;font-size:13px">拒绝码（可选）</div>
+      <select id="rjCode" style="width:100%">
+        <option value="">不指定</option><option>MISSING_EVIDENCE</option><option>OVER_LIMIT</option><option>POLICY_DENIED</option>
+      </select>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px">
+        <button class="btn" onclick="closeM('mReject')">取消</button>
+        <button class="btn danger" onclick="doReject()">确认驳回</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ modal: delegate ============ -->
+<div class="mask hide" id="mDele">
+  <div class="modal" style="width:400px">
+    <div class="mh">转办<span class="x" onclick="closeM('mDele')">×</span></div>
+    <div class="mb">
+      <div style="margin-bottom:8px;font-size:13px">转给（留痕：acted_by=你 → 新办理人）</div>
+      <select id="dlUser" style="width:100%">
+        <option>赵敏（财务副经理）</option><option>孙倩（店长助理）</option><option>陈晨（平台部）</option>
+      </select>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px">
+        <button class="btn" onclick="closeM('mDele')">取消</button>
+        <button class="btn pri" onclick="doDelegate()">确认转办</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ modal: adjust agent ============ -->
+<div class="mask hide" id="mAdj">
+  <div class="modal" style="width:420px">
+    <div class="mh">调整信任档<span class="x" onclick="closeM('mAdj')">×</span></div>
+    <div class="mb">
+      <div id="adjName" style="font-weight:600;margin-bottom:10px"></div>
+      <div style="font-size:13px;margin-bottom:6px">信任档</div>
+      <select id="adjTier" style="width:100%"><option>T0 试用</option><option>T1 标准</option><option>T2 成熟</option></select>
+      <div style="font-size:13px;margin:12px 0 6px">单笔自动通过额度（¥）</div>
+      <input type="number" id="adjQuota" style="width:100%">
+      <div class="muted" style="margin-top:8px">调整将写入新策略版本（v13），发布后生效；全部留痕。</div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px">
+        <button class="btn" onclick="closeM('mAdj')">取消</button>
+        <button class="btn pri" onclick="doAdjust()">保存到草稿</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ modal: access example ============ -->
+<div class="mask hide" id="mAcc">
+  <div class="modal">
+    <div class="mh">接入示例 · 10 分钟给 Agent 加上审批门<span class="x" onclick="closeM('mAcc')">×</span></div>
+    <div class="mb">
+      <div style="font-size:13px;margin-bottom:8px;font-weight:600">① Python SDK（HTTP/MCP 同语义）</div>
+<pre><span class="kw">import</span> flowork
+
+res = flowork.request(
+    action=<span class="str">"refund.customer"</span>,
+    payload={<span class="str">"order_id"</span>: <span class="str">"SO-88371"</span>, <span class="str">"amount"</span>: 86000, <span class="str">"reason"</span>: <span class="str">"物流破损"</span>},
+    idempotency_key=<span class="str">"refund-SO-88371"</span>,
+)
+<span class="cm"># → pending_approval: 财务会签 + 店长；agent 在此挂起</span>
+result = flowork.wait_for_result(res.request_id)
+<span class="cm"># → approved / rejected(comment, reason_code) —— 驳回后整改可重提</span></pre>
+      <div style="font-size:13px;margin:16px 0 8px;font-weight:600">② MCP 客户端配置（Claude / 任意 MCP 宿主）</div>
+<pre>{
+  <span class="str">"mcpServers"</span>: {
+    <span class="str">"flowork"</span>: {
+      <span class="str">"url"</span>: <span class="str">"https://flowork.internal.example/mcp"</span>,
+      <span class="str">"headers"</span>: { <span class="str">"Authorization"</span>: <span class="str">"Bearer &lt;agent 凭证&gt;"</span> }
+    }
+  }
+}
+<span class="cm"># 工具面（刻意薄，7 个）：propose / get_status / wait_for_result</span>
+<span class="cm">#                list_my_approvals / approve / reject / delegate</span></pre>
+      <div class="muted">敏感动作没有这一行就不该被执行 —— 就像没有 OAuth 授权码拿不到 token。</div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* ================= data ================= */
+const USERS = { fin:"张三（财务）", shop:"李四（店长）", oncall:"王工（值班工程师）", dpo:"何敏（数据 Owner）", mgr:"赵敏（财务副经理）" };
+
+const AGENTS = {
+  agent_cs07:    { name:"客服Agent-07",  owner:"客服部 · 王磊", status:"active",   tier:"T2 成熟", quota:500,   used:47, limit:50, pol:"v12" },
+  agent_cc:      { name:"CodingAgent-CC",owner:"平台部 · 陈晨", status:"active",   tier:"T1 标准", quota:0,     used:12, limit:80, pol:"v12" },
+  agent_sales_b: { name:"销售Agent-B",   owner:"销售部 · 刘洋", status:"trial",    tier:"T0 试用", quota:500,   used:9,  limit:20, pol:"v12" },
+  agent_call03:  { name:"外呼Agent-03",  owner:"市场部 · 周舟", status:"suspended",tier:"T1 标准", quota:200,   used:0,  limit:100,pol:"v12" },
+};
+
+let REQS = [
+  { id:"REQ-20261003-0042", action:"refund.customer", amount:86000, agent:"agent_cs07", risk:"high",
+    status:"pending", sla:87, slaMax:120, policy:"v12", rule:"规则② 金额>50,000",
+    payload:{ order_id:"SO-88371", amount:"¥86,000", reason:"物流破损，客户投诉工单#4471", customer:"王**（138****6672）" },
+    steps:[
+      {k:"ai",  t:"客服Agent-07 提交退款 ¥86,000", who:"客服Agent-07 · T2 · 凭证指纹 9f3a", ts:"09:12:04"},
+      {k:"ai",  t:"策略求值：命中 v12 规则② → 财务会签 + 店长，SLA 120 分钟", who:"policy v12 · deny-by-default 兜底", ts:"09:12:04"},
+      {k:"ok",  t:"卡片投递 张三（财务）、李四（店长）", who:"飞书 · 已送达", ts:"09:12:06"},
+      {k:"ok",  t:"张三 批准", who:USERS.fin+" · 意见：金额与订单核对一致", ts:"09:41:37"},
+      {k:"pend",t:"等待 李四（店长）审批", who:"剩余 SLA 87 分钟，超时自动升级至区域总监", ts:"—"} ] },
+  { id:"REQ-20261003-0041", action:"infra.prod_migration", agent:"agent_cc", risk:"critical",
+    status:"pending", sla:43, slaMax:60, policy:"v12", rule:"规则③ 生产变更",
+    payload:{ 变更:"orders 表增加索引 idx_user_status", diff:"+12 −3 行（SQL 附件）", 回滚:"DROP INDEX，预计 <1min", 窗口:"凌晨 02:00–03:00" },
+    steps:[
+      {k:"ai",  t:"CodingAgent-CC 提交生产库迁移", who:"CodingAgent-CC · T1 · Claude Code 会话 #c921", ts:"01:47:12"},
+      {k:"ai",  t:"策略求值：命中 v12 规则③ → 值班工程师，SLA 60 分钟", who:"policy v12", ts:"01:47:12"},
+      {k:"pend",t:"等待 王工（值班工程师）审批", who:"剩余 SLA 43 分钟，超时升级 CTO", ts:"—"} ] },
+  { id:"REQ-20261003-0040", action:"data.pii_read", agent:"agent_cs07", risk:"medium",
+    status:"pending", sla:210, slaMax:240, policy:"v12", rule:"规则④ 敏感数据读取",
+    payload:{ 工单:"TS-4471", 字段:"身份证号（脱敏回显）", 用途:"退款实名核验", TTL:"2 小时（批准后生效）" },
+    steps:[
+      {k:"ai",  t:"客服Agent-07 申请读取用户身份证号（工单 TS-4471）", who:"客服Agent-07 · T2", ts:"10:03:55"},
+      {k:"ai",  t:"策略求值：命中 v12 规则④ → 数据 Owner + 2h 临时凭证", who:"policy v12", ts:"10:03:55"},
+      {k:"pend",t:"等待 何敏（数据 Owner）审批", who:"剩余 SLA 210 分钟", ts:"—"} ] },
+  { id:"REQ-20261003-0039", action:"refund.customer", amount:120, agent:"agent_cs07", risk:"low",
+    status:"auto", sla:0, slaMax:0, policy:"v12", rule:"规则① 金额≤500 自动通过",
+    payload:{ order_id:"SO-88372", amount:"¥120", reason:"漏发赠品补偿" },
+    steps:[
+      {k:"ai", t:"客服Agent-07 提交退款 ¥120", who:"客服Agent-07 · T2", ts:"10:24:11"},
+      {k:"ok", t:"命中自动通过规则，放行（端到端 87ms，审计已落库）", who:"policy v12 规则① · 限额内", ts:"10:24:11"} ] },
+  { id:"REQ-20261002-0038", action:"refund.customer", amount:23400, agent:"agent_cs07", risk:"high",
+    status:"rejected", sla:0, slaMax:120, policy:"v11", rule:"v11 规则②",
+    payload:{ order_id:"SO-88120", amount:"¥23,400", reason:"物流破损" },
+    steps:[
+      {k:"ai", t:"客服Agent-07 提交退款 ¥23,400", who:"客服Agent-07 · T2", ts:"昨日 16:20:01"},
+      {k:"no", t:"张三 驳回：缺物流破损凭证", who:USERS.fin+" · 拒绝码 MISSING_EVIDENCE", ts:"昨日 16:44:19"},
+      {k:"ai", t:"Agent 整改后重新提交 → REQ-20261003-0042（supersedes 链）", who:"整改：补充凭证附件", ts:"09:12:04"} ] },
+  { id:"REQ-20261003-0037", action:"app.expense", amount:2380, agent:null, user:"小陈（市场部）", risk:"low",
+    status:"pending", sla:210, slaMax:240, policy:"v12", rule:"报销模板 v3 · AI 预审 → 直属主管 → 财务",
+    payload:{ 事项:"客户拜访交通与餐饮", 金额:"¥2,380", 附件:"invoice_0930.pdf ×3" },
+    steps:[
+      {k:"hum", t:"小陈 提交报销申请 ¥2,380", who:"submitted_by：小陈（市场部）· 模板 app.expense v3", ts:"08:58:20"},
+      {k:"ok",  t:"AI 预审通过：发票要素齐全（3 张，抬头/税号校验）", who:"发票核验Agent · 自动节点", ts:"08:58:22"},
+      {k:"pend",t:"等待 周主管（直属主管）审批", who:"剩余 SLA 210 分钟", ts:"—"} ] },
+  { id:"REQ-20260930-0021", action:"app.expense", amount:456, agent:null, user:"小陈（市场部）", risk:"low",
+    status:"approved", sla:0, slaMax:240, policy:"v11", rule:"报销模板 v3 · AI 预审 → 直属主管（≤1,000 单签）",
+    payload:{ 事项:"办公用品", 金额:"¥456", 附件:"invoice_0929.pdf ×1" },
+    steps:[
+      {k:"hum", t:"小陈 提交报销申请 ¥456", who:"submitted_by：小陈（市场部）", ts:"09-30 14:02:11"},
+      {k:"ok",  t:"AI 预审通过", who:"发票核验Agent · 自动节点", ts:"09-30 14:02:12"},
+      {k:"ok",  t:"周主管 批准", who:"acted_by：周主管 · ¥456 ≤1,000 单签", ts:"09-30 15:20:47"} ] },
+];
+
+const RULES = {
+  v12: [
+    { n:"①", when:"refund.customer 且 amount ≤ 500", route:"自动通过", badge:"b-auto", sla:"—" },
+    { n:"②", when:"refund.customer 且 amount > 50,000", route:"财务(角色) 会签 + 店长(固定人)", badge:"b-high", sla:"120min，超时→上级" },
+    { n:"③", when:"infra.prod_migration", route:"值班工程师(角色)", badge:"b-crit", sla:"60min，超时→CTO" },
+    { n:"④", when:"data.pii_read", route:"数据 Owner + 2h 临时凭证", badge:"b-med", sla:"240min" },
+    { n:"—", when:"其余一切动作（deny-by-default）", route:"拒绝", badge:"b-mut", sla:"—" },
+  ],
+  v13: [
+    { n:"①", when:"refund.customer 且 amount ≤ 1,000（T2 提额）", route:"自动通过", badge:"b-auto", sla:"—" },
+    { n:"②", when:"refund.customer 且 amount > 50,000", route:"财务(角色) 会签 + 店长(固定人)", badge:"b-high", sla:"120min，超时→上级" },
+    { n:"③", when:"infra.prod_migration", route:"值班工程师 + 变更评审(角色)", badge:"b-crit", sla:"60min，超时→CTO" },
+    { n:"④", when:"data.pii_read", route:"数据 Owner + 2h 临时凭证", badge:"b-med", sla:"240min" },
+    { n:"—", when:"其余一切动作（deny-by-default）", route:"拒绝", badge:"b-mut", sla:"—" },
+  ],
+};
+
+const VERS = [
+  { v:"v13", st:"草稿", by:"林姐", at:"今日 11:02", d:"规则① T2 自动通过额度 500→1,000；规则③ 增加变更评审席" },
+  { v:"v12", st:"线上", by:"林姐", at:"2026-09-28", d:"规则② 由「店长单人」改为「财务会签+店长」；新增规则③④" },
+  { v:"v11", st:"归档", by:"林姐", at:"2026-08-15", d:"首个版本：仅退款两档规则" },
+];
+
+/* ================= helpers ================= */
+const $=s=>document.querySelector(s);
+const fmt=r=>({pending:"待审批",auto:"自动通过",rejected:"已驳回",approved:"已批准"})[r.status]||r.status;
+const riskB=r=>({critical:["b-crit","严重"],high:["b-high","高风险"],medium:["b-med","中风险"],low:["b-low","低风险"]})[r];
+function proposer(r){
+  if(r.user) return {badge:"b-low", label:"🙋 "+r.user.split("（")[0]+" · 员工", tier:"员工 · 最终责任人", name:r.user, human:true};
+  const a=AGENTS[r.agent];
+  return {badge:"b-ai", label:"🤖 "+a.name, tier:a.tier+" · 凭证指纹留档", name:a.name, human:false};
+}
+function toast(m){const t=$("#toast");t.textContent=m;t.classList.add("show");clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove("show"),2600)}
+function closeM(id){$("#"+id).classList.add("hide")}
+let curReq=null;
+
+/* ================= nav ================= */
+function showView(v){
+  ["inbox","agents","policy","audit","apply"].forEach(x=>$("#v-"+x).classList.toggle("hide",x!==v));
+  $("#viewTitle").textContent={inbox:"审批收件箱",agents:"Agent 名册",policy:"策略中心",audit:"审计回放",apply:"申请中心"}[v];
+  document.querySelectorAll("#nav a[data-v]").forEach(x=>x.classList.toggle("on",x.dataset.v===v));
+}
+$("#nav").addEventListener("click",e=>{
+  const a=e.target.closest("a[data-v]"); if(!a)return;
+  showView(a.dataset.v);
+});
+
+/* ================= inbox ================= */
+function slaBar(r){
+  if(r.status!=="pending")return "";
+  const pct=Math.max(4,Math.round(r.sla/r.slaMax*100));
+  const col=r.sla/r.slaMax<0.25?"var(--crit)":r.sla/r.slaMax<0.5?"var(--high)":"var(--ok)";
+  return `<div class="sla"><i style="width:${pct}%;background:${col}"></i></div>
+  <div class="muted">剩余 SLA ${r.sla} 分钟${r.sla/r.slaMax<0.25?" · 即将升级":""}</div>`;
+}
+function renderList(){
+  $("#reqList").innerHTML=REQS.filter(r=>r.status==="pending").map(r=>{
+    const[b,l]=riskB(r); const p=proposer(r);
+    return `<div class="reqrow ${curReq===r.id?"on":""}" onclick="sel('${r.id}')">
+      <div class="l1"><span class="bdg ${b}">${l}</span><span class="act">${r.action}</span>
+        ${r.amount?`<span style="margin-left:auto;font-weight:700">¥${r.amount.toLocaleString()}</span>`:""}</div>
+      <div class="l2"><span class="bdg ${p.badge}">${p.label}</span><span>${r.id}</span></div>
+      ${slaBar(r)}</div>`;
+  }).join("");
+  $("#navBadge").textContent=REQS.filter(r=>r.status==="pending").length;
+  $("#statPending").textContent=REQS.filter(r=>r.status==="pending").length;
+}
+function imCardHTML(r){
+  const[b,l]=riskB(r); const p=proposer(r); const rows=Object.entries(r.payload).map(([k,v])=>`<div class="row"><span class="k">${k}</span><span class="v">${v}</span></div>`).join("");
+  return `<div class="imcard" id="imcard">
+    <div class="imhead">🔔 flowork 审批请求 · ${r.id}</div>
+    <div class="imbd">
+      <div class="row"><span class="k">动作</span><span class="v mono">${r.action}</span></div>
+      ${rows}
+      <div class="row"><span class="k">${p.human?"申请人":"提议方"}</span><span class="v"><span class="bdg ${p.badge}">${p.label}</span></span></div>
+      <div class="row"><span class="k">风险 / 依据</span><span class="v"><span class="bdg ${b}">${l}</span> <span class="chip">${r.policy}</span></span></div>
+    </div>
+    <div class="imft">
+      <button class="btn pri sm" onclick="doApprove()">✓ 批准</button>
+      <button class="btn danger sm" onclick="openReject('${r.id}')">✕ 驳回</button>
+      <button class="btn sm" onclick="openDele()">转办</button>
+    </div>
+    <div class="flipnote">✔ 已批准 · 操作人：当前登录用户 · ${now()} · 不可重复操作</div>
+  </div>`;
+}
+function sel(id){
+  curReq=id; const r=REQS.find(x=>x.id===id); if(!r)return;
+  const[b,l]=riskB(r); const p=proposer(r);
+  const steps=r.steps.map(s=>{
+    const ic=s.k==="hum"?"🙋":s.k==="ai"?"AI":s.k==="ok"?"✓":s.k==="no"?"✕":s.k==="pend"?"⏳":"·";
+    return `<div class="step ${s.k==="ok"?"ok":s.k==="ai"?"ai":s.k==="pend"?"pend":""}">
+      <div class="dot">${ic}</div><div><div class="what">${s.t}</div><div class="meta">${s.who} · ${s.ts}</div></div></div>`;
+  }).join("");
+  $("#reqDetail").innerHTML=`
+    <div class="hd"><h3 class="mono" style="font-size:13px">${r.id}</h3>
+      <span style="flex:1"></span><span class="bdg ${b}">${l}</span><span class="bdg b-mut">${fmt(r)}</span></div>
+    <div class="bd">
+      <dl class="kv">
+        <dt>动作</dt><dd class="mono">${r.action}</dd>
+        <dt>${p.human?"申请人":"提议方"}</dt><dd><span class="bdg ${p.badge}">${p.label}</span> <span class="chip">${p.tier}</span></dd>
+        <dt>路由依据</dt><dd><span class="chip">${r.policy}</span> ${r.rule}</dd>
+        <dt>幂等键</dt><dd class="mono">${r.payload.order_id||"—"}</dd>
+      </dl>
+      <div style="margin-top:16px;font-weight:600;font-size:13px">证据链（实时）</div>
+      <div class="steps">${steps}</div>
+      ${r.status==="pending"?`<div class="actions">
+        <button class="btn pri" onclick="doApprove()">✓ 批准</button>
+        <button class="btn danger" onclick="openReject('${r.id}')">✕ 驳回（需意见）</button>
+        <button class="btn" onclick="openDele()">转办</button></div>`:
+        `<div class="muted" style="margin-top:12px">该请求已终态，操作通道关闭。</div>`}
+      <div class="imwrap"><div class="muted" style="margin-bottom:8px">IM 卡片形态（飞书/钉钉同构，v1 支持两通道）</div>${imCardHTML(r)}</div>
+    </div>`;
+  renderList();
+}
+function now(){const d=new Date();return String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0")}
+
+/* ---- approve / reject / delegate ---- */
+function doApprove(){
+  const r=REQS.find(x=>x.id===curReq); if(!r||r.status!=="pending")return;
+  const last=r.steps.find(s=>s.k==="pend");
+  if(last){last.k="ok";last.t=last.t.replace("等待 ","").replace("审批"," 批准");last.who="acted_by：你（演示）· "+now();last.ts=now();}
+  r.status="approved";
+  const im=$("#imcard"); if(im)im.classList.add("flipped");
+  toast("已批准 · 审计留痕（policy "+r.policy+"），wait_for_result 将唤醒 Agent");
+  sel(r.id);
+}
+function openReject(id){curReq=id;$("#rjComment").value="";$("#mReject").classList.remove("hide")}
+function doReject(){
+  const c=$("#rjComment").value.trim();
+  if(!c){toast("驳回意见必填（FR-203）：意见将回传 Agent 用于整改");return}
+  const r=REQS.find(x=>x.id===curReq); const code=$("#rjCode").value;
+  const last=r.steps.find(s=>s.k==="pend");
+  if(last){last.k="no";last.t="你 驳回："+c+(code?"（"+code+"）":"");last.who="acted_by：你 · 拒绝码 "+(code||"NONE");last.ts=now();}
+  r.status="rejected"; closeM("mReject");
+  toast("已驳回 · rejection{comment, reason_code} 已回传 Agent，整改重提将挂 supersedes 链");
+  sel(r.id);
+}
+function openDele(){$("#mDele").classList.remove("hide")}
+function doDelegate(){
+  const r=REQS.find(x=>x.id===curReq); const u=$("#dlUser").value;
+  const last=r.steps.find(s=>s.k==="pend");
+  if(last){last.t="转办 → "+u;last.who="acted_by：你（转出）· 卡片已投递新办理人";last.ts=now();}
+  closeM("mDele"); toast("已转办给 "+u+" · 原审批人留痕"); sel(r.id);
+}
+
+/* ================= agents ================= */
+function renderAgents(){
+  $("#agentRows").innerHTML=Object.entries(AGENTS).map(([id,a])=>{
+    const st=a.status==="active"?["b-ok","在岗"]:a.status==="trial"?["b-med","试用期"]:["b-crit","已停用"];
+    return `<tr>
+      <td><b>${a.name}</b><div class="muted mono">${id}</div></td>
+      <td><span class="chip">上岗证 #${id.slice(-4).toUpperCase()}</span></td>
+      <td>${a.owner}</td>
+      <td><span class="bdg ${st[0]}">${st[1]}</span></td>
+      <td>${a.tier}</td>
+      <td>${a.quota?"≤ ¥"+a.quota.toLocaleString()+" 自动通过":"—（T1 无额度）"}</td>
+      <td>${a.used} / ${a.limit}</td>
+      <td><span class="chip">${a.pol}</span></td>
+      <td>${a.status==="suspended"?'<button class="btn sm" onclick="toast(\'恢复需管理员二次确认\')">恢复</button>'
+        :`<button class="btn sm" onclick='openAdj("${id}")'>调整</button>
+          <button class="btn sm danger" onclick='suspend("${id}")'>停用</button>`}</td>
+    </tr>`;}).join("");
+}
+function suspend(id){
+  const a=AGENTS[id]; a.status="suspended";
+  toast(a.name+" 已停用：在途请求冻结，新请求一律拒绝（即时生效，留痕）");
+  renderAgents();
+}
+function openAdj(id){
+  const a=AGENTS[id]; $("#adjName").textContent=a.name;
+  $("#adjTier").value=a.tier; $("#adjQuota").value=a.quota; $("#mAdj").dataset.id=id;
+  $("#mAdj").classList.remove("hide");
+}
+function doAdjust(){
+  const id=$("#mAdj").dataset.id; const a=AGENTS[id];
+  a.tier=$("#adjTier").value; a.quota=+$("#adjQuota").value||0;
+  closeM("mAdj"); renderAgents();
+  toast("已保存到策略草稿 v13（未发布不影响线上）· 发布后新请求生效");
+}
+
+/* ================= policy ================= */
+function renderPolicyView(){
+  const v=$("#polVer").value;
+  $("#ruleTable").innerHTML=`<thead><tr><th>#</th><th>条件（首个命中生效）</th><th>路由</th><th>SLA / 升级</th></tr></thead><tbody>`+
+    RULES[v].map(r=>`<tr><td class="mono">${r.n}</td><td class="mono" style="font-size:12.5px">${r.when}</td>
+      <td><span class="bdg ${r.badge}">${r.route}</span></td><td class="muted">${r.sla}</td></tr>`).join("")+`</tbody>`;
+}
+function renderVer(){ $("#verList").innerHTML=VERS.map(x=>`
+  <div style="padding:9px 0;border-bottom:1px solid var(--line2)">
+    <div style="display:flex;gap:8px;align-items:center">
+      <span class="chip">${x.v}</span><span class="bdg ${x.st==="线上"?"b-ok":x.st==="草稿"?"b-med":"b-mut"}">${x.st}</span>
+      <span class="muted" style="margin-left:auto">${x.by} · ${x.at}</span></div>
+    <div class="muted" style="margin-top:4px">${x.d}</div></div>`).join(""); }
+function simulate(){
+  const act=$("#simAct").value, amt=+$("#simAmt").value||0, ag=AGENTS[$("#simAgent").value];
+  let path;
+  if(ag.status==="trial") path=`<span class="pathchip">⚠️ ${ag.name} 为试用期</span><span class="pathchip">→ 强制人审（财务 + 店长）</span><span class="pathchip">依据：agent 限额优先于动作规则</span>`;
+  else if(act==="refund.customer")
+    path = amt<=500?`<span class="pathchip">规则① 命中</span><span class="pathchip">✅ 自动通过（${ag.tier} 限额内）</span>`
+    : amt>50000?`<span class="pathchip">规则② 命中</span><span class="pathchip">财务 会签</span><span class="pathchip">→ 店长</span><span class="pathchip">⏱ 120min 超时升级上级</span>`
+    : `<span class="pathchip">规则② 命中</span><span class="pathchip">店长 审批</span>`;
+  else if(act==="infra.prod_migration") path=`<span class="pathchip">规则③ 命中</span><span class="pathchip">值班工程师</span><span class="pathchip">⏱ 60min 超时升级 CTO</span>`;
+  else if(act==="data.pii_read") path=`<span class="pathchip">规则④ 命中</span><span class="pathchip">数据 Owner</span><span class="pathchip">→ 发放 2h 临时凭证</span>`;
+  $("#simOut").innerHTML=`<div class="simout"><div style="font-weight:600;margin-bottom:4px">模拟结果（未建实例）</div>${path}</div>`;
+}
+function renderDiff(){
+  $("#diffBox").innerHTML=`
+    <span class="ctx">  规则② when refund.customer AND amount > 50,000</span>
+    <span class="del">- route: 店长(固定人) · SLA 120min</span>
+    <span class="add">+ route: 财务(角色) 会签 + 店长(固定人) · SLA 120min</span>
+    <span class="add">+ 规则③ infra.prod_migration → 值班工程师 · 60min 超时升级 CTO</span>
+    <span class="add">+ 规则④ data.pii_read → 数据 Owner + 2h 临时凭证</span>
+    <span class="ctx">  default: deny（未知动作一律拒绝）</span>`;
+}
+
+/* ================= audit ================= */
+function renderAudit(){
+  $("#audList").innerHTML=REQS.map(r=>{
+    const[b,l]=riskB(r); const st={pending:["b-mut","pending"],auto:["b-auto","auto_approved"],rejected:["b-crit","rejected"],approved:["b-ok","approved"]}[r.status];
+    return `<div class="reqrow" onclick="selAud('${r.id}')">
+      <div class="l1"><span class="mono" style="font-size:12px">${r.id}</span><span class="bdg ${st[0]}" style="margin-left:auto">${st[1]}</span></div>
+      <div class="l2"><span class="bdg ${b}">${l}</span><span class="mono">${r.action}</span>${r.amount?"<b>¥"+r.amount.toLocaleString()+"</b>":""}</div>
+      <div class="l2 muted">${proposer(r).label} · ${r.policy}</div></div>`;}).join("");
+  $("#audDetail").innerHTML=`<div class="muted">← 选择请求展开证据链：提议者（AI 身份）→ 策略求值（版本+规则）→ 各级审批（人+意见）→ 终态回执</div>`;
+}
+function selAud(id){
+  const r=REQS.find(x=>x.id===id); const[b,l]=riskB(r); const p=proposer(r);
+  const steps=r.steps.map(s=>{
+    const ic=s.k==="hum"?"🙋":s.k==="ai"?"AI":s.k==="ok"?"✓":s.k==="no"?"✕":s.k==="pend"?"⏳":"·";
+    return `<div class="step ${s.k==="ok"?"ok":s.k==="ai"?"ai":s.k==="pend"?"pend":""}">
+      <div class="dot">${ic}</div><div><div class="what">${s.t}</div><div class="meta">${s.who} · ${s.ts}</div></div></div>`;}).join("");
+  $("#audDetail").innerHTML=`
+    <dl class="kv" style="margin-bottom:14px">
+      <dt>请求</dt><dd class="mono">${r.id}</dd>
+      <dt>动作 / 风险</dt><dd><span class="mono">${r.action}</span> <span class="bdg ${b}">${l}</span></dd>
+      <dt>${p.human?"提交人":"提议者"}</dt><dd><span class="bdg ${p.badge}">${p.label}</span> ${p.tier}</dd>
+      <dt>制度依据</dt><dd><span class="chip">${r.policy}</span> ${r.rule}（版本不可变，永久可溯）</dd>
+      <dt>状态</dt><dd><b>${fmt(r)}</b></dd>
+    </dl>
+    <div style="font-weight:600;font-size:13px;margin-bottom:4px">完整证据链（只追加 · 不可改）</div>
+    <div class="steps">${steps}</div>
+    <div class="muted" style="margin-top:10px">AI 与人的每个动作都有 actor 归因；导出报告字段对齐 CS108「审计与合规」评估项。</div>`;
+  document.querySelectorAll("#audList .reqrow").forEach((el,i)=>el.classList.toggle("on",REQS[i].id===id));
+}
+
+/* ================= apply（人发起申请） ================= */
+const APP_TYPES={
+  expense:{name:"报销申请", route:amt=>"报销模板 v3 · AI 预审 → 直属主管"+(amt>1000?" → 财务":"（≤1,000 单签）"),
+    fields:[["事项","text","客户拜访交通与餐饮"],["金额","amount",""],["备注","text",""]]},
+  leave:{name:"请假申请", route:()=>"请假模板 v1 · AI 预审 → 直属主管",
+    fields:[["类型","select","事假|年假|调休"],["天数","number","1"],["事由","text",""]]},
+};
+function renderAppForm(){
+  const t=APP_TYPES[$("#appType").value];
+  $("#appForm").innerHTML=t.fields.map(([lab,ty,ph])=>`<div style="margin-bottom:10px">
+    <div style="font-size:13px;margin-bottom:5px">${lab}</div>${
+      ty==="select"
+      ?`<select class="af" data-lab="${lab}" style="width:100%">${ph.split("|").map(o=>`<option>${o}</option>`).join("")}</select>`
+      :`<input class="af" data-lab="${lab}" type="${ty==="number"||ty==="amount"?"number":"text"}" placeholder="${ph}" style="width:100%">`
+    }</div>`).join("");
+}
+let reqSeq=43;
+function submitApplication(){
+  const vals={}; document.querySelectorAll("#appForm .af").forEach(el=>vals[el.dataset.lab]=el.value.trim());
+  if(!Object.values(vals).every(v=>v)){toast("请填写完整（模板字段校验）");return}
+  const type=$("#appType").value, t=APP_TYPES[type], amount=+(vals["金额"]||0);
+  const rid=`REQ-20261003-00${String(++reqSeq).padStart(2,"0")}`;
+  const payload={...vals}; if(amount) payload["金额"]="¥"+amount.toLocaleString();
+  const r={ id:rid, action:"app."+type, amount:amount||null, agent:null, user:"小陈（市场部）",
+    risk:amount>5000?"medium":"low", status:"pending", sla:240, slaMax:240, policy:"v12", rule:t.route(amount),
+    payload,
+    steps:[
+      {k:"hum",t:`小陈 提交${t.name}`,who:"submitted_by：小陈（市场部）· acted_by 留痕",ts:now()},
+      {k:"ok", t:"AI 预审通过：要素齐全",who:"发票核验Agent · 自动节点",ts:now()},
+      {k:"pend",t:"等待 周主管（直属主管）审批",who:"剩余 SLA 240 分钟"+(amount>1000?"，之后转财务":""),ts:"—"} ] };
+  REQS.unshift(r); renderList(); renderAudit(); renderMyApps();
+  toast("已提交 "+rid+" · 已进入审批收件箱（与 Agent 请求同管道）");
+  showView("inbox"); sel(rid);
+}
+function renderMyApps(){
+  $("#myApps").innerHTML=REQS.filter(r=>r.user).map(r=>{
+    const st={pending:["b-mut","审批中"],approved:["b-ok","已批准"],rejected:["b-crit","已驳回"],auto:["b-auto","自动通过"]}[r.status];
+    return `<div class="reqrow" onclick="showView('audit');selAud('${r.id}')">
+      <div class="l1"><span class="mono" style="font-size:12px">${r.id}</span><span class="bdg ${st[0]}" style="margin-left:auto">${st[1]}</span></div>
+      <div class="l2"><span class="mono">${r.action}</span>${r.amount?"<b>¥"+r.amount.toLocaleString()+"</b>":""}</div>
+      <div class="l2 muted">${r.payload["事项"]||r.payload["类型"]||""} · ${r.rule}</div></div>`;
+  }).join("");
+}
+
+/* ================= init ================= */
+renderList(); renderAgents(); renderPolicyView(); renderVer(); renderDiff(); renderAudit(); renderAppForm(); renderMyApps();
+function openAccess(){$("#mAcc").classList.remove("hide")}
+sel("REQ-20261003-0042"); simulate();
+</script>
+</body>
+</html>
