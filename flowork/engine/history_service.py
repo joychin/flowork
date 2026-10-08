@@ -1,4 +1,7 @@
-"""HistoryService：只读查询（事件 / 已办 / 实例 / 令牌）。"""
+"""HistoryService：只读查询（事件 / 已办 / 实例 / 令牌）。
+
+归档导出面拆至 history_archive.py（Mixin 组合，入口类不变）。
+"""
 
 from __future__ import annotations
 
@@ -6,8 +9,8 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select
 
+from flowork.engine.history_archive import ArchiveMixin
 from flowork.engine.ops import CommandContext
-from flowork.errors import InstanceNotFoundError
 from flowork.persistence.orm import (
     EventOutboxRow,
     ProcessInstanceRow,
@@ -57,7 +60,7 @@ class TraceEntry(BaseModel):
     detail: str = ""
 
 
-class HistoryService:
+class HistoryService(ArchiveMixin):
     """历史与只读查询服务（待办查询在 TaskService.list_tasks）。"""
 
     def __init__(self, engine: ProcessEngine) -> None:
@@ -255,54 +258,6 @@ class HistoryService:
             ]
 
         result: list[TraceEntry] = self._engine.execute(_command)
-        return result
-
-    def archive_instance(self, instance_id: str) -> dict[str, Any]:
-        """完结实例归档导出（JSON 可序列化；热表保持小的冷存方案）。"""
-
-        def _command(ctx: CommandContext) -> Any:
-            from sqlalchemy import select
-
-            from flowork.persistence.orm import (
-                CcItemRow,
-                EventOutboxRow,
-                ProcessInstanceRow,
-                TokenRow,
-            )
-
-            instance = ctx.session.get(ProcessInstanceRow, instance_id)
-            if instance is None:
-                raise InstanceNotFoundError(f"实例不存在：{instance_id}")
-
-            def rows(model: Any, order: Any) -> list[dict[str, Any]]:
-                result: list[dict[str, Any]] = []
-                for row in ctx.session.scalars(  # type: ignore[var-annotated]
-                    select(model).where(model.instance_id == instance_id).order_by(order)
-                ):
-                    result.append(
-                        {c.name: str(getattr(row, c.name)) for c in model.__table__.columns}
-                    )
-                return result
-
-            archive: dict[str, Any] = {
-                "instance": {
-                    "id": instance.id,
-                    "definition_code": instance.definition_code,
-                    "state": instance.state,
-                    "business_key": instance.business_key,
-                    "start_user": instance.start_user,
-                    "started_at": str(instance.started_at),
-                    "finished_at": str(instance.finished_at),
-                    "variables": dict(instance.variables),
-                },
-                "tokens": rows(TokenRow, TokenRow.token_no),
-                "task_history": rows(TaskHistoryRow, TaskHistoryRow.created_at),
-                "cc_items": rows(CcItemRow, CcItemRow.created_at),
-                "events": rows(EventOutboxRow, EventOutboxRow.occurred_at),
-            }
-            return archive
-
-        result: dict[str, Any] = self._engine.execute(_command)
         return result
 
 
