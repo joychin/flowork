@@ -7,30 +7,21 @@
 
 对齐 Flowable InclusiveGatewayActivityBehavior（静态可达性＋活跃执行扫描）；
 驳回归零、管理员 move_token 等直调 ``activate`` 的路径不经本门（语义保持）。
-实现＝自汇聚点反向 BFS 求「上游盆地」（单次 O(V+E)，与令牌数无关）；
-定义不可变，若 profile 需要可再按定义内容键缓存（spec §2.3 实现提示）。
+遍历实现下沉 :mod:`flowork.definitions.graph`（能力补足 P0-3）——设计时图级
+lint 与本门同源，杜绝镜像漂移；定义不可变，若 profile 需要可再按定义内容键
+缓存（spec §2.3 实现提示）。
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from flowork.definitions.graph import upstream_basin
+
 if TYPE_CHECKING:
     from flowork.definitions.definition import ProcessDefinition
 
 __all__ = ["should_release"]
-
-
-def _upstream_basin(definition: ProcessDefinition, node_code: str) -> frozenset[str]:
-    """能沿 ≥1 条连线到达 ``node_code`` 的节点集合（含 ``node_code`` 自身，经环）。"""
-    seen = {node_code}
-    frontier = [node_code]
-    while frontier:
-        for flow in definition.incoming(frontier.pop()):
-            if flow.source not in seen:
-                seen.add(flow.source)
-                frontier.append(flow.source)
-    return frozenset(seen)
 
 
 def should_release(
@@ -44,4 +35,4 @@ def should_release(
             （停靠本节点者由调用方剔除——它们正是等待放行的既有到达）。
         node_code: 汇聚节点编码。
     """
-    return not (unfinished_elsewhere & _upstream_basin(definition, node_code))
+    return not (unfinished_elsewhere & upstream_basin(definition, node_code))

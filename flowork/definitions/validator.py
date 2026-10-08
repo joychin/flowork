@@ -2,8 +2,8 @@
 
 不抛异常：返回 ``list[ValidateIssue]``，由调用方（CLI/发布服务）决定渲染与拦截；
 存在 ERROR 级问题时禁止发布（``assert_valid``）。
-规则实现拆至 validator_rules.py（结构类）与 validator_conditions.py（条件/语义类），
-入口函数与 issue 类型不变。
+规则实现拆至 validator_rules.py（结构类）、validator_conditions.py（条件/语义类）
+与 validator_graph.py（图级 lint，能力补足 P0-3），入口函数与 issue 类型不变。
 """
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ from flowork.definitions.validator_conditions import (
     check_node_semantics,
     check_variable_references,
 )
+from flowork.definitions.validator_graph import check_graph_lints
 from flowork.definitions.validator_rules import (
     check_advance_policy,
     check_branch_rules,
@@ -97,6 +98,7 @@ def validate_definition(
 
     check_variables_and_org(definition, error, warning, org_configured=org_configured)
     check_structure(definition, registry, error, warning)
+    check_graph_lints(definition, warning)
     check_branch_rules(definition, error, warning)
     check_advance_policy(definition, warning)
     check_deadlines(definition, error)
