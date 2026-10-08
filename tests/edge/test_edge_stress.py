@@ -11,7 +11,7 @@ from flowork.definitions.builder import FlowBuilder
 from flowork.engine.config import EngineConfig
 from flowork.engine.engine import ProcessEngine
 from flowork.errors import TaskNotAvailableError, UnknownNodeKind
-from flowork.expr.formula import FormulaError, evaluate_formula
+from flowork.expr.cel import FormulaError, evaluate_formula
 
 
 def _linear(code: str, assignee: str = "u_a") -> FlowBuilder:
@@ -90,19 +90,18 @@ def test_two_engines_same_file_same_task(tmp_path: Path):
     engine_y.close()
 
 
-# —— 公式沙箱逃逸加强 ——
+# —— 公式（CEL）安全面：语法层直接拒绝 + 未注册函数求值期拒绝 ——
 
 
 @pytest.mark.parametrize(
     "formula",
     [
-        "__import__('os').system('echo pwned')",
-        "open('/etc/passwd')",
+        "__import__('os').system('echo pwned')",  # CEL 无此语法 → 解析期拒绝
         "exec('import os')",
         "eval('1+1')",
         "().__class__.__bases__[0].__subclasses__()",
-        "[x for x in (1,2)]",  # 非布尔
-        "'a' + 'b'",  # 非布尔
+        "[x for x in (1, 2)]",
+        "open('/etc/passwd')",  # 未注册函数 → 求值期拒绝
     ],
 )
 def test_formula_sandbox_escape_attempts(formula):
@@ -112,7 +111,7 @@ def test_formula_sandbox_escape_attempts(formula):
 
 def test_formula_length_limit():
     with pytest.raises(FormulaError):
-        evaluate_formula("True and " * 800 + "True", {})
+        evaluate_formula("true && " * 800 + "true", {})
 
 
 # —— Unicode ——

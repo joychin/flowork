@@ -13,7 +13,7 @@ from flowork.definitions.node import MultiInstance
 from flowork.engine.engine import ProcessEngine
 from flowork.engine.kernel import DeadLoopError, RouteError
 from flowork.errors import ConditionError
-from flowork.expr.formula import FormulaError, evaluate_formula
+from flowork.expr.cel import FormulaError, evaluate_formula
 
 
 @pytest.fixture
@@ -189,7 +189,7 @@ def test_all_match_race_cancels_sibling_branch(engine: ProcessEngine):
     assert engine.runtime.get_instance(instance_id).state == "completed"
 
 
-# —— 公式沙箱 ——
+# —— 公式（CEL，kernel-v2 §4.3）——
 
 
 @pytest.mark.parametrize(
@@ -197,9 +197,9 @@ def test_all_match_race_cancels_sibling_branch(engine: ProcessEngine):
     [
         ("amount > 1000", {"amount": 2000}, True),
         ("amount > 1000", {"amount": 500}, False),
-        ("amount >= 100 and level == 'L2'", {"amount": 100, "level": "L2"}, True),
-        ("a in (1, 2, 3)", {"a": 2}, True),
-        ("len(items) > 1", {"items": [1, 2]}, True),
+        ('amount >= 100 && level == "L2"', {"amount": 100, "level": "L2"}, True),
+        ("a in [1, 2, 3]", {"a": 2}, True),
+        ("items.size() > 1", {"items": [1, 2]}, True),
     ],
 )
 def test_formula_sandbox(formula, variables, expected):
@@ -208,9 +208,10 @@ def test_formula_sandbox(formula, variables, expected):
 
 def test_formula_sandbox_rejects_dangerous():
     with pytest.raises(FormulaError):
-        evaluate_formula("__import__('os').system('id')", {})
+        evaluate_formula("__import__('os').system('id')", {})  # CEL 无此语法 → 解析期拒绝
     with pytest.raises(FormulaError):
-        evaluate_formula("amount", {"amount": 5})  # 非布尔
+        evaluate_formula("no_such_fn(1) == 2", {})  # 未注册函数 → 求值期拒绝
+    # 非布尔结果按 P0-1 决策 bool(...) 收敛（不再报错），见 tests/expr/test_cel.py
 
 
 def test_formula_via_branch(engine: ProcessEngine):
@@ -222,7 +223,7 @@ def test_formula_via_branch(engine: ProcessEngine):
         .user_task("small", assignee="u_clerk")
         .end()
         .connect("start", "route")
-        .flow("route", "big", condition=FlowCondition(formula="amount > 5000 and urgent == True"))
+        .flow("route", "big", condition=FlowCondition(formula='amount > 5000 && urgent == true'))
         .flow("route", "small", default=True)
         .connect("big", "end")
         .connect("small", "end")

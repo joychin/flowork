@@ -2,7 +2,7 @@
 
 条件两层表达（FlowCondition）：
 - 结构化条件组 groups：组间 OR、组内 AND —— 推荐方式，可校验、可可视化；
-- 公式 formula：字符串表达式，M2 起经沙箱求值（asteval，白名单+长度+超时限制）。
+- 公式 formula：CEL 表达式（kernel-v2 §4.3，expr/cel.py 求值；原 asteval 已退役）。
 """
 
 from __future__ import annotations

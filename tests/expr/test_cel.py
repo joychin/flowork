@@ -10,11 +10,10 @@ import pytest
 
 from flowork.expr.cel import (
     MAX_BINARY_OPS,
+    FormulaError,
     collect_references,
     evaluate_formula,
 )
-from flowork.expr.cel import FormulaError
-
 
 # —— 基本语法与语义 ——
 

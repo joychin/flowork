@@ -150,12 +150,17 @@ class IncidentMixin:
 
     def _skip_failed_nodes(self, ctx: CommandContext, instance_id: str, actor: str) -> None:
         """跳过故障节点：未完令牌视为完成，按条件路由激活后继（管理员手术，绕放行门）。"""
-        from flowork.engine.routing import select_outgoing
+        from flowork.engine.routing import (
+            evaluation_variables,
+            expression_functions_of,
+            select_outgoing,
+        )
 
         kernel = self._engine.kernel_for(ctx)
         instance = ctx.session.get(ProcessInstanceRow, instance_id)
         assert instance is not None
         definition = kernel.definition_of(ctx.session, instance)
+        functions = expression_functions_of(self._engine.config)
         for token in kernel.tokens(ctx.session, instance_id, states=(TokenState.UNFINISHED.value,)):
             node = definition.node(token.activity_code)
             kernel.cancel_token(ctx.session, token)
@@ -167,7 +172,10 @@ class IncidentMixin:
             if node is None:
                 continue
             outgoing = select_outgoing(
-                definition.outgoing(node.code), dict(instance.variables), mode="all_match"
+                definition.outgoing(node.code),
+                evaluation_variables(instance, instance.variables),
+                mode="all_match",
+                functions=functions,
             )
             for flow in outgoing:
                 target = definition.node(flow.target)

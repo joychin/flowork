@@ -9,13 +9,16 @@ v2.1 定稿（kernel-v2 spec §9）：OrgDirectory 瘦身为引擎必需四方�
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, NamedTuple, Protocol, runtime_checkable
 
 __all__ = [
     "Clock",
     "EventSink",
+    "ExpressionFunction",
     "ExpressionFunctions",
+    "FunctionSignature",
     "Notifier",
     "OrgDirectory",
     "ResourceProvider",
@@ -63,16 +66,35 @@ class OrgDirectory(Protocol):
         ...
 
 
+@dataclass(frozen=True)
+class FunctionSignature:
+    """表达式函数签名（P0-1 决策：注册必须带签名，喂给 CEL 静态检查）。
+
+    类型词汇（spec §5.5）：one_user / users / groups / mixed / bool，
+    另含 CEL 原生标量 string/number/boolean/list/map。
+    """
+
+    params: tuple[str, ...]
+    returns: str
+
+
+class ExpressionFunction(NamedTuple):
+    """一个注册项：签名 + 可调用体（纯读，无副作用——路由决策只属于引擎+条件求值）。"""
+
+    signature: FunctionSignature
+    fn: Callable[..., object]
+
+
 @runtime_checkable
 class ExpressionFunctions(Protocol):
     """表达式自定义函数来源（spec §4.3/§5.5）——取人词汇全从这里注册。
 
     内核注册表出厂为空；宿主经本端口注册，须带签名（参数＋返回类型，
     词汇表 one_user/users/groups/mixed/bool）喂给 CEL 静态检查。
-    激活时点：expr/cel.py 换绑（P0-1 决策记录）。
+    求值链：EngineConfig.expression_functions → routing → expr.cel（functions= 注入）。
     """
 
-    def functions(self) -> Mapping[str, Callable[..., object]]: ...
+    def functions(self) -> Mapping[str, ExpressionFunction]: ...
 
 
 @runtime_checkable

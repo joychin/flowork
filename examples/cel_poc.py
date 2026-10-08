@@ -143,9 +143,9 @@ def main() -> int:
 
     check(results, "数据侧 comprehension 病态", _data_size)
 
-    # —— 7. 性能对比：celpy vs asteval（现状 formula 沙箱）——
+    # —— 7. 性能对比：celpy 裸 program vs 正式 evaluate_formula（护栏+compile 开销）——
     def _perf() -> str:
-        from flowork.expr.formula import evaluate_formula
+        from flowork.expr.cel import evaluate_formula
 
         program = env.program(env.compile('input.amount > 300 && input.urgency == "high"'))
         rounds = 1_000
@@ -156,14 +156,14 @@ def main() -> int:
 
         start = time.perf_counter()
         for i in range(rounds):
-            evaluate_formula("amount > 300 and urgency == 'high'", {"amount": i, "urgency": "high"})
-        asteval_us = (time.perf_counter() - start) / rounds * 1e6
+            evaluate_formula('amount > 300 && urgency == "high"', {"amount": i, "urgency": "high"})
+        wrapped_us = (time.perf_counter() - start) / rounds * 1e6
         return (
-            f"celpy {cel_us:.1f} µs/次 vs asteval {asteval_us:.1f} µs/次"
-            f"（{cel_us / asteval_us:.1f}×，路由决策频次下绝对量级可忽略）"
+            f"celpy {cel_us:.1f} µs/次 vs evaluate_formula（含护栏+compile）{wrapped_us:.1f} µs/次"
+            f"（{wrapped_us / cel_us:.1f}×；asteval 基线已随换绑退役）"
         )
 
-    check(results, "性能（vs asteval 基线）", _perf)
+    check(results, "性能（裸 celpy vs 正式入口）", _perf)
 
     # —— 报告 ——
     print(f"cel-python PoC（celpy {getattr(celpy, '__version__', '0.5.x')}）\n")

@@ -10,7 +10,6 @@ dependencies = [
     "pyyaml>=6.0",
     "pydantic>=2.7",
     "sqlalchemy>=2.0",
-    "asteval>=0.9.29",
     "typer>=0.12",
     "rich>=13.0",
     "apscheduler>=3.11.3",
@@ -87,7 +86,7 @@ plugins = ["pydantic.mypy"]
 disallow_untyped_decorators = false
 
 [[tool.mypy.overrides]]
-module = ["asteval.*", "apscheduler.*"]
+module = ["apscheduler.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

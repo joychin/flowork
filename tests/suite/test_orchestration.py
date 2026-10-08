@@ -146,7 +146,7 @@ def test_formula_condition_routes_by_expression() -> None:
         .user_task("small", "小额", assignee="u_b")
         .end()
         .flow("start", "gate")
-        .flow("gate", "big", condition=FlowCondition(formula="amount > 100 and urgent"))
+        .flow("gate", "big", condition=FlowCondition(formula="amount > 100 && urgent"))
         .flow("gate", "small", default=True)
         .flow("big", "end")
         .flow("small", "end")

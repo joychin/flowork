@@ -75,8 +75,17 @@ def _edge_text(flow: Any) -> str:
     return " 或 ".join(" 且 ".join(_condition_text(i) for i in group) for group in condition.groups)
 
 
-def simulate_route(definition: ProcessDefinition, variables: Mapping[str, Any]) -> DryRunResult:
-    """按样例变量静态预演路由，返回路径步骤 / 警告 / 阻断。"""
+def simulate_route(
+    definition: ProcessDefinition,
+    variables: Mapping[str, Any],
+    *,
+    functions: Mapping[str, Any] | None = None,
+) -> DryRunResult:
+    """按样例变量静态预演路由，返回路径步骤 / 警告 / 阻断。
+
+    Args:
+        functions: 宿主 CEL 自定义函数表（与运行时同一注册来源，预演结果才可信）。
+    """
     from flowork.expr.conditions import evaluate_condition
 
     result = DryRunResult()
@@ -94,7 +103,7 @@ def simulate_route(definition: ProcessDefinition, variables: Mapping[str, Any]) 
         if condition is None:
             return True
         try:
-            return evaluate_condition(condition, variables)
+            return evaluate_condition(condition, variables, functions=functions)
         except VariableNotDefined as exc:
             name = str(exc)
             if name not in warned_vars:

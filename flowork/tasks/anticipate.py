@@ -74,8 +74,14 @@ class AnticipateMixin:
             return AnticipateResult(node_exit=False, instance_complete=False)
 
         # 节点将出：按当前变量近似路由，看是否无需再等任何人工/子流程即到 end
-        from flowork.engine.routing import select_outgoing
+        from flowork.engine.routing import (
+            evaluation_variables,
+            expression_functions_of,
+            select_outgoing,
+        )
 
+        variables = evaluation_variables(instance, instance.variables)
+        functions = expression_functions_of(self._engine.config)
         if outcome == "reject" and spec is not None:
             reject_target = spec.reject_target or token.source_activity_code or ""
             targets = [reject_target] if reject_target else []
@@ -84,8 +90,9 @@ class AnticipateMixin:
                 flow.target
                 for flow in select_outgoing(
                     definition.outgoing(node.code),
-                    dict(instance.variables),
+                    variables,
                     mode=getattr(node, "route_mode", "all_match"),
+                    functions=functions,
                 )
             ]
         waiting_specs = (UserTaskSpec, CallActivitySpec)
@@ -109,7 +116,7 @@ class AnticipateMixin:
             frontier.extend(
                 flow.target
                 for flow in select_outgoing(
-                    definition.outgoing(hop.code), dict(instance.variables), mode="all_match"
+                    definition.outgoing(hop.code), variables, mode="all_match", functions=functions
                 )
             )
             if len(seen) > 200:  # 环路守卫

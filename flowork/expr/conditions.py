@@ -1,11 +1,12 @@
 """条件求值：结构化条件组（组间 OR、组内 AND）。
 
-公式（formula）求值 M2 提供沙箱实现；当前引用公式抛 FormulaNotSupported。
+公式（formula）支经 ``expr.cel`` 求值（CEL，kernel-v2 §4.3；原 asteval 已退役）；
+``functions`` 为宿主经 ExpressionFunctions 端口拍平的自定义函数表（可选）。
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import Any
 
 from flowork.definitions.flow import ConditionItem, FlowCondition
@@ -87,12 +88,16 @@ def evaluate_groups(groups: list[list[ConditionItem]], variables: Mapping[str, A
     return any(all(evaluate_item(item, variables) for item in group) for group in groups)
 
 
-def evaluate_condition(condition: FlowCondition, variables: Mapping[str, Any]) -> bool:
-    """求值路由条件：结构化组优先，公式走沙箱（expr.formula）。"""
+def evaluate_condition(
+    condition: FlowCondition,
+    variables: Mapping[str, Any],
+    functions: Mapping[str, Callable[..., object]] | None = None,
+) -> bool:
+    """求值路由条件：结构化组优先，公式走 CEL（expr.cel）。"""
     if condition.groups:
         return evaluate_groups(condition.groups, variables)
     if condition.formula:
-        from flowork.expr.formula import evaluate_formula
+        from flowork.expr.cel import evaluate_formula
 
-        return evaluate_formula(condition.formula, dict(variables))
+        return evaluate_formula(condition.formula, dict(variables), functions=functions)
     return False
