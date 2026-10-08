@@ -94,6 +94,12 @@ FEATURES: dict[str, tuple[str, ...]] = {
         "contract.variable_declarations",
         "contract.variable_index_search",
     ),
+    "variables": (
+        "variables.external_update",
+        "variables.reroute_pending_branch",
+        "variables.terminal_guard",
+        "variables.history",
+    ),
     "query": (
         "query.instance_states",
         "query.list_tasks",

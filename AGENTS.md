@@ -92,8 +92,14 @@ deadline 列表+实例级时限+escalate/anticipate 只读预判。DoD 全链路
 ≤300 行）。残留超标（既有债务，非本轮引入）：kernel.py 534、task_actions.py 470、task_service.py 364、
 validator.py 368——拆解随 M 系 REST/MCP 前的重构刀处理。
 
-当前快照（2026-10-08）：**541 个测试全绿**；web API（`flowork/web`）与设计器前端（`designer/`）已可用；
-黑盒验收套件 `tests/suite`（80 例，含驳回/异常走查 demo）落地。
+当前快照（2026-10-08）：**564 个测试全绿**；web API（`flowork/web`）与设计器前端（`designer/`）已可用；
+黑盒验收套件 `tests/suite`（82 例，含驳回/异常走查 demo）落地。
+**变量读写接口批（2026-10-08，spec §10/§11/§12/§13/§14 + variable-io-api.md，REST 随 /v2 批、MCP 随 M7 仅登记）**：
+RuntimeService 变量面（update_variables 三门槛：白名单=声明∪input schema∪既有键、保留键拒、类型对位、
+≤256KB、终态拒；variables_of 只读；variable_history 血缘）；wf_variable_history 全写方留痕表
+（命令尾 diff，before 快照挂 touch 与 record_event 双咽喉点，值相等跳过）；variables_updated 事件仅外部
+写入发射（§10 条款改「引擎内部写不发」）；CLI instance 子命令组（vars/vars-set/var-history）；
+VariableStore 死端口零兼容删除（§9 四端口）。
 **重构刀清账（2026-10-08）**：kernel.py 534→281（token_records/task_records Mixin）、task_actions.py 470→213
 （task_admin/task_cc/task_rework）、task_service.py 364→199（tasks/reject_flow + contract.input_schema_of）、
 validator.py 368→113（validator_rules/validator_conditions）——全仓单文件 ≤300 行达成。
