@@ -138,6 +138,16 @@ validator_conditions 硬编码 frozenset 退役（RESERVED_POSITIONS 表驱动�
 FunctionSignature 补 `label`（函数目录下发原料）+ contrib.cel_vocabulary 三函数标注。
 F1：`now` 求值时刻全位点注入（expr/context.py 唯一装配点，统一时钟 naive UTC，
 一次装配钉一时刻——routing/resolver 组内多公式同刻；dry-run 模拟面与 web 公式试算面
-同步注入）。575 测试全绿。下一刀 F2：prev_task（token 因果链）/node() 节点事实
-（现查派生、票数最近一轮）+ F3 路由决策审计（合并 P2 遗留）。
+同步注入）。575 测试全绿。
+**表达式数据面 F2（2026-10-08 同日，核心批）**：`tasks/facts.py` 节点事实现查聚合
+（wf_task_history+wf_token；used_time 取 cost_seconds 派生 timedelta）。`prev_task`
+上一站（=最近一条已完成任务，条件+取人位；查无不注入，`references_identifier`
+静态预检——条件跳过/取人贡献空，温和不出故障单）；`node("code")` 引擎注入函数
+（runs=已结束轮数/skipped/最近轮五字段/最近轮票数；查无=固定形状：人物 null
+计数 0，返回值过 json_to_cel 才可字段选择）；接线七点（routing/behavior/branch/
+incident/anticipate/cc/rework，resolver._evaluate_expressions 为取人咽喉）；validator
+泛化 `*.{name}_unavailable` 位点规则 + 引擎函数目录对照（arity/位点，无注册表不误报）；
+改派位 task.* 补 created_at/deadline_at。设计文档 B2 口径修正（重报后查驳回须用
+node()，prev_task 因果链语义由 D 组承担）；C5 exit assignees 记开放问题。
+590 测试全绿。剩余 F3 路由审计（合并 P2 遗留）/F4 设计器目录下发/F5 spec 收口。
 

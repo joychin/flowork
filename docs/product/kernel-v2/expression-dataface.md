@@ -5,7 +5,7 @@
 | 对应 spec | [spec.md](./spec.md) §4.2（位点清单）、§4.3（求值语义）、C.4（task.* 快照）、§12/§13（投影登记） |
 | 关联设计 | [variable-io-api.md](./variable-io-api.md)（读写面，2026-10-08 已批六批）——本设计只管**判断面**，互补不重叠 |
 | 日期 | 2026-10-08 |
-| 状态 | **已批准**（2026-10-08）；**F0+F1 已落地**（本表 §8 前两批），F2–F5 按批排期；范围变更已记《本期建设边界》backlog |
+| 状态 | **已批准**（2026-10-08）；**F0+F1+F2 已落地**（§8 前三批；F3–F5 按批排期），范围变更已记《本期建设边界》backlog |
 | 决策 | 判断面 = 精选事实目录（现查派生、位点分家、版本化）；`now` 由引擎经 Clock 注入；路由决策审计同批补齐 |
 
 ## 0. 一句话与五词口诀
@@ -42,7 +42,10 @@
 
 字段：`assignee`（谁办的）、`outcome`（结果）、`comment`（意见，可空）、`finished_at`（办完时间）、`used_time`（耗时，duration 类型，直接与 `duration('24h')` 比较）。
 
-语义钉死：**"导致本次流转的那个已完成任务"**——沿 token 因果链取（incoming token 的 source 活动对应最近完成记录）。驳回复活（cause_token）、并行分支、多入边下均有确定答案。
+语义钉死：**"导致本次流转的那个已完成任务"**——实现口径＝**实例内最近一条已完成任务**
+（F2 落地）：串行、会签最后一票、加签/改派后的实际办理人、并行汇聚最后到达、
+驳回复活后的驳回票，全部场景下与因果链取法等价。查无＝不注入，条件位经
+静态预检按不满足跳过、取人位贡献空（温和，不出故障单）。
 
 ### 2.3 点名查任意站 `node("节点编码").*`（位点：连线条件 + 取人/传阅）
 
@@ -53,10 +56,15 @@
 | `assignee` / `outcome` / `comment` / `finished_at` / `used_time` | 同 prev_task | **最近一轮**的办理事实 |
 | `approve_count` / `disapprove_count` / `item_count` | int | **最近一轮**会签票数（token 三计数派生；非会签节点为 0） |
 
+查无＝**固定形状**（人物字段 null、计数 0、runs 0）：`==` 比较自动不满足、取人位
+自动贡献空、`node("x").assignee` 求值为 null；对 null 字段做排序/算术比较
+（如 `used_time > duration('24h')`）需判空守卫——CEL 严格类型语义，缺键仍报错
+（可抓字段名笔误）。返回值经 json_to_cel 包装（MapType 字段选择）。
+
 ### 2.4 既有窄位点快照 `task.*`（方言维持，各补实用字段）
 
-- 改派位 reassign_to：`{id, assignee, outcome, created_at, deadline_at}`（补后两个——"已超时多久决定改给谁"三元表达）。
-- 会签出口 approve_exit / disapprove_exit：`{item_count, approve_count, disapprove_count}` 维持，候选补 `assignees`（本轮流派人名单，"发起人在名单里"可判）。
+- 改派位 reassign_to：`{id, assignee, outcome, created_at, deadline_at}`（F2 已补后两个——"已超时多久决定改给谁"三元表达）。
+- 会签出口 approve_exit / disapprove_exit：`{item_count, approve_count, disapprove_count}` 维持；`assignees`（本轮流派人名单）→ **开放问题未实现**（§10）。
 
 ### 2.5 位点矩阵
 
@@ -122,7 +130,7 @@
 |---|---|---|---|
 | **F0 目录地基** | 目录对象 + FunctionSignature 补 label + validator 表驱动化 | validator 规则由目录生成；既有测试全绿 | 小 |
 | **F1 now 注入** | expression_context + Clock 接线 + 保留词 + 装配点透传（可与 F0 同刀） | §9 案例集 A2/A4/E5 全过（Clock 冻结断言） | 小 |
-| **F2 节点事实（核心）** | 事实查询模块（现查聚合）+ prev_task 因果链 + node() + 位点矩阵 + 查无语义 + 改派/出口快照补字段 | **§9 案例集 A1/A3、B/C/D 组、E1–E4 全过**（招标投票为主线场景，测试先行） | 中 |
+| **F2 节点事实（核心）** | 事实查询模块（现查聚合）+ prev_task 因果链 + node() + 位点矩阵 + 查无语义 + 改派/出口快照补字段 | **已落地（2026-10-08）**：§9 A1/B1/B2/B3/C1–C3/D1/D5 共 10 例过（tests/semantics/test_node_facts.py）；C5→开放问题、D2/D3 由"最近完成"语义经 B1/J1 覆盖（专用加签/改派流程用例随 suite 补） | 中 |
 | **F3 路由审计** | 决策记录（公式/结果/取值快照）+ 落库 + 查询 | §9 案例集 F 组全过；与 wf_variable_history 同事务语义对齐 | 中 |
 | **F4 设计器与下发** | 目录下发端点 + 变量树五分组 + 公式编辑器提示（时效用 duration 字面量等） | 设计器无后端硬编码词汇；下拉与 validator 同源 | 小 |
 | **F5 文档收口** | spec §4.2/§4.3/C.4 修订 + 边界 backlog 记账 + API.md | 五道门全绿；spec 与实现一致 | 小 |
@@ -148,7 +156,7 @@
 | # | 业务场景 | 示例公式 | 断言要点 | 层 |
 |---|---|---|---|---|
 | B1 | 上一站审批人的领导来审（取人位） | `assignee: manager_of(prev_task.assignee)` | 取人位 prev_task 可用；宿主函数收到正确 subject | 黑盒 |
-| B2 | 驳回重报走复核分支 | `prev_task.outcome == 'reject'` | **驳回复活语义**：prev_task=驳回那一票（cause_token 链），不是更早轮次 | 黑盒 |
+| B2 | 驳回重报走复核分支 | `node("manager").outcome == 'reject'`（经理最近一轮为驳回） | **口径修正（F2 落地时）**：重报后出边的 prev_task＝重报任务自身，"上站驳回过"须点名查 `node()`；prev_task 因果链语义由 D1/D2/D3 承担 | 黑盒 |
 | B3 | 意见路由：意见含"加急"走加急通道 | `prev_task.comment.contains('加急')` | 空意见/无意见 → 条件不满足不报错；中文 contains | 黑盒 |
 | B4 | 指定节点结果 × 业务字段复合 | `node("legal_review").outcome == 'approve' && amount > 50000` | 节点事实与表单字段可自由复合（对标产品出口不可复合的对照） | 黑盒 |
 
@@ -195,3 +203,4 @@
 2. `used_time` 暂停剔除口径：v1 自然时长，剔除规则待业务样本再定。
 3. 多轮历史实例的聚合成本：`runs` 大时 `node()` 查询走索引仍 O(轮次)，先观察，必要时加"最近一轮"短路。
 4. 扩展词汇需求收集：宿主侧按需注册，先不预置清单（避免词典膨胀）。
+5. 会签出口位 `task.assignees`（C5）未实现：加签名单注入需 behaviors/anticipate/reject_flow 三点接线，复杂度与收益暂不匹配——待"发起人在会签名单"场景成真再启。
