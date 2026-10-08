@@ -289,3 +289,135 @@ def test_dead_letter_job_can_be_requeued(engine: ProcessEngine):
     assert engine.execute(_check) == ("scheduled", 0)
     with pytest.raises(ValueError):
         engine.jobs.requeue("no-such-job")
+
+
+def test_mappings_cel_expressions(engine: ProcessEngine):
+    """映射值 CEL（spec §4.2）：输入侧运算表达式、输出侧字符串拼接。"""
+    child = (
+        FlowBuilder("compliance_expr", "合规表达式")
+        .start()
+        .user_task("verify", assignee="'u_compliance'")
+        .end()
+        .connect("start", "verify")
+        .connect("verify", "end")
+        .build()
+    )
+    publish(engine, child)
+    parent = (
+        FlowBuilder("parent_expr", "主流程表达式")
+        .start()
+        .call_activity(
+            "sub",
+            process_code="compliance_expr",
+            input_mappings={"doubled": "amount * 2", "who": "initiator"},
+            output_mappings={"verdict_line": '"verdict:" + verdict'},
+        )
+        .end()
+        .connect("start", "sub")
+        .connect("sub", "end")
+        .build()
+    )
+    publish(engine, parent)
+    from flowork.persistence.orm import ProcessInstanceRow
+
+    instance_id = engine.runtime.start_process(
+        "parent_expr", start_user="u_maker", variables={"amount": 21}
+    )
+
+    def _child() -> ProcessInstanceRow:
+        return engine.execute(
+            lambda ctx: next(
+                row
+                for row in ctx.session.query(ProcessInstanceRow).all()
+                if row.parent_id == instance_id
+            )
+        )
+
+    child = _child()
+    assert child.variables["doubled"] == 42  # 求值后的输入映射
+    assert child.variables["who"] == "u_maker"
+    task = engine.task.list_tasks(instance_id=child.id)[0]
+    engine.task.complete(task.id, actor="u_compliance", variables={"verdict": "pass"})
+    assert engine.runtime.get_instance(instance_id).state == "completed"
+
+    def _parent_vars() -> dict:
+        return engine.execute(
+            lambda ctx: ctx.session.get(ProcessInstanceRow, instance_id).variables
+        )
+
+    assert _parent_vars()["verdict_line"] == "verdict:pass"
+
+
+def test_output_mapping_missing_bare_ident_is_none(engine: ProcessEngine):
+    """裸标识符直传缺键 → None（管理员修复直达终态等场景，旧 .get 语义）。"""
+    child = (
+        FlowBuilder("compliance_silent", "合规静默")
+        .start()
+        .user_task("verify", assignee="'u_compliance'")
+        .end()
+        .connect("start", "verify")
+        .connect("verify", "end")
+        .build()
+    )
+    publish(engine, child)
+    parent = (
+        FlowBuilder("parent_silent", "主流程静默")
+        .start()
+        .call_activity(
+            "sub",
+            process_code="compliance_silent",
+            output_mappings={"result": "never_set"},
+        )
+        .end()
+        .connect("start", "sub")
+        .connect("sub", "end")
+        .build()
+    )
+    publish(engine, parent)
+    from flowork.persistence.orm import ProcessInstanceRow
+
+    instance_id = engine.runtime.start_process("parent_silent", start_user="u_maker")
+
+    def _child_id() -> str:
+        return engine.execute(
+            lambda ctx: next(
+                row.id
+                for row in ctx.session.query(ProcessInstanceRow).all()
+                if row.parent_id == instance_id
+            )
+        )
+
+    child_id = _child_id()
+    verify_token = next(t for t in engine.history.tokens(child_id) if t.activity_code == "verify")
+    engine.runtime.move_token(verify_token.id, "end", actor="admin")  # 管理员直达终态
+    assert engine.runtime.get_instance(instance_id).state == "completed"
+
+    def _parent_vars() -> dict:
+        return engine.execute(
+            lambda ctx: ctx.session.get(ProcessInstanceRow, instance_id).variables
+        )
+
+    assert _parent_vars()["result"] is None
+
+
+def test_input_mapping_expression_error_suspends():
+    """映射表达式求值错 → 技术故障（挂起+故障单，spec §8）。"""
+    from flowork.engine.kernel import EngineExecutionError
+
+    child = (
+        FlowBuilder("compliance_bad", "合规坏映射").start().end().connect("start", "end").build()
+    )
+    engine = ProcessEngine()
+    publish(engine, child)
+    parent = (
+        FlowBuilder("parent_bad", "主流程坏映射")
+        .start()
+        .call_activity("sub", process_code="compliance_bad", input_mappings={"x": "nosuchvar + 1"})
+        .end()
+        .connect("start", "sub")
+        .connect("sub", "end")
+        .build()
+    )
+    publish(engine, parent)
+    with pytest.raises(EngineExecutionError, match="子流程输入映射求值失败"):
+        engine.runtime.start_process("parent_bad", start_user="u_maker", variables={})

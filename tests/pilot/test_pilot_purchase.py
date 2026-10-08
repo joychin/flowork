@@ -96,7 +96,8 @@ def test_purchase_subprocess_reject_to_originator(pilot: ProcessEngine):
 
     task = pilot.task.list_tasks(instance_id=child.id, assignee="u_zhang")[0]
     pilot.task.complete(task.id, actor="u_zhang", variables={"supplier": "ACME-2"})
-    complete_of(pilot, child.id, "u_fa1")
+    verify = pilot.task.list_tasks(instance_id=child.id, assignee="u_fa1")[0]
+    pilot.task.complete(verify.id, actor="u_fa1", variables={"compliance": "pass"})
     assert pilot.runtime.get_instance(child.id).state == "completed"
     assert pilot.runtime.get_instance(instance_id).state == "completed"
 
