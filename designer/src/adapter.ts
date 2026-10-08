@@ -34,39 +34,16 @@ const SIZE: Record<string, { w: number; h: number }> = {
 
 export const nodeSize = (meta?: NodeKindMeta) => SIZE[meta?.ui?.shape ?? 'rect']
 
-/** 条件文本摘要:结构化 groups → "amount > 10000 && x == 1 / …";默认边 → 默认 */
+/** 条件文本摘要（单轨 CEL）：公式原文截断；默认边 → 默认 */
 export function conditionSummary(flow: Spec['flows'][number]): string {
   const parts: string[] = []
   if (flow.is_default) parts.push('默认')
   const cond = flow.condition
-  if (cond?.groups?.length) {
-    const groupTexts = cond.groups.map((group) =>
-      group.map((item) => `${item.left} ${OPERATOR_LABEL[item.operator] ?? item.operator} ${formatRight(item)}`).join(' 且 '),
-    )
-    parts.push(groupTexts.join(' 或 '))
+  if (typeof cond === 'string' && cond.trim()) {
+    parts.push(cond.length > 40 ? `${cond.slice(0, 40)}…` : cond)
   }
-  if (cond?.formula) parts.push(cond.formula)
   return parts.join(' · ') || ''
 }
-
-function formatRight(item: { operator: string; right: unknown }): string {
-  const right = item.right
-  if (item.operator === 'is_empty' || item.operator === 'is_not_empty') return ''
-  if (Array.isArray(right)) return `[${right.map(String).join(', ')}]`
-  return typeof right === 'string' ? `"${right}"` : String(right ?? '')
-}
-
-export const OPERATOR_LABEL: Record<string, string> = {
-  eq: '==', ne: '!=', gt: '>', ge: '>=', lt: '<', le: '<=',
-  in: '属于', not_in: '不属于', contains: '包含',
-  starts_with: '前缀', is_empty: '为空', is_not_empty: '非空',
-}
-
-export const OPERATOR_OPTIONS: [string, string][] = [
-  ['eq', '等于 =='], ['ne', '不等于 !='], ['gt', '大于 >'], ['ge', '大于等于 >='],
-  ['lt', '小于 <'], ['le', '小于等于 <='], ['in', '属于(列表)'], ['not_in', '不属于(列表)'],
-  ['contains', '包含'], ['starts_with', '前缀匹配'], ['is_empty', '为空'], ['is_not_empty', '非空'],
-]
 
 type Cached<T> = { sig: string; value: T }
 

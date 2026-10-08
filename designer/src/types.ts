@@ -2,23 +2,13 @@
 
 export type NodePosition = { x: number; y: number }
 
-export type ConditionItem = {
-  left: string
-  operator: string
-  right: unknown
-}
-
-export type FlowCondition = {
-  groups: ConditionItem[][] // 组间 OR、组内 AND
-  formula?: string | null
-}
-
 export type SequenceFlow = {
   source: string
   target: string
   name?: string
   is_default?: boolean
-  condition?: FlowCondition | null
+  /** CEL 公式（条件单轨化，spec §4.1）；null＝无条件 */
+  condition?: string | null
 }
 
 export type SpecNode = Record<string, unknown> & {
