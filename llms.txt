@@ -1,15 +1,23 @@
 # flowork
 
-> 无头（headless）、可扩展的审批流程引擎。Token 令牌内核，用户词汇无「网关」（条件分支/同时进行/开始条件），AI 友好三层设计。
-> Python >= 3.11，SQLite 起步，pip 库 + CLI 交付。
+> 可独立部署的审批流程引擎。Token 令牌内核，CEL 表达式单轨，用户词汇无「网关」（条件分支/同时进行/开始条件），AI 友好三层设计。
+> Python >= 3.11，SQLite 起步，pip 库 + CLI + web/设计器交付；REST /v2 与 MCP 开放面推进中。
 
 ## 仓库文档
 
-- [README.md](README.md): 项目简介、快速开始、扩展节点三步法
-- [AGENTS.md](AGENTS.md): 构建/测试命令、包结构地图、硬约束（改代码必读）
-- [docs/API.md](docs/API.md): 四服务 API 参考（含扩展点）
-- [docs/integration.md](docs/integration.md): 集成与部署指南（表结构/超时调度/二期对接/运维）
+- [README.md](README.md): 项目简介、快速开始、里程碑现状、扩展节点三步法
+- [AGENTS.md](AGENTS.md): 构建/测试命令、包结构地图、硬约束、当前快照（改代码必读）
+- [docs/API.md](docs/API.md): 四服务 + 消息/Job Python API 参考（含扩展点）
+- [docs/integration.md](docs/integration.md): 集成与部署指南（表结构/超时调度/并发模型/运维）
+- [designer/README.md](designer/README.md): 流程设计器前端（架构原则与 API 面）
 - examples/: 3 个示例模板（串行审批 / 条件分支+会签 / 子流程）、org.yaml 组织配置与 ai_review 自定义节点 demo
+
+## 范围权威（仓库内 docs/product/）
+
+1. [kernel-v2/spec.md](docs/product/kernel-v2/spec.md): 内核 v2 范围权威（v2.3，含 CEL 单轨/判断面词汇/§11 API/§12 REST /v2/§13 MCP）
+2. [engine-v1/](docs/product/engine-v1/): 产品 v1 范围权威（11 篇：REST+MCP 双开放、目录与权限、business_object、任务页+CLI+docker）
+3. [kernel-v2/expression-dataface.md](docs/product/kernel-v2/expression-dataface.md) / [variable-io-api.md](docs/product/kernel-v2/variable-io-api.md): 判断面与读写面两份已批设计
+4. [kernel-v2-plan.md](docs/product/kernel-v2-plan.md): 内核 v2 实施排期
 
 ## 设计文档（位于 ../../benchmark_refs/out/，按权威优先级）
 

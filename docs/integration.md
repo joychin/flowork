@@ -8,22 +8,39 @@ uv run pytest                             # 全量测试
 uv run flowork init --db flowork.db       # 初始化 SQLite 库
 uv run flowork validate examples/01_simple_approval.json
 uv run flowork demo-full                  # 全流程 DoD 演示（事件回放）
+uv run flowork retire <code>             # 定义退役（purge 物理清除 / drift 文件对账）
+uv run flowork instance vars <iid>       # 实例变量面（vars-set 写 / var-history 血缘）
 ```
 
 嵌入使用：`pip install -e .` 后 `from flowork.engine.engine import ProcessEngine`。
 
 ## 表结构（SQLite，可平迁 PostgreSQL）
 
+内核执行面（`flowork/persistence/orm.py`）：
+
 | 表 | 内容 |
 |---|---|
-| wf_process_definition | 定义（content=模板 JSON；发布后不可变） |
-| wf_process_instance | 实例（definition_snapshot 快照；version 乐观锁） |
+| wf_process_definition | 定义（code+major+revision、content_hash、发布后不可变） |
+| wf_process_instance | 实例（definition_snapshot 快照；version 乐观锁；deadline_at/actor_context） |
 | wf_token | 令牌（三计数：item/approve/disapprove；reject_flag） |
 | wf_task / wf_task_history | 待办（活表）/ 已办（append-only，驳回复活不删不改历史） |
 | wf_cc_task | 传阅件（含已读） |
 | wf_identity_link | 候选关联（claim） |
-| wf_event_outbox | 领域事件（消息/UI/MCP 统一消费入口） |
-| wf_job / wf_incident | 超时任务（重试/死信）/ 流程异常 |
+| wf_event_outbox | 领域事件（消息/UI/MCP 统一消费入口，CloudEvents 信封） |
+| wf_job / wf_incident | 超时与外部执行任务（重试/死信/租约）/ 流程异常 |
+
+v2 扩展面（`flowork/persistence/orm_v2.py`）：
+
+| 表 | 内容 |
+|---|---|
+| wf_designer_draft | 设计器草稿（独立于发布版） |
+| wf_message_buffer / wf_message_subscription | 消息缓冲（TTL）/ 等待节点订阅 |
+| wf_variable_index | 变量检索（searchable 值索引） |
+| wf_variable_history | 变量血缘（全写方留痕：改前/改后+归因） |
+| wf_route_decision | 路由决策审计（逐条件边 result、selected、求值快照） |
+
+目录表（M-A，`flowork/directory/orm.py`）：org_unit / org_user / org_role /
+org_role_assignment / org_agent / org_agent_credential。
 
 ## 超时调度
 
@@ -79,21 +96,28 @@ uv run flowork demo-full                  # 全流程 DoD 演示（事件回放�
 
 ## 与后续系统对接（二期入口已预留）
 
-- **HTTP 服务**：四服务方法即 FastAPI 路由（一一映射，无需改动内核）。
-- **消息推送**：订阅 `wf_event_outbox`（或替换 `EngineConfig.notifier` 端口）。
-- **AI（MCP）**：`pyflow-mcp` 二期包把四服务映射为 ~10 个合并型工具；
+- **HTTP 服务**：`flowork/web` 已上线设计器面（定义草稿/校验/发布/试算，前缀 `/api`）；
+  实例/任务/搜索 REST 面随 kernel-v2 §12（`/v2`）落地，四服务方法即路由一一映射。
+- **消息推送**：订阅 `wf_event_outbox`（CloudEvents 信封，按 id 幂等；
+  `flowork.events.consumer.IdempotentSink` 为参考实现；`EngineConfig.notifier` 端口保留给宿主定制）。
+- **AI（MCP）**：MCP 工具面随 M7 落地（18 个工具，清单见 kernel-v2 spec §13）；
   当期已落实：全 typed、双语 docstring、幂等键、行动提示式返回、actor 区分人/agent。
-- **UI 设计器**：模板即 JSON（pydantic JSON Schema 可导出）；bpmn-js 路线见《命名规范》§7 预留。
-- **组织系统**：替换 `EngineConfig.org`（实现 `OrgDirectory` 同形接口或适配现有库）。
+- **UI 设计器**：`designer/`（React Flow）已可用——Spec 唯一事实源、schema 驱动表单、
+  校验闭环；任务页/Console 随产品 v1 M-C。
+- **组织系统**：替换 `EngineConfig.org`（实现 `OrgDirectory` 同形接口或适配现有库；
+  持久化目录 `flowork.directory.DirectoryStore` 已起步，M-A）。
 
 ## 运维要点
 
-- 实例异常自动挂起（`suspended`）并落 `wf_incident`；修复数据后
-  `resolve_incident(id, "resume")` 恢复，或 `"cancel"` 终止。
+- 实例异常自动挂起（`suspended`）并落 `wf_incident`；修复数据后 `resolve_incident`
+  五动作择一：`resume` 恢复 / `cancel` 取消 / `retry` 重派该实例 dead-letter Job /
+  `skip` 跳过故障节点推进 / `fail` 判失败。
+- 死信 Job 人工重派：`engine.jobs.requeue(job_id)`（重置 scheduled、清零重试计数）。
 - 死循环防护：单节点完成次数上限 `EngineConfig.max_node_loops`（默认 50）。
 - 乐观锁（实例行 version）：所有写命令统一触碰实例行（`CommandContext.touch`），
   同实例并发写在提交时串行化；冲突自动重试 `lock_retries`（默认 3）次。
 - 时间戳统一 naive UTC（`flowork.clock.utc_now`）：多副本时钟可比，
   各机器以 NTP 对齐；注入测试时钟走 `EngineConfig.now`。
-- 历史分级 `history_level`：`none`（不落事件）/ `activity`（仅流程与节点）/ `full`（默认）。
+- 历史分级 `history_level`：`none`（不落事件）/ `activity`（仅流程与节点）/
+  `full`（默认；`audit` 为保留档，当前实现同 full 全记）。
 - 完结实例归档：`history.archive_instance(id)` 导出 JSON 冷存。
