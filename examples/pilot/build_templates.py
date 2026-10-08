@@ -156,7 +156,12 @@ def purchase_order():
     return (
         FlowBuilder("purchase_order", "采购申请")
         .start("start", "提交")
-        .user_task("dept_review", "部门主管审批", assignee="manager_of(initiator)", reject_target="start")
+        .user_task(
+            "dept_review",
+            "部门主管审批",
+            assignee="manager_of(initiator)",
+            reject_target="start",
+        )
         .branch("amount_route", "金额分流", route_mode=RouteMode.ALL_MATCH)
         .user_task("legal_review", "法务核验", assignee="'u_fa1'")
         .user_task(
