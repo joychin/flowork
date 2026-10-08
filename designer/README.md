@@ -49,12 +49,16 @@ npm run dev        # http://localhost:5173,/api 代理到 8901
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
+| GET  | `/api/health` | 健康检查 |
 | GET  | `/api/node-kinds` | 节点类型元数据 + 各 Spec 的 JSON Schema |
 | GET  | `/api/definitions` | 定义汇总(草稿/已发布版本号) |
 | GET  | `/api/definitions/{code}` | 定义详情(含最新草稿 Spec) |
 | PUT  | `/api/definitions/{code}` | 保存草稿(就地更新或新建草稿版本) |
 | POST | `/api/definitions/{code}/publish` | 发布(校验失败 → 422 + issues) |
 | POST | `/api/validate` | 设计时校验(不落库) |
+| POST | `/api/dry-run` | 路由预演(样例变量走一遍图) |
+| POST | `/api/formula/preview` | CEL 公式试算(样例值) |
+| POST | `/api/definitions/{code}/diff` | 语义 diff(草稿 vs 最新发布) |
 
 ## 目录
 
@@ -66,13 +70,18 @@ designer/
 │   ├── adapter.ts           # Spec → React Flow 元素派生(带内容签名缓存,未变元素不重渲染) + 条件摘要
 │   ├── edgeInsert.ts        # 「节点插入连线中间」几何判定(smoothstep 路径采样找最近线)
 │   ├── types.ts             # 与 pydantic 模型同构的类型
+│   ├── App.tsx              # 两态壳:定义列表 ⇄ 设计器
+│   ├── main.tsx / index.css # 入口与样式
 │   └── components/
-│       ├── DefinitionList.tsx   # 定义列表 / 新建
-│       ├── Canvas.tsx           # 画布(受控渲染)
-│       ├── FlowNodes.tsx        # 自定义节点(矩形/圆/菱形)+ 连线(点击连线/条件标签)
-│       ├── Palette.tsx          # registry 驱动调色板
-│       ├── RightPanel.tsx       # 属性 / Spec JSON / 校验 三 Tab
-│       ├── SchemaForm.tsx       # JSON Schema 递归表单
-│       ├── Topbar.tsx           # 生命周期状态 + 发布入口
-│       └── PublishDialog.tsx    # 发布确认(错误拦截/警告提示)
+│       ├── DefinitionList.tsx      # 定义列表 / 新建
+│       ├── Canvas.tsx              # 画布(受控渲染)
+│       ├── FlowNodes.tsx           # 自定义节点(矩形/圆/菱形)+ 连线(点击连线/条件标签)
+│       ├── Palette.tsx             # registry 驱动调色板
+│       ├── RightPanel.tsx          # 属性 / Spec JSON / 校验 三 Tab
+│       ├── SchemaForm.tsx          # JSON Schema 递归表单
+│       ├── Topbar.tsx              # 生命周期状态 + 发布入口
+│       ├── PublishDialog.tsx       # 发布确认(错误拦截/警告提示)
+│       ├── DryRunDialog.tsx        # 路由预演(样例变量编辑 + 结果)
+│       ├── ConnectMenu.tsx         # 拖线到空白处的快捷新建菜单
+│       └── DevErrorBoundary.tsx    # 开发期错误边界
 ```

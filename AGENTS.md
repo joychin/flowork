@@ -87,14 +87,14 @@ P0-5 启动幂等三策略（reject/return_existing/allow_duplicate，唯一索�
 P0-7 all 汇聚可达性放行（engine/join_gate.py）｜P1：消息服务/Job 租约 worker 面/pause-resume-terminate/
 错误二分（resolve 五动作）/wf_variable_index/定义生命周期（retire-purge-drift）/身份快照 actor_context/
 deadline 列表+实例级时限+escalate/anticipate 只读预判。DoD 全链路（单 SQLite 文件零配置）已验证；
-下一程：REST /v2 搜索面（§12）与 MCP 17 工具（§13，M7）、Alembic 基线迁移（§14 尾注）。
+下一程：REST /v2 搜索面（§12）与 MCP 18 工具（§13，M7）、Alembic 基线迁移（§14 尾注）。
 代码 REVIEW 修复批（2026-10-07 第二批提交）：dead_letter 统一/消息防重收窄 message_id/暂停全动作
 拦截/驳回契约/时限终态事件/文件拆分（repository·runtime·incident·anticipate·orm_v2，engine 主文件回归
 ≤300 行）。残留超标（既有债务，非本轮引入）：kernel.py 534、task_actions.py 470、task_service.py 364、
 validator.py 368——拆解随 M 系 REST/MCP 前的重构刀处理。
 
-当前快照（2026-10-08）：**624 个测试全绿**；web API（`flowork/web`）与设计器前端（`designer/`）已可用；
-黑盒验收套件 `tests/suite`（82 例，含驳回/异常走查 demo）落地。
+当前快照（2026-10-08）：**625 个测试全绿**；web API（`flowork/web`）与设计器前端（`designer/`）已可用；
+黑盒验收套件 `tests/suite`（含驳回/异常走查 demo）落地。
 **变量读写接口批（2026-10-08，spec §10/§11/§12/§13/§14 + variable-io-api.md，REST 随 /v2 批、MCP 随 M7 仅登记）**：
 RuntimeService 变量面（update_variables 三门槛：白名单=声明∪input schema∪既有键、保留键拒、类型对位、
 ≤256KB、终态拒；variables_of 只读；variable_history 血缘）；wf_variable_history 全写方留痕表
@@ -174,3 +174,25 @@ forward_reachable/can_reach_end）+ `validator_graph.py` 图级 lint 两规则�
 判据与运行时放行门同源（join_gate 改 import 复用，语义零变化），条件未命中臂
 不告警（不复活已移除的 advance.all_conditional_arm）。④ docs/integration.md 新增
 「并发模型」声明节（一句话串行化模型 + 竞态测试矩阵证据索引）。624 测试全绿。
+
+**卫生批+文档收口（2026-10-08，能力补足盘点后续；表达式数据面 F5 顺带完成）**：
+① designer EdgeForm datalist 死代码块删除（datalist 挂不了 textarea 且无消费）。
+② 三个贴线/超标文件拆分守 300 行红线（Mixin 组合、入口类不变）：history_service
+329→283（archive_instance→history_archive.py）、validator_conditions 309→168
+（check_variable_references→validator_references.py 规则组三）、scheduler 305→155
+（策略执行四方法→jobs/strategies.py）；`tests/suite/test_file_size_contract.py`
+行数守卫测试（flowork/*.py ≤300 行，超标即红）。
+③ 过期注释清理：loader shim/asteval/变量端口表述（flow.py/conditions.py/
+expr/__init__/spi/__init__/cel_poc.py）+ 包地图 expr/spi 两行对齐现役结构。
+④ **F5 spec 收口**：spec §2.2 condition 字段表 FlowCondition→str(CEL)、§2.5 会签
+出口字段去掉退役专用语法、§4.3 补判断面事实目录（now/prev_task/node()，
+instance.* 标未实现后续项）、§11 状态列对齐 P1 实况+签名对齐（offset 分页）、
+C.4 补 now/prev_task/node() 三行（形状对齐 tasks/facts.py）；expression-dataface.md
+状态行标 F5 完成。
+⑤ 文档现状收口：docs/API.md（save_definition/publish→deploy/update_draft 死方法名
+修正+补 MessageService/JobService worker 面/pause 族/retire 族/route_decisions/
+anticipate/幂等三策略）；README.md 里程碑刷新+去 headless 矛盾；llms.txt 补
+docs/product/ 权威索引；integration.md 补 v2 六表+目录表+CLI 清单+resolve 五动作
++history_level audit 口径+对接面实况；designer/README API 表补 4 条+目录补 6 文件。
+⑥ MCP 工具数统一为 **18**（kernel-v2 spec §13 权威；AGENTS.md 17→18；engine-v1
+01 §6/00/04 加注——8 个为 M-B 首发子集，纪律不变）。625 测试全绿。
