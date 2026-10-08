@@ -292,7 +292,7 @@ git 里的 YAML/JSON 文件      ← 编辑态事实来源：人和 AI 只改这
 
 | 写法 | 用在哪 | 现状→v2 |
 |---|---|---|
-| **CEL 公式**（`SequenceFlow.condition` 及取人/超时/关联键/映射表达式） | 连线路由条件（**单轨**：condition 直接存公式字符串）；以及所有「需要一个值」的地方 | ✓ 求值器已换 **CEL**（cel-python，expr/cel.py；取人/超时/关联键/映射表达式位仍待各自功能面接入，见 4.2） |
+| **CEL 公式**（`SequenceFlow.condition` 及取人/超时/关联键/映射表达式） | 连线路由条件（**单轨**：condition 直接存公式字符串）；以及所有「需要一个值」的地方 | ✓ 全位点已接线（**位点统一批，2026-10-08**：取人/传阅/超时改派/子流程映射均 CEL，见 4.2；关联键随等待节点） |
 | **专用出口语法**（`">=50%"` / `"all"` / `">=1"`） | 仅会签 approve_exit/disapprove_exit | ✓ 保留（比例基数＝参与人数，CEL 表达不了百分比语义，不硬套） |
 
 **单轨化决策**（结构化条件组 groups 退役，理由成文）：
@@ -302,24 +302,31 @@ git 里的 YAML/JSON 文件      ← 编辑态事实来源：人和 AI 只改这
 - CEL 静态检查（§4.3）已追平 groups「天然合法」的可靠性优势。
 - AI 生成 Spec 时写一行 CEL 比嵌套 groups 结构更自然。
 - 可视化点选体验不丢：设计器将以下拉拼装**生成 CEL 文本**（辅助输入而非第二存储语言）。
-- 兼容：旧 JSON 的 groups 经 loader shim 机械翻译为 CEL（definitions.definition，
-  12 操作符映射表，不可翻译明确报错）；错误语义统一为求值错→技术故障（挂起+故障单）。
+- 兼容：**零兼容**（系统早期，用户拍板 2026-10-08）——不做旧格式翻译，存量模板/测试
+  直接迁移；错误语义统一为求值错→技术故障（挂起+故障单，spec §8）。
+- **位点统一**（同日批次）：取人（assignee/assignees/recipients 每项一表达式，字面人
+  写 `'u_a'`、`originator` 魔法词退役为 `initiator`）、超时改派（fire 时求值，task.* 可用）、
+  子流程映射（输入父上下文/输出子上下文；裸变量名是 CEL 子集零迁移）全部换绑
+  evaluate_formula_value；取人/传阅/改派/映射求值错同样挂起+故障单；ParticipantFunctions
+  双注册面退役，ExpressionFunctions（cel_vocabulary）成唯一注册面。
 
 ### 4.2 CEL 的使用位置清单（全篇唯一清单）
 
-| 位置 | 字段 | 示例 |
-|---|---|---|
-| 连线条件 | flows[].condition（CEL 字符串） | `input.amount > 300 && input.urgency == "high"` |
-| 取人 | user_task/cc_task 的 assignee/recipients | `manager_of(initiator)`、`users_with_role("finance")`（函数来自 contrib 或宿主注册，见 5.5） |
-| 超时改派 | deadlines[].action=reassign 时的目标 | `manager_of(task.assignee)`（超时求值可用 task.*，见 C.4） |
-| 消息关联键 | 等待节点的 correlation_key | `"input.order_no"`（求值结果用于匹配） |
-| 子流程映射 | input_mappings/output_mappings 的右侧 | `input.amount * 1.0` |
+| 位置 | 字段 | 示例 | 状态 |
+|---|---|---|---|
+| 连线条件 | flows[].condition（CEL 字符串） | `input.amount > 300 && input.urgency == "high"` | ✓ |
+| 取人 | user_task/cc_task 的 assignee/assignees/recipients（每项一表达式） | `'u_chen'`、`manager_of(initiator)`、`users_with_role("finance")`（函数来自 contrib 或宿主注册，见 5.5；null/空=查无传播） | ✓ |
+| 超时改派 | deadlines[].action=reassign 时的 reassign_to | `manager_of(task.assignee)`（fire 时求值，task.* 见 C.4；结果须单个非空人） | ✓ |
+| 消息关联键 | 等待节点的 correlation_key | `"input.order_no"`（求值结果用于匹配） | 随等待节点 |
+| 子流程映射 | input_mappings/output_mappings 的右侧 | `input.amount * 1.0`（输入在父上下文、输出在子上下文求值；裸标识符缺键→None） | ✓ |
 
 ### 4.3 CEL 求值语义【v2 改造】
 
-- **变量命名空间**：`input.*`（流程契约输入）、`vars.*`（运行中变量）、`task.*`（任务上下文）、`initiator`（发起人 Subject）。
+- **变量命名空间**：`input.*`（流程契约输入）、`vars.*`（运行中变量）、`task.*`（任务快照，当前仅超时改派位注入，见 C.4）、`initiator`（发起人 Subject，全位点注入）。
 - **自定义函数**：经 SPI 端口 `ExpressionFunctions` 注册（第 9 章），**必须声明参数与返回类型**（词汇表 one_user/users/groups/mixed/bool，兼容性检查见 5.5）。**内核函数注册表出厂为空**——取人词汇全部由宿主注册（v2.1 定稿，理由见 5.5）；`flowork.contrib` 便利包提供 `manager_of` / `users_with_role` / `has_role` 三个常见词汇，纯基于 OrgDirectory 端口实现，一行代码挂上。
-- **设计时检查**：`validate` 阶段做 CEL 静态类型检查——引用未声明变量、类型不匹配直接报错（K8s CRD 校验同款体验）。
+- **设计时检查**：`validate` 阶段做 CEL 静态检查（**全位点**，validator_conditions）——
+  编译护栏/引用未声明变量/未注册函数与参数个数直接报错（K8s CRD 校验同款体验）；
+  取人与改派位的根调用另做 returns 类型对位（谓词 bool 误用发布期即拦）。
 - **运行时限制**：非图灵完备；表达式长度上限 2KB、二元运算链 ≤256 项、变量序列化 ≤1MB（P0-1 决策护栏；进程内硬超时为已知缺口）。
 - **P0-1 先做 PoC**：cel-python 的函数注册/类型检查/性能验证；不达标换 cel-expr-python（C++ 绑定），本章接口不变。
 
@@ -443,6 +450,8 @@ register("approvers_of", fn, params=["one_user"], returns="mixed")
 | 进入节点（候选制） | 定格为候选 | 保留引用，认领时展开 |
 | 超时 reassign/升级 | 重新求值（可用 task.*，见 C.4） | 重新求值 |
 | 条件求值 | 即时比较 | 走谓词即时 |
+
+（位点统一注：assignee/assignees/recipients 为**进入节点**逐项 CEL 求值；子流程输入映射在子实例启动时按父上下文求值、输出映射在子完结时按子上下文求值；静态检查对全位点同一套——见 4.3。）
 
 ### 5.6 身份快照（actor_context）【v2.1 新增：审计的严肃性要求】
 
@@ -760,7 +769,7 @@ Subject：`user:{id} | agent:{id} | role:{name} | org:{code}`；ParticipantSet �
 |---|---|
 | input.* | 按 input JSON Schema |
 | vars.* | 运行时（静态检查按声明，未声明按 any 降级为警告） |
-| task.* | 固定形状：task.id:string、task.assignee:subject、task.outcome:string——节点离开时的条件求值、输出映射、超时策略求值可用 |
+| task.* | 固定形状：task.id:string、task.assignee:subject、task.outcome:string——超时策略求值可用（✓ 已实现，fire 时注入；活任务 outcome=null）；节点离开时的条件求值/输出映射注入为后续项（静态检查：非改派位引用 task.* 即 ERROR task_unavailable） |
 | initiator | subject |
 
 contrib 签名（便利包，可选，纯基于 OrgDirectory 端口实现）：`manager_of(one_user)→one_user`（吃 user:/agent: 返回其上级；吃 org: 返回部门负责人；吃 role: 设计期报错）、`users_with_role(string)→users`、`has_role(one_user, string)→bool`。部门类词汇（org_of 等）数据源无端口支撑，由宿主注册。自定义函数注册必须带全签名（参数＋返回，词汇表见 5.5）；内核注册表出厂为空。

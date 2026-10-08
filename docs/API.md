@@ -74,11 +74,11 @@ engine.close()
 ## Jobs（超时）
 
 `engine.jobs.tick()` 推进到期 Job（测试/外部定时器）；`start(interval_seconds)/stop()` APScheduler 后台轮询。
-超时配置在节点上：`timeout=TimeoutPolicy(due_minutes=60, strategy="notify"|"auto_approve"|"auto_reject")`。
+超时配置在节点上（v2.2 列表形态，同一节点最多 8 条）：`deadlines=[TaskDeadline(after_minutes=60, action="notify"|"reassign"|"escalate"|"auto_approve"|"auto_reject", reassign_to=...)]`；`reassign_to` 为 CEL 表达式（fire 时求值，可用 `task.assignee`）。
 
 ## 扩展点
 
 - **自定义节点**：`FlowNode` 子类（Spec）+ `NodeBehavior` 子类 + `config.node_registry.register(kind, spec, behavior)`。
 - **声明式钩子**：节点 `hooks={"on_exit": {"handler": "name", "params": {...}}}` + `engine.register_handler("name", fn)`。
-- **取人函数**：`config.participant_functions.register("my_pick", fn)`（参数 `ctx, org, *args`）。
+- **表达式函数（全位点 CEL 词汇）**：经 `ExpressionFunctions` 端口注册（必须带 FunctionSignature 签名，纯读闭包无 ctx）；一行挂官方词汇：`config.expression_functions = contrib.cel_vocabulary(org)`（manager_of/users_with_role/has_role）。取人/传阅/改派/连线条件/子流程映射共用同一注册面。
 - **Listener SPI**（M6 后增强）：消费 `wf_event_outbox` 事件表即可（Notifier 端口二期接消息推送）。

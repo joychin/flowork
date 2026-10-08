@@ -92,7 +92,7 @@ deadline 列表+实例级时限+escalate/anticipate 只读预判。DoD 全链路
 ≤300 行）。残留超标（既有债务，非本轮引入）：kernel.py 534、task_actions.py 470、task_service.py 364、
 validator.py 368——拆解随 M 系 REST/MCP 前的重构刀处理。
 
-当前快照（2026-10-08）：**525 个测试全绿**；web API（`flowork/web`）与设计器前端（`designer/`）已可用；
+当前快照（2026-10-08）：**541 个测试全绿**；web API（`flowork/web`）与设计器前端（`designer/`）已可用；
 黑盒验收套件 `tests/suite`（80 例，含驳回/异常走查 demo）落地。
 **重构刀清账（2026-10-08）**：kernel.py 534→281（token_records/task_records Mixin）、task_actions.py 470→213
 （task_admin/task_cc/task_rework）、task_service.py 364→199（tasks/reject_flow + contract.input_schema_of）、
@@ -105,8 +105,19 @@ validator 设计时静态检查（未声明变量 ERROR/未注册函数有注册
 路由期 CEL 求值错按错误二分包 EngineExecutionError（挂起+故障单），groups 支直抛语义不变。
 公式语法＝CEL（`&&/||/true/false/null/in [..]/.size()`），上限 2048 单源 definitions/flow.py。
 **条件单轨化（2026-10-08，spec §4.1 v2.3）**：结构化条件组 groups 退役，`SequenceFlow.condition`
-直存 CEL 公式字符串（FlowCondition/ConditionItem/ConditionOperator 三类已删）；旧 JSON 经
-loader shim 机械翻译（definitions.definition，12 操作符映射表）；**条件求值错误语义统一为技术
+直存 CEL 公式字符串（FlowCondition/ConditionItem/ConditionOperator 三类已删）；**条件求值错误语义统一为技术
 故障**（FormulaError→EngineExecutionError→挂起+故障单，groups 支直抛回滚语义退役）；设计器
 EdgeForm 单轨公式编辑。范围变更已记《本期建设边界》backlog 附录。
+**CEL 位点统一批（2026-10-08，spec §4.2，零兼容）**：全表达式位单语法——取人（assignee/
+assignees 每项一表达式）、传阅（recipients）、超时改派（reassign_to fire 时求值 + `task.*`
+快照注入，spec C.4）、子流程映射值（输入父上下文/输出子上下文）全部换绑
+`expr.cel.evaluate_formula_value`（值变体，BoolType 收敛原生 bool；中文变量名不毒化求值）；
+上下文构造统一 `expr/context.py`（expression_context + expression_functions_of，叶子模块防环）。
+**删除**：条件 loader shim（零兼容，存量已迁移）、取人迷你语法（participants/functions.py）、
+简化解析（participants/simple.py）、`EngineConfig.participant_functions` 双注册面
+（contrib.org_vocabulary 退役，cel_vocabulary 成唯一注册面）、originator 魔法词（→initiator）。
+**语义配套**：求值错=技术故障全位点一致；查无传播（null/空贡献空，spec §5.5）；谓词误用取人位
+发布期拦（cel.root_call 根调用 returns 对位）；validator 静态检查扩至全位点（iter_expression_positions，
+连线位 condition.* / 节点位 expression.* 规则名；task.* 仅改派位可用；输出映射跳过父侧未声明变量检查）；
+加签重排存具体人（resolver.resolve_subjects 共用件）。范围变更已记《本期建设边界》backlog。
 
