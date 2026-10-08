@@ -6,7 +6,7 @@ import { Icon } from './FlowNodes'
 
 export function Palette() {
   const meta = useStore((s) => s.meta)
-  const addNode = useStore((s) => s.addNode)
+  const startPaletteDrag = useStore((s) => s.startPaletteDrag)
 
   const groups = useMemo(() => {
     const out = new Map<string, { kind: string; label: string; defaults: Record<string, unknown>; color: string; icon: string }[]>()
@@ -36,15 +36,12 @@ export function Palette() {
             <button
               key={`${item.kind}-${i}`}
               className="palette-item"
-              draggable
-              onDragStart={(e) => {
-                e.dataTransfer.setData(
-                  'application/flowork-node',
-                  JSON.stringify({ kind: item.kind, defaults: { ...item.defaults, name: item.label } }),
-                )
-                e.dataTransfer.effectAllowed = 'copy'
+              onPointerDown={(e) => {
+                // 指针驱动拖拽:Canvas 挂窗口级 pointermove/up;原地松手 = 点击添加
+                if (e.button !== 0) return
+                e.preventDefault()
+                startPaletteDrag({ kind: item.kind, defaults: { ...item.defaults, name: item.label }, label: item.label })
               }}
-              onClick={() => addNode(item.kind, { ...item.defaults, name: item.label })}
               title={`拖到画布任意位置,或点击添加「${item.label}」`}
             >
               <span className="palette-ico" style={{ background: `${item.color}1a`, color: item.color }}>

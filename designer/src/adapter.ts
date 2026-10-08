@@ -1,5 +1,8 @@
-/** Spec ↔ React Flow 元素适配:spec 是唯一事实源,RF 元素全部派生 */
+/** Spec ↔ React Flow 元素适配:spec 是唯一事实源,RF 元素全部派生。
+ *  元素对象带内容签名缓存:未变化的节点/连线复用旧对象,React Flow 据此跳过重渲染 ——
+ *  拖拽中校验/保存响应到达、点击选中、连线高亮等只重绘真正受影响的元素。 */
 
+import type { Edge, Node as RFNode } from '@xyflow/react'
 import { edgeId, type NodeKindMeta, type Spec, type ValidateIssue } from './types'
 
 export type NodeData = {
@@ -65,14 +68,37 @@ export const OPERATOR_OPTIONS: [string, string][] = [
   ['contains', '包含'], ['starts_with', '前缀匹配'], ['is_empty', '为空'], ['is_not_empty', '非空'],
 ]
 
+type Cached<T> = { sig: string; value: T }
+
+/** 元素对象缓存:按定义 code 分代;Canvas 侧 useRef 持有 */
+export type ElementsCache = {
+  code: string
+  nodes: Map<string, Cached<RFNode>>
+  edges: Map<string, Cached<Edge>>
+}
+
+export function newElementsCache(): ElementsCache {
+  return { code: '', nodes: new Map(), edges: new Map() }
+}
+
+export type Selection = { type: 'node' | 'edge'; id: string } | null
+
 export function toFlowElements(
   spec: Spec,
   metaByKind: Record<string, NodeKindMeta>,
   issues: ValidateIssue[],
-  selected: { type: 'node' | 'edge'; id: string } | null,
+  selected: Selection,
   pendingConnect: string | null,
-  hit?: DryRunHit | null,
+  hit: DryRunHit | null | undefined,
+  cache: ElementsCache,
+  splitTarget: string | null = null,
 ) {
+  if (cache.code !== spec.code) {
+    cache.nodes.clear()
+    cache.edges.clear()
+    cache.code = spec.code
+  }
+
   const nodeIssues = new Map<string, 'error' | 'warning'>()
   for (const issue of issues) {
     if (!issue.node) continue
@@ -82,14 +108,40 @@ export function toFlowElements(
     }
   }
 
+  // ui 元数据签名按 kind 缓存,避免逐节点 stringify
+  const uiSigs = new Map<string, string>()
+  const uiSig = (kind: string) => {
+    let v = uiSigs.get(kind)
+    if (v === undefined) {
+      v = JSON.stringify(metaByKind[kind]?.ui ?? null)
+      uiSigs.set(kind, v)
+    }
+    return v
+  }
+
   const nodes = spec.nodes.map((n) => {
     const meta = metaByKind[n.kind]
     const size = nodeSize(meta)
     const pos = spec.layout[n.code] ?? { x: 0, y: 0 }
-    return {
+    const sig = [
+      pos.x, pos.y, n.kind, n.name ?? '', typeof n.route_mode === 'string' ? n.route_mode : '',
+      nodeIssues.get(n.code) ?? '', pendingConnect === n.code ? 1 : 0,
+      hit?.nodes.has(n.code) ? 1 : 0,
+      selected?.type === 'node' && selected.id === n.code ? 1 : 0,
+      uiSig(n.kind),
+    ].join('|')
+    const cached = cache.nodes.get(n.code)
+    if (cached && cached.sig === sig) return cached.value
+    const node: RFNode = {
       id: n.code,
       type: `fk_${meta?.ui?.shape ?? 'rect'}`,
       position: { x: pos.x, y: pos.y },
+      width: size.w,
+      height: size.h,
+      // v12 受控模式:measured 只从用户 node 的 measured 字段 adopt(不回退 width/height)。
+      // 节点尺寸由 SIZE 表确定,显式声明 → 打开定义后的测量窗口期(ResizeObserver 回填前)
+      // 拖动不再是"未初始化"(error#015)死状态
+      measured: { width: size.w, height: size.h },
       selected: selected?.type === 'node' && selected.id === n.code,
       data: {
         code: n.code,
@@ -105,49 +157,75 @@ export function toFlowElements(
       draggable: true,
       selectable: true,
     }
+    cache.nodes.set(n.code, { sig, value: node })
+    return node
   })
+
+  // 同端兄弟偏移:同一节点的多条入边(按源排序)/多条出边(按目标排序)端点垂直错开,
+  // 否则它们的端点与改道拖点完全重叠,多线汇入时无法分辨要拖哪条
+  const byTarget = new Map<string, string[]>() // target → 排序后的 source 列表
+  const bySource = new Map<string, string[]>() // source → 排序后的 target 列表
+  for (const f of spec.flows) {
+    if (!byTarget.has(f.target)) byTarget.set(f.target, [])
+    if (!bySource.has(f.source)) bySource.set(f.source, [])
+    byTarget.get(f.target)!.push(f.source)
+    bySource.get(f.source)!.push(f.target)
+  }
+  for (const list of byTarget.values()) list.sort()
+  for (const list of bySource.values()) list.sort()
+  const spread = (list: string[] | undefined, key: string) => {
+    if (!list || list.length < 2) return 0
+    const i = list.indexOf(key)
+    return (i - (list.length - 1) / 2) * 18
+  }
 
   const edges = spec.flows.map((f) => {
     const id = edgeId(f.source, f.target)
     const summary = conditionSummary(f)
     const isSelected = selected?.type === 'edge' && selected.id === id
+    const isHighlighted = isSelected || splitTarget === id
     const isHit = hit?.edges.has(id) ?? false
-    return {
+    const srcOffset = spread(bySource.get(f.source), f.target)
+    const tgtOffset = spread(byTarget.get(f.target), f.source)
+    const sig = [f.source, f.target, summary, isHighlighted ? 1 : 0, isHit ? 1 : 0, srcOffset, tgtOffset, JSON.stringify(f)].join('|')
+    const cached = cache.edges.get(id)
+    if (cached && cached.sig === sig) return cached.value
+    const edge: Edge = {
       id,
       source: f.source,
       target: f.target,
       type: 'fk_smooth',
       selected: isSelected,
-      reconnectable: true,
-      // 命中带略窄于默认 20:减少多条边交汇时改道手柄被相邻边命中带遮挡
       interactionWidth: 14,
       label: summary || undefined,
       labelShowBg: true,
       labelBgPadding: [6, 3] as [number, number],
       labelBgBorderRadius: 6,
       labelBgStyle: {
-        fill: isSelected ? '#2f6bff' : isHit ? '#16a34a' : '#ffffff',
+        fill: isHighlighted ? '#2f6bff' : isHit ? '#16a34a' : '#ffffff',
         fillOpacity: 0.95,
-        stroke: isSelected ? '#2f6bff' : isHit ? '#16a34a' : '#dbe3ef',
+        stroke: isHighlighted ? '#2f6bff' : isHit ? '#16a34a' : '#dbe3ef',
         strokeWidth: 1,
       },
       labelStyle: {
-        fill: isSelected || isHit ? '#ffffff' : '#475569',
+        fill: isHighlighted || isHit ? '#ffffff' : '#475569',
         fontSize: 11,
-        fontWeight: isSelected || isHit ? 600 : 400,
+        fontWeight: isHighlighted || isHit ? 600 : 400,
       },
       style: {
-        stroke: isSelected ? '#2f6bff' : isHit ? '#16a34a' : '#9aa8bd',
-        strokeWidth: isSelected || isHit ? 2.2 : 1.6,
+        stroke: isHighlighted ? '#2f6bff' : isHit ? '#16a34a' : '#9aa8bd',
+        strokeWidth: isHighlighted || isHit ? 2.2 : 1.6,
       },
       markerEnd: {
         type: 'arrowclosed' as const,
         width: 16,
         height: 16,
-        color: isSelected ? '#2f6bff' : isHit ? '#16a34a' : '#9aa8bd',
+        color: isHighlighted ? '#2f6bff' : isHit ? '#16a34a' : '#9aa8bd',
       },
-      data: { flow: f, hit: isHit },
+      data: { flow: f, hit: isHit, highlight: isHighlighted, srcOffset, tgtOffset },
     }
+    cache.edges.set(id, { sig, value: edge })
+    return edge
   })
 
   return { nodes, edges }

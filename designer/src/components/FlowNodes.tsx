@@ -1,6 +1,8 @@
-/** React Flow 自定义节点(矩形/圆)+ 连线,样式与交互(点击连线)在这里挂 */
+/** React Flow 自定义节点(矩形/圆)+ 连线,样式与交互(点击连线)在这里挂。
+ *  组件全部 memo:配合 adapter 的元素签名缓存,未变化的节点/连线不重渲染。 */
 
-import { Handle, Position, BaseEdge, EdgeText, getSmoothStepPath } from '@xyflow/react'
+import { memo, useCallback, useRef, useState } from 'react'
+import { Handle, Position, BaseEdge, EdgeLabelRenderer, EdgeText, getSmoothStepPath, useStore as useRFStore } from '@xyflow/react'
 import type { EdgeProps, NodeProps } from '@xyflow/react'
 import type { NodeData } from '../adapter'
 import { useStore } from '../store'
@@ -103,7 +105,26 @@ function useNodeClick(data: NodeData) {
   }
 }
 
-export function RectNode({ data, selected }: NodeProps) {
+// 改道拖点沿路径取点的采样器(隐藏 SVG path;仅选中的 1-2 条边每次渲染算两次,开销可忽略)
+let reconnectSampler: SVGPathElement | null = null
+function sampleEdgePath(d: string, insetStart: number, insetEnd: number): [{ x: number; y: number }, { x: number; y: number }] {
+  if (!reconnectSampler) {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+    svg.setAttribute('style', 'position:absolute;width:0;height:0;overflow:hidden;pointer-events:none')
+    reconnectSampler = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+    svg.appendChild(reconnectSampler)
+    document.body.appendChild(svg)
+  }
+  reconnectSampler.setAttribute('d', d)
+  const total = reconnectSampler.getTotalLength()
+  const a = Math.min(insetStart, total * 0.25)
+  const b = Math.min(insetEnd, total * 0.25)
+  const p1 = reconnectSampler.getPointAtLength(a)
+  const p2 = reconnectSampler.getPointAtLength(Math.max(a + 1, total - b))
+  return [{ x: p1.x, y: p1.y }, { x: p2.x, y: p2.y }]
+}
+
+function RectNodeImpl({ data, selected }: NodeProps) {
   const d = data as unknown as NodeData
   const color = d.meta?.ui?.color ?? '#2563eb'
   const onClick = useNodeClick(d)
@@ -124,7 +145,7 @@ export function RectNode({ data, selected }: NodeProps) {
   )
 }
 
-export function CircleNode({ data, selected }: NodeProps) {
+function CircleNodeImpl({ data, selected }: NodeProps) {
   const d = data as unknown as NodeData
   const color = d.meta?.ui?.color ?? '#16a34a'
   const onClick = useNodeClick(d)
@@ -141,25 +162,102 @@ export function CircleNode({ data, selected }: NodeProps) {
   )
 }
 
-export function SmoothEdge(props: EdgeProps) {
-  const { id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, label, selected, markerEnd } = props
-  const hit = Boolean((props.data as { hit?: boolean } | undefined)?.hit)
+function SmoothEdgeImpl(props: EdgeProps) {
+  const { id, source, target, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, label, selected, markerEnd } = props
+  const d = props.data as { hit?: boolean; highlight?: boolean; srcOffset?: number; tgtOffset?: number } | undefined
+  const hit = Boolean(d?.hit)
+  const highlight = Boolean(d?.highlight)
+  // 拖拽聚焦:订阅 RF 内部 store 的拖动节点(不经过受控 nodes 管线,不会触发画布级重渲染);
+  // 值只在拖动开始/结束各变化一次,期间所有边零开销
+  const draggingId = useRFStore((s) => {
+    for (const n of s.nodes) if (n.dragging) return n.id
+    return null
+  })
+  const dragFocus = draggingId != null && (draggingId === source || draggingId === target)
+  const active = selected || highlight || dragFocus
   const [path, labelX, labelY] = getSmoothStepPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, borderRadius: 14 })
   const deleteEdge = useStore((s) => s.deleteSelection)
   const select = useStore((s) => s.select)
+  const reconnectFlow = useStore((s) => s.reconnectFlow)
+  const showToast = useStore((s) => s.showToast)
+  // 改道拖拽:选中后从两端拖点拖到目标节点身上松手;多线汇入同一节点时拖点按兄弟偏移错开
+  const [rehover, setRehover] = useState<string | null>(null)
+  const rehoverRef = useRef<string | null>(null)
+  const startReconnect = useCallback(
+    (end: 'source' | 'target') => (e: React.PointerEvent) => {
+      e.stopPropagation()
+      e.preventDefault()
+      // 几何命中:遍历节点矩形判断落点(不依赖 elementFromPoint —— 改接拖动期间
+      // 其他节点可能被聚焦 CSS 置 pointer-events:none,DOM 命中会穿透;矩形判定免疫)
+      const nodeUnder = (cx: number, cy: number) => {
+        for (const el of document.querySelectorAll('.react-flow__node')) {
+          if (el.classList.contains('dragging')) continue
+          const r = el.getBoundingClientRect()
+          if (cx >= r.x && cx <= r.x + r.width && cy >= r.y && cy <= r.y + r.height) {
+            return el.getAttribute('data-id')
+          }
+        }
+        return null
+      }
+      const valid = (a: string, b: string) => {
+        const st = useStore.getState().spec
+        if (!st || a === b) return false
+        const an = st.nodes.find((n) => n.code === a)
+        const bn = st.nodes.find((n) => n.code === b)
+        if (!an || !bn || an.kind === 'end' || bn.kind === 'start') return false
+        return true
+      }
+      const onMove = (ev: PointerEvent) => {
+        const id2 = nodeUnder(ev.clientX, ev.clientY)
+        if (id2 !== rehoverRef.current) { rehoverRef.current = id2; setRehover(id2) }
+      }
+      const finish = (ev: PointerEvent, cancel: boolean) => {
+        cleanup()
+        if (cancel) return
+        const dropId = nodeUnder(ev.clientX, ev.clientY)
+        if (!dropId || dropId === source || dropId === target) return
+        const next = end === 'target' ? { source, target: dropId } : { source: dropId, target }
+        if (!valid(next.source, next.target)) {
+          showToast('无法改接:end 不可出线 / start 不可入线')
+          return
+        }
+        reconnectFlow(source, target, next.source, next.target)
+      }
+      const onUp = (ev: PointerEvent) => finish(ev, false)
+      const onKey = (ev: KeyboardEvent) => { if (ev.key === 'Escape') finish(ev as unknown as PointerEvent, true) }
+      const cleanup = () => {
+        window.removeEventListener('pointermove', onMove)
+        window.removeEventListener('pointerup', onUp)
+        window.removeEventListener('keydown', onKey)
+        rehoverRef.current = null
+        setRehover(null)
+        document.body.classList.remove('fk-dragging')
+      }
+      document.body.classList.add('fk-dragging')
+      window.addEventListener('pointermove', onMove)
+      window.addEventListener('pointerup', onUp)
+      window.addEventListener('keydown', onKey)
+    },
+    [source, target, reconnectFlow, showToast],
+  )
+  const srcOff = d?.srcOffset ?? 0
+  const tgtOff = d?.tgtOffset ?? 0
+  // 拖点沿路径向内缩进 36px:不再压住节点的出线口/入线口(端口保持可拉新线),
+  // 同时仍骑在自己的线上;多线兄弟偏移(±18px)保证互相不叠
+  const [startPt, endPt] = selected ? sampleEdgePath(path, 36, 36) : [{ x: sourceX, y: sourceY }, { x: targetX, y: targetY }]
   return (
-    <g onClick={() => select({ type: 'edge', id })} style={{ cursor: 'pointer' }}>
-      <BaseEdge id={id} path={path} markerEnd={markerEnd} style={{ stroke: selected ? '#2f6bff' : hit ? '#16a34a' : '#9aa8bd', strokeWidth: selected || hit ? 2.2 : 1.6 }} />
+    <g className={dragFocus ? 'drag-focus' : undefined} onClick={() => select({ type: 'edge', id })} style={{ cursor: 'pointer' }}>
+      <BaseEdge id={id} path={path} markerEnd={markerEnd} style={{ stroke: active ? '#2f6bff' : hit ? '#16a34a' : '#9aa8bd', strokeWidth: active || hit ? 2.2 : 1.6 }} />
       {label ? (
         <EdgeText
           x={labelX}
           y={labelY - 4}
           label={label}
-          labelStyle={{ fill: selected || hit ? '#fff' : '#475569', fontSize: 11, fontWeight: selected || hit ? 600 : 400 }}
+          labelStyle={{ fill: active || hit ? '#fff' : '#475569', fontSize: 11, fontWeight: active || hit ? 600 : 400 }}
           labelShowBg
           labelBgPadding={[6, 3]}
           labelBgBorderRadius={6}
-          labelBgStyle={{ fill: selected ? '#2f6bff' : hit ? '#16a34a' : '#fff', stroke: selected ? '#2f6bff' : hit ? '#16a34a' : '#dbe3ef', strokeWidth: 1 }}
+          labelBgStyle={{ fill: active ? '#2f6bff' : hit ? '#16a34a' : '#fff', stroke: active ? '#2f6bff' : hit ? '#16a34a' : '#dbe3ef', strokeWidth: 1 }}
         />
       ) : null}
       {selected && (
@@ -168,9 +266,29 @@ export function SmoothEdge(props: EdgeProps) {
           <path d={`M${labelX - 3.4},${labelY + 12.6} l6.8,6.8 m0,-6.8 l-6.8,6.8`} stroke="#dc2626" strokeWidth="1.6" strokeLinecap="round" />
         </g>
       )}
+      {selected && (
+        <EdgeLabelRenderer>
+          <div
+            className={`fk-reconnect ${rehover ? 'armed' : ''}`}
+            style={{ left: startPt.x, top: startPt.y + srcOff, transform: 'translate(-50%, -50%)' }}
+            onPointerDown={startReconnect('source')}
+            title="拖到别的节点 = 改接起点(Esc 取消)"
+          />
+          <div
+            className={`fk-reconnect ${rehover ? 'armed' : ''}`}
+            style={{ left: endPt.x, top: endPt.y + tgtOff, transform: 'translate(-50%, -50%)' }}
+            onPointerDown={startReconnect('target')}
+            title="拖到别的节点 = 改接终点(Esc 取消)"
+          />
+        </EdgeLabelRenderer>
+      )}
     </g>
   )
 }
+
+export const RectNode = memo(RectNodeImpl)
+export const CircleNode = memo(CircleNodeImpl)
+export const SmoothEdge = memo(SmoothEdgeImpl)
 
 export const nodeTypes = { fk_rect: RectNode, fk_circle: CircleNode }
 export const edgeTypes = { fk_smooth: SmoothEdge }

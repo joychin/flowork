@@ -165,18 +165,100 @@ input, select, textarea { font-family: inherit; }
   background: #f8fafc; border: 1px dashed var(--line); border-radius: 8px;
 }
 
+/* 面板指针拖拽:自绘幽灵(不用 HTML5 原生拖拽,避免 OS 级跟手延迟) */
+.palette-item { touch-action: none; user-select: none; -webkit-user-select: none; }
+.fk-dragging, .fk-dragging * { cursor: grabbing !important; }
+.palette-ghost {
+  position: fixed; top: 0; left: 0; z-index: 1000; pointer-events: none; opacity: 0;
+  display: flex; align-items: center; gap: 6px; padding: 5px 10px;
+  background: #fff; border: 1.5px solid var(--line); border-radius: 8px;
+  font-size: 12px; color: #1e293b; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18);
+}
+
 /* ── 画布 ─────────────────────────────── */
 .canvas-wrap { flex: 1; position: relative; }
 .canvas-wrap .react-flow { background: var(--bg); }
-.canvas-wrap.drop-ready { box-shadow: inset 0 0 0 2.5px rgba(47, 107, 255, 0.45); }
-.canvas-wrap.drop-ready .react-flow { background: #eaf0ff; transition: background 0.15s; }
+/* 拖入可放置提示:用独立描边层,不动整块 .react-flow 的背景(全画布重绘在拖拽悬停期间非常贵) */
+.canvas-wrap.drop-ready::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 4;
+  border: 2.5px solid rgba(47, 107, 255, 0.45); border-radius: 2px;
+}
 .fk-minimap { border-radius: 8px; border: 1px solid var(--line); }
 
-/* 节点:悬停浮起、拖拽光标、进场淡入(只动 opacity,不碰 RF 的定位 transform) */
+/* 节点:悬停浮起、拖拽光标。
+   注意:不要给节点挂进场动画 —— 开启视口虚拟化后平移画布会反复挂载节点,动画会不停重放(闪烁+重绘) */
 .react-flow__node { cursor: grab; }
 .react-flow__node.dragging { cursor: grabbing; }
-.react-flow__node { animation: node-in 0.18s ease-out; }
-@keyframes node-in { from { opacity: 0; } }
+
+/* 拖拽聚焦(参考 bpmn-js 拖拽降噪):用 CSS :has() 感知 RF 原生的 .dragging 类 ——
+   零 JS 状态、零重渲染;拖动时其余节点/连线压暗、不再响应悬停,被拖节点置顶。 */
+.canvas-wrap:has(.react-flow__node.dragging) .react-flow__node:not(.dragging),
+.canvas-wrap:has(.react-flow__node.dragging) .react-flow__edge:not(.drag-focus) { opacity: 0.25; }
+.canvas-wrap:has(.react-flow__node.dragging) .react-flow__node:not(.dragging) { pointer-events: none; }
+.react-flow__node.dragging { z-index: 1000 !important; opacity: 1; }
+.canvas-wrap:has(.react-flow__node.dragging) .fk-minimap { opacity: 0.35; }
+.react-flow__node, .react-flow__edge { transition: opacity 0.12s ease; }
+
+/* 连线改道拖点:小号空心圆(视觉与原生端口一致,不喧宾夺主);多线按兄弟偏移错开、
+   沿路径内缩不压端口;悬停显示 title 提示,拖动悬停到合法节点时变绿 */
+.fk-reconnect {
+  position: absolute; width: 12px; height: 12px; border-radius: 50%;
+  background: #fff; border: 2px solid #2f6bff; cursor: grab;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.15); z-index: 10;
+  transition: transform 0.1s, border-color 0.1s, background 0.1s;
+  /* EdgeLabelRenderer 容器层默认 pointer-events:none,子元素必须显式开启 */
+  pointer-events: all;
+}
+.fk-reconnect:hover { transform: translate(-50%, -50%) scale(1.35); }
+.fk-reconnect.armed { border-color: #16a34a; background: #f0fff4; }
+
+/* 拖线中:所有节点显示虚线环提示「可以放到我身上」(排除连线来源节点自己) */
+.react-flow:has(.react-flow__connection) .react-flow__node {
+  outline: 2px dashed rgba(47, 107, 255, 0.45); outline-offset: 4px; border-radius: 14px;
+}
+.react-flow:has(.react-flow__connection) .react-flow__node:has(.connectingfrom),
+.react-flow:has(.react-flow__connection) .react-flow__node:has(.connectingto) { outline: none; }
+
+/* 连线快捷新建菜单(拖线松手到空白处;n8n/Dify 模式) */
+.connect-menu {
+  position: fixed; z-index: 1000; background: #fff; border: 1px solid var(--line); border-radius: 10px;
+  box-shadow: 0 12px 36px rgba(15, 23, 42, 0.16); overflow: hidden;
+}
+.connect-menu-head {
+  padding: 8px 12px 6px; font-size: 11px; color: var(--sub); border-bottom: 1px solid var(--line);
+  background: #f8fafc;
+}
+.connect-menu-list { max-height: 300px; overflow-y: auto; padding: 4px; }
+.connect-menu-item {
+  display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 8px; border: 0; background: none;
+  border-radius: 7px; font-size: 12.5px; color: #1e293b; cursor: pointer; text-align: left;
+}
+.connect-menu-item:hover { background: #eef3ff; }
+.connect-menu-foot {
+  padding: 5px 12px; font-size: 10.5px; color: var(--sub); border-top: 1px solid var(--line); background: #f8fafc;
+}
+
+/* 拖动对齐辅助线(Figma 模式):接近其他节点中心/边缘时出现,磁吸对齐 */
+.fk-align-guides { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 5; }
+.fk-align-guide { position: absolute; background: #f43f5e; pointer-events: none; }
+.fk-align-guide.v { width: 1px; top: 0; bottom: 0; }
+.fk-align-guide.h { height: 1px; left: 0; right: 0; }
+
+/* 错误边界卡片(DevErrorBoundary):组件树崩溃时替代白屏 */
+.eb-wrap {
+  position: fixed; inset: 0; z-index: 2000; display: flex; align-items: center; justify-content: center;
+  background: #f1f5f9;
+}
+.eb-card {
+  max-width: 460px; padding: 28px 32px; background: #fff; border: 1px solid var(--line);
+  border-radius: 14px; box-shadow: 0 12px 40px rgba(15, 23, 42, 0.12); text-align: center;
+}
+.eb-title { font-size: 17px; font-weight: 700; color: #1e293b; margin-bottom: 10px; }
+.eb-desc { font-size: 13px; color: #64748b; line-height: 1.8; margin-bottom: 18px; }
+.eb-desc code {
+  display: block; margin-top: 8px; padding: 6px 10px; background: #f8fafc; border: 1px solid var(--line);
+  border-radius: 6px; font-size: 11.5px; color: #dc2626; word-break: break-all;
+}
 .fnode, .fnode.circle { transition: box-shadow 0.15s, border-color 0.15s; }
 .fnode:hover { box-shadow: 0 6px 18px rgba(15, 23, 42, 0.12); }
 .fnode.circle:hover { box-shadow: 0 4px 14px rgba(15, 23, 42, 0.14); }
@@ -186,6 +268,10 @@ input, select, textarea { font-family: inherit; }
 .react-flow__handle {
   width: 11px; height: 11px; background: #fff; border: 1.6px solid #94a3b8; border-radius: 50%;
   transition: border-color 0.12s, background 0.12s, box-shadow 0.12s;
+}
+/* 低缩放下 handle 渲染仅 3px 拖线起点点不中(压测观察③):命中带向外扩 8px 保底 */
+.react-flow__handle::after {
+  content: ''; position: absolute; inset: -8px; border-radius: 50%;
 }
 .react-flow__handle:hover { border-color: var(--brand); background: var(--brand-weak); box-shadow: 0 0 0 4px rgba(47, 107, 255, 0.16); }
 .react-flow__handle.port-active { border-color: var(--warn); background: #fef3c7; box-shadow: 0 0 0 4px rgba(217, 119, 6, 0.2); }

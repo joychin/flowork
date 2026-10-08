@@ -16,10 +16,8 @@ export type Selection = { type: 'node' | 'edge'; id: string } | null
 export type RightTab = 'props' | 'json' | 'issues'
 export type SaveState = 'idle' | 'saving' | 'saved' | 'error'
 
-const AUTOSAVE_DELAY = 800
 const AUTOVALIDATE_DELAY = 500
 
-let saveTimer: ReturnType<typeof setTimeout> | null = null
 let validateTimer: ReturnType<typeof setTimeout> | null = null
 let toastTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -34,6 +32,8 @@ type StoreState = {
   issues: ValidateIssue[]
   rightTab: RightTab
   saveState: SaveState
+  /** 草稿有未保存变更(手动保存模式,无自动保存) */
+  dirty: boolean
   toast: string | null
   pendingConnect: string | null
   publishOpen: boolean
@@ -41,6 +41,12 @@ type StoreState = {
   publishDiffLoading: boolean
   dryRunOpen: boolean
   dryRun: DryRunResult | null
+  /** 面板拖拽会话:非空 = 正在从调色板拖出一个节点(指针驱动,不走 HTML5 原生拖拽) */
+  paletteDrag: { kind: string; defaults: Record<string, unknown>; label: string } | null
+  /** 连线拖到空白处弹出的快捷新建菜单(记录落点与来源节点;bx/bw=画布横向范围,用于菜单折返定位) */
+  connectMenu: {
+    sx: number; sy: number; fx: number; fy: number; source: string; bx: number; bw: number
+  } | null
   past: string[]
   future: string[]
 }
@@ -52,12 +58,23 @@ type StoreActions = {
   backToListing: () => void
   mutate: (
     fn: (draft: Spec) => void,
-    opts?: { history?: boolean; resave?: boolean; keepDryRun?: boolean },
+    opts?: { history?: boolean; keepDryRun?: boolean },
   ) => void
   addNode: (kind: string, defaults: Record<string, unknown>, pos?: { x: number; y: number }) => void
+  /** 把新节点插到一条已有连线中间:原线替换为 source→新节点→target,条件/默认标记随前段走。
+   *  仅供调色板拖入(显式插入意图);画布节点拖动不做插线,避免移动节点时误改拓扑。 */
+  insertNodeOnFlow: (
+    kind: string, defaults: Record<string, unknown>, pos: { x: number; y: number }, source: string, target: string,
+  ) => void
+  /** 在 pos 处新建节点并立即连一条 source→新节点 的边(连线拖到空白的快捷新建;n8n/Dify 模式) */
+  addNodeAndConnect: (kind: string, defaults: Record<string, unknown>, pos: { x: number; y: number }, source: string) => void
   connect: (source: string, target: string) => void
   reconnectFlow: (oldSource: string, oldTarget: string, source: string, target: string) => void
   setPendingConnect: (code: string | null) => void
+  startPaletteDrag: (item: { kind: string; defaults: Record<string, unknown>; label: string }) => void
+  cancelPaletteDrag: () => void
+  openConnectMenu: (m: { sx: number; sy: number; fx: number; fy: number; source: string; bx: number; bw: number }) => void
+  closeConnectMenu: () => void
   select: (sel: Selection) => void
   deleteSelection: () => void
   setNodePos: (code: string, x: number, y: number) => void
@@ -90,6 +107,7 @@ export const useStore = create<Store>((set, get) => ({
   issues: [],
   rightTab: 'props',
   saveState: 'idle',
+  dirty: false,
   toast: null,
   pendingConnect: null,
   publishOpen: false,
@@ -97,6 +115,8 @@ export const useStore = create<Store>((set, get) => ({
   publishDiffLoading: false,
   dryRunOpen: false,
   dryRun: null,
+  paletteDrag: null,
+  connectMenu: null,
   past: [],
   future: [],
 
@@ -123,6 +143,7 @@ export const useStore = create<Store>((set, get) => ({
       past: [],
       future: [],
       saveState: 'idle',
+      dirty: false,
       pendingConnect: null,
     })
     get().validateNow()
@@ -149,8 +170,9 @@ export const useStore = create<Store>((set, get) => ({
     set({ defInfo: null, spec: null, selection: null, pendingConnect: null })
   },
 
-  /** 所有写路径的唯一入口:structuredClone 后应用变更,历史/保存/校验自动跟上。
-   *  keepDryRun: 纯布局类变更不使预演结果失效（路由拓扑未变）。 */
+  /** 所有写路径的唯一入口:structuredClone 后应用变更,历史/脏标记/校验自动跟上。
+   *  keepDryRun: 纯布局类变更不使预演结果失效（路由拓扑未变）。
+   *  注意:mutate 只改内存并标脏,落库靠手动保存(顶栏按钮 / Ctrl+S)或发布前的强制保存。 */
   mutate(fn, opts = {}) {
     const { spec } = get()
     if (!spec) return
@@ -161,19 +183,14 @@ export const useStore = create<Store>((set, get) => ({
     if (history) {
       set((s) => ({ past: [...s.past.slice(-49), JSON.stringify(spec)], future: [] }))
     }
-    set(keepDryRun ? { spec: draft } : { spec: draft, dryRun: null })
-    if (opts.resave !== false) {
-      scheduleSave(set, get)
-      scheduleValidate(get)
-    }
+    set(keepDryRun ? { spec: draft, dirty: true } : { spec: draft, dryRun: null, dirty: true })
+    scheduleValidate(get)
   },
 
   addNode(kind, defaults, pos) {
     const { spec, selection } = get()
     if (!spec) return
-    const codes = new Set(spec.nodes.map((n) => n.code))
-    let code = kind
-    for (let i = 2; codes.has(code); i++) code = `${kind}_${i}`
+    const code = nextNodeCode(spec, kind)
     // 放置位置:拖放落点 > 选中节点右侧 > 整体最右再往右一格
     let x: number, y: number
     if (pos) {
@@ -187,6 +204,38 @@ export const useStore = create<Store>((set, get) => ({
     get().mutate((draft) => {
       draft.nodes.push({ code, name: '', kind, ...defaults })
       draft.layout[code] = { x, y }
+    })
+    set({ selection: { type: 'node', id: code }, rightTab: 'props' })
+  },
+
+  insertNodeOnFlow(kind, defaults, pos, source, target) {
+    const { spec } = get()
+    if (!spec) return
+    const flow = spec.flows.find((f) => f.source === source && f.target === target)
+    if (!flow) return
+    const code = nextNodeCode(spec, kind)
+    get().mutate((draft) => {
+      draft.nodes.push({ code, name: '', kind, ...defaults })
+      draft.layout[code] = { x: Math.round(pos.x), y: Math.round(pos.y) }
+      draft.flows = draft.flows.flatMap((f) =>
+        f.source === source && f.target === target
+          ? [{ ...f, source: f.source, target: code }, { source: code, target: f.target }]
+          : [f],
+      )
+    })
+    set({ selection: { type: 'node', id: code }, rightTab: 'props' })
+    get().showToast(`已把「${String(defaults.name ?? code)}」插入 ${source} → ${target}`)
+  },
+
+  addNodeAndConnect(kind, defaults, pos, source) {
+    const { spec } = get()
+    if (!spec) return
+    if (!spec.nodes.some((n) => n.code === source)) return
+    const code = nextNodeCode(spec, kind)
+    get().mutate((draft) => {
+      draft.nodes.push({ code, name: '', kind, ...defaults })
+      draft.layout[code] = { x: Math.round(pos.x), y: Math.round(pos.y) }
+      draft.flows.push({ source, target: code })
     })
     set({ selection: { type: 'node', id: code }, rightTab: 'props' })
   },
@@ -215,6 +264,22 @@ export const useStore = create<Store>((set, get) => ({
 
   setPendingConnect(code) {
     set({ pendingConnect: code })
+  },
+
+  startPaletteDrag(item) {
+    set({ paletteDrag: item })
+  },
+
+  cancelPaletteDrag() {
+    set({ paletteDrag: null })
+  },
+
+  openConnectMenu(m) {
+    set({ connectMenu: m, pendingConnect: null })
+  },
+
+  closeConnectMenu() {
+    set({ connectMenu: null })
   },
 
   /** 拖动边的端点改道:替换 source/target(带自环/重复/存在性检查) */
@@ -271,12 +336,12 @@ export const useStore = create<Store>((set, get) => ({
   },
 
   setNodePos(code, x, y) {
-    // 拖拽不进历史(避免刷屏),但要触发保存;纯布局变更不失效预演
+    // 一次拖动 = 一条撤销记录(拖乱可 Ctrl+Z 找回);纯布局变更不失效预演
     get().mutate(
       (draft) => {
         draft.layout[code] = { x, y }
       },
-      { history: false, keepDryRun: true },
+      { keepDryRun: true },
     )
   },
 
@@ -290,8 +355,7 @@ export const useStore = create<Store>((set, get) => ({
       if (!Array.isArray(next.nodes) || !Array.isArray(next.flows)) throw new Error('缺少 nodes / flows')
       if (get().defInfo) next.code = get().defInfo!.code
       ensureLayout(next)
-      get().mutate((draft) => Object.assign(draft, next), { resave: false })
-      scheduleSave(set, get)
+      get().mutate((draft) => Object.assign(draft, next))
       get().validateNow()
       get().showToast('已应用 JSON — 画布已从 Spec 重绘')
       return true
@@ -320,6 +384,7 @@ export const useStore = create<Store>((set, get) => ({
       const saved = await api.saveDraft(defInfo.code, spec)
       set((s) => ({
         saveState: 'saved',
+        dirty: false,
         defInfo: s.defInfo ? { ...s.defInfo, draftVersion: saved.version, name: spec.name || s.defInfo.name } : null,
       }))
     } catch (err) {
@@ -337,6 +402,7 @@ export const useStore = create<Store>((set, get) => ({
       set((s) => ({
         defInfo: s.defInfo ? { ...s.defInfo, publishedVersion: result.version, draftVersion: null } : null,
         publishOpen: false,
+        dirty: false,
       }))
       await reloadListing(set)
       get().showToast(`✅ 已发布 v${result.version} — 运行中实例不受影响,新实例使用新版本`)
@@ -406,8 +472,7 @@ export const useStore = create<Store>((set, get) => ({
     const { past, spec } = get()
     if (!past.length || !spec) return
     const prev = past[past.length - 1]
-    set((s) => ({ past: s.past.slice(0, -1), future: [JSON.stringify(spec), ...s.future].slice(0, 50), spec: JSON.parse(prev) }))
-    scheduleSave(set, get)
+    set((s) => ({ past: s.past.slice(0, -1), future: [JSON.stringify(spec), ...s.future].slice(0, 50), spec: JSON.parse(prev), dirty: true }))
     scheduleValidate(get)
   },
 
@@ -415,8 +480,7 @@ export const useStore = create<Store>((set, get) => ({
     const { future, spec } = get()
     if (!future.length || !spec) return
     const next = future[0]
-    set((s) => ({ future: s.future.slice(1), past: [...s.past, JSON.stringify(spec)].slice(-50), spec: JSON.parse(next) }))
-    scheduleSave(set, get)
+    set((s) => ({ future: s.future.slice(1), past: [...s.past, JSON.stringify(spec)].slice(-50), spec: JSON.parse(next), dirty: true }))
     scheduleValidate(get)
   },
 
@@ -428,6 +492,14 @@ export const useStore = create<Store>((set, get) => ({
 }))
 
 // ── 内部工具 ──────────────────────────────────────────────
+
+/** 未占用的节点编码:kind, kind_2, kind_3 … */
+function nextNodeCode(spec: Spec, kind: string): string {
+  const codes = new Set(spec.nodes.map((n) => n.code))
+  let code = kind
+  for (let i = 2; codes.has(code); i++) code = `${kind}_${i}`
+  return code
+}
 
 /** 推进策略推断：≥2 入边且未显式设置的节点自动落字段（用户显式选择优先，只填空不覆盖）。
  *  入边全为无条件 → all（并行汇合，等齐）；含条件/默认边 → any（分支合并，任一到达即开始）。 */
@@ -483,6 +555,21 @@ function layoutSpec(spec: Spec, { force }: { force: boolean }) {
   const GAP_X = 260
   const GAP_Y = 130
   const sortedLevels = [...levels.keys()].sort((a, b) => a - b)
+  // 长链蛇形折行(压测观察①):层数超过 8 层的一维图会宽到 fitView 失效(minZoom 卡底)、
+  // 两端节点无法同屏 —— 自动按 8 列换行成二维网格,奇数行反向行走
+  const MAX_COLS = 8
+  if (sortedLevels.length > MAX_COLS) {
+    for (const level of sortedLevels) {
+      const codes = levels.get(level)!
+      const row = Math.floor(level / MAX_COLS)
+      const col0 = level % MAX_COLS
+      const col = row % 2 === 1 ? MAX_COLS - 1 - col0 : col0
+      codes.forEach((code, i) => {
+        spec.layout[code] = { x: 60 + col * GAP_X, y: 120 + row * (GAP_Y + 40) + i * 40 }
+      })
+    }
+    return
+  }
   for (const level of sortedLevels) {
     const codes = levels.get(level)!
     const height = (codes.length - 1) * GAP_Y
@@ -499,12 +586,6 @@ async function reloadListing(set: (partial: Partial<StoreState>) => void) {
   } catch {
     set({ listingLoading: false })
   }
-}
-
-function scheduleSave(set: (partial: Partial<StoreState>) => void, get: () => Store) {
-  if (saveTimer) clearTimeout(saveTimer)
-  set({ saveState: 'saving' })
-  saveTimer = setTimeout(() => void get().saveNow(), AUTOSAVE_DELAY)
 }
 
 function scheduleValidate(get: () => Store) {

@@ -30,6 +30,11 @@ function Designer() {
         e.shiftKey ? redo() : undo()
         return
       }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault()
+        void useStore.getState().saveNow()
+        return
+      }
       if (e.key === 'Escape') {
         useStore.getState().setPendingConnect(null)
         return
@@ -41,7 +46,18 @@ function Designer() {
       }
     }
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    // 手动保存模式:有未保存变更时关页/刷新给一次拦截提示
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (useStore.getState().dirty) {
+        e.preventDefault()
+        e.returnValue = ''
+      }
+    }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('beforeunload', onBeforeUnload)
+    }
   }, [deleteSelection, undo, redo])
 
   return (

@@ -7,6 +7,8 @@ export function Topbar() {
   const spec = useStore((s) => s.spec)
   const issues = useStore((s) => s.issues)
   const saveState = useStore((s) => s.saveState)
+  const dirty = useStore((s) => s.dirty)
+  const saveNow = useStore((s) => s.saveNow)
   const back = useStore((s) => s.backToListing)
   const setPublishOpen = useStore((s) => s.setPublishOpen)
   const setRightTab = useStore((s) => s.setRightTab)
@@ -39,6 +41,14 @@ export function Topbar() {
       <button className="icon-btn" onClick={redo} disabled={!future} title="重做 (Ctrl+Shift+Z)">↻</button>
       <button className="icon-btn" onClick={relayout} title="按分层重新排布全部节点">⌗</button>
       <button className="btn" onClick={openDryRun} title="按流程变量样例值预演路由,画布高亮路径">▶ 试运行</button>
+      <button
+        className={`btn ${dirty ? 'btn-primary' : ''}`}
+        onClick={() => void saveNow()}
+        disabled={!dirty || saveState === 'saving'}
+        title="保存草稿 (Ctrl+S / Cmd+S)"
+      >
+        {saveState === 'saving' ? '保存中…' : dirty ? '● 保存' : '已保存'}
+      </button>
       <span className={`save-state ${saveState}`}>
         {saveState === 'saving' && '保存中…'}
         {saveState === 'saved' && '✓ 已保存'}
