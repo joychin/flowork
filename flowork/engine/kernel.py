@@ -3,17 +3,18 @@
 流程：activate（建令牌→on_enter→完成判定）→ finish（on_exit→记事件→路由）→
 route（行为给出出边→逐边推进）。节点语义全部由 NodeBehavior 提供；
 内核只负责状态、计数、事件与守卫（死循环/乐观锁）。
+令牌/任务记录面拆至 token_records.py / task_records.py（Mixin 组合，入口类不变）。
 """
 
 from __future__ import annotations
 
-import uuid
 from typing import TYPE_CHECKING, Any
 
-from flowork.definitions.builtin import UserTaskSpec
 from flowork.definitions.definition import ProcessDefinition, load_definition
 from flowork.engine.context import RuntimeNodeContext
 from flowork.engine.join_gate import should_release
+from flowork.engine.task_records import TaskRecordsMixin
+from flowork.engine.token_records import TokenRecordsMixin
 from flowork.errors import FloworkError
 from flowork.events.domain import DomainEvent
 from flowork.runtime.behavior import NodeBehavior
@@ -26,7 +27,7 @@ if TYPE_CHECKING:
     from flowork.definitions.flow import SequenceFlow
     from flowork.definitions.node import FlowNode
     from flowork.engine.config import EngineConfig
-    from flowork.persistence.orm import ProcessInstanceRow, TaskRow, TokenRow
+    from flowork.persistence.orm import ProcessInstanceRow, TokenRow
 
 __all__ = ["DeadLoopError", "EngineExecutionError", "Kernel", "RouteError"]
 
@@ -51,11 +52,7 @@ class RejectTargetMissing(EngineExecutionError):
     """驳回目标节点缺失（未配置且无来源节点）。"""
 
 
-def _new_id() -> str:
-    return uuid.uuid4().hex
-
-
-class Kernel:
+class Kernel(TaskRecordsMixin, TokenRecordsMixin):
     """单命令内的执行内核（不提交事务；事务由 Command 管线管理）。"""
 
     def __init__(
@@ -94,225 +91,6 @@ class Kernel:
         if instance_id and self.command_ctx is not None:
             self.command_ctx.instances_touched.add(instance_id)
 
-    # —— 令牌 ——
-
-    def create_token(
-        self,
-        session: Session,
-        instance: ProcessInstanceRow,
-        activity_code: str,
-        *,
-        source_activity_code: str | None = None,
-        reject_flag: bool = False,
-        item_count: int = 0,
-        manual_participants: dict[str, list[str]] | None = None,
-    ) -> TokenRow:
-        from flowork.persistence.orm import TokenRow as _TokenRow
-
-        existing = self.tokens(session, instance.id)
-        next_no = max((t.token_no for t in existing), default=0) + 1
-        token = _TokenRow(
-            id=_new_id(),
-            instance_id=instance.id,
-            token_no=next_no,
-            activity_code=activity_code,
-            source_activity_code=source_activity_code,
-            state=TokenState.UNFINISHED.value,
-            reject_flag=reject_flag,
-            item_count=item_count,
-            manual_participants=manual_participants or {},
-        )
-        session.add(token)
-        session.flush()
-        return token
-
-    def tokens(
-        self, session: Session, instance_id: str, states: tuple[str, ...] | None = None
-    ) -> list[TokenRow]:
-        from sqlalchemy import select
-
-        from flowork.persistence.orm import TokenRow as _TokenRow
-
-        stmt = (
-            select(_TokenRow)
-            .where(_TokenRow.instance_id == instance_id)
-            .order_by(_TokenRow.token_no)
-        )
-        rows = list(session.scalars(stmt))
-        if states:
-            rows = [row for row in rows if row.state in states]
-        return rows
-
-    def touch_token(self, session: Session, token: TokenRow) -> None:
-        session.flush()
-
-    def finish_token(
-        self, session: Session, token: TokenRow, *, approval_exit: str | None = None
-    ) -> None:
-        token.state = TokenState.FINISHED.value
-        token.finished_at = self.config.now()
-        if approval_exit:
-            token.approval_exit = approval_exit
-        session.flush()
-
-    def cancel_token(self, session: Session, token: TokenRow) -> None:
-        """取消令牌并撤销其未办任务（任务落历史 outcome=cancelled）。"""
-        from flowork.persistence.orm import TaskHistoryRow
-
-        for task in self.tasks(session, token.instance_id, token_id=token.id):
-            session.add(
-                TaskHistoryRow(
-                    id=_new_id(),
-                    task_id=task.id,
-                    instance_id=task.instance_id,
-                    token_id=task.token_id,
-                    activity_code=task.activity_code,
-                    name=task.name,
-                    assignee=task.assignee,
-                    task_type=task.task_type,
-                    outcome="cancelled",
-                    context_payload=task.context_payload,
-                    acted_by="system",
-                )
-            )
-            session.delete(task)
-        token.state = TokenState.CANCELLED.value
-        token.finished_at = self.config.now()
-        session.flush()
-
-    # —— 任务 ——
-
-    def create_task(
-        self,
-        session: Session,
-        instance: ProcessInstanceRow,
-        token: TokenRow,
-        node: FlowNode,
-        *,
-        assignee: str,
-        name: str,
-        task_type: str = "approval",
-        context_payload: dict[str, Any] | None = None,
-        root_task_id: str | None = None,
-    ) -> TaskRow:
-        from flowork.persistence.orm import TaskRow as _TaskRow
-
-        task = _TaskRow(
-            id=_new_id(),
-            instance_id=instance.id,
-            token_id=token.id,
-            activity_code=node.code,
-            name=name,
-            assignee=assignee,
-            task_type=task_type,
-            context_payload=context_payload or {},
-            root_task_id=root_task_id,
-        )
-        session.add(task)
-        session.flush()
-        self.record_event(
-            DomainEvent.TASK_CREATED,
-            {
-                "task_id": task.id,
-                "activity_code": node.code,
-                "assignee": assignee,
-                "task_type": task_type,
-            },
-            instance.id,
-        )
-        return task
-
-    def tasks(
-        self,
-        session: Session,
-        instance_id: str,
-        *,
-        token_id: str | None = None,
-        assignee: str | None = None,
-    ) -> list[TaskRow]:
-        from sqlalchemy import select
-
-        from flowork.persistence.orm import TaskRow as _TaskRow
-
-        stmt = select(_TaskRow).where(_TaskRow.instance_id == instance_id)
-        if token_id:
-            stmt = stmt.where(_TaskRow.token_id == token_id)
-        if assignee:
-            stmt = stmt.where(_TaskRow.assignee == assignee)
-        return list(session.scalars(stmt))
-
-    MAX_ACTOR_CONTEXT_BYTES = 4096  # spec §5.6：JSON 袋上限，超限拒收
-
-    def _actor_context_of(self, actor: str) -> dict[str, Any]:
-        """身份快照：完成事务内经目录端口定格操作者当时的岗位/角色/部门。
-
-        目录未配置（裸跑/单测）→ {}；内核不解析、不校验、不理解内容——
-        存什么、存多细是宿主的审计策略（spec §5.6）。
-        """
-        import json as _json
-
-        org = self.engine.config.org if self.engine else None
-        if org is None:
-            return {}
-        try:
-            snapshot = dict(org.snapshot(actor) or {})
-        except Exception:
-            return {}
-        if (
-            len(_json.dumps(snapshot, ensure_ascii=False).encode("utf-8"))
-            > self.MAX_ACTOR_CONTEXT_BYTES
-        ):
-            raise EngineExecutionError(
-                f"身份快照超限（>{self.MAX_ACTOR_CONTEXT_BYTES}B）：宿主 snapshot 返回内容过大"
-            )
-        return snapshot
-
-    def archive_task(
-        self,
-        session: Session,
-        task: TaskRow,
-        *,
-        outcome: str,
-        comment: str = "",
-        actor: str = "system",
-        as_agent: bool = False,
-        idempotency_key: str | None = None,
-        cause_token_id: str | None = None,
-    ) -> None:
-        """任务归档：写历史（append-only）并从活表删除。"""
-        import uuid as _uuid
-
-        from flowork.persistence.orm import TaskHistoryRow
-
-        cost = (
-            (self.config.now() - task.created_at).total_seconds()
-            if task.created_at is not None
-            else 0.0
-        )
-        session.add(
-            TaskHistoryRow(
-                id=_uuid.uuid4().hex,
-                task_id=task.id,
-                instance_id=task.instance_id,
-                token_id=task.token_id,
-                activity_code=task.activity_code,
-                name=task.name,
-                assignee=task.assignee,
-                task_type=task.task_type,
-                outcome=outcome,
-                comment=comment,
-                context_payload=task.context_payload,
-                acted_by=actor,
-                acted_as_agent=as_agent,
-                idempotency_key=idempotency_key,
-                cause_token_id=cause_token_id,
-                cost_seconds=cost,
-                actor_context=self._actor_context_of(actor),
-            )
-        )
-        session.delete(task)
-        session.flush()
-
     # —— 实例 ——
 
     def complete_instance(
@@ -337,37 +115,6 @@ class Kernel:
         """无条件出边（default 视同无条件）；条件路由见 engine.routing.select_outgoing。"""
         definition = self.definition_of(ctx.session, ctx.instance)
         return [flow for flow in definition.outgoing(ctx.node.code) if flow.condition is None]
-
-    # —— 参与者 / 已办 ——
-
-    def resolve_participants(self, ctx: RuntimeNodeContext, spec: UserTaskSpec) -> Any:
-        """参与者解析入口：返回 ParticipantResolution（todo + skipped）。"""
-        from flowork.participants.resolver import (
-            ParticipantResolution,
-            fallback_when_empty,
-            resolve_with_delegation,
-        )
-
-        org = self.engine.config.org if self.engine else None
-        if org is not None:
-            resolution, _delegation = resolve_with_delegation(
-                ctx, spec, org, self.engine.config.participant_functions
-            )
-            if not resolution.todo and not resolution.skipped:
-                return fallback_when_empty(ctx, spec, org)
-            return resolution
-        from flowork.participants.simple import resolve_simple
-
-        return ParticipantResolution(todo=resolve_simple(ctx, spec))
-
-    def handled_assignees(self, session: Session, token_id: str) -> list[str]:
-        """令牌下已实际办理过的人（排除被取消的任务）。"""
-        from sqlalchemy import select
-
-        from flowork.persistence.orm import TaskHistoryRow
-
-        stmt = select(TaskHistoryRow).where(TaskHistoryRow.token_id == token_id)
-        return [row.assignee for row in session.scalars(stmt) if row.outcome != "cancelled"]
 
     # —— 执行推进 ——
 
