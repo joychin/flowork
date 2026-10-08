@@ -20,6 +20,7 @@ from flowork.definitions.flow import MAX_FORMULA_LENGTH
 from flowork.errors import ConditionError
 
 __all__ = [
+    "CEL_BUILTIN_FUNCTIONS",
     "MAX_BINARY_OPS",
     "MAX_VARIABLE_BYTES",
     "FormulaError",
@@ -32,6 +33,32 @@ MAX_BINARY_OPS = 255  # 每个二元节点计一次运算；255 次 ⇒ 256 项
 
 # 变量序列化上限（间接约束 comprehension 可遍历的集合规模）。
 MAX_VARIABLE_BYTES = 1024 * 1024
+
+# CEL 内建全局函数（标准库 + comprehension 宏）：静态检查免检名单——
+# 未注册又不在名单内的函数调用才报「未知函数」（validator 侧使用）。
+CEL_BUILTIN_FUNCTIONS = frozenset(
+    {
+        "size",
+        "has",
+        "starts",
+        "ends",
+        "matches",
+        "string",
+        "double",
+        "int",
+        "uint",
+        "bytes",
+        "duration",
+        "timestamp",
+        "dyn",
+        "type",
+        "all",
+        "exists",
+        "exists_one",
+        "map",
+        "filter",
+    }
+)
 
 # comprehension 宏（方法或函数形态）：第一个参数是绑定变量，不算标识符引用。
 _COMPREHENSION_MACROS = frozenset({"all", "exists", "exists_one", "map", "filter"})

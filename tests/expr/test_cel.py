@@ -31,8 +31,11 @@ from flowork.expr.cel import (
         ("!urgent || amount < 10", {"urgent": True, "amount": 5}, True),
         ("flag == true", {"flag": True}, True),
         ("x == null", {"x": None}, True),
-        ('input.amount > 300 && input.urgency == "high"',
-         {"input": {"amount": 500, "urgency": "high"}}, True),
+        (
+            'input.amount > 300 && input.urgency == "high"',
+            {"input": {"amount": 500, "urgency": "high"}},
+            True,
+        ),
     ],
 )
 def test_cel_syntax_and_semantics(formula, variables, expected):
@@ -72,11 +75,11 @@ def test_custom_functions_injection():
 @pytest.mark.parametrize(
     ("formula", "variables"),
     [
-        ("amount >", {"amount": 1}),          # 语法错误（CELParseError）
-        ("nosuchvar > 1", {}),                 # 未声明变量（CELEvalError）
-        ("nosuchfn(1) == 2", {}),              # 未注册函数（CELEvalError）
+        ("amount >", {"amount": 1}),  # 语法错误（CELParseError）
+        ("nosuchvar > 1", {}),  # 未声明变量（CELEvalError）
+        ("nosuchfn(1) == 2", {}),  # 未注册函数（CELEvalError）
         ("amount / zero > 1", {"amount": 1, "zero": 0}),  # 求值错（除零）
-        ("input.amount > 1", {"input": 3}),    # 非法字段选择（int 无字段）
+        ("input.amount > 1", {"input": 3}),  # 非法字段选择（int 无字段）
     ],
 )
 def test_errors_normalized_to_formula_error(formula, variables):
@@ -144,7 +147,7 @@ def test_collect_identifiers_and_root_only():
 
 
 def test_collect_field_access_takes_root_only():
-    idents, _ = collect_references('input.amount > 300')
+    idents, _ = collect_references("input.amount > 300")
     assert idents == {"input"}
 
 

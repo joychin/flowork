@@ -223,7 +223,7 @@ def test_formula_via_branch(engine: ProcessEngine):
         .user_task("small", assignee="u_clerk")
         .end()
         .connect("start", "route")
-        .flow("route", "big", condition=FlowCondition(formula='amount > 5000 && urgent == true'))
+        .flow("route", "big", condition=FlowCondition(formula="amount > 5000 && urgent == true"))
         .flow("route", "small", default=True)
         .connect("big", "end")
         .connect("small", "end")

@@ -192,3 +192,112 @@ def test_assert_valid_raises_with_all_errors(registry):
     with pytest.raises(InvalidDefinition) as excinfo:
         assert_valid(definition, registry)
     assert any(i.rule == "structure.start.count" for i in excinfo.value.issues)
+
+
+# —— CEL 静态检查薄层（kernel-v2 §4.3）——
+
+
+def _cel_flow(registry, *, formula=None, declare=("amount", "urgent")):
+    from flowork.definitions.definition import ProcessVariable
+    from flowork.definitions.flow import FlowCondition
+
+    definition = (
+        FlowBuilder("cel")
+        .start()
+        .branch("gate")
+        .user_task("big", assignee="u_boss")
+        .user_task("small", assignee="u_clerk")
+        .end()
+        .connect("start", "gate")
+        .flow("gate", "big", condition=FlowCondition(formula=formula))
+        .flow("gate", "small", default=True)
+        .connect("big", "end")
+        .connect("small", "end")
+        .build(registry)
+    )
+    definition.variables = [ProcessVariable(name=name, type="number") for name in declare]
+    return definition
+
+
+class _FixedFunctions:
+    """测试用 ExpressionFunctions 最小实现（固定注册表）。"""
+
+    def __init__(self, table):
+        self._table = table
+
+    def functions(self):
+        return self._table
+
+
+def _registry_with(manager_params: int = 1):
+    from flowork.spi.ports import ExpressionFunction, FunctionSignature
+
+    return _FixedFunctions(
+        {
+            "manager_of": ExpressionFunction(
+                FunctionSignature(("one_user",) * manager_params, "one_user"), lambda u: u
+            )
+        }
+    )
+
+
+def test_cel_formula_parse_error_is_error(registry):
+    definition = _cel_flow(registry, formula="amount >")
+    assert "condition.formula.invalid" in error_rules(definition, registry)
+
+
+def test_cel_formula_unknown_variable_is_error(registry):
+    definition = _cel_flow(registry, formula="nope > 1")
+    assert "condition.variable.unknown" in error_rules(definition, registry)
+
+
+def test_cel_formula_declared_references_pass(registry):
+    definition = _cel_flow(registry, formula="amount > 100 && urgent >= 1")
+    rules = error_rules(definition, registry)
+    assert "condition.variable.unknown" not in rules
+    assert "condition.formula.invalid" not in rules
+
+
+def test_cel_builtin_function_and_initiator_pass(registry):
+    definition = _cel_flow(
+        registry, formula='items.size() > 1 && initiator == "u1"', declare=("items",)
+    )
+    rules = error_rules(definition, registry)
+    assert "condition.variable.unknown" not in rules
+    assert "condition.function.unknown" not in rules
+
+
+def test_cel_unknown_function_with_registry_is_error(registry):
+    functions = _registry_with()
+    definition = _cel_flow(registry, formula="nosuchfn(amount) == 1")
+    issues = validate_definition(definition, registry, expression_functions=functions)
+    matching = [i for i in issues if i.rule == "condition.function.unknown"]
+    assert matching and matching[0].level == IssueLevel.ERROR
+
+
+def test_cel_unknown_function_without_registry_warns(registry):
+    definition = _cel_flow(registry, formula="nosuchfn(amount) == 1")
+    issues = validate_definition(definition, registry)
+    matching = [i for i in issues if i.rule == "condition.function.unknown"]
+    assert matching and matching[0].level == IssueLevel.WARNING
+
+
+def test_cel_function_arity_mismatch_is_error(registry):
+    functions = _registry_with(manager_params=1)
+    definition = _cel_flow(registry, formula='manager_of(initiator, amount) == "u"')
+    issues = validate_definition(definition, registry, expression_functions=functions)
+    assert any(i.rule == "condition.function.arity" and i.level == IssueLevel.ERROR for i in issues)
+
+
+def test_cel_registered_function_passes(registry):
+    functions = _registry_with(manager_params=1)
+    definition = _cel_flow(registry, formula='manager_of(initiator) == "u:li"')
+    issues = validate_definition(definition, registry, expression_functions=functions)
+    assert not any(
+        i.rule.startswith("condition.function") and i.level == IssueLevel.ERROR for i in issues
+    )
+
+
+def test_reserved_identifier_initiator_cannot_be_declared(registry):
+    definition = _cel_flow(registry, formula="amount > 1", declare=("amount", "initiator"))
+    assert "variables.reserved_name" in error_rules(definition, registry)

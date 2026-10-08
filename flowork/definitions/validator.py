@@ -29,6 +29,7 @@ from flowork.errors import DefinitionError
 if TYPE_CHECKING:
     from flowork.definitions.definition import ProcessDefinition
     from flowork.runtime.registry import NodeRegistry
+    from flowork.spi.ports import ExpressionFunctions
 
 __all__ = [
     "InvalidDefinition",
@@ -74,6 +75,7 @@ def validate_definition(
     registry: NodeRegistry,
     *,
     org_configured: bool | None = None,
+    expression_functions: ExpressionFunctions | None = None,
 ) -> list[ValidateIssue]:
     """执行全部设计时校验，返回问题列表（ERROR + WARNING）。
 
@@ -81,6 +83,9 @@ def validate_definition(
         org_configured: 调用方是否知道组织目录已配置（spec §9）。
             None＝未知（跳过组主体检查）；False＝确知未配置——图纸使用
             role:/org: 组主体时给 WARNING（不拦发布，后果＝组待办无人能认领）。
+        expression_functions: CEL 自定义函数注册表（spec §4.3/§9）。
+            None＝未配置——公式调用的非内建函数仅 WARNING（无法静态核对）；
+            提供时未注册/参数个数不符为 ERROR。
     """
     issues: list[ValidateIssue] = []
 
@@ -97,7 +102,7 @@ def validate_definition(
     check_deadlines(definition, error)
     check_node_semantics(definition, error, warning)
     check_condition_legality(definition, error, warning)
-    check_variable_references(definition, warning)
+    check_variable_references(definition, error, warning, expression_functions=expression_functions)
 
     return issues
 

@@ -213,11 +213,12 @@ class RepositoryService(DesignerDraftSupportMixin, DefinitionLifecycleMixin):
     # —— 校验 / 查询 ——
 
     def validate(self, definition: ProcessDefinition) -> list[ValidateIssue]:
-        """设计时校验（不落库；组主体×目录状态联动检查，spec §9）。"""
+        """设计时校验（不落库；组主体×目录、CEL 函数注册表联动，spec §9/§4.3）。"""
         return validate_definition(
             definition,
             self._engine.config.node_registry,
             org_configured=self._engine.config.org is not None,
+            expression_functions=self._engine.config.expression_functions,
         )
 
     def get_definition(
