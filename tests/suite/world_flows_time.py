@@ -62,7 +62,7 @@ def deadline_reassign_definition() -> ProcessDefinition:
             "改派闸口",
             assignee="'u_dev_liu'",
             deadlines=[
-                TaskDeadline(after_minutes=5, action="reassign", reassign_to="u_lead_be"),
+                TaskDeadline(after_minutes=5, action="reassign", reassign_to="'u_lead_be'"),
                 TaskDeadline(after_minutes=10, action="auto_approve"),
             ],
         )

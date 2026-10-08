@@ -128,7 +128,7 @@ def test_reassign_deadline_transfers_task():
         .user_task(
             "a",
             assignee="'u_a'",
-            deadlines=[TaskDeadline(after_minutes=15, action="reassign", reassign_to="u_backup")],
+            deadlines=[TaskDeadline(after_minutes=15, action="reassign", reassign_to="'u_backup'")],
         )
         .end()
         .connect("start", "a")
@@ -339,3 +339,73 @@ def test_instance_deadline_cancel_emits_terminal_event():
     payloads = events_named(engine, DomainEvent.PROCESS_CANCELLED.value)
     # kernel.complete_instance 亦发一条（无 reason）；deadline 路径带 reason=instance_deadline
     assert any(p.get("reason") == "instance_deadline" for p in payloads)
+
+
+def test_reassign_expression_with_task_context():
+    """改派表达式 fire 时求值（spec §4.2/C.4）：manager_of(task.assignee) 用当前办理人。"""
+    from flowork import contrib
+    from flowork.engine.config import EngineConfig
+    from flowork.participants.org_directory import OrgDirectory
+
+    org = OrgDirectory.from_dict({"users": {"u_clerk": {"manager": "u_boss"}, "u_boss": {}}})
+    clock = FakeClock()
+    engine = ProcessEngine(
+        EngineConfig(
+            now=clock,
+            org=org,
+            expression_functions=contrib.cel_vocabulary(org),
+        )
+    )
+    flow = (
+        FlowBuilder("reassign_expr")
+        .start()
+        .user_task(
+            "a",
+            assignee="'u_clerk'",
+            deadlines=[
+                TaskDeadline(
+                    after_minutes=15, action="reassign", reassign_to="manager_of(task.assignee)"
+                )
+            ],
+        )
+        .end()
+        .connect("start", "a")
+        .connect("a", "end")
+    )
+    engine.repository.deploy(flow.build())
+    instance_id = engine.runtime.start_process("reassign_expr", start_user="u_x")
+    clock.advance(15)
+    engine.jobs.tick()
+    task = engine.task.list_tasks(instance_id=instance_id)[0]
+    assert task.assignee == "u_boss"  # 办理人上级接手
+
+
+def test_reassign_expression_error_becomes_incident():
+    """改派公式求值错 → Job 失败路径（死信+故障单，对齐 escalate 语义）。"""
+    clock = FakeClock()
+    engine = ProcessEngine(EngineConfig(now=clock))
+    flow = (
+        FlowBuilder("reassign_bad")
+        .start()
+        .user_task(
+            "a",
+            assignee="'u_a'",
+            deadlines=[TaskDeadline(after_minutes=15, action="reassign", reassign_to="nosuchvar")],
+        )
+        .end()
+        .connect("start", "a")
+        .connect("a", "end")
+    )
+    engine.repository.deploy(flow.build())
+    engine.runtime.start_process("reassign_bad", start_user="u_x")
+    clock.advance(15)
+    engine.jobs.tick()
+    from sqlalchemy import select as _select
+
+    from flowork.persistence.orm import JobRow as _JobRow
+
+    session = engine.session_factory()
+    job = session.scalars(_select(_JobRow)).first()
+    session.close()
+    assert job is not None and "改派公式求值失败" in (job.last_error or "")
+    assert engine.runtime.list_incidents(), "改派公式错必须落故障单（首败即记）"

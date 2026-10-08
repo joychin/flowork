@@ -84,7 +84,7 @@ class TaskDeadline(BaseModel):
 
     after_minutes: int = Field(gt=0)
     action: DeadlineAction = DeadlineAction.NOTIFY
-    # reassign 改派目标（Subject 字面量；CEL 表达式随 expr/cel.py 换绑启用，spec §4.2）
+    # reassign 改派目标：CEL 表达式（fire 时求值，task.* 可用——spec §4.2/C.4）
     reassign_to: str | None = None
 
 

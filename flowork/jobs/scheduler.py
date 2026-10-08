@@ -203,12 +203,37 @@ class JobScheduler:
     def _execute_handover(
         self, ctx: CommandContext, job: JobRow, task: TaskRow, strategy: str
     ) -> None:
-        """reassign（按目标改派）/ escalate（自动转上级，查无上级→故障单）。"""
+        """reassign（表达式改派）/ escalate（自动转上级，查无上级→故障单）。"""
+        from flowork.expr.cel import FormulaError, evaluate_formula_value
+        from flowork.expr.context import expression_context, expression_functions_of
+
         kernel = self._engine.kernel_for(ctx)
         if strategy == "reassign":
-            target = str(job.payload.get("reassign_to") or "")
-            if not target:
+            expression = str(job.payload.get("reassign_to") or "")
+            if not expression:
                 raise EngineExecutionError(f"reassign deadline 缺少改派目标（job={job.id}）")
+            # fire 时求值（spec §4.2/C.4）：task.* 快照取当前任务行，活任务 outcome=null
+            instance = ctx.session.get(ProcessInstanceRow, job.instance_id)
+            if instance is None:
+                raise EngineExecutionError(f"reassign 实例不存在（job={job.id}）")
+            snapshot = {"id": task.id, "assignee": task.assignee, "outcome": None}
+            variables = expression_context(
+                instance.variables or {},
+                start_user=instance.start_user if instance else None,
+                task=snapshot,
+            )
+            try:
+                target = evaluate_formula_value(
+                    expression, variables, functions=expression_functions_of(self._engine.config)
+                )
+            except FormulaError as exc:
+                raise EngineExecutionError(
+                    f"改派公式求值失败（job={job.id}，{expression!r}）：{exc}"
+                ) from exc
+            if not isinstance(target, str) or not target:
+                raise EngineExecutionError(
+                    f"改派公式须返回单个非空人（job={job.id}，{expression!r} → {target!r}）"
+                )
         else:  # escalate：宿主目录的上级；查无 → 故障单（不静默丢，spec §5.1）
             org = self._engine.config.org
             if org is None:
