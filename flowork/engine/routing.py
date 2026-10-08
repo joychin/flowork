@@ -15,7 +15,8 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from typing import TYPE_CHECKING, Any, Literal
 
-from flowork.engine.kernel import RouteError
+from flowork.engine.kernel import EngineExecutionError, RouteError
+from flowork.expr.cel import FormulaError
 from flowork.expr.conditions import evaluate_condition
 
 if TYPE_CHECKING:
@@ -87,10 +88,21 @@ def _match_in_order(
     variables: dict[str, Any],
     functions: Mapping[str, Callable[..., object]] | None = None,
 ) -> list[SequenceFlow]:
-    """按声明顺序求值条件边，返回为真者。"""
+    """按声明顺序求值条件边，返回为真者。
+
+    CEL 求值错（FormulaError）按错误二分归**技术故障**（spec §8）：包成
+    EngineExecutionError → 命令管线挂起实例 + 故障单；groups 支的
+    ConditionError（未定义变量等定义缺陷）维持直抛语义不变。
+    """
     matched: list[SequenceFlow] = []
     for flow in conditional:
         assert flow.condition is not None  # conditional 分组已过滤
-        if evaluate_condition(flow.condition, variables, functions=functions):
+        try:
+            hit = evaluate_condition(flow.condition, variables, functions=functions)
+        except FormulaError as exc:
+            raise EngineExecutionError(
+                f"连线条件公式求值失败（{flow.flow_code()}）：{exc}"
+            ) from exc
+        if hit:
             matched.append(flow)
     return matched

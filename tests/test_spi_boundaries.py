@@ -192,3 +192,32 @@ def test_contrib_manager_of_rejects_role(subject):
     ctx = _FakeCtx("u_x", {"x": subject})
     with pytest.raises(Exception, match="角色主体"):
         functions.call("manager_of", ctx, ORG, ["x"])
+
+
+# —— contrib CEL 注册面（cel_vocabulary，spec §4.3/§9）——
+
+
+def test_contrib_cel_vocabulary_port_shape():
+    """cel_vocabulary 返回 ExpressionFunctions：三词汇且带类型签名。"""
+    port = contrib.cel_vocabulary(ORG)
+    assert callable(getattr(port, "functions", None))
+    table = port.functions()
+    assert set(table) == {"manager_of", "users_with_role", "has_role"}
+    assert table["manager_of"].signature.params == ("one_user",)
+    assert table["manager_of"].signature.returns == "one_user"
+    assert table["users_with_role"].signature.returns == "users"
+    assert table["has_role"].signature.params == ("one_user", "string")
+    assert table["has_role"].signature.returns == "bool"
+
+
+def test_contrib_cel_vocabulary_callable_semantics():
+    """CEL 词汇纯读语义：与参与者面同源（manager/roles/成员判定），None 空传播。"""
+    from flowork.expr.cel import evaluate_formula
+
+    functions = contrib.cel_vocabulary(ORG)
+    table = {name: item.fn for name, item in functions.functions().items()}
+    assert evaluate_formula('manager_of("u_zhang") == "u_bob"', {}, functions=table)
+    assert evaluate_formula('manager_of("u_nobody") == null', {}, functions=table)
+    assert evaluate_formula('has_role("u_bob", "eng_lead")', {}, functions=table)
+    assert not evaluate_formula('has_role("u_zhang", "eng_lead")', {}, functions=table)
+    assert evaluate_formula('users_with_role("eng_lead").size() == 1', {}, functions=table)
