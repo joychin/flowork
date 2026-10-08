@@ -14,6 +14,7 @@ from flowork.expr.cel import (
     collect_references,
     evaluate_formula,
     evaluate_formula_value,
+    root_call,
 )
 
 # —— 基本语法与语义 ——
@@ -227,3 +228,21 @@ def test_non_ascii_variable_names_do_not_poison_evaluation():
     """中文变量名不可被 CEL 引用，但也不得牵连同上下文的其他求值（celpy Invalid name 规避）。"""
     assert evaluate_formula("amount > 100", {"amount": 200, "金额": 1200})
     assert evaluate_formula_value("'张三'", {"金额": 1200}) == "张三"
+
+
+# —— root_call（取人位根调用类型检查的原料）——
+
+
+def test_root_call_detects_global_call():
+    name, arity = root_call('users_with_role("f")')  # type: ignore[misc]
+    assert (name, arity) == ("users_with_role", 1)
+    assert root_call("manager_of(initiator)") == ("manager_of", 1)
+    assert root_call("no_args()") == ("no_args", 0)
+    assert root_call("has_role(a, b)") == ("has_role", 2)
+
+
+def test_root_call_none_for_non_call_root():
+    assert root_call("'u_a'") is None
+    assert root_call("initiator") is None
+    assert root_call("manager_of(initiator) + extra") is None
+    assert root_call("amount > 1 && ok") is None

@@ -1,19 +1,22 @@
 """条件与节点语义校验规则（validator 编排件的规则组二）。
 
-节点语义 / 条件合法性 / 变量引用与 **CEL 静态检查薄层**（kernel-v2 §4.3）：
-公式支经 ``expr.cel`` 编译 + ``collect_references`` 收集，对照已声明变量与
-ExpressionFunctions 注册表签名——未声明变量 ERROR（K8s CRD 体验）、未注册函数
-有注册表 ERROR / 无注册表 WARNING（诚实分级，照 org_configured 先例）。
-groups 支维持启发式 WARNING（原语义）。
+节点语义 / 表达式合法性 / 变量引用与 **CEL 静态检查薄层**（kernel-v2 §4.3）。
+位点统一（§4.2）：静态检查覆盖全部表达式位——连线条件、取人（assignee/
+assignees/recipients）、超时改派（reassign_to）、子流程映射值；各公式经
+``expr.cel`` 编译 + ``collect_references`` 收集，对照已声明变量与
+ExpressionFunctions 注册表签名。未声明变量 ERROR（K8s CRD 体验）、未注册函数
+有注册表 ERROR / 无注册表 WARNING（诚实分级，照 org_configured 先例）；
+取人/改派位根调用另做 returns 类型对位（谓词 bool 误用即拦）。
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from typing import TYPE_CHECKING
 
 from flowork.definitions.builtin import (
     KIND_BRANCH,
+    KIND_CALL_ACTIVITY,
     KIND_CC_TASK,
     KIND_USER_TASK,
 )
@@ -23,12 +26,69 @@ if TYPE_CHECKING:
     from flowork.definitions.definition import ProcessDefinition
     from flowork.spi.ports import ExpressionFunctions
 
-__all__ = ["check_condition_legality", "check_node_semantics", "check_variable_references"]
+__all__ = [
+    "check_condition_legality",
+    "check_node_semantics",
+    "check_variable_references",
+    "iter_expression_positions",
+]
 
 IssueFn = Callable[..., None]
 
 # 求值上下文注入的保留标识符：可引用，不可声明为流程变量。
-RESERVED_IDENTIFIERS = frozenset({"initiator"})
+RESERVED_IDENTIFIERS = frozenset({"initiator", "task"})
+
+# task.* 快照当前仅超时改派位提供（fire 时注入，spec C.4）；其余位点引用即错。
+TASK_KINDS = frozenset({"reassign"})
+
+# 位点 kind → 规则名前缀（连线位沿用既有 condition.* 规则名，节点位用 expression.*）
+_RULE_PREFIX = {
+    "condition": "condition",
+    "subjects": "expression",
+    "reassign": "expression",
+    "mapping_input": "expression",
+    "mapping_output": "expression",
+}
+
+
+def iter_expression_positions(definition: ProcessDefinition) -> Iterator[tuple[str, str, str, str]]:
+    """遍历全部表达式位：yield (kind, where, expression, node)。
+
+    kind ∈ condition（连线条件）/ subjects（取人：assignee·assignees·recipients）/
+    reassign（超时改派）/ mapping_input·mapping_output（子流程映射值，后者在子
+    上下文求值——父定义静态不可知其变量，跳过未声明变量检查）。
+    """
+    for flow in definition.flows:
+        if flow.condition:
+            yield "condition", flow.flow_code(), flow.condition, flow.source
+    for node in definition.nodes:
+        if node.kind == KIND_USER_TASK:
+            assignee = getattr(node, "assignee", None)
+            if assignee:
+                yield "subjects", f"{node.code}.assignee", assignee, node.code
+            for index, expression in enumerate(getattr(node, "assignees", None) or []):
+                yield "subjects", f"{node.code}.assignees[{index}]", expression, node.code
+        if node.kind == KIND_CC_TASK:
+            for index, expression in enumerate(getattr(node, "recipients", None) or []):
+                yield "subjects", f"{node.code}.recipients[{index}]", expression, node.code
+        for index, deadline in enumerate(getattr(node, "deadlines", None) or []):
+            if deadline.reassign_to:
+                yield (
+                    "reassign",
+                    f"{node.code}.deadlines[{index}].reassign_to",
+                    deadline.reassign_to,
+                    node.code,
+                )
+        if node.kind == KIND_CALL_ACTIVITY:
+            for target, expression in (getattr(node, "input_mappings", None) or {}).items():
+                yield "mapping_input", f"{node.code}.input_mappings.{target}", expression, node.code
+            for target, expression in (getattr(node, "output_mappings", None) or {}).items():
+                yield (
+                    "mapping_output",
+                    f"{node.code}.output_mappings.{target}",
+                    expression,
+                    node.code,
+                )
 
 
 def check_node_semantics(
@@ -66,36 +126,27 @@ def check_condition_legality(
     error: IssueFn,
     warning: IssueFn,
 ) -> None:
-    """条件合法性（单轨 CEL）：空公式、长度上限、编译与护栏、分支臂缺条件。"""
+    """表达式合法性（全位点）：空公式、长度上限、编译与护栏、分支臂缺条件。"""
     from flowork.expr.cel import FormulaError, collect_references
 
     nodes = {n.code: n for n in definition.nodes}
-    for flow in definition.flows:
-        condition = flow.condition
-        if condition is None:
-            continue
-        if not condition.strip():
+    for kind, where, expression, _node_code in iter_expression_positions(definition):
+        rule = _RULE_PREFIX[kind]
+        if not expression.strip():
+            error(f"{rule}.empty", "条件公式为空字符串（无条件请置 null）", flow=where)
+        elif len(expression) > MAX_FORMULA_LENGTH:
             error(
-                "condition.empty",
-                "条件公式为空字符串（无条件请置 null）",
-                flow=flow.flow_code(),
-            )
-        elif len(condition) > MAX_FORMULA_LENGTH:
-            error(
-                "condition.formula.too_long",
-                f"公式长度 {len(condition)} 超过上限 {MAX_FORMULA_LENGTH}",
-                flow=flow.flow_code(),
+                f"{rule}.formula.too_long",
+                f"公式长度 {len(expression)} 超过上限 {MAX_FORMULA_LENGTH}",
+                flow=where,
             )
         else:
             try:  # 编译 + 护栏 + 引用收集一次完成（语法错在发布前拦截）
-                collect_references(condition)
+                collect_references(expression)
             except FormulaError as exc:
-                error(
-                    "condition.formula.invalid",
-                    f"公式不可用：{exc}",
-                    flow=flow.flow_code(),
-                )
-        if not flow.is_default and not condition and definition.outgoing(flow.source):
+                error(f"{rule}.formula.invalid", f"公式不可用：{exc}", flow=where)
+    for flow in definition.flows:
+        if not flow.is_default and not flow.condition and definition.outgoing(flow.source):
             source_node = nodes.get(flow.source)
             source_is_branch = source_node is not None and source_node.kind == KIND_BRANCH
             if source_is_branch:
@@ -113,70 +164,104 @@ def check_variable_references(
     *,
     expression_functions: ExpressionFunctions | None = None,
 ) -> None:
-    """变量引用与函数调用（声明了流程变量时启用，单轨 CEL）。
+    """变量引用与函数调用（声明了流程变量时启用，全位点单轨 CEL）。
 
-    - 保留字声明（initiator）→ ERROR（求值上下文冲突）；
+    - 保留字声明（initiator/task）→ ERROR（求值上下文冲突）；
     - 公式引用未声明变量 → ERROR（静态检查，K8s CRD 体验）；
-    - 公式调用未注册函数：有注册表 → ERROR（含参数个数）；无注册表 → WARNING（无法核对）。
+      ``task.*`` 仅超时改派位可引用（快照注入位，spec C.4），其余位点即错；
+    - 公式调用未注册函数：有注册表 → ERROR（含参数个数）；无注册表 → WARNING；
+    - 取人/改派位根调用 returns 非 one_user/users → ERROR（谓词误用提前拦）。
     """
     declared = {v.name for v in definition.variables}
     for variable in definition.variables:
         if variable.name in RESERVED_IDENTIFIERS:
             error(
                 "variables.reserved_name",
-                f"{variable.name} 为求值保留标识符（发起人，由引擎注入），不可声明为流程变量",
+                f"{variable.name} 为求值保留标识符（initiator=发起人、task=任务快照，"
+                "由引擎注入），不可声明为流程变量",
                 node=variable.name,
             )
     if not declared:
         return  # 未启用变量声明（spec §3.2「声明」不约束）：不做引用检查
-    signatures: dict[str, int] | None = None
+    signatures: dict[str, tuple[int, str]] | None = None
     if expression_functions is not None:
         signatures = {
-            name: len(registered.signature.params)
+            name: (len(registered.signature.params), registered.signature.returns)
             for name, registered in expression_functions.functions().items()
         }
 
-    from flowork.expr.cel import CEL_BUILTIN_FUNCTIONS, FormulaError, collect_references
+    from flowork.expr.cel import (
+        CEL_BUILTIN_FUNCTIONS,
+        FormulaError,
+        collect_references,
+        root_call,
+    )
 
-    for flow in definition.flows:
-        condition = flow.condition
-        if condition is None or not condition.strip():
-            continue
+    subject_kinds = frozenset({"subjects", "reassign"})
+    for kind, where, expression, _node_code in iter_expression_positions(definition):
+        rule = _RULE_PREFIX[kind]
         try:
-            idents, functions = collect_references(condition)
+            idents, functions = collect_references(expression)
         except FormulaError:
-            continue  # 语法问题已由 condition.formula.invalid 报告
-        unknown = {
-            name for name in idents if name not in declared and name not in RESERVED_IDENTIFIERS
-        }
+            continue  # 语法问题已由 formula.invalid 报告
+        if kind == "mapping_output":
+            idents = set()  # 子上下文变量父定义不可知：跳过未声明变量检查
+        unknown: set[str] = set()
+        for name in idents:
+            if name in declared:
+                continue
+            if name == "task" and kind in TASK_KINDS:
+                continue  # task.* 快照该位点可用
+            if name in RESERVED_IDENTIFIERS:
+                if name == "task":
+                    error(
+                        f"{rule}.task_unavailable",
+                        f"公式引用 {name}.*：任务快照当前仅超时改派位提供（spec C.4）",
+                        flow=where,
+                    )
+                    continue
+                continue  # initiator 全位点可用
+            unknown.add(name)
         if unknown:
             error(
-                "condition.variable.unknown",
+                f"{rule}.variable.unknown",
                 "公式引用了未声明的流程变量："
                 f"{', '.join(sorted(unknown))}"
                 f"（{', '.join(sorted(RESERVED_IDENTIFIERS))} 为内置标识符）",
-                flow=flow.flow_code(),
+                flow=where,
             )
         for name, arities in functions.items():
             if name in CEL_BUILTIN_FUNCTIONS:
                 continue
             if signatures is None:
                 warning(
-                    "condition.function.unknown",
+                    f"{rule}.function.unknown",
                     f"公式调用函数 {name}(...)：未配置表达式函数注册表"
                     "（EngineConfig.expression_functions），无法静态核对",
-                    flow=flow.flow_code(),
+                    flow=where,
                 )
             elif name not in signatures:
                 error(
-                    "condition.function.unknown",
+                    f"{rule}.function.unknown",
                     f"公式调用未注册的函数：{name}(...)（已注册：{', '.join(sorted(signatures))}）",
-                    flow=flow.flow_code(),
+                    flow=where,
                 )
-            elif any(arity != signatures[name] for arity in arities):
+            elif any(arity != signatures[name][0] for arity in arities):
                 error(
-                    "condition.function.arity",
-                    f"函数 {name} 期望 {signatures[name]} 个参数，"
+                    f"{rule}.function.arity",
+                    f"函数 {name} 期望 {signatures[name][0]} 个参数，"
                     f"调用处为 {'/'.join(str(a) for a in sorted(arities))} 个",
-                    flow=flow.flow_code(),
+                    flow=where,
                 )
+        if kind in subject_kinds and signatures is not None:
+            root = root_call(expression)
+            if root is not None:
+                name, _arity = root
+                registered = signatures.get(name)
+                if registered is not None and registered[1] not in ("one_user", "users"):
+                    error(
+                        f"{rule}.function.returns",
+                        f"函数 {name}(...) 返回 {registered[1]}（谓词/标量），"
+                        "取人位须返回 one_user/users 词汇",
+                        flow=where,
+                    )

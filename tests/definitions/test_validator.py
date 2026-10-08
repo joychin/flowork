@@ -285,3 +285,110 @@ def test_cel_registered_function_passes(registry):
 def test_reserved_identifier_initiator_cannot_be_declared(registry):
     definition = _cel_flow(registry, formula="amount > 1", declare=("amount", "initiator"))
     assert "variables.reserved_name" in error_rules(definition, registry)
+
+
+# —— 位点统一静态检查（spec §4.2：取人/改派/映射位与连线同一套检查）——
+
+
+def _subjects_flow(registry, *, assignee="'u_boss'", declare=("amount",)):
+    from flowork.definitions.definition import ProcessVariable
+
+    definition = (
+        FlowBuilder("subj")
+        .start()
+        .user_task("a", assignee=assignee)
+        .end()
+        .connect("start", "a")
+        .connect("a", "end")
+        .build(registry)
+    )
+    definition.variables = [ProcessVariable(name=name, type="number") for name in declare]
+    return definition
+
+
+def test_participant_unknown_variable_is_error(registry):
+    definition = _subjects_flow(registry, assignee="nosuchvar")
+    assert "expression.variable.unknown" in error_rules(definition, registry)
+
+
+def test_participant_predicate_root_returns_rejected(registry):
+    """谓词函数（returns=bool）误用取人位：根调用类型对位提前拦（有注册表时）。"""
+    from flowork.definitions.validator import IssueLevel, validate_definition
+    from flowork.runtime.registry import create_registry
+    from flowork.spi.ports import ExpressionFunction, FunctionSignature
+
+    class _Registry:
+        def functions(self):
+            return {
+                "has_role": ExpressionFunction(
+                    FunctionSignature(("one_user", "string"), "bool"), lambda u, r: True
+                )
+            }
+
+    definition = _subjects_flow(create_registry(), assignee='has_role(initiator, "x")')
+    issues = validate_definition(
+        definition,
+        create_registry(),
+        expression_functions=_Registry(),  # type: ignore[arg-type]
+    )
+    hits = [i for i in issues if i.rule == "expression.function.returns"]
+    assert hits and hits[0].level == IssueLevel.ERROR
+
+
+def test_task_snapshot_only_available_in_reassign(registry):
+    from flowork.definitions.definition import ProcessVariable
+    from flowork.definitions.node import TaskDeadline
+
+    definition = (
+        FlowBuilder("taskpos")
+        .start()
+        .user_task(
+            "a",
+            assignee="'u_boss'",
+            deadlines=[
+                TaskDeadline(
+                    after_minutes=5, action="reassign", reassign_to="manager_of(task.assignee)"
+                )
+            ],
+        )
+        .user_task("b", assignee="task.assignee")
+        .end()
+        .connect("start", "a")
+        .connect("a", "b")
+        .connect("b", "end")
+        .build(registry)
+    )
+    definition.variables = [ProcessVariable(name="amount", type="number")]
+    rules = error_rules(definition, registry)
+    assert "expression.task_unavailable" in rules  # 取人位不可用 task.*
+    assert "expression.variable.unknown" not in rules  # 改派位的 task.* 合法
+
+
+def test_mapping_output_skips_parent_variable_check(registry):
+    """输出映射在子上下文求值：父定义不做未声明变量检查（子变量静态不可知）。"""
+    definition = (
+        FlowBuilder("mapout")
+        .start()
+        .call_activity("sub", process_code="child", output_mappings={"r": "child_only_var"})
+        .end()
+        .connect("start", "sub")
+        .connect("sub", "end")
+        .build(registry)
+    )
+    assert "expression.variable.unknown" not in error_rules(definition, registry)
+
+
+def test_mapping_input_unknown_variable_is_error(registry):
+    from flowork.definitions.definition import ProcessVariable
+
+    definition = (
+        FlowBuilder("mapin")
+        .start()
+        .call_activity("sub", process_code="child", input_mappings={"x": "nosuchvar"})
+        .end()
+        .connect("start", "sub")
+        .connect("sub", "end")
+        .build(registry)
+    )
+    definition.variables = [ProcessVariable(name="amount", type="number")]
+    assert "expression.variable.unknown" in error_rules(definition, registry)

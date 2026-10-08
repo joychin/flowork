@@ -30,6 +30,7 @@ __all__ = [
     "collect_references",
     "evaluate_formula",
     "evaluate_formula_value",
+    "root_call",
 ]
 
 # 二元运算链项数上限：PoC 实测 350 项（1747B）触发 celpy 递归悬崖，256 留余量。
@@ -240,3 +241,23 @@ def collect_references(formula: str) -> tuple[set[str], dict[str, set[int]]]:
 
     visit(tree)
     return identifiers - bound, functions
+
+
+def root_call(formula: str) -> tuple[str, int] | None:
+    """公式**根节点**是全局函数调用时返回 (函数名, 参数个数)，否则 None。
+
+    取人/改派位静态类型检查用：根调用可直接对照 FunctionSignature.returns
+    词汇（one_user/users）；非根调用（如 ``'a' + fn(x)``）不做该检查，交给运行时。
+    """
+    node: Any = _parse(formula)
+    while True:
+        data = getattr(node, "data", None)
+        if data is None:
+            return None  # 走到 Token（字面量根）
+        if data == "ident_arg":
+            args = next((c for c in node.children if getattr(c, "data", None) == "exprlist"), None)
+            return str(node.children[0]), 0 if args is None else len(args.children)
+        kids = [c for c in node.children if getattr(c, "data", None) is not None]
+        if len(kids) != 1:
+            return None  # 根是运算/复合表达式，不是单一全局调用
+        node = kids[0]
