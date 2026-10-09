@@ -551,6 +551,8 @@ CRUD：新增与更新＝同一操作 `deploy`——**纯数据写入（INSERT �
 
 **实例时限（deadline）【v2.2 新增】**：图纸顶层 `deadline: {after_minutes, strategy}`，strategy ∈ mark（实例打超时标记＋发事件，流程继续跑）/ cancel（作废）/ terminate（终止）。发起时按工作日历折算 deadline_at 物化进实例表，到点由 timer job 触发 `instance_deadline_reached` 事件并执行策略；实例已完成则静默不触发。暂停期间冻结、恢复后顺延（与节点定时器同规则）。依据：Temporal 的 Workflow Execution Timeout 是原生实例级超时（限制实例总生命周期）；BPMN 系引擎无原生等价物（要拿子流程包住主流程再挂中断型定时边界事件）——flowork 取声明式字段，不逼用户画「定时炸弹并行分支」。
 
+**终止/取消＝砍树（子树级联）【v2.3 第十五轮】**：`terminate` / `cancel` 与实例时限的 cancel/terminate 策略都是**整树动作**——父实例进入终态时，未结算子实例（含暂停/挂起中的）递归同置终态，待办撤销落历史（outcome=cancelled）；已结算子不动。顺序契约：先把树内全部未完令牌撤光、再逐实例落终态（子先父后）——`resume_parent_if_waiting` 只在父令牌仍 unfinished 时推进，先撤令牌保证子终态不误唤醒中间层。事件：父终态事件携带 `cascaded_instances` 清单，每个级联子发同款终态事件并带 `cascade_from` 溯源。多实例提前收工（§8.3 completion 命中终止剩余 running 子）**不走此语义**——那是完成侧的「提前下班」，paused/suspended 子属管理员域不动；管理员砍树不豁免暂停子（对齐 Camunda/Zeebe 子树终止，行业标配）。
+
 ### 7.1 start_on_message：消息启动实例【v2 新增，2026-10-09 定稿】
 
 定义顶层声明 `start_on_message: [{name, correlation_key?, input_mappings?, start_user?, business_key?}]`（列表可多条，常见一条）——**启动订阅＝定义派生**：published 定义即生效、retire 即失效，不落订阅表（部署动作天然增删订阅，零表结构变更）。
@@ -852,6 +854,14 @@ Zeebe inputCollection/outputCollection 契约实装（multi-instance-call-design
 5. **工程**：subprocess_mi.py 拆分（行数红线）；builder extra 袋 dict→CallInstanceConfig 归一（`_mi_config`，同第十一轮 getattr 惯例）；迁移幂等化（基线 create_all 新库已含列则跳过——alembic 幂等测试实证 batch 多列追加的伪循环依赖，改 `op.add_column`+存在性守卫）。
 
 **对标四批（A 档 8 项 + 修复 + 竞态窗）就此全部完结**：第一批修正确性、第二批立守卫、第三批上能力面、第四批 Zeebe 契约。行业修正版清单与拍板记录见 对标明细.md 三篇。
+
+### 第十五轮（2026-10-09，v2.3 续，收口批：时钟统一＋终止级联）
+
+来源：收口盘点两处已核实语义缺口（与 escalate 批同日并行会话撞号——本批提交信息中写作「第十四轮」，登记序以 spec 为准：escalate 批先入，本批为第十五轮；提交 541369c/de8bb03）。
+
+1. **时钟统一**：全表达式位 `now` 与 worker Job 租约/退避恒取 `EngineConfig.now`。盘点发现 8 个装配位点（路由条件 evaluation_variables、取人 resolve_subjects、会签出口 exit_reached、超时改派 fire 位、子流程映射、MI completion、消息 correlation 写入/启动匹配）装配上下文时未传 `now`（`expression_context` 缺省墙钟），worker Job 三处（create run_at/领活租约/失败退避）直用 `utc_now`——FakeClock 下被测对象与测试时钟不同源（route_audit 挂账「审计时刻与任务时刻不一致」同根，一并收口）。修复形态：三函数增 `now` 参数、十三调用点显式穿针（不是缺省改时钟——引擎位点必须显式传，缺省墙钟保留给无引擎装配面并写入文档）；`tests/semantics/test_clock_unification.py` 每位点一个「假钟阈值」判例（实施前 8/8 红、实施后全绿——判别力依赖阈值定在假钟未来/墙钟过去的区间）。
+2. **终止/取消＝砍树**（§7 新段）：terminate/cancel/实例时限 cancel/terminate 三入口共用 `terminate_cascade`——未结算子实例（含暂停/挂起中的）递归同置终态、待办撤销留痕、父事件带 `cascaded_instances` 清单/子事件带 `cascade_from`。翻转 `tests/suite/test_construct_subprocess` 曾钉住的「孤儿运行」开放问题钉子；`test_terminate_cascade.py` 六走查（整树/孙层/暂停子/已结算不动/时限策略/无子空清单）。
+
 ## 附录 C：类型清单（须提前定义的全集）
 
 原则：**跨边界的类型提前定，业务语义类型不进内核**（Money/TicketPriority 之类由插件用 JSON Schema format 扩展表达）。五条边界：图纸↔引擎、表达式↔变量、函数↔校验器、API/事件↔外部、数据库↔代码。
@@ -889,7 +899,7 @@ Subject：人字段＝**裸 id**（`u_zhang` / `bot1`，引擎不解析前缀）
 | task.* | **位点相关快照**（静态检查：非可用位引用 task.* 即 ERROR task_unavailable）——超时改派位 ✓：{id, assignee, outcome:null, created_at, deadline_at}（fire 时注入，活任务无 outcome）；会签出口位 ✓：{item_count, approve_count, disapprove_count}（每次办理后注入）；条件求值/输出映射位注入为后续项（开放问题 C5） |
 | initiator | subject |
 | instance | 实例全局事实 {id, started_at, business_key}（全位点注入；started_at 为 datetime 与 now 同口径，可直接做时长运算；dry-run/公式试算面注入占位形状；2026-10-09 落地） |
-| now | datetime（引擎统一时钟 naive UTC；一次装配钉一时刻，expression-dataface F1） |
+| now | datetime（引擎统一时钟 naive UTC；一次装配钉一时刻，expression-dataface F1；**全引擎位点恒注入 `EngineConfig.now`【v2.3 第十五轮时钟统一】**——FakeClock 下条件求值、任务时限与路由审计同源；`expression_context` 缺省墙钟仅供无引擎装配面：dry-run 静态预检、web 公式试算） |
 | prev_task | 上一站已完成任务快照 {assignee, outcome, comment, finished_at, used_time}（条件+取人位；查无不注入，F2；used_time 为自然时长口径——暂停剔除待定） |
 | node("code") | 引擎注入函数 → 平铺 {assignee, outcome, comment, finished_at, used_time, runs, skipped, item_count, approve_count, disapprove_count}（runs=已结束轮数；票数取最近轮令牌三计数；查无＝固定形状：人物 null 计数 0，F2） |
 

@@ -398,3 +398,18 @@ running 子（撤令牌待办对齐 terminate）；child_failed 表达「一子�
 不做失败机制（C7 教训）。③ collect=index 对齐聚合（失败位 null 占位、完成序无关）；
 merge 仅单子（validator 拦 MI+merge=last-wins C7 痛点）。④ subprocess_mi.py 拆分；
 builder extra 袋 dict 归一 _mi_config。测试 11 例；范围内 766 全绿。**对标四批全部完结**。
+
+**收口批：时钟统一+终止级联（2026-10-09，spec v2.3 第十五轮；提交 541369c/de8bb03）**：
+① 时钟统一——盘点发现 8 个表达式装配位点（路由/取人/会签出口/改派/子流程映射/MI completion/
+消息 correlation 两处）不传 now（expression_context 缺省墙钟）+ worker Job 三处（create run_at/
+领活租约/失败退避）直用 utc_now：FakeClock 下被测对象与测试时钟不同源（route_audit 挂账
+「审计时刻与任务时刻不一致」同根）。修复＝evaluation_variables/resolve_subjects/exit_reached
+增 now 参数、十三调用点显式穿针 config.now（缺省墙钟保留给无引擎装配面：dry-run/web 试算）；
+test_clock_unification.py 八位点「假钟阈值」判例（实施前 8/8 红）。② 终止/取消＝砍树——
+terminate/cancel/实例时限 cancel/terminate 三入口共用 terminate_cascade：整树撤未完令牌→
+未结算子实例（含暂停/挂起中）子先父后落终态（顺序契约：先撤光令牌再 complete，子终态不误
+唤醒中间层父）；父事件带 cascaded_instances、子事件带 cascade_from；MI 提前收工不走此语义
+（完成侧提前下班，暂停子属管理员域）。翻转 test_construct_subprocess 的孤儿钉子；
+test_terminate_cascade.py 六走查。**与 escalate 批（ab0b6de）同日并行会话共享工作区**：
+本批提交信息误写「第十四轮」（escalate 批先入登记），spec 附录已归正为第十五轮；共享区
+协作纪律＝提交前用 write-tree 临时 worktree 验证暂存集（主树常混并行 WIP）。
