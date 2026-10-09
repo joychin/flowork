@@ -8,16 +8,20 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from flowork.api import (
+    EngineConfig,
+    FlowBuilder,
+    FloworkError,
+    IssueLevel,
+    MultiInstance,
+    ProcessEngine,
+    RouteMode,
+    TaskInfo,
+    create_registry,
+    load_definition_file,
+    validate_definition,
+)
 from flowork.cli.instance import instance_app
-from flowork.definitions.builder import FlowBuilder
-from flowork.definitions.builtin import RouteMode
-from flowork.definitions.definition import load_definition_file
-from flowork.definitions.node import MultiInstance
-from flowork.definitions.validator import IssueLevel, validate_definition
-from flowork.engine.config import EngineConfig
-from flowork.engine.engine import ProcessEngine
-from flowork.errors import FloworkError
-from flowork.runtime.registry import create_registry
 
 app = typer.Typer(help="flowork 流程引擎 CLI", no_args_is_help=True)
 app.add_typer(instance_app, name="instance")
@@ -198,8 +202,6 @@ def demo_full() -> None:
         "full_demo", start_user="u_zhang", variables={"amount": 20_000}
     )
     console.print(f"[bold]1. 发起[/bold] amount=20000 → 实例 {instance_id[:10]}…")
-
-    from flowork.tasks.models import TaskInfo
 
     def take(assignee: str) -> TaskInfo:
         return engine.task.list_tasks(instance_id=instance_id, assignee=assignee)[0]

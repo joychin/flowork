@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from flowork.web.app import create_app
+from flowork.contrib.web.app import create_app
 
 EXAMPLES = Path(__file__).parent.parent / "examples"
 

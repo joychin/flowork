@@ -10,9 +10,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from flowork.engine.config import EngineConfig
-from flowork.engine.engine import ProcessEngine
-from flowork.errors import FloworkError
+from flowork.api import EngineConfig, FloworkError, ProcessEngine
 
 instance_app = typer.Typer(help="实例操作（变量读写/血缘）", no_args_is_help=True)
 console = Console()

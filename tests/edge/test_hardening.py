@@ -448,7 +448,7 @@ def test_default_clock_is_naive_utc():
 def test_web_app_starts_and_stops_scheduler(tmp_path: Path):
     from fastapi.testclient import TestClient
 
-    from flowork.web.app import create_app
+    from flowork.contrib.web.app import create_app
 
     app = create_app(db_file=tmp_path / "web.db", seed=False)
     with TestClient(app) as client:
@@ -460,7 +460,7 @@ def test_web_app_starts_and_stops_scheduler(tmp_path: Path):
 def test_web_app_scheduler_can_be_disabled(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     from fastapi.testclient import TestClient
 
-    from flowork.web.app import create_app
+    from flowork.contrib.web.app import create_app
 
     monkeypatch.setenv("FLOWORK_JOBS", "off")
     app = create_app(db_file=tmp_path / "web_off.db", seed=False)

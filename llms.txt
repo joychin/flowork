@@ -31,9 +31,10 @@
 
 ## 关键入口
 
-- flowork/definitions/definition.py: ProcessDefinition + JSON 编解码
-- flowork/runtime/registry.py: NodeRegistry / HandlerRegistry（扩展机制核心）
-- flowork/runtime/behavior.py: NodeBehavior 生命周期契约
-- flowork/engine/branch.py: 条件分支行为（first_match / all_match 路由）
-- flowork/engine/kernel.py: 推进门 _advance（advance_policy any/all，对齐 对标产品 preCondition）
-- flowork/definitions/validator.py: 设计时校验器
+- flowork/api.py: **公开门面（唯一稳定 API 面）**——宿主/AI/插件（cli、contrib.web）只准 import 这里，符号冻结于快照测试；内核模块重排不影响本门面
+- flowork/definitions/definition.py: ProcessDefinition + JSON 编解码（内部实现阅读）
+- flowork/runtime/registry.py: NodeRegistry / HandlerRegistry（扩展机制核心，内部实现阅读）
+- flowork/runtime/behavior.py: NodeBehavior 生命周期契约（内部实现阅读）
+- flowork/engine/branch.py: 条件分支行为（first_match / all_match 路由，内部实现阅读）
+- flowork/engine/kernel.py: 推进门 _advance（advance_policy any/all，对齐 对标产品 preCondition，内部实现阅读）
+- flowork/definitions/validator.py: 设计时校验器（内部实现阅读）

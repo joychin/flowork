@@ -7,7 +7,7 @@ React + TypeScript + React Flow 实现的 flowork 流程设计器 UI。
 
 ```
 ┌──────────────┐  PUT/POST(JSON)   ┌───────────────────┐   四服务    ┌────────────┐
-│  designer/   │ ────────────────→ │  flowork/web       │ ─────────→ │  引擎内核   │
+│  designer/   │ ────────────────→ │ flowork/contrib/web │ ─────────→ │  引擎内核   │
 │  React Flow  │ ←──────────────── │  (薄 FastAPI 传输层)│            │ repository  │
 │  纯视图+编辑  │  JSON(Spec/Issues)│  无业务逻辑         │            │ validate…   │
 └──────────────┘                   └───────────────────┘            └────────────┘
@@ -23,7 +23,7 @@ React + TypeScript + React Flow 实现的 flowork 流程设计器 UI。
 
 ```bash
 # 1. 后端 API(仓库根目录;FLOWORK_DB 指定 SQLite 文件,空库自动灌入 examples/)
-FLOWORK_DB=/tmp/flowork-designer.db uv run uvicorn flowork.web.app:app --port 8901
+FLOWORK_DB=/tmp/flowork-designer.db uv run uvicorn flowork.contrib.web.app:app --port 8901
 
 # 2. 前端(本目录)
 npm install

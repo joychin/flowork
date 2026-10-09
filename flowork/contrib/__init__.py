@@ -1,8 +1,9 @@
-"""contrib 便利包（v2.1，spec §5.5/C.4）：可选的取人词汇，一行挂上。
+"""contrib 官方插件包：词汇插件 + web 传输面（rest/mcp 进驻后同列）。
 
-纯基于 OrgDirectory 四方法端口实现，内核注册表出厂为空——本包是「官方插件」，
-内核（engine/participants/expr/definitions 等模块）import 本包即违反边界铁律
-（import-linter 红灯，见 pyproject [tool.importlinter]）。宿主用法::
+本包是「官方插件」而非内核——双向铁律（import-linter 红灯，见 pyproject
+[tool.importlinter]）：内核包禁止 import 本包；本包（含 web 传输面）只准经
+``flowork.api`` 公开门面使用内核。词汇部分纯基于 OrgDirectory 端口实现，
+内核注册表出厂为空。宿主用法::
 
     from flowork import contrib
     config = EngineConfig(
@@ -24,13 +25,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from flowork.api import ExpressionFunction, ExpressionFunctions, FloworkError, FunctionSignature
 from flowork.contrib._registry import FixedFunctions
 from flowork.contrib.numeric import numeric_vocabulary
-from flowork.errors import FloworkError
-from flowork.spi.ports import ExpressionFunction, ExpressionFunctions, FunctionSignature
 
 if TYPE_CHECKING:
-    from flowork.participants.org_directory import OrgDirectoryLike
+    from flowork.api import OrgDirectoryLike
 
 __all__ = ["ContribDirectoryMissing", "cel_vocabulary", "numeric_vocabulary"]
 

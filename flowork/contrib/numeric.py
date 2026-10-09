@@ -27,9 +27,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from flowork.api import ExpressionFunction, ExpressionFunctions, FloworkError, FunctionSignature
 from flowork.contrib._registry import FixedFunctions
-from flowork.errors import FloworkError
-from flowork.spi.ports import ExpressionFunction, ExpressionFunctions, FunctionSignature
 
 __all__ = ["numeric_vocabulary"]
 

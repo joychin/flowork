@@ -13,13 +13,18 @@ from __future__ import annotations
 
 from typing import Any
 
-from flowork.definitions.builder import FlowBuilder
-from flowork.definitions.definition import ProcessDefinition
-from flowork.definitions.node import FlowNode
-from flowork.definitions.validator import IssueLevel, validate_definition
-from flowork.expr.conditions import evaluate_condition
-from flowork.runtime.behavior import InMemoryNodeContext, NodeBehavior
-from flowork.runtime.registry import NodeRegistry, create_registry
+from flowork.api import (
+    FlowBuilder,
+    FlowNode,
+    InMemoryNodeContext,
+    IssueLevel,
+    NodeBehavior,
+    NodeRegistry,
+    ProcessDefinition,
+    create_registry,
+    evaluate_condition,
+    validate_definition,
+)
 
 AI_REVIEW_KIND = "ai_review"
 

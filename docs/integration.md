@@ -65,7 +65,7 @@ FLOWORK_DB=/path/prod.db uv run alembic revision -m "..."  # 新增量迁移（a
 
 生产环境三种形态任选：
 
-1. **web 进程内置调度（默认）**：`uvicorn flowork.web.app:app` 启动时自动开启
+1. **web 进程内置调度（默认）**：`uvicorn flowork.contrib.web.app:app` 启动时自动开启
    后台轮询（默认 30s，`FLOWORK_JOB_INTERVAL` 可调；`FLOWORK_JOBS=off` 关闭）。
    多副本部署安全：tick 内逐 Job CAS 认领（条件 UPDATE），同一 Job 只会被
    一个副本执行。
@@ -115,7 +115,7 @@ FLOWORK_DB=/path/prod.db uv run alembic revision -m "..."  # 新增量迁移（a
 
 ## 与后续系统对接（二期入口已预留）
 
-- **HTTP 服务**：`flowork/web` 已上线设计器面（定义草稿/校验/发布/试算，前缀 `/api`）；
+- **HTTP 服务**：`flowork/contrib/web`（插件位）已上线设计器面（定义草稿/校验/发布/试算，前缀 `/api`）；
   实例/任务/搜索 REST 面随 kernel-v2 §12（`/v2`）落地，四服务方法即路由一一映射。
 - **消息推送**：订阅 `wf_event_outbox`（CloudEvents 信封，按 id 幂等；
   `flowork.events.consumer.IdempotentSink` 为参考实现；`EngineConfig.notifier` 端口保留给宿主定制）。

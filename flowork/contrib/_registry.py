@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from flowork.spi.ports import ExpressionFunction
+from flowork.api import ExpressionFunction
 
 __all__ = ["FixedFunctions"]
 

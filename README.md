@@ -38,8 +38,7 @@ uv run python examples/ai_review_demo.py   # 自定义节点 demo（AI 预审 �
 ## 扩展一种节点类型（三步，不改引擎核心）
 
 ```python
-from flowork.definitions.node import FlowNode
-from flowork.runtime.behavior import NodeBehavior
+from flowork.api import FlowNode, NodeBehavior
 
 class MySpec(FlowNode):
     kind: str = "my_node"
@@ -55,10 +54,10 @@ node_registry.register("my_node", MySpec, MyBehavior)
 ## 流程设计器(Web UI)
 
 `designer/` 提供 React Flow 可视化设计器(草稿 → 校验 → 发布生命周期、schema 驱动属性表单、
-registry 驱动调色板、Spec JSON 直编辑),后端为 `flowork/web/` 的薄 FastAPI:
+registry 驱动调色板、Spec JSON 直编辑),后端为 `flowork/contrib/web/`（官方插件位）的薄 FastAPI:
 
 ```bash
-FLOWORK_DB=/tmp/flowork-designer.db uv run uvicorn flowork.web.app:app --port 8901  # 引擎 API
+FLOWORK_DB=/tmp/flowork-designer.db uv run uvicorn flowork.contrib.web.app:app --port 8901  # 引擎 API
 cd designer && npm install && npm run dev                                            # http://localhost:5173
 ```
 

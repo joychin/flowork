@@ -15,7 +15,7 @@ uv run lint-imports                       # 分层契约门禁（内核禁止 im
 uv run python examples/ai_review_demo.py  # 自定义节点 demo
 
 # web API + 设计器前端（开发模式；详见 designer/README.md）
-FLOWORK_DB=/tmp/f.db uv run uvicorn flowork.web.app:app --port 8901   # 后端，空库自动灌 examples/
+FLOWORK_DB=/tmp/f.db uv run uvicorn flowork.contrib.web.app:app --port 8901   # 后端，空库自动灌 examples/
 cd designer && npm install && npm run dev   # 前端 http://localhost:5173，/api 代理到 8901
 ```
 
@@ -26,6 +26,8 @@ cd designer && npm install && npm run dev   # 前端 http://localhost:5173，/ap
 
 ```
 flowork/
+├── api.py         公开门面（唯一稳定 API 面）：宿主/投影/插件只准 import 这里——
+│                  符号冻结（快照测试守卫）；内核重排（spec §15）只准动内部件
 ├── definitions/   定义层：node(FlowNode基类) flow(连线/条件) builtin(内置Spec)
 │                  definition(模型+JSON编解码) validator(设计时校验) builder(Python DSL)
 ├── runtime/       运行时：behavior(NodeBehavior+NodeContext) registry(注册表) lifecycle(状态枚举)
@@ -33,15 +35,17 @@ flowork/
 │                  conditions(条件求值薄层)
 ├── spi/           端口协议：Clock/WorkCalendar/OrgDirectory/ExpressionFunctions/EventSink
 ├── events/        领域事件类型（M1 起随 Command 管线落 outbox）
-├── tasks/ participants/ persistence/ engine/ jobs/ cli/   # 内核主体（engine 已按职责拆分多文件）
+├── tasks/ participants/ persistence/ engine/ jobs/   # 内核主体（engine 已按职责拆分多文件）
 ├── directory/     目录（M-A）：组织/角色/用户/Agent/委托（agents/roles/delegation/
 │                  queries 读缓存/audit 写审计/store/orm）
-├── web/           薄 FastAPI 传输层（app.py，无业务逻辑，与 RepositoryService 一一映射）
-├── contrib/       官方插件包——内核禁止 import 它（import-linter 契约强制）
+├── cli/           CLI 投影面（运维+用户面）——只准走 flowork.api（静态纪律测试守卫）
+├── contrib/       官方插件包：词汇插件(cel/numeric) + web 传输面(web/，rest/mcp 进驻后同列）
+│                  ——内核禁止 import 它；插件只准经 flowork.api 用内核（双向铁律）
 ├── clock.py       时间戳统一 naive UTC 的唯一出口
 ├── errors.py      异常体系
 tests/             definitions/ runtime/ semantics/(内核语义逐项) suite/(黑盒验收+三个走查 demo)
-                   edge/ pilot/ directory/ + 顶层（web_api/outbox/spi/conditions）
+                   edge/ pilot/ directory/ + 顶层（web_api/outbox/spi/conditions/
+                   api_surface+projection_surface 结构守卫）
 examples/          3 个模板 JSON + org.yaml + ai_review_demo.py + cel_poc.py + pilot/
 designer/          流程设计器前端（React Flow + zustand + Vite；详见 designer/README.md：
                    Spec 唯一事实源、schema 驱动表单、registry 驱动调色板、校验闭环）
@@ -94,7 +98,7 @@ deadline 列表+实例级时限+escalate/anticipate 只读预判。DoD 全链路
 ≤300 行）。残留超标（既有债务，非本轮引入）：kernel.py 534、task_actions.py 470、task_service.py 364、
 validator.py 368——拆解随 M 系 REST/MCP 前的重构刀处理。
 
-当前快照（2026-10-08）：**625 个测试全绿**；web API（`flowork/web`）与设计器前端（`designer/`）已可用；
+当前快照（2026-10-08）：**625 个测试全绿**；web API（`flowork/contrib/web` 插件位）与设计器前端（`designer/`）已可用；
 黑盒验收套件 `tests/suite`（含驳回/异常走查 demo）落地。
 **变量读写接口批（2026-10-08，spec §10/§11/§12/§13/§14 + variable-io-api.md，REST 随 /v2 批、MCP 随 M7 仅登记）**：
 RuntimeService 变量面（update_variables 三门槛：白名单=声明∪input schema∪既有键、保留键拒、类型对位、
@@ -226,3 +230,19 @@ FLOWORK_DB 解析；既有 create_all 库 stamp head 对齐；create_all 与 upg
 并存不冲突）。**663 测试全绿**。开放面（REST /v2、MCP 18、F4 设计器目录下发）
 按插件层排期，待用户启动；挂账开放问题（三契约合一/事件脱敏归属/used_time
 剔除/变量历史清理/C5 出口 assignees）不阻塞主线。
+
+**公开面+插件位结构批（2026-10-09，结构评审落地三件套：立公开面/插件位/反向纪律）**：
+① `flowork/api.py` 唯一公开门面（66 符号冻结：引擎四服务+消息/Job worker 面/定义
+DSL/校验/试算/CEL 值求值/词汇目录/SPI 端口/错误体系/返回模型/OrgDirectoryLike）；
+快照契约 `tests/test_api_surface.py` 守卫（增删=显式动作）；内核重排（spec §15）
+只准动内部件，公开面路径与符号名冻结——宿主与 AI 的稳定记忆锚点。
+② web 迁入插件位 `flowork/contrib/web`（contrib 升格=官方插件包：词汇插件+web
+传输面，rest/mcp 进驻后同列）；uvicorn 入口/全部文档引用同步；启动命令
+`uvicorn flowork.contrib.web.app:app`。
+③ 反向纪律双保险：import-linter 新契约「内核不得 import 投影/插件宿主面（cli、
+contrib.web）」+ 静态纪律测试 `tests/test_projection_surface.py`「投影/插件对内核
+的直接 import 只准经 flowork.api」（forbidden 契约按传递闭包判定、api re-export
+出边必然穿透，正向规则只能静态扫描）；cli/web/examples/contrib 全量换绑 api
+（含 cli demo 与 web 试算两处函数内隐藏深路径）；契约一 source 补漏 directory。
+目录残留债不动：engine 巨包拆分/tasks 改名/validator 子包化/orm_v2 收口——
+随 Alembic 后重排刀（spec §15）一批处理。

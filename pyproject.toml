@@ -63,6 +63,7 @@ source_modules = [
     "flowork.persistence",
     "flowork.engine",
     "flowork.jobs",
+    "flowork.directory",
     "flowork.errors",
     "flowork.clock",
 ]
@@ -70,6 +71,33 @@ forbidden_modules = ["flowork.contrib"]
 ignore_imports = []
 # 注：definitions→runtime→engine 的传递链是既有分层现实（runtime.behavior 懒加载
 # engine.routing），分层拆解不在本契约范围——随内核 v2 模块重排（spec §15）再立。
+
+[[tool.importlinter.contracts]]
+name = "内核不得 import 投影/插件宿主面（cli 与 contrib.web）——依赖单向：投影→api→内核"
+type = "forbidden"
+source_modules = [
+    "flowork.api",
+    "flowork.definitions",
+    "flowork.runtime",
+    "flowork.expr",
+    "flowork.spi",
+    "flowork.events",
+    "flowork.tasks",
+    "flowork.participants",
+    "flowork.persistence",
+    "flowork.engine",
+    "flowork.jobs",
+    "flowork.directory",
+    "flowork.errors",
+    "flowork.clock",
+]
+forbidden_modules = ["flowork.cli", "flowork.contrib.web"]
+ignore_imports = []
+# 注 1：「投影/插件只准直接 import flowork.api」的正向纪律由
+# tests/test_projection_surface.py 静态扫描守卫——forbidden 契约按传递闭包判定，
+# flowork.api 作为 re-export 聚合器必然链到内部包，正向规则无法用 forbidden 表达。
+# 注 2：公开面符号冻结于 flowork/api.py（快照测试 tests/test_api_surface.py 守卫）；
+# 内核重排（spec §15）只准动内部件。宿主与 AI 同样只准依赖 flowork.api。
 
 [tool.ruff.lint.per-file-ignores]
 "flowork/persistence/orm.py" = ["RUF012", "E402"]  # SQLAlchemy mapped_column 惯例 + 尾部再导出 v2 表（同 Base 元数据的刻意结构）

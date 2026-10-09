@@ -2,7 +2,7 @@
 
 启动::
 
-    uvicorn flowork.web.app:app --port 8901     # FLOWORK_DB 指定 SQLite 文件
+    uvicorn flowork.contrib.web.app:app --port 8901     # FLOWORK_DB 指定 SQLite 文件
 """
 
 from __future__ import annotations
@@ -15,20 +15,25 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from flowork.clock import utc_now
-from flowork.definitions.definition import (
+from flowork.api import (
+    DefinitionError,
+    EngineConfig,
+    FloworkError,
+    InvalidDefinition,
     InvalidDefinitionData,
+    IssueLevel,
     ProcessDefinition,
+    ProcessEngine,
+    UnknownNodeKind,
+    ValidateIssue,
+    evaluate_formula_value,
+    expression_functions_of,
     load_definition,
     load_definition_file,
+    semantic_diff,
+    simulate_route,
+    utc_now,
 )
-from flowork.definitions.dry_run import simulate_route
-from flowork.definitions.semantic_diff import semantic_diff
-from flowork.definitions.validator import InvalidDefinition, IssueLevel, ValidateIssue
-from flowork.engine.config import EngineConfig
-from flowork.engine.engine import ProcessEngine
-from flowork.errors import DefinitionError, FloworkError, UnknownNodeKind
-from flowork.expr.context import expression_functions_of
 
 __all__ = ["app", "create_app"]
 
@@ -36,7 +41,7 @@ __all__ = ["app", "create_app"]
 # hooks/properties 属于高级用法（Spec JSON Tab 直接编辑）
 FORM_EXCLUDE = ("code", "kind", "hooks", "properties")
 
-EXAMPLES_DIR = Path(__file__).parent.parent.parent / "examples"
+EXAMPLES_DIR = Path(__file__).parent.parent.parent.parent / "examples"
 
 
 def _issues_payload(issues: list[ValidateIssue]) -> list[dict[str, Any]]:
@@ -220,8 +225,6 @@ def create_app(db_file: str | Path | None = None, *, seed: bool = True) -> FastA
         缺 instance 时注入占位形状（id=i_preview）——试算可引用保留标识符，
         与运行时同一注入面。
         """
-        from flowork.expr.cel import evaluate_formula_value
-
         formula = str(body.get("formula") or "")
         raw_vars = body.get("variables")
         variables = dict(raw_vars) if isinstance(raw_vars, dict) else {}

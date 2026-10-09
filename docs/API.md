@@ -2,17 +2,16 @@
 
 > 入口：`ProcessEngine(config?)` → 四服务 `engine.repository / runtime / task / history` + `engine.jobs / engine.messages / engine.worker_jobs`。
 > 所有写操作带 `actor` 归因；AI 代办传 `as_agent=True`（审计区分）。
+> **公开面纪律**：宿主/插件只准 `from flowork.api import …`（符号快照冻结）；内部深路径随时可变，不构成兼容承诺。
 
 ## 装配
 
 ```python
-from flowork.engine.config import EngineConfig
-from flowork.engine.engine import ProcessEngine
-from flowork.participants.org_directory import OrgDirectory
+from flowork.api import EngineConfig, ProcessEngine, StaticOrgDirectory
 
 engine = ProcessEngine(EngineConfig(
     db_file="flowork.db",                     # 默认内存 SQLite
-    org=OrgDirectory.from_yaml("org.yaml"),   # 参与者体系（可选；取人词汇数据源）
+    org=StaticOrgDirectory.from_yaml("org.yaml"),  # 参与者体系（可选；取人词汇数据源）
     history_level="full",                     # none / activity / audit / full（audit 当前同 full 全记）
 ))
 engine.register_handler("my_action", handler) # ServiceTask 动作 / 声明式钩子
