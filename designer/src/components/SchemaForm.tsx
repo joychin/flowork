@@ -6,6 +6,7 @@
 
 import { useState } from 'react'
 import type { FormGroup, JSONSchema } from '../types'
+import { ObjectArrayField } from './ObjectArrayField'
 
 /** 字段中文名(引擎 schema title 为英文时兜底) */
 const FIELD_LABELS: Record<string, string> = {
@@ -18,8 +19,8 @@ const FIELD_LABELS: Record<string, string> = {
   candidate_groups: '候选组',
   multi_instance: '多人审批(多实例)',
   mode: '执行模式',
-  approve_exit: '同意出口(比例)',
-  disapprove_exit: '驳回出口(比例)',
+  approve_exit: '同意出口(公式)',
+  disapprove_exit: '驳回出口(公式)',
   reject_target: '驳回目标节点',
   auto_pass_originator: '发起人自动通过',
   auto_pass_previous: '上一步办理人自动通过',
@@ -28,13 +29,22 @@ const FIELD_LABELS: Record<string, string> = {
   timeout: '超时策略',
   due_minutes: '超时时间(分钟)',
   strategy: '到期动作',
+  deadlines: '多级超时(分钟 → 动作)',
+  after_minutes: '时长(分钟)',
+  reassign_to: '改派目标(CEL)',
   action: '动作 handler',
   params: '动作参数(JSON)',
   process_code: '子流程定义 code',
+  binding: '绑定方式',
+  subjects: '参与主体(每项一个 CEL 表达式)',
+  completion: '完成公式',
+  output_mode: '输出聚合方式',
   is_synchronous: '同步等待子流程',
   input_mappings: '输入映射(JSON)',
   output_mappings: '输出映射(JSON)',
   recipients: '接收人',
+  message: '等待消息',
+  correlation_key: '关联键(CEL)',
 }
 
 const ENUM_LABELS: Record<string, string> = {
@@ -46,6 +56,15 @@ const ENUM_LABELS: Record<string, string> = {
   auto_reject: '自动驳回',
   raise: '报错拦截',
   to_admins: '转交管理员',
+  reassign: '改派他人',
+  escalate: '升级上报',
+  latest: '最新版(运行期解析)',
+  deployment: '部署时锁定版本',
+  collect: '按序聚合(列表)',
+  merge: '逐子合并(仅单子)',
+  mark: '仅打标继续跑',
+  cancel: '作废实例',
+  terminate: '终止实例',
 }
 
 /** 按字段语境区分的枚举标签(如 multi_instance.mode 的 parallel 是「并签」而非「并行」) */
@@ -53,8 +72,9 @@ const FIELD_ENUM_LABELS: Record<string, Record<string, string>> = {
   mode: { parallel: '并签(全员同时待办)', sequential: '依次(逐人待办)' },
 }
 
-function fieldLabel(name: string, schema: JSONSchema): string {
-  return FIELD_LABELS[name] ?? schema.title ?? name
+function fieldLabel(path: string, name: string, schema: JSONSchema, labels?: Record<string, string>): string {
+  // 解析顺序:registry 下发的路径标签(kind 专属,可区分同名字段) → 前端全局字段表 → schema title
+  return labels?.[path] ?? FIELD_LABELS[name] ?? schema.title ?? name
 }
 
 function enumLabel(fieldName: string, value: unknown): string {
@@ -82,13 +102,21 @@ function resolve(schema: JSONSchema | undefined, defs: Record<string, JSONSchema
   return { schema, nullable: false }
 }
 
+export type FieldOverride = (ctx: { value: unknown; onChange: (v: unknown) => void }) => React.ReactNode
+
 type Props = {
   schema: JSONSchema
   defs: Record<string, JSONSchema>
   value: Record<string, unknown>
   exclude?: string[]
+  /** 按字段名覆盖默认控件(如 process_code → 定义下拉、reject_target → 节点下拉);仅顶层生效 */
+  overrides?: Record<string, FieldOverride>
   /** 属性面板分组元数据(registry ui.form_groups);未分组字段归入「其他」组 */
   groups?: FormGroup[] | null
+  /** registry 下发的路径标签(kind 专属;键为点路径,如 message.name / deadlines[].action) */
+  labels?: Record<string, string>
+  /** 嵌套递归时的父路径(顶层空) */
+  basePath?: string
   /** 字段级内联错误(key → 错误文案) */
   errors?: Record<string, string>
   onChange: (next: Record<string, unknown>) => void
@@ -117,26 +145,44 @@ export function requiredFieldErrors(
   return out
 }
 
-export function SchemaForm({ schema, defs, value, exclude = [], groups, errors, onChange }: Props) {
+export function SchemaForm({ schema, defs, value, exclude = [], groups, labels, basePath = '', overrides, errors, onChange }: Props) {
   const resolved = resolve(schema, defs)
   const target = resolved.schema
   if (!target?.properties) return <div className="form-empty">该节点类型无可配置字段</div>
 
   const required = new Set(target.required ?? [])
   const setField = (key: string, v: unknown) => onChange({ ...value, [key]: v })
+  const childPath = (key: string) => (basePath ? `${basePath}.${key}` : key)
 
-  const renderField = (key: string, sub: JSONSchema) => (
+  const renderField = (key: string, sub: JSONSchema) => {
+    const Override = basePath ? undefined : overrides?.[key]
+    if (Override) {
+      return (
+        <div key={key} className={`field ${errors?.[key] ? 'has-error' : ''}`}>
+          <div className="field-label">
+            <span>{fieldLabel(childPath(key), key, sub, labels)}</span>
+            {!required.has(key) && <span className="opt">可选</span>}
+          </div>
+          <Override value={value[key]} onChange={(v) => setField(key, v)} />
+          {errors?.[key] && <div className="field-error">{errors[key]}</div>}
+        </div>
+      )
+    }
+    return (
     <SchemaField
       key={key}
+      path={childPath(key)}
       name={key}
       schema={sub}
       defs={defs}
+      labels={labels}
       required={required.has(key)}
       error={errors?.[key]}
       value={value[key]}
       onChange={(v) => setField(key, v)}
     />
-  )
+    )
+  }
 
   // 无分组元数据:保持单列(自定义类型零配置兜底)
   if (!groups?.length) {
@@ -183,19 +229,21 @@ function FormSection({ title, defaultCollapsed, children }: {
 }
 
 type FieldProps = {
+  path: string
   name: string
   schema: JSONSchema
   defs: Record<string, JSONSchema>
+  labels?: Record<string, string>
   required: boolean
   error?: string
   value: unknown
   onChange: (v: unknown) => void
 }
 
-function SchemaField({ name, schema, defs, required, error, value, onChange }: FieldProps) {
+function SchemaField({ path, name, schema, defs, labels, required, error, value, onChange }: FieldProps) {
   const { schema: target, nullable } = resolve(schema, defs)
   if (!target) return null
-  const label = fieldLabel(name, target)
+  const label = fieldLabel(path, name, target, labels)
   const desc = target.description
 
   const labelRow = (extra?: React.ReactNode) => (
@@ -216,13 +264,13 @@ function SchemaField({ name, schema, defs, required, error, value, onChange }: F
     </div>
   )
 
-  // 可空对象(multi_instance / timeout):启用开关 + 嵌套表单
+  // 可空对象(multi_instance / timeout / message):启用开关 + 嵌套表单
   if (target.type === 'object' && nullable && target.properties) {
     const enabled = value != null && typeof value === 'object'
     return wrap(
       enabled && typeof value === 'object' && value != null && (
         <div className="nested">
-          <SchemaForm schema={target} defs={defs} value={value as Record<string, unknown>} onChange={(v) => onChange(v)} />
+          <SchemaForm schema={target} defs={defs} labels={labels} basePath={path} value={value as Record<string, unknown>} onChange={(v) => onChange(v)} />
         </div>
       ),
       <button
@@ -243,6 +291,8 @@ function SchemaField({ name, schema, defs, required, error, value, onChange }: F
         <SchemaForm
           schema={target}
           defs={defs}
+          labels={labels}
+          basePath={path}
           value={(value ?? {}) as Record<string, unknown>}
           onChange={(v) => onChange(v)}
         />
@@ -255,11 +305,25 @@ function SchemaField({ name, schema, defs, required, error, value, onChange }: F
     return wrap(<JsonArea value={value ?? {}} onChange={onChange} />)
   }
 
-  // 数组:字符串标签输入
+  // 数组:元素是对象(deadlines 等)走条目子表单;字符串数组走标签输入
   if (target.type === 'array') {
-    const items = Array.isArray(value) ? (value as unknown[]).map(String) : []
+    const { schema: items } = resolve(target.items, defs)
+    if (items?.type === 'object' && items.properties) {
+      return wrap(
+        <ObjectArrayField
+          itemsSchema={items}
+          defs={defs}
+          labels={labels}
+          basePath={`${path}[]`}
+          value={Array.isArray(value) ? (value as Record<string, unknown>[]) : []}
+          onChange={onChange}
+        />,
+        !required && <span className="opt">可选</span>,
+      )
+    }
+    const stringItems = Array.isArray(value) ? (value as unknown[]).map(String) : []
     return wrap(
-      <TagInput values={items} onChange={onChange} placeholder={desc ?? '输入后回车添加,点击标签删除'} />,
+      <TagInput values={stringItems} onChange={onChange} placeholder={desc ?? '输入后回车添加,点击标签删除'} />,
       !required && <span className="opt">可选</span>,
     )
   }

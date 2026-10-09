@@ -4,6 +4,12 @@ import { useEffect, useState } from 'react'
 import { sampleVariables } from '../api'
 import { useStore } from '../store'
 
+const WAIT_ASSUMPTIONS: [string, string][] = [
+  ['auto', '自动(消息到达与超时两面都试)'],
+  ['matched', '假设消息到达'],
+  ['elapsed', '假设超时'],
+]
+
 export function DryRunDialog() {
   const open = useStore((s) => s.dryRunOpen)
   const result = useStore((s) => s.dryRun)
@@ -13,6 +19,9 @@ export function DryRunDialog() {
   const [varsText, setVarsText] = useState('{}')
   const [running, setRunning] = useState(false)
   const [parseError, setParseError] = useState<string | null>(null)
+  // 等待节点预演假设(逐节点;缺省 auto=两面都试,reason 会标注假设)
+  const [assumptions, setAssumptions] = useState<Record<string, string>>({})
+  const waitNodes = (spec?.nodes ?? []).filter((n) => n.kind === 'wait')
 
   // 打开时用声明变量的样例值预填
   useEffect(() => {
@@ -38,7 +47,7 @@ export function DryRunDialog() {
       return
     }
     setRunning(true)
-    await run(variables)
+    await run(variables, assumptions)
     setRunning(false)
   }
 
@@ -73,6 +82,25 @@ export function DryRunDialog() {
           onChange={(e) => setVarsText(e.target.value)}
         />
         {parseError && <div className="field-error">{parseError}</div>}
+
+        {waitNodes.length > 0 && (
+          <div className="dryrun-assumptions">
+            <div className="dryrun-assumptions-title">等待节点假设(预演不是运行:先到者决定走向,这里把两面都画出来)</div>
+            {waitNodes.map((n) => (
+              <div key={n.code} className="var-row">
+                <span className="dryrun-node">{n.name || n.code}</span>
+                <select
+                  value={assumptions[n.code] ?? 'auto'}
+                  onChange={(e) => setAssumptions((prev) => ({ ...prev, [n.code]: e.target.value }))}
+                >
+                  {WAIT_ASSUMPTIONS.map(([v, label]) => (
+                    <option key={v} value={v}>{label}</option>
+                  ))}
+                </select>
+              </div>
+            ))}
+          </div>
+        )}
 
         <div className="modal-actions">
           <button className="btn" onClick={close}>关闭</button>

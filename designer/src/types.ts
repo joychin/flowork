@@ -25,6 +25,15 @@ export type ProcessVariable = {
   sample?: unknown
 }
 
+/** 消息启动声明(spec §7.1;表达式求值于消息上下文 payload.* + now) */
+export type StartMessageDecl = {
+  name: string
+  correlation_key?: string
+  input_mappings?: Record<string, string>
+  start_user?: string
+  business_key?: string
+}
+
 export type Spec = {
   code: string
   name: string
@@ -33,6 +42,12 @@ export type Spec = {
   nodes: SpecNode[]
   flows: SequenceFlow[]
   variables?: ProcessVariable[]
+  /** 入参契约(JSON Schema 2020-12);发起/任务提交/节点输出三边界按它校验 */
+  input?: Record<string, unknown> | null
+  /** 实例时限:整单最大存活时间,到点按 strategy 处置 */
+  deadline?: { after_minutes: number; strategy: 'mark' | 'cancel' | 'terminate' } | null
+  /** 消息启动声明(随定义发布生效) */
+  start_on_message?: StartMessageDecl[]
   layout: Record<string, NodePosition>
 }
 
@@ -73,6 +88,11 @@ export type NodeKindMeta = {
     icon?: string
     palette?: { label: string; defaults: Record<string, unknown> }[]
     form_groups?: FormGroup[]
+    /** 路径标签(点路径 → 中文),供 schema 表单按「父对象感知」显示字段名 */
+    field_labels?: Record<string, string>
+    /** 画布徽章/摘要声明(表达式按节点字段取值),供画布节点渲染关键参数 */
+    badges?: { mode: string; field: string; values?: Record<string, string> }[]
+    summary?: string
   }
   form_exclude: string[]
   schema: JSONSchema
@@ -93,6 +113,19 @@ export type JSONSchema = {
   additionalProperties?: boolean | JSONSchema
   format?: string
 }
+
+/** /api/catalog 返回：表达式词汇目录(F4,与 validator 同源) */
+export type CatalogEntry = {
+  name: string
+  type?: string
+  params?: string[]
+  returns?: string
+  label: string
+  positions: string[]
+  note: string
+}
+
+export type Catalog = { identifiers: CatalogEntry[]; functions: CatalogEntry[] }
 
 /** /api/dry-run 返回：路由预演路径 */
 export type DryRunStep = {

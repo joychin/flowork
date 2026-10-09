@@ -1,12 +1,13 @@
 /** 右侧面板:属性(schema 驱动、分组)/ Spec JSON / 校验 三个 Tab;空选态 = 流程设置 */
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { conditionSummary } from '../adapter'
-import { parseEdgeId, type ProcessVariable, type Spec } from '../types'
+import { parseEdgeId, type Catalog, type Spec } from '../types'
 import { sampleVariables } from '../api'
 import { api } from '../api'
 import { useStore } from '../store'
-import { SchemaForm, requiredFieldErrors } from './SchemaForm'
+import { SchemaForm, requiredFieldErrors, type FieldOverride } from './SchemaForm'
+import { ProcessSettings } from './ProcessSettings'
 import { Icon } from './FlowNodes'
 
 export function RightPanel() {
@@ -45,6 +46,21 @@ function PropsTab() {
   const mutate = useStore((s) => s.mutate)
   const deleteSelection = useStore((s) => s.deleteSelection)
   const setRightTab = useStore((s) => s.setRightTab)
+
+  const refreshListing = useStore((s) => s.refreshListing)
+  const nodeKind = selection?.type === 'node' ? spec?.nodes.find((n) => n.code === selection.id)?.kind : undefined
+  useEffect(() => {
+    if (nodeKind === 'call_activity') void refreshListing()
+  }, [nodeKind, refreshListing])
+  const overrides = useMemo<Record<string, FieldOverride> | undefined>(() => {
+    if (nodeKind === 'call_activity') {
+      return { process_code: ProcessCodePicker } as Record<string, FieldOverride>
+    }
+    if (nodeKind === 'user_task') {
+      return { reject_target: RejectTargetPicker } as Record<string, FieldOverride>
+    }
+    return undefined
+  }, [nodeKind])
 
   if (!spec) return null
   if (!selection) {
@@ -123,6 +139,8 @@ function PropsTab() {
           defs={schema.$defs ?? {}}
           exclude={exclude}
           groups={meta?.ui?.form_groups ?? null}
+          labels={meta?.ui?.field_labels}
+          overrides={overrides}
           errors={fieldErrors}
           value={node}
           onChange={(next) => mutate((draft) => {
@@ -160,149 +178,6 @@ function IssueInline({ issues, onOpen }: {
   )
 }
 
-/* ── 流程设置(空选态):流程名称 + 流程变量声明 ─────────── */
-
-const VAR_TYPE_LABELS: Record<ProcessVariable['type'], string> = {
-  string: '文本',
-  number: '数字',
-  boolean: '是/否',
-  list: '列表',
-}
-
-function ProcessSettings({ spec }: { spec: Spec }) {
-  const mutate = useStore((s) => s.mutate)
-  const openDryRun = useStore((s) => s.openDryRun)
-  const variables = spec.variables ?? []
-
-  const setVar = (index: number, patch: Partial<ProcessVariable>) => {
-    mutate((draft) => {
-      draft.variables = [...(draft.variables ?? [])]
-      draft.variables[index] = { ...draft.variables[index], ...patch }
-    })
-  }
-  const removeVar = (index: number) => {
-    mutate((draft) => {
-      draft.variables = (draft.variables ?? []).filter((_, i) => i !== index)
-    })
-  }
-  const addVar = () => {
-    mutate((draft) => {
-      draft.variables = [...(draft.variables ?? []), { name: '', type: 'string', label: '' }]
-    })
-  }
-
-  return (
-    <div>
-      <PanelHead icon="⌂" title="流程设置" code={spec.code} onDelete={() => {}} deleteLabel="" />
-      <div className="field">
-        <div className="field-label"><span>流程名称</span></div>
-        <input
-          value={spec.name}
-          placeholder="给流程起个名字"
-          onChange={(e) => mutate((draft) => { draft.name = e.target.value })}
-        />
-      </div>
-      <div className="field">
-        <div className="field-label">
-          <span>流程变量</span>
-          <span className="opt">条件/试运行/变量选择器的数据源</span>
-        </div>
-        {variables.length === 0 && (
-          <div className="empty-sub">
-            未声明变量。声明后:连线条件可直接点选变量,「试运行」用样例值预演路由。
-          </div>
-        )}
-        {variables.map((v, i) => (
-          <div key={i} className="var-row">
-            <input
-              className="var-name"
-              value={v.name}
-              placeholder="变量名(如 amount)"
-              onChange={(e) => setVar(i, { name: e.target.value.trim() })}
-            />
-            <select
-              value={v.type}
-              onChange={(e) => setVar(i, { type: e.target.value as ProcessVariable['type'] })}
-            >
-              {(Object.keys(VAR_TYPE_LABELS) as ProcessVariable['type'][]).map((t) => (
-                <option key={t} value={t}>{VAR_TYPE_LABELS[t]}</option>
-              ))}
-            </select>
-            <input
-              className="var-label"
-              value={v.label ?? ''}
-              placeholder="显示名(可选)"
-              onChange={(e) => setVar(i, { label: e.target.value })}
-            />
-            <VariableSampleInput value={v} onChange={(sample) => setVar(i, { sample })} />
-            <button className="mini-btn" title="删除变量" onClick={() => removeVar(i)}>×</button>
-          </div>
-        ))}
-        <button className="add-group" onClick={addVar}>＋ 添加变量</button>
-      </div>
-      <button className="btn btn-block" onClick={openDryRun}>▶ 试运行(按样例值预演路由)</button>
-      <div className="panel-note">
-        点击画布中的节点或连线编辑其属性;变量声明随 Spec 保存,与 Spec JSON Tab 同源。
-      </div>
-    </div>
-  )
-}
-
-/** 样例值输入:按变量类型给对应控件(string 文本 / number 数字 / boolean 下拉 / list JSON) */
-function VariableSampleInput({ value, onChange }: {
-  value: ProcessVariable
-  onChange: (sample: unknown) => void
-}) {
-  if (value.type === 'boolean') {
-    return (
-      <select
-        className="var-sample"
-        value={value.sample === true ? 'true' : 'false'}
-        onChange={(e) => onChange(e.target.value === 'true')}
-        title="试运行样例值"
-      >
-        <option value="false">否</option>
-        <option value="true">是</option>
-      </select>
-    )
-  }
-  if (value.type === 'number') {
-    return (
-      <input
-        className="var-sample"
-        type="number"
-        value={value.sample == null ? '' : String(value.sample)}
-        placeholder="样例值"
-        onChange={(e) => onChange(e.target.value === '' ? undefined : Number(e.target.value))}
-      />
-    )
-  }
-  if (value.type === 'list') {
-    return (
-      <input
-        className="var-sample"
-        value={Array.isArray(value.sample) ? JSON.stringify(value.sample) : ''}
-        placeholder='样例值,如 ["a","b"]'
-        onChange={(e) => {
-          try {
-            const parsed = JSON.parse(e.target.value)
-            onChange(Array.isArray(parsed) ? parsed : undefined)
-          } catch {
-            onChange(undefined)
-          }
-        }}
-      />
-    )
-  }
-  return (
-    <input
-      className="var-sample"
-      value={value.sample == null ? '' : String(value.sample)}
-      placeholder="样例值"
-      onChange={(e) => onChange(e.target.value === '' ? undefined : e.target.value)}
-    />
-  )
-}
 
 /* ── 开始条件：仅多条入边节点显示（advance_policy any/all）── */
 
@@ -367,6 +242,22 @@ function EdgeForm({ flow, onChange }: {
   const showToast = useStore((s) => s.showToast)
   const formula = typeof flow.condition === 'string' ? flow.condition : ''
   const [preview, setPreview] = useState<{ ok: boolean; text: string } | null>(null)
+  const areaRef = useRef<HTMLTextAreaElement | null>(null)
+  // 词汇目录(F4):与 validator 同源;连线条件位点 = 'condition'
+  const [catalog, setCatalog] = useState<Catalog | null>(null)
+  useEffect(() => { api.catalog().then(setCatalog).catch(() => {}) }, [])
+  const insert = (token: string) => {
+    const el = areaRef.current
+    if (!el) return
+    const start = el.selectionStart ?? formula.length
+    const end = el.selectionEnd ?? formula.length
+    const next = formula.slice(0, start) + token + formula.slice(end)
+    onChange({ condition: next.trim() ? next : null })
+    requestAnimationFrame(() => {
+      el.focus()
+      el.setSelectionRange(start + token.length, start + token.length)
+    })
+  }
 
   const setFormula = (text: string) => {
     onChange({ condition: text.trim() ? text : null })
@@ -418,6 +309,7 @@ function EdgeForm({ flow, onChange }: {
             发起人内置标识符 initiator。
           </div>
           <textarea
+            ref={areaRef}
             className="json-area"
             rows={3}
             spellCheck={false}
@@ -425,6 +317,7 @@ function EdgeForm({ flow, onChange }: {
             placeholder={'如 amount > 10000 && level == "L2"'}
             onChange={(e) => setFormula(e.target.value)}
           />
+          <FormulaChips catalog={catalog} onInsert={insert} />
           <div className="formula-actions">
             <button className="mini-btn" type="button" onClick={() => void runPreview()}>▶ 按样例值试算</button>
           </div>
@@ -468,6 +361,7 @@ function IssuesTab() {
   const select = useStore((s) => s.select)
   const validateNow = useStore((s) => s.validateNow)
   const pending = useStore((s) => s.saveState)
+  const [deployCheck, setDeployCheck] = useState(false)
 
   if (!spec) return null
   return (
@@ -476,8 +370,19 @@ function IssuesTab() {
         <span className={`issues-verdict ${issues.every((i) => i.level !== 'error') ? 'ok' : 'bad'}`}>
           {issues.length === 0 ? '✓ 校验通过,无问题' : issues.every((i) => i.level !== 'error') ? '○ 无错误,有改进建议' : `✕ ${issues.filter((i) => i.level === 'error').length} 个错误,禁止发布`}
         </span>
-        <button className="btn btn-sm" onClick={() => void validateNow()} disabled={pending === 'saving'}>重新校验</button>
+        <button className="btn btn-sm" onClick={() => void validateNow(deployCheck)} disabled={pending === 'saving'}>重新校验</button>
       </div>
+      <label className="deploy-check" title="子流程目标是否已发布 / handler 是否注册 / 取人实体是否存在——平时点发布才看到,勾上提前提醒">
+        <input
+          type="checkbox"
+          checked={deployCheck}
+          onChange={(e) => {
+            setDeployCheck(e.target.checked)
+            void validateNow(e.target.checked)
+          }}
+        />
+        同时检查发布项(部署期校验预览)
+      </label>
       {issues.map((issue, i) => (
         <button
           key={i}
@@ -496,5 +401,120 @@ function IssuesTab() {
       ))}
       {issues.length === 0 && <div className="empty-sub">修改任意配置后会自动重新校验(引擎侧 repository.validate)。</div>}
     </div>
+  )
+}
+
+
+/* ── 字段控件覆盖:子流程定义下拉 / 驳回目标节点下拉(不再手打 code) ── */
+
+function ProcessCodePicker({ value, onChange }: { value: unknown; onChange: (v: unknown) => void }) {
+  const listing = useStore((s) => s.listing)
+  const current = typeof value === 'string' ? value : ''
+  const known = listing.some((d) => d.code === current)
+  return (
+    <select
+      value={current}
+      onChange={(e) => onChange(e.target.value === '' ? '' : e.target.value)}
+    >
+      <option value="">— 选择被调流程(留空=未配置) —</option>
+      {!known && current && <option value={current}>{current}(当前值,不在列表)</option>}
+      {listing.map((d) => (
+        <option key={d.code} value={d.code}>
+          {d.code} · {d.name || '(未命名)'}
+          {d.published_version != null ? `(已发布 v${d.published_version})` : '(仅草稿)'}
+        </option>
+      ))}
+    </select>
+  )
+}
+
+function RejectTargetPicker({ value, onChange }: { value: unknown; onChange: (v: unknown) => void }) {
+  const spec = useStore((s) => s.spec)
+  const selection = useStore((s) => s.selection)
+  const current = typeof value === 'string' ? value : ''
+  return (
+    <select
+      value={current}
+      onChange={(e) => onChange(e.target.value === '' ? null : e.target.value)}
+    >
+      <option value="">— 选择驳回目标节点(留空=回到上一站) —</option>
+      {(spec?.nodes ?? [])
+        .filter((n) => n.code !== selection?.id && n.kind !== 'wait')
+        .map((n) => (
+          <option key={n.code} value={n.code}>{n.code} · {n.name || '(未命名)'}</option>
+        ))}
+      {current && !(spec?.nodes ?? []).some((n) => n.code === current) && (
+        <option value={current}>{current}(当前值,节点已不存在)</option>
+      )}
+    </select>
+  )
+}
+
+
+/* ── 公式词汇点选(F4):变量 + 保留词(按位点过滤) + 引擎函数,点击插入光标处 ── */
+
+const INSERT_AS: Record<string, string> = { wait: 'wait.result' }
+
+function FormulaChips({ catalog, onInsert }: {
+  catalog: Catalog | null
+  onInsert: (token: string) => void
+}) {
+  const spec = useStore((s) => s.spec)
+  if (!catalog) return null
+  const vars = (spec?.variables ?? []).filter((v) => v.name)
+  const idents = catalog.identifiers.filter((e) => e.positions.includes('condition'))
+  const fns = catalog.functions.filter((e) => e.positions.includes('condition'))
+  if (!vars.length && !idents.length && !fns.length) return null
+  return (
+    <div className="formula-chips">
+      {vars.length > 0 && (
+        <ChipGroup title="变量">
+          {vars.map((v) => (
+            <button key={v.name} type="button" className="chip" title={v.label || v.type} onClick={() => onInsert(v.name)}>
+              {v.name}
+            </button>
+          ))}
+        </ChipGroup>
+      )}
+      {idents.length > 0 && (
+        <ChipGroup title="词汇">
+          {idents.map((e) => (
+            <button
+              key={e.name}
+              type="button"
+              className="chip reserved"
+              title={`${e.label} · ${e.note}`}
+              onClick={() => onInsert(INSERT_AS[e.name] ?? e.name)}
+            >
+              {INSERT_AS[e.name] ?? e.name}
+            </button>
+          ))}
+        </ChipGroup>
+      )}
+      {fns.length > 0 && (
+        <ChipGroup title="函数">
+          {fns.map((e) => (
+            <button
+              key={e.name}
+              type="button"
+              className="chip fn"
+              title={`${e.label} · ${e.note}`}
+              onClick={() => onInsert(`${e.name}("…")`)}
+            >
+              {e.name}()
+            </button>
+          ))}
+        </ChipGroup>
+      )}
+    </div>
+  )
+}
+
+function ChipGroup({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <span className="chip-group">
+      <span className="chip-title">{title}</span>
+      {children}
+    </span>
   )
 }

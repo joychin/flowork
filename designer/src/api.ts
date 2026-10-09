@@ -1,4 +1,5 @@
 import type {
+  Catalog,
   DefinitionDetail,
   DefinitionSummary,
   DiffResult,
@@ -45,17 +46,23 @@ export const api = {
       { method: 'POST' },
     ),
 
-  validate: (spec: Spec) =>
-    request<{ ok: boolean; issues: ValidateIssue[] }>('/api/validate', {
-      method: 'POST',
-      body: JSON.stringify(spec),
-    }),
+  validate: (spec: Spec, deploy = false) =>
+    request<{ ok: boolean; issues: ValidateIssue[] }>(
+      `/api/validate${deploy ? '?deploy=true' : ''}`,
+      { method: 'POST', body: JSON.stringify(spec) },
+    ),
 
-  dryRun: (spec: Spec, variables: Record<string, unknown>) =>
+  dryRun: (
+    spec: Spec,
+    variables: Record<string, unknown>,
+    assumptions?: Record<string, string>,
+  ) =>
     request<DryRunResult>('/api/dry-run', {
       method: 'POST',
-      body: JSON.stringify({ spec, variables }),
+      body: JSON.stringify({ spec, variables, assumptions }),
     }),
+
+  catalog: () => request<Catalog>('/api/catalog'),
 
   formulaPreview: (formula: string, variables: Record<string, unknown>) =>
     request<{ ok: boolean; result?: boolean; error?: string }>('/api/formula/preview', {
