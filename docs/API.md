@@ -83,10 +83,14 @@ engine.close()
 
 | 方法 | 说明 |
 |---|---|
-| `publish_message(name, correlation_key="", payload=None, *, message_id=None, ttl_seconds=...) -> bool` | 发布消息：命中 open 订阅立即关联（True）；否则入缓冲（False）；message_id 幂等防重 |
+| `publish_message(name, correlation_key="", payload=None, *, message_id=None, ttl_seconds=...) -> bool` | 发布消息：命中 open 订阅立即关联（True）；否则入缓冲（False）；message_id 幂等防重。等待节点（wait kind）命中即推进（按节点 output_mappings 写载荷，缺省全量合并）；暂停实例的订阅不消费 |
+| `correlate_message(name, correlation_key="", payload=None, *, message_id=None) -> dict \| None` | **同步关联（不缓冲，spec §7.2）**：命中回传签收凭证 `{matched, duplicate, instance_id, node_id, message_name, business_key, definition_code}` 并推进；无人在等返回 None（消息不留存）；重复 message_id 幂等回放首次结果（duplicate=True） |
 | `subscribe(instance_id, token_id, node_id, name, correlation_key="") -> bool` | 登记订阅；命中缓冲未过期消息立即关联（先到竞态） |
 | `signal(name) -> int` | 广播信号（唤醒全部同名订阅） |
+| `waiting(name=None, correlation_key=None) -> list[dict]` | 等待实例反查（open 订阅）：实例/节点/消息名/关联键/流程/业务键/等待起时——运维面；CLI `flowork message waiting` |
 | `close_subscriptions(instance_id, *, node_id=None) -> int` | 关闭订阅（节点离开等待态） |
+
+等待节点（`kind="wait"`，spec §7.2）：`message`（{name, correlation_key?}，进入时求值快照）/ `output_mappings`（载荷→变量，缺省全量合并）/ `timeout`（{after_minutes}）三模式合一；结果词汇 `wait.result`（matched|elapsed）仅出边条件；到时发 `timer_fired`；周期触发不做（调度域）。
 
 ## Jobs（超时与外部执行）
 

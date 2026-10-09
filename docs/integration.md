@@ -95,6 +95,9 @@ FLOWORK_DB=/path/prod.db uv run alembic revision -m "..."  # 新增量迁移（a
   （`activate_jobs` / `complete_job` / `fail_job`，同样是 CAS 认领 + 租约易主）。
 - **启动幂等**：同 `idempotency_key` 并发到达，按 `reuse` 策略
   （reject / return_existing / allow_duplicate）收敛，数据库唯一索引兜底。
+- **等待竞速**（wait 节点，spec §7.2）：消息命中与定时到时是两条独立命令，
+  各自 touch 实例行——并发到达时乐观锁串行化，**先落者赢、后到者查订阅已
+  终态/令牌已完结即跳过**（不重试不死信），零专用仲裁代码。
 
 ### 竞态测试矩阵（上述声明的证据索引）
 
@@ -140,3 +143,15 @@ FLOWORK_DB=/path/prod.db uv run alembic revision -m "..."  # 新增量迁移（a
 - 历史分级 `history_level`：`none`（不落事件）/ `activity`（仅流程与节点）/
   `full`（默认；`audit` 为保留档，当前实现同 full 全记）。
 - 完结实例归档：`history.archive_instance(id)` 导出 JSON 冷存。
+
+
+## 消息用法四模式（spec §7 等待与唤醒的应用手册）
+
+以「外部系统与流程交互」视角组织，引擎侧原语只有两个：`publish_message`（发后不管，可缓冲）与 `correlate_message`（同步要回执，不缓冲）。
+
+1. **单实例**（同一业务键至多一个在途实例）：`start_on_message` 声明 + 发布侧带业务关联键。第一条消息启动实例，同键在途期间后续消息不再启新实例（定格防重并集）。适合「一个订单/一张单一个流程」。
+2. **请求-回复（唯一关联键）**：等待节点声明 `correlation_key`，键里带每次交互的唯一标识（如 `instance.id` 或调用方生成的请求 ID）——并发实例互不串单。**Zeebe 官方对 AI agent 异步工具回调的推荐做法**；发布方需要回执时用 `correlate_message`，同步拿到被哪个实例消费。
+3. **等回函或超时**（二元竞速，全行业主形态）：wait 节点同时声明 `message` 与 `timeout`，出边挂 `wait.result == 'matched' | 'elapsed'` 条件分流——「等签署回调，三天没回转人工」一类场景的标准写法。
+4. **纯延时**：只声明 `timeout`（「等 N 分钟后继续」）——冷却期/延后处理；暂停冻结、恢复顺延。**周期性触发**（每小时跑一次）不属于等待节点，那是定时启动流程的调度域。
+
+运维：`flowork message waiting [--name X --key Y]` 反查谁在等什么；`engine.messages.waiting(...)` 同款编程面。
