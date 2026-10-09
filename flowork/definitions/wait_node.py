@@ -24,6 +24,7 @@ __all__ = [
     "WaitSpec",
     "WaitTimeout",
     "register_wait_node",
+    "wait_fields",
 ]
 
 KIND_WAIT: Literal["wait"] = "wait"
@@ -83,3 +84,20 @@ WAIT_UI: dict[str, Any] = {
 def register_wait_node(registry: NodeRegistry) -> None:
     """注册等待节点（由 register_builtin_nodes 统一调用）。"""
     registry.register(KIND_WAIT, WaitSpec, ui=WAIT_UI)
+
+
+def wait_fields(node: Any) -> tuple[WaitMessage | None, WaitTimeout | None]:
+    """从节点取 (message, timeout)——兼容 bare FlowNode 的 dict 薄形态。
+
+    FlowBuilder 不带 registry 的 build 产出基类节点（部署规范化 round-trip 前），
+    校验器在该形态下也要给出准确规则，故此处统一升格为模型再判。
+    """
+    raw_message = getattr(node, "message", None)
+    raw_timeout = getattr(node, "timeout", None)
+    message = (
+        WaitMessage.model_validate(raw_message) if isinstance(raw_message, dict) else raw_message
+    )
+    timeout = (
+        WaitTimeout.model_validate(raw_timeout) if isinstance(raw_timeout, dict) else raw_timeout
+    )
+    return message, timeout

@@ -65,6 +65,10 @@ class NodeBehavior:
     def __init__(self, spec: FlowNode) -> None:
         self.spec = spec
 
+    # 消息命中是否推进本节点（等待节点 True；默认 False=仅关联事实不推进，
+    # 供宿主在任意节点上做纯订阅式关联——registry 中介，引擎零 kind 分支）。
+    advances_on_message: bool = False
+
     def on_enter(self, ctx: NodeContext) -> None:
         """进入节点（令牌创建后）。
 

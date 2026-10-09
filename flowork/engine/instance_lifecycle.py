@@ -77,6 +77,10 @@ class InstanceLifecycleMixin:
                 {"actor": actor, "reason": reason, "deferred_minutes": paused_minutes},
                 instance_id,
             )
+            # 暂停期间到达的消息（落缓冲）反查：open 订阅补消费（spec §7.2）。
+            from flowork.engine.message_query import retro_poll_instance
+
+            retro_poll_instance(ctx, self._engine, instance)
 
         self._engine.execute(_command)
 

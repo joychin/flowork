@@ -248,10 +248,11 @@ def check_wait_nodes(definition: ProcessDefinition, error: IssueFn) -> None:
                 "wait.* 仅等待节点出边条件可用（spec §7.2）",
                 flow=flow.flow_code(),
             )
+    from flowork.definitions.wait_node import wait_fields
+
     for node in definition.nodes:
         if node.kind == KIND_WAIT:
-            message = getattr(node, "message", None)
-            timeout = getattr(node, "timeout", None)
+            message, timeout = wait_fields(node)
             if message is None and timeout is None:
                 error(
                     "wait.mode.required",

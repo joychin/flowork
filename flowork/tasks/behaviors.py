@@ -13,6 +13,7 @@ from flowork.definitions.builtin import (
     ServiceTaskSpec,
     StartSpec,
     UserTaskSpec,
+    WaitSpec,
 )
 from flowork.engine.context import RuntimeNodeContext
 from flowork.engine.kernel import EngineExecutionError, NoParticipantError
@@ -21,6 +22,7 @@ from flowork.runtime.behavior import NodeBehavior, NodeContext
 from flowork.runtime.registry import NodeRegistry
 from flowork.tasks.countersign import exit_reached
 from flowork.tasks.deadlines import schedule_deadline_jobs
+from flowork.tasks.wait import WaitBehavior
 
 __all__ = [
     "CallActivityBehavior",
@@ -29,6 +31,7 @@ __all__ = [
     "ServiceTaskBehavior",
     "StartBehavior",
     "UserTaskBehavior",
+    "WaitBehavior",
     "register_builtin_behaviors",
 ]
 
@@ -45,6 +48,7 @@ def register_builtin_behaviors(registry: NodeRegistry) -> None:
     registry.register("call_activity", CallActivitySpec, CallActivityBehavior, replace=True)
     registry.register("cc_task", CcTaskSpec, CcTaskBehavior, replace=True)
     registry.register("branch", BranchSpec, BranchBehavior, replace=True)
+    registry.register("wait", WaitSpec, WaitBehavior, replace=True)
 
 
 class StartBehavior(NodeBehavior):

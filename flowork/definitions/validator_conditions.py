@@ -106,7 +106,9 @@ def iter_expression_positions(definition: ProcessDefinition) -> Iterator[tuple[s
                     node.code,
                 )
         if node.kind == KIND_WAIT:
-            message = getattr(node, "message", None)
+            from flowork.definitions.wait_node import wait_fields
+
+            message, _timeout = wait_fields(node)
             if message is not None and message.correlation_key:
                 yield (
                     "wait_correlation",

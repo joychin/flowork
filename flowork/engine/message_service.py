@@ -34,6 +34,10 @@ __all__ = ["MessageService"]
 
 DEFAULT_TTL_SECONDS = 86_400
 
+# 裸投影形态 payload.<key>：载荷缺该键 → None（数据缺失≠求值错，对齐
+# _mapping_values 的 _BARE_IDENT 缺键 None 先例）；复合表达式严格求值。
+_BARE_PAYLOAD_FIELD = __import__("re").compile(r"^payload\.([A-Za-z_][A-Za-z0-9_]*)$")
+
 
 class MessageService:
     """消息/信号的发布-订阅-关联（spec §7）。"""
@@ -75,19 +79,16 @@ class MessageService:
             if duplicate:
                 return False
 
-            subscription = ctx.session.scalars(
-                select(MessageSubscriptionRow)
-                .where(
-                    MessageSubscriptionRow.name == name,
-                    MessageSubscriptionRow.correlation_key == correlation_key,
-                    MessageSubscriptionRow.state == "open",
-                )
-                .order_by(MessageSubscriptionRow.created_at)
-                .limit(1)
-            ).first()
+            # 在途订阅优先（FCFS）；暂停实例的订阅跳过（全动作拦截——spec §7.2：
+            # 暂停不消费，消息落下一优先级），命中走完整管线（映射+推进）。
+            subscription = self._first_open_subscription(ctx, name, correlation_key)
             if subscription is not None:
-                self._correlate(ctx, subscription, dict(payload or {}), message_id=message_id_)
-                return True
+                from flowork.engine.message_query import hit_subscription
+
+                if hit_subscription(
+                    ctx, self._engine, subscription, dict(payload or {}), message_id=message_id_
+                ):
+                    return True
 
             # 启动匹配（spec §7.1，第三优先级）：在途订阅未消费 → 查定义派生的
             # 启动订阅；命中即同事务发起实例并定格 message_id（不回溯缓冲）。
@@ -124,44 +125,17 @@ class MessageService:
         """登记订阅；命中缓冲区未过期消息立即关联（消息先到竞态，spec §7）。"""
 
         def _command(ctx: CommandContext) -> bool:
-            ctx.session.add(
-                MessageSubscriptionRow(
-                    id=uuid.uuid4().hex,
-                    instance_id=instance_id,
-                    token_id=token_id,
-                    node_id=node_id,
-                    name=name,
-                    correlation_key=correlation_key,
-                )
+            from flowork.engine.message_query import subscribe_open
+
+            return subscribe_open(
+                ctx,
+                self._engine,
+                instance_id=instance_id,
+                token_id=token_id,
+                node_id=node_id,
+                name=name,
+                correlation_key=correlation_key,
             )
-            self._purge_expired(ctx)
-            buffered = ctx.session.scalars(
-                select(MessageBufferRow)
-                .where(
-                    MessageBufferRow.name == name,
-                    MessageBufferRow.correlation_key == correlation_key,
-                )
-                .order_by(MessageBufferRow.received_at)
-                .limit(1)
-            ).first()
-            if buffered is None:
-                return False
-            subscription = ctx.session.scalars(
-                select(MessageSubscriptionRow)
-                .where(
-                    MessageSubscriptionRow.instance_id == instance_id,
-                    MessageSubscriptionRow.token_id == token_id,
-                    MessageSubscriptionRow.node_id == node_id,
-                    MessageSubscriptionRow.state == "open",
-                )
-                .limit(1)
-            ).first()
-            assert subscription is not None
-            payload = dict(buffered.payload or {})
-            message_id = buffered.message_id
-            ctx.session.delete(buffered)
-            self._correlate(ctx, subscription, payload, message_id=message_id)
-            return True
 
         return self._engine.execute(_command)
 
@@ -203,6 +177,54 @@ class MessageService:
 
         return self._engine.execute(_command)
 
+    def _first_open_subscription(
+        self, ctx: CommandContext, name: str, correlation_key: str
+    ) -> MessageSubscriptionRow | None:
+        """首个可消费的 open 订阅（FCFS；跳过暂停实例——spec §7.2 暂停拦截）。"""
+        from flowork.persistence.orm import ProcessInstanceRow
+
+        rows = ctx.session.scalars(
+            select(MessageSubscriptionRow)
+            .where(
+                MessageSubscriptionRow.name == name,
+                MessageSubscriptionRow.correlation_key == correlation_key,
+                MessageSubscriptionRow.state == "open",
+            )
+            .order_by(MessageSubscriptionRow.created_at)
+        ).all()
+        for row in rows:
+            instance = ctx.session.get(ProcessInstanceRow, row.instance_id)
+            if instance is None or instance.state == "paused":
+                continue
+            return row
+        return None
+
+    def _resolve_write(
+        self, payload: dict[str, Any], mappings: dict[str, str] | None, node_id: str
+    ) -> dict[str, Any]:
+        """载荷写入集：声明了 output_mappings 按映射白名单，否则全量合并。"""
+        if not mappings:
+            return dict(payload)
+        from flowork.engine.kernel import EngineExecutionError
+        from flowork.expr.cel import FormulaError, evaluate_formula_value
+        from flowork.expr.context import expression_context, expression_functions_of
+
+        context = expression_context({"payload": dict(payload)})
+        functions = expression_functions_of(self._engine.config)
+        write: dict[str, Any] = {}
+        for target, expression in mappings.items():
+            bare = _BARE_PAYLOAD_FIELD.match(expression.strip())
+            if bare is not None and bare.group(1) not in (payload or {}):
+                write[target] = None  # 裸投影缺键：数据缺失≠求值错（spec §7.2）
+                continue
+            try:
+                write[target] = evaluate_formula_value(expression, context, functions=functions)
+            except FormulaError as exc:
+                raise EngineExecutionError(
+                    f"wait {node_id} output_mappings.{target} 求值失败（{expression!r}）：{exc}"
+                ) from exc
+        return write
+
     # —— 内部 ——
 
     def _correlate(
@@ -212,20 +234,27 @@ class MessageService:
         payload: dict[str, Any],
         *,
         message_id: str | None = None,
+        mappings: dict[str, str] | None = None,
     ) -> None:
-        """关联成功（同事务）：matched＋载荷合并（契约边界）＋事件。"""
+        """关联成功（同事务）：matched＋载荷写入（映射或全量，契约边界）＋事件。
+
+        mappings（spec §7 原文「按节点 output 映射写入」）：右侧表达式于消息
+        上下文（payload.* + now）求值，缺键得 None；未声明 → 全量合并兜底
+        （Zeebe 默认同款）。映射求值错＝技术故障（publish 失败，消息不落库）。
+        """
         from flowork.definitions.contract import validate_input_contract
         from flowork.persistence.orm import ProcessInstanceRow
 
+        write = self._resolve_write(payload, mappings, subscription.node_id)
         instance = ctx.session.get(ProcessInstanceRow, subscription.instance_id)
         if instance is not None:
             # touch 先于载荷合并：变量留痕 before 快照须在写入前留存
             ctx.touch(instance)
             merged = dict(instance.variables)
-            merged.update(payload)
+            merged.update(write)
             schema = (json.loads(instance.definition_snapshot) or {}).get("input")
             validate_input_contract(schema, merged, boundary="node_output")
-            instance.variables.update(payload)
+            instance.variables.update(write)
         subscription.state = "matched"
         subscription.message_id = message_id  # 防重定格（只按 message_id 判）
         kernel = self._engine.kernel_for(ctx)
