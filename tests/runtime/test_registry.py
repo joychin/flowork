@@ -14,6 +14,7 @@ from flowork.definitions.builtin import (
     KIND_START,
     KIND_USER_TASK,
 )
+from flowork.definitions.wait_node import KIND_WAIT
 from flowork.definitions.node import FlowNode
 from flowork.errors import UnknownHandler, UnknownNodeKind
 from flowork.runtime.behavior import NodeBehavior
@@ -31,7 +32,7 @@ class PingBehavior(NodeBehavior):
 
 
 def test_builtin_kinds_registered():
-    """内置 kind 恰为 KIND_* 常量全集（相等而非超集：新增 kind 必须显式入此清单）。"""
+    """内置 kind 恰为 KIND_* 常量全集（相等而非超集：新增 kind 必须显式过此清单）。"""
     registry = create_registry()
     assert set(registry.kinds()) == {
         KIND_START,
@@ -41,6 +42,7 @@ def test_builtin_kinds_registered():
         KIND_CALL_ACTIVITY,
         KIND_CC_TASK,
         KIND_BRANCH,
+        KIND_WAIT,
     }
 
 

@@ -19,6 +19,7 @@ FEATURES: dict[str, tuple[str, ...]] = {
         "node.call_activity",
         "node.cc_task",
         "node.branch",
+        "node.wait",
     ),
     "subprocess": (
         "subprocess.input_mapping",
@@ -116,6 +117,7 @@ FEATURES: dict[str, tuple[str, ...]] = {
         "query.events_stream",
         "query.tokens",
         "query.trace_instance",
+        "query.route_decisions",
         "query.anticipate",
         "query.cc_list",
         "query.archive_instance",

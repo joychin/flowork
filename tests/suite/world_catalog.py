@@ -10,6 +10,7 @@ from tests.suite.world_flows import (
     purchase_definition,
     supplier_check_definition,
 )
+from tests.suite.world_flows_branch import branch_matrix_definition
 from tests.suite.world_flows_subprocess import (
     call_child_definition,
     call_grand_definition,
@@ -25,11 +26,14 @@ from tests.suite.world_flows_time import (
     lifecycle_definition,
     message_definition,
 )
+from tests.suite.world_flows_wait import wait_duration_definition
 
 BUILDERS: dict[str, Callable[[], ProcessDefinition]] = {
     "suite_expense": expense_definition,
     "suite_supplier_check": supplier_check_definition,
     "suite_purchase": purchase_definition,
+    "suite_branch_matrix": branch_matrix_definition,
+    "suite_wait_duration": wait_duration_definition,
     "suite_call_matrix": call_matrix_definition,
     "suite_call_child": call_child_definition,
     "suite_call_grand": call_grand_definition,
@@ -49,6 +53,8 @@ BUILDERS: dict[str, Callable[[], ProcessDefinition]] = {
 STORE_WORLD_CODES = [
     "suite_expense",
     "suite_supplier_check",
+    "suite_branch_matrix",
+    "suite_wait_duration",
     "suite_call_matrix",
     "suite_call_child",
     "suite_call_grand",
@@ -64,7 +70,12 @@ STORE_WORLD_CODES = [
     "suite_fragile",
 ]
 # 静态目录世界（OrgDirectory：有 admins/委托）部署集
-STATIC_WORLD_CODES = ["suite_expense", "suite_supplier_check", "suite_purchase"]
+STATIC_WORLD_CODES = [
+    "suite_expense",
+    "suite_supplier_check",
+    "suite_purchase",
+    "suite_branch_matrix",
+]
 
 
 def build_definition(code: str) -> ProcessDefinition:
