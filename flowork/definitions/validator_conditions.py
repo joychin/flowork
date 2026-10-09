@@ -25,10 +25,12 @@ from flowork.definitions.flow import MAX_FORMULA_LENGTH
 
 if TYPE_CHECKING:
     from flowork.definitions.definition import ProcessDefinition
+    from flowork.spi.ports import ExpressionFunctions
 
 __all__ = [
     "check_condition_legality",
     "check_node_semantics",
+    "check_start_on_message",
     "iter_expression_positions",
 ]
 
@@ -166,3 +168,84 @@ def check_condition_legality(
                     "分支节点出边未挂条件（仅默认边允许无条件）",
                     flow=flow.flow_code(),
                 )
+
+
+def check_start_on_message(
+    definition: ProcessDefinition,
+    error: IssueFn,
+    warning: IssueFn,
+    *,
+    expression_functions: ExpressionFunctions | None = None,
+) -> None:
+    """start_on_message 声明校验（spec §7.1）：name 必填、表达式编译与函数对照。
+
+    变量引用不查——消息上下文的 payload 形状消息侧才知（同 mapping_output
+    先例）；correlation/start_user/business_key 运行期须 string（运行期把关）。
+    """
+    from flowork.expr.catalog import engine_functions
+    from flowork.expr.cel import CEL_BUILTIN_FUNCTIONS, FormulaError, collect_references
+
+    signatures: dict[str, tuple[int, str]] | None = None
+    if expression_functions is not None:
+        signatures = {
+            name: (len(r.signature.params), r.signature.returns)
+            for name, r in expression_functions.functions().items()
+        }
+    engine_fns = engine_functions()
+    for decl in definition.start_on_message:
+        where = decl.name or "(空)"
+        if not decl.name.strip():
+            error("start_on_message.name_empty", "消息启动声明缺 name", node=where)
+            continue
+        expressions: list[tuple[str, str]] = [
+            ("correlation_key", decl.correlation_key),
+            ("start_user", decl.start_user),
+            ("business_key", decl.business_key),
+        ] + [(f"input_mappings[{key}]", value) for key, value in decl.input_mappings.items()]
+        for field, expression in expressions:
+            if not expression.strip():
+                if field.startswith("input_mappings"):
+                    error("start_on_message.formula.invalid", f"{field} 映射公式为空", node=where)
+                continue  # 可选位（correlation/start_user/business_key）未声明
+            if len(expression) > MAX_FORMULA_LENGTH:
+                error(
+                    "start_on_message.formula.invalid",
+                    f"{field} 公式超长（上限 {MAX_FORMULA_LENGTH}）",
+                    node=where,
+                )
+                continue
+            try:
+                _idents, functions = collect_references(expression)
+            except FormulaError as exc:
+                error("start_on_message.formula.invalid", f"{field} 公式不可用：{exc}", node=where)
+                continue
+            for name, arities in functions.items():
+                if name in CEL_BUILTIN_FUNCTIONS:
+                    continue
+                if name in engine_fns:
+                    error(
+                        "start_on_message.function.position",
+                        f"{field} 调用 {name}(...)：消息上下文无节点事实"
+                        f"（payload.*+now，spec §7.1）",
+                        node=where,
+                    )
+                    continue
+                if signatures is None:
+                    warning(
+                        "start_on_message.function.unknown",
+                        f"{field} 调用 {name}(...)：未配置表达式函数注册表，无法静态核对",
+                        node=where,
+                    )
+                elif name not in signatures:
+                    error(
+                        "start_on_message.function.unknown",
+                        f"{field} 调用未注册的函数：{name}(...)",
+                        node=where,
+                    )
+                elif any(arity != signatures[name][0] for arity in arities):
+                    error(
+                        "start_on_message.function.arity",
+                        f"{field}：{name} 期望 {signatures[name][0]} 个参数，"
+                        f"调用处为 {'/'.join(str(a) for a in sorted(arities))} 个",
+                        node=where,
+                    )

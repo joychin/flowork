@@ -525,3 +525,31 @@ def test_cel_numeric_function_arity_mismatch_is_error(registry):
         definition, registry, expression_functions=contrib.numeric_vocabulary()
     )
     assert any(i.rule == "condition.function.arity" and i.level == IssueLevel.ERROR for i in issues)
+
+
+# —— start_on_message（spec §7.1）：声明位静态检查 ——
+
+
+def test_start_on_message_name_and_formula_errors(registry):
+    """name 必填；表达式语法错发布期拦（payload 形状不查，同 mapping_output）。"""
+    from flowork.definitions.definition import StartMessageDecl
+
+    definition = _cel_flow(registry, formula="amount > 1")
+    definition.start_on_message = [
+        StartMessageDecl(name="", correlation_key="payload.a +"),  # name 空（语法错不再查）
+        StartMessageDecl(name="ok", correlation_key="payload.a +"),
+    ]
+    rules = error_rules(definition, registry)
+    assert "start_on_message.name_empty" in rules
+    assert "start_on_message.formula.invalid" in rules
+
+
+def test_start_on_message_rejects_engine_function_in_message_context(registry):
+    """消息上下文无节点事实：node() 在启动位 → ERROR（payload.*+now 才可用）。"""
+    from flowork.definitions.definition import StartMessageDecl
+
+    definition = _cel_flow(registry, formula="amount > 1")
+    definition.start_on_message = [
+        StartMessageDecl(name="paid", correlation_key='node("voting").runs > 1'),
+    ]
+    assert "start_on_message.function.position" in error_rules(definition, registry)

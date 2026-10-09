@@ -89,6 +89,15 @@ class MessageService:
                 self._correlate(ctx, subscription, dict(payload or {}), message_id=message_id_)
                 return True
 
+            # 启动匹配（spec §7.1，第三优先级）：在途订阅未消费 → 查定义派生的
+            # 启动订阅；命中即同事务发起实例并定格 message_id（不回溯缓冲）。
+            from flowork.engine.message_start import match_start_on_message
+
+            if match_start_on_message(
+                self._engine, ctx, name, correlation_key, dict(payload or {}), message_id_
+            ):
+                return True
+
             ctx.session.add(
                 MessageBufferRow(
                     id=uuid.uuid4().hex,

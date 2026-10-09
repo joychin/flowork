@@ -540,7 +540,7 @@ CRUD：新增与更新＝同一操作 `deploy`——**纯数据写入（INSERT �
 - **business_key**（可选表达式，须 string）：→ 实例业务键（招标单号等对账场景）。
 - **幂等与防重定格**：重复 publish 同 message_id 在匹配前静默忽略（既有）；启动消费把消息定格为 matched 订阅行（node_id=`(start)`），进「buffer ∪ 订阅定格」防重并集——同 message 至多启动一个实例。
 - **不回溯缓冲**：部署时刻起算——部署前到达的缓冲消息不被启动匹配消费（避免「一部署冒出一批实例」的意外）；缓冲消息仍只在节点订阅登记时被反查（第 7 章既有语义不变）。
-- **事件**：命中启动＝message_received + process_started（payload 增 `start_message: {name, message_id}`）+ message_correlated（定格记录配套，node_id=`(start)`）。
+- **事件**：命中启动＝process_started（payload 增 `start_message: {name, message_id}`）+ message_correlated（定格记录配套，node_id=`(start)`）；message_received 仅缓冲路径发（与节点直接命中同口径）。
 - **错误语义**：声明位表达式求值错 / 非 string → **技术故障**（错误二分，第 8 章）：publish 命令失败（消息不落库不缓冲），错误信息带定义 code 与表达式——不静默吞、不伪装成未命中。
 - **版本语义**：start_on_message 变更＝定义内容变更（content_hash / minor 续发）；不新增破坏性规则（在途订阅为派生态，无残留状态需迁移）。
 

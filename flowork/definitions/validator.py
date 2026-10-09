@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 from flowork.definitions.validator_conditions import (
     check_condition_legality,
     check_node_semantics,
+    check_start_on_message,
 )
 from flowork.definitions.validator_graph import check_graph_lints
 from flowork.definitions.validator_references import check_variable_references
@@ -106,6 +107,7 @@ def validate_definition(
     check_node_semantics(definition, error, warning)
     check_condition_legality(definition, error, warning)
     check_variable_references(definition, error, warning, expression_functions=expression_functions)
+    check_start_on_message(definition, error, warning, expression_functions=expression_functions)
 
     return issues
 

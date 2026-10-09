@@ -136,6 +136,7 @@ class RuntimeService(InstanceLifecycleMixin, IncidentMixin, VariableActionsMixin
         revision: int | None,
         idempotency_key: str | None,
         reuse: Literal["reject", "return_existing", "allow_duplicate"],
+        start_message: dict[str, str] | None = None,
     ) -> str:
         import json
 
@@ -203,11 +204,14 @@ class RuntimeService(InstanceLifecycleMixin, IncidentMixin, VariableActionsMixin
                 )
             )
         kernel = self._engine.kernel_for(ctx)
-        kernel.record_event(
-            DomainEvent.PROCESS_STARTED,
-            {"definition_code": code, "start_user": start_user, "business_key": business_key},
-            instance.id,
-        )
+        started_payload: dict[str, Any] = {
+            "definition_code": code,
+            "start_user": start_user,
+            "business_key": business_key,
+        }
+        if start_message is not None:  # 消息启动（spec §7.1）：归因可追溯
+            started_payload["start_message"] = start_message
+        kernel.record_event(DomainEvent.PROCESS_STARTED, started_payload, instance.id)
         start_node = definition.start_node()
         if start_node is None:
             raise InstanceNotFoundError(f"定义 {code} 缺少 start 节点")

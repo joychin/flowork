@@ -26,6 +26,7 @@ __all__ = [
     "NodePosition",
     "ProcessDefinition",
     "ProcessVariable",
+    "StartMessageDecl",
     "dump_definition",
     "load_definition",
     "load_definition_file",
@@ -85,6 +86,27 @@ class InstanceDeadline(BaseModel):
     strategy: DeadlineStrategy = DeadlineStrategy.MARK
 
 
+class StartMessageDecl(BaseModel):
+    """消息启动声明（spec §7.1）：发布该名消息即发起实例。
+
+    表达式均求值于**消息上下文**（``payload.*`` + ``now``，实例尚不存在）；
+    correlation_key/start_user/business_key 结果须 string。启动订阅＝定义派生：
+    published 即生效、retire 即失效，不落订阅表。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    # 可选：载荷求值键==publish 携带 correlation_key 才命中（防串单）；空= name 命中即启动
+    correlation_key: str = ""
+    # 可选：载荷 → 启动变量（右侧表达式于消息上下文求值，过 input 契约 start 边界）
+    input_mappings: dict[str, str] = Field(default_factory=dict)
+    # 可选：发起人表达式；缺省合成 message:{name}
+    start_user: str = ""
+    # 可选：业务键表达式 → 实例 business_key
+    business_key: str = ""
+
+
 class InvalidDefinitionData(DefinitionError):
     """定义数据不是合法的 JSON 对象。"""
 
@@ -107,6 +129,8 @@ class ProcessDefinition(BaseModel):
     # v2.2（spec §7）：实例级时限——发起时按 after_minutes 物化 deadline_at，
     # 到点 mark（打标继续跑）/cancel（作废）/terminate（终止）
     deadline: InstanceDeadline | None = None
+    # v2（spec §7.1）：消息启动声明——启动订阅=定义派生（published 即生效）
+    start_on_message: list[StartMessageDecl] = Field(default_factory=list)
     # SerializeAsAny：节点按实例类型（Spec 子类）序列化，否则子类字段会在 dump 时丢失
     nodes: list[SerializeAsAny[FlowNode]] = Field(default_factory=list)
     flows: list[SequenceFlow] = Field(default_factory=list)
