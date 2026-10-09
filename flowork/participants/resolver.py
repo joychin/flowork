@@ -51,16 +51,18 @@ def resolve_subjects(
     *,
     label: str = "",
     what: str = "取人",
+    instance: Mapping[str, Any] | None = None,
 ) -> list[str]:
     """对一组取人表达式（CEL）求值 → 具体人列表（保序去重）。
 
     供解析管线与加签/传阅等场景共用——重排场景必须存具体人，不能存表达式原文。
     语义同取人位：null/空＝查无传播；str/list[str]＝单人/多人；其他类型报错。
     label 为错误消息里的位置标注（如节点码）；what 为错误措辞（取人/传阅接收人）。
+    ``instance`` 全局事实（id/started_at/business_key）可选注入，调用方持实例行时传。
     """
     where = f"{label}：" if label else ""
     pool: list[str] = []
-    context = expression_context(variables, start_user=start_user)
+    context = expression_context(variables, start_user=start_user, instance=instance)
     for expression in expressions:
         if "prev_task" not in context and references_identifier(expression, "prev_task"):
             continue  # 上一站查无：贡献空（expression-dataface §3，对齐 §5.5）
@@ -110,7 +112,7 @@ def _evaluate_expressions(
     函数表并入 node()——InMemoryNodeContext（无 session）裸跑不受影响。
     """
     expressions = ([spec.assignee] if spec.assignee else []) + list(spec.assignees)
-    from flowork.tasks.facts import attach_node, with_prev_task
+    from flowork.tasks.facts import attach_node, instance_facts, with_prev_task
 
     session = getattr(ctx, "session", None)
     return resolve_subjects(
@@ -119,6 +121,7 @@ def _evaluate_expressions(
         ctx.instance.start_user,
         attach_node(functions, session, ctx.instance.id),
         label=spec.code,
+        instance=instance_facts(ctx.instance),
     )
 
 

@@ -26,14 +26,17 @@ def expression_context(
     task: Mapping[str, Any] | None = None,
     now: Any = None,
     prev_task: Mapping[str, Any] | None = None,
+    instance: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """构造求值上下文副本：变量 + ``initiator`` + ``now`` + 可选 ``task``/``prev_task``。
+    """构造求值上下文副本：变量 + 保留标识符（initiator/instance/now + 可选 task/prev_task）。
 
     显式同名变量优先（setdefault）：声明了保留词同名变量时不覆盖。
     ``now`` 缺省取统一时钟（naive UTC，cel-python 按 UTC 解释）；可显式传入
     钉死（测试冻结）。上下文在求值前装配一次、组内多条公式共用——因此
     **一次求值钉一个时刻**（expression-dataface 验收 E5）。
     ``prev_task`` 仅条件/取人位注入（上一站快照，查无＝不注入，调用方预检温和跳过）。
+    ``instance`` 为实例全局事实（id/started_at/business_key，全位点；快照由
+    ``tasks.facts.instance_facts`` 构造，模拟面注入占位形状）。
     task 快照做防御性副本——spec C.4 固定形状（task.id / task.assignee /
     task.outcome），活任务（超时触发时）outcome 为 None。
     """
@@ -44,6 +47,8 @@ def expression_context(
         payload.setdefault("task", dict(task))
     if prev_task is not None:
         payload.setdefault("prev_task", dict(prev_task))
+    if instance is not None:
+        payload.setdefault("instance", dict(instance))
     payload.setdefault("now", utc_now() if now is None else now)
     return payload
 

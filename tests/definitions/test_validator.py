@@ -293,6 +293,19 @@ def test_reserved_identifier_now_cannot_be_declared(registry):
     assert "variables.reserved_name" in error_rules(definition, registry)
 
 
+def test_reserved_identifier_instance_cannot_be_declared(registry):
+    """instance.* 全局事实入册（判断面词汇 v1 收口）：同 now/initiator 保留。"""
+    definition = _cel_flow(registry, formula="amount > 1", declare=("amount", "instance"))
+    assert "variables.reserved_name" in error_rules(definition, registry)
+
+
+def test_instance_reference_needs_no_declaration(registry):
+    """instance 为全位点保留词：未声明也不算 unknown（目录表驱动放行）。"""
+    definition = _cel_flow(registry, formula="instance.business_key == 'VIP-001'")
+    issues = validate_definition(definition, registry)
+    assert not any(issue.rule == "condition.variable.unknown" for issue in issues)
+
+
 def test_now_reference_needs_no_declaration(registry):
     """now 为全位点保留词：未声明也不算 unknown（目录表驱动放行）。"""
     definition = _cel_flow(registry, formula="now > timestamp('2000-01-01T00:00:00Z')")

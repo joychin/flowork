@@ -17,10 +17,13 @@ from flowork.spi.ports import FunctionSignature
 
 
 def test_catalog_reserved_identifiers_and_positions():
-    assert reserved_identifiers() == frozenset({"initiator", "now", "prev_task", "task"})
+    assert reserved_identifiers() == frozenset(
+        {"initiator", "instance", "now", "prev_task", "task"}
+    )
     assert positions_of("task") == frozenset({"reassign", "exit"})
     assert positions_of("prev_task") == frozenset({"condition", "subjects"})
     assert positions_of("initiator") == positions_of("now")
+    assert positions_of("instance") == positions_of("now")  # 全位点全局词
     assert positions_of("amount") == frozenset()  # 非保留词
 
 
@@ -37,6 +40,7 @@ def test_catalog_entries_carry_chinese_labels():
     labels = {entry.name: entry.label for entry in identifier_entries()}
     assert labels == {
         "initiator": "发起人",
+        "instance": "当前实例",
         "now": "求值时刻",
         "prev_task": "上一站",
         "task": "当前任务快照",
@@ -79,7 +83,7 @@ def test_routing_pins_one_moment(monkeypatch):
     t2 = datetime(2026, 1, 2, 0, 0, 0)
     times = iter([t1, t2, datetime(2026, 1, 3)])
     monkeypatch.setattr("flowork.expr.context.utc_now", lambda: next(times))
-    instance = SimpleNamespace(start_user="u_start")
+    instance = SimpleNamespace(start_user="u_start", id="i_e5", started_at=t1, business_key=None)
     flows = [
         SequenceFlow(
             source="gate", target="late", condition="now == timestamp('2026-01-02T00:00:00Z')"

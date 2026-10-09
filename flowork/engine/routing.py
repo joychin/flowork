@@ -43,14 +43,20 @@ def evaluation_variables(
     显式声明同名变量时以声明为准（setdefault）；实例无 start_user 时缺省。
     带 session 时注入 ``prev_task`` 上一站快照（expression-dataface §2.2，
     查无＝不注入，引用预检在 select_outgoing 内温和跳过）。
+    ``instance`` 全局事实（id/started_at/business_key）恒注入（§2，全位点）。
     """
     prev_task = None
     if session is not None:
         from flowork.tasks.facts import prev_task_snapshot
 
         prev_task = prev_task_snapshot(session, instance.id)
+    from flowork.tasks.facts import instance_facts
+
     return expression_context(
-        variables, start_user=getattr(instance, "start_user", None), prev_task=prev_task
+        variables,
+        start_user=getattr(instance, "start_user", None),
+        prev_task=prev_task,
+        instance=instance_facts(instance),
     )
 
 

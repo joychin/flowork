@@ -216,8 +216,9 @@ def create_app(db_file: str | Path | None = None, *, seed: bool = True) -> FastA
         """公式试算：CEL 对样例变量求值（含引擎配置的自定义函数），原样返回值或错误说明。
 
         值语义（位点统一）：条件公式返回 bool，取人/映射公式返回 str/list/数值；
-        样例缺 initiator 时注入占位 ``u_initiator``，缺 now 时注入统一时钟
-        （试算可引用保留标识符，与运行时同一注入面）。
+        样例缺 initiator 时注入占位 ``u_initiator``，缺 now 时注入统一时钟，
+        缺 instance 时注入占位形状（id=i_preview）——试算可引用保留标识符，
+        与运行时同一注入面。
         """
         from flowork.expr.cel import evaluate_formula_value
 
@@ -226,6 +227,9 @@ def create_app(db_file: str | Path | None = None, *, seed: bool = True) -> FastA
         variables = dict(raw_vars) if isinstance(raw_vars, dict) else {}
         variables.setdefault("initiator", "u_initiator")
         variables.setdefault("now", utc_now())
+        variables.setdefault(
+            "instance", {"id": "i_preview", "started_at": utc_now(), "business_key": None}
+        )
         try:
             return {
                 "ok": True,

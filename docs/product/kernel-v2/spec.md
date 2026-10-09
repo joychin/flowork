@@ -327,7 +327,7 @@ git 里的 YAML/JSON 文件      ← 编辑态事实来源：人和 AI 只改这
 ### 4.3 CEL 求值语义【v2 改造】
 
 - **变量命名空间**：`input.*`（流程契约输入）、`vars.*`（运行中变量）、`task.*`（任务快照，超时改派/会签出口位注入，见 C.4）、`initiator`（发起人 Subject，全位点注入）。
-- **判断面事实目录**（expression-dataface F0–F3，2026-10-08 落地）：`now`（求值时刻，统一时钟 naive UTC，一次装配钉一时刻——组内多条公式同刻；全位点）、`prev_task`（上一站已完成任务，条件+取人位；查无不注入，静态预检温和跳过）、`node("code")`（引擎注入函数，点名查节点事实：runs/skipped/最近轮人物与票数；查无＝固定形状）——与变量读写面（§10 variables_updated、§11 变量三方法）互补。词汇目录权威在 `expr/catalog.py`（保留词与位点白名单表驱动），validator 规则名 `*.{name}_unavailable`。路由决策审计落 `wf_route_decision`（§14），查询面 `history.route_decisions`。`instance.*`（id/started_at）为设计文档登记的后续项，未实现。
+- **判断面事实目录**（expression-dataface F0–F3，2026-10-08 落地）：`now`（求值时刻，统一时钟 naive UTC，一次装配钉一时刻——组内多条公式同刻；全位点）、`instance`（实例全局事实 {id, started_at, business_key}，全位点注入；2026-10-09 内核收口批落地，模拟面试算面注入占位形状）、`prev_task`（上一站已完成任务，条件+取人位；查无不注入，静态预检温和跳过）、`node("code")`（引擎注入函数，点名查节点事实：runs/skipped/最近轮人物与票数；查无＝固定形状）——与变量读写面（§10 variables_updated、§11 变量三方法）互补。词汇目录权威在 `expr/catalog.py`（保留词与位点白名单表驱动），validator 规则名 `*.{name}_unavailable`。路由决策审计落 `wf_route_decision`（§14），查询面 `history.route_decisions`。
 - **自定义函数**：经 SPI 端口 `ExpressionFunctions` 注册（第 9 章），**必须声明参数与返回类型**（词汇表 one_user/users/groups/mixed/bool，兼容性检查见 5.5）。**内核函数注册表出厂为空**——取人词汇全部由宿主注册（v2.1 定稿，理由见 5.5）；`flowork.contrib` 便利包提供 `manager_of` / `users_with_role` / `has_role` 三个常见词汇，纯基于 OrgDirectory 端口实现，一行代码挂上。
 - **设计时检查**：`validate` 阶段做 CEL 静态检查（**全位点**，validator_conditions）——
   编译护栏/引用未声明变量/未注册函数与参数个数直接报错（K8s CRD 校验同款体验）；
@@ -774,6 +774,7 @@ Subject：`user:{id} | agent:{id} | role:{name} | org:{code}`；ParticipantSet �
 | vars.* | 运行时（静态检查按声明，未声明按 any 降级为警告） |
 | task.* | **位点相关快照**（静态检查：非可用位引用 task.* 即 ERROR task_unavailable）——超时改派位 ✓：{id, assignee, outcome:null, created_at, deadline_at}（fire 时注入，活任务无 outcome）；会签出口位 ✓：{item_count, approve_count, disapprove_count}（每次办理后注入）；条件求值/输出映射位注入为后续项（开放问题 C5） |
 | initiator | subject |
+| instance | 实例全局事实 {id, started_at, business_key}（全位点注入；started_at 为 datetime 与 now 同口径，可直接做时长运算；dry-run/公式试算面注入占位形状；2026-10-09 落地） |
 | now | datetime（引擎统一时钟 naive UTC；一次装配钉一时刻，expression-dataface F1） |
 | prev_task | 上一站已完成任务快照 {assignee, outcome, comment, finished_at, used_time}（条件+取人位；查无不注入，F2；used_time 为自然时长口径——暂停剔除待定） |
 | node("code") | 引擎注入函数 → 平铺 {assignee, outcome, comment, finished_at, used_time, runs, skipped, item_count, approve_count, disapprove_count}（runs=已结束轮数；票数取最近轮令牌三计数；查无＝固定形状：人物 null 计数 0，F2） |

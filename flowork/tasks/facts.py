@@ -82,6 +82,19 @@ def with_prev_task(
     return payload
 
 
+def instance_facts(instance: Any) -> dict[str, Any]:
+    """实例全局事实（expression-dataface §2）：id / started_at / business_key。
+
+    全位点注入的全局词（同 initiator/now）；started_at 保持 datetime
+    （naive UTC，与 now 同口径，可直接做时长运算）。
+    """
+    return {
+        "id": instance.id,
+        "started_at": instance.started_at,
+        "business_key": getattr(instance, "business_key", None),
+    }
+
+
 def node_facts(session: Session, instance_id: str, activity_code: str) -> dict[str, Any]:
     """点名节点聚合：runs/skipped + 最近轮人物字段 + 最近轮票数（token 三计数）。"""
     tokens = list(

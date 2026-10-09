@@ -37,8 +37,13 @@ def exit_reached(
     variables: Mapping[str, Any] | None = None,
     start_user: str | None = None,
     functions: Mapping[str, Callable[..., object]] | None = None,
+    instance: Mapping[str, Any] | None = None,
 ) -> bool:
-    """求值会签出口公式；expr 缺省＝该侧全票（task.* = 三计数快照）。"""
+    """求值会签出口公式；expr 缺省＝该侧全票（task.* = 三计数快照）。
+
+    ``instance`` 全局事实可选注入（variables 已携带时免传——anticipate 经
+    evaluation_variables 自动带上）。
+    """
     if not expr:
         done = approve_count if side == "approve" else disapprove_count
         return done >= item_count
@@ -52,6 +57,7 @@ def exit_reached(
             "approve_count": approve_count,
             "disapprove_count": disapprove_count,
         },
+        instance=instance,
     )
     try:
         return evaluate_formula(expr, context, functions=functions)

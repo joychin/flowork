@@ -44,7 +44,13 @@ def _mapping_values(
     终态等场景，对齐旧 ``.get`` 直传语义）；其余表达式（运算/函数/字段选择）严格。
     """
     config = ctx.kernel.engine.config if ctx.kernel.engine else None
-    variables = expression_context(owner.variables or {}, start_user=owner.start_user)
+    from flowork.tasks.facts import instance_facts
+
+    variables = expression_context(
+        owner.variables or {},
+        start_user=owner.start_user,
+        instance=instance_facts(owner),
+    )
     values: dict[str, object] = {}
     for target, expression in mappings.items():
         if _BARE_IDENT.match(expression) and expression not in variables:

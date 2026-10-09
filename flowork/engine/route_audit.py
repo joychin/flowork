@@ -53,10 +53,12 @@ def _jsonable(value: Any) -> Any:
 
 
 def snapshot_of(variables: dict[str, Any], node_calls: dict[str, Any]) -> dict[str, Any]:
-    """从求值上下文钉关键取值：now / prev_task / node() 引用值。"""
+    """从求值上下文钉关键取值：now / instance / prev_task / node() 引用值。"""
     snapshot: dict[str, Any] = {}
     if "now" in variables:
         snapshot["now"] = _jsonable(variables["now"])
+    if "instance" in variables:
+        snapshot["instance"] = _jsonable(dict(variables["instance"]))
     if "prev_task" in variables:
         snapshot["prev_task"] = _jsonable(dict(variables["prev_task"]))
     if node_calls:

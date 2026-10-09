@@ -195,6 +195,8 @@ class UserTaskBehavior(NodeBehavior):
         token = ctx.token
         assert token is not None
         mi = spec.multi_instance
+        from flowork.tasks.facts import instance_facts
+
         counts: dict[str, Any] = {
             "item_count": token.item_count,
             "approve_count": token.approve_count,
@@ -204,6 +206,7 @@ class UserTaskBehavior(NodeBehavior):
             "functions": expression_functions_of(
                 ctx.kernel.engine.config if ctx.kernel.engine else None
             ),
+            "instance": instance_facts(ctx.instance),
         }
         if exit_reached(mi.approve_exit if mi else None, side="approve", **counts):
             token.approval_exit = "agree"

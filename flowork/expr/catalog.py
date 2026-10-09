@@ -55,7 +55,7 @@ class FunctionEntry:
     note: str = ""
 
 
-# 判断面词汇 v1（expression-dataface §2）：instance.* 随 F2 后续项入册。
+# 判断面词汇 v1（expression-dataface §2）：instance.* 已入册（全位点全局词）。
 IDENTIFIER_CATALOG: tuple[IdentifierEntry, ...] = (
     IdentifierEntry(
         name="initiator",
@@ -63,6 +63,13 @@ IDENTIFIER_CATALOG: tuple[IdentifierEntry, ...] = (
         label="发起人",
         positions=ALL_POSITIONS,
         note="保留标识符；显式声明同名变量时以声明为准",
+    ),
+    IdentifierEntry(
+        name="instance",
+        type="map",
+        label="当前实例",
+        positions=ALL_POSITIONS,
+        note="id/started_at/business_key；全位点注入（模拟面试算面注入占位形状）",
     ),
     IdentifierEntry(
         name="now",

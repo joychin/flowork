@@ -124,6 +124,7 @@ class RejectMixin:
         # 出口判定（单轨 CEL）：会签未配＝全员否决；非会签＝任一否决即出口（原 >=1 语义）
         from flowork.expr.context import expression_functions_of
         from flowork.tasks.countersign import exit_reached
+        from flowork.tasks.facts import instance_facts
 
         expr = mi.disapprove_exit if mi is not None else "task.disapprove_count >= 1"
         exit_hit = exit_reached(
@@ -135,6 +136,7 @@ class RejectMixin:
             variables=instance.variables,
             start_user=instance.start_user,
             functions=expression_functions_of(self._engine.config),
+            instance=instance_facts(instance),
         )
         if not exit_hit:
             from flowork.engine.context import RuntimeNodeContext

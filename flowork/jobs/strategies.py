@@ -125,10 +125,13 @@ class DeadlineStrategiesMixin:
                 "created_at": task.created_at,
                 "deadline_at": task.due_at,  # 首条 deadline 到期时刻（未配＝null）
             }
+            from flowork.tasks.facts import instance_facts
+
             variables = expression_context(
                 instance.variables or {},
                 start_user=instance.start_user,
                 task=snapshot,
+                instance=instance_facts(instance),
             )
             try:
                 target = evaluate_formula_value(
