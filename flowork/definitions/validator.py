@@ -18,12 +18,12 @@ from flowork.definitions.validator_conditions import (
     check_node_semantics,
     check_start_on_message,
 )
+from flowork.definitions.validator_deadlines import check_deadlines
 from flowork.definitions.validator_graph import check_graph_lints
 from flowork.definitions.validator_references import check_variable_references
 from flowork.definitions.validator_rules import (
     check_advance_policy,
     check_branch_rules,
-    check_deadlines,
     check_structure,
     check_variables_and_org,
     check_wait_nodes,

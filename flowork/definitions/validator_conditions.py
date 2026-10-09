@@ -23,6 +23,7 @@ from flowork.definitions.builtin import (
     KIND_WAIT,
 )
 from flowork.definitions.flow import MAX_FORMULA_LENGTH
+from flowork.definitions.validator_deadlines import deadline_positions
 
 if TYPE_CHECKING:
     from flowork.definitions.definition import ProcessDefinition
@@ -97,14 +98,8 @@ def iter_expression_positions(definition: ProcessDefinition) -> Iterator[tuple[s
         if node.kind == KIND_CC_TASK:
             for index, expression in enumerate(getattr(node, "recipients", None) or []):
                 yield "subjects", f"{node.code}.recipients[{index}]", expression, node.code
-        for index, deadline in enumerate(getattr(node, "deadlines", None) or []):
-            if deadline.reassign_to:
-                yield (
-                    "reassign",
-                    f"{node.code}.deadlines[{index}].reassign_to",
-                    deadline.reassign_to,
-                    node.code,
-                )
+        for where, expression in deadline_positions(node):
+            yield "reassign", where, expression, node.code
         if node.kind == KIND_CALL_ACTIVITY:
             mi = _mi_config(node)
             if mi is not None and mi.completion != "all":  # A9 完成公式位

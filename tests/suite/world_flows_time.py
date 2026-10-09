@@ -42,7 +42,11 @@ def deadline_notify_definition() -> ProcessDefinition:
             reject_target="start",
             deadlines=[
                 TaskDeadline(after_minutes=5, action="notify"),
-                TaskDeadline(after_minutes=10, action="escalate"),
+                TaskDeadline(
+                    after_minutes=10,
+                    action="escalate",
+                    escalate_to="manager_of(task.assignee)",
+                ),
             ],
         )
         .end("notify_end", "超时流程结束")

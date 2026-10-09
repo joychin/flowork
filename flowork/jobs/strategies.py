@@ -162,59 +162,54 @@ class DeadlineStrategiesMixin:
     def _execute_handover(
         self, ctx: CommandContext, job: JobRow, task: TaskRow, strategy: str
     ) -> None:
-        """reassign（表达式改派）/ escalate（自动转上级，查无上级→故障单）。"""
+        """reassign / escalate：两条都是**图纸给的 CEL 目标**（v2.3 第十四轮）。
+
+        取人语义归宿主（spec §5.5 分工铁律）——引擎不含「上级」概念，escalate 的
+        目标由 `escalate_to` 表达式给出（科层组织写 `'manager_of(task.assignee)'`）。
+        两者共用求值契约（fire 时求值、task.* 快照注入，spec §4.2/C.4），差别只在
+        审计事件：escalate 记 TASK_ESCALATED（升级语义），reassign 不记。
+        """
         from flowork.expr.cel import FormulaError, evaluate_formula_value
         from flowork.expr.context import expression_context, expression_functions_of
 
         kernel = self._engine.kernel_for(ctx)
-        if strategy == "reassign":
-            expression = str(job.payload.get("reassign_to") or "")
-            if not expression:
-                raise EngineExecutionError(f"reassign deadline 缺少改派目标（job={job.id}）")
-            # fire 时求值（spec §4.2/C.4）：task.* 快照取当前任务行，活任务 outcome=null
-            instance = ctx.session.get(ProcessInstanceRow, job.instance_id)
-            if instance is None:
-                raise EngineExecutionError(f"reassign 实例不存在（job={job.id}）")
-            snapshot = {
-                "id": task.id,
-                "assignee": task.assignee,
-                "outcome": None,
-                "created_at": task.created_at,
-                "deadline_at": task.due_at,  # 首条 deadline 到期时刻（未配＝null）
-            }
-            from flowork.tasks.facts import instance_facts
+        field = "reassign_to" if strategy == "reassign" else "escalate_to"
+        expression = str(job.payload.get(field) or "")
+        if not expression:
+            raise EngineExecutionError(f"{strategy} deadline 缺少目标（{field}，job={job.id}）")
+        # fire 时求值（spec §4.2/C.4）：task.* 快照取当前任务行，活任务 outcome=null
+        instance = ctx.session.get(ProcessInstanceRow, job.instance_id)
+        if instance is None:
+            raise EngineExecutionError(f"{strategy} 实例不存在（job={job.id}）")
+        snapshot = {
+            "id": task.id,
+            "assignee": task.assignee,
+            "outcome": None,
+            "created_at": task.created_at,
+            "deadline_at": task.due_at,  # 首条 deadline 到期时刻（未配＝null）
+        }
+        from flowork.tasks.facts import instance_facts
 
-            variables = expression_context(
-                instance.variables or {},
-                start_user=instance.start_user,
-                task=snapshot,
-                instance=instance_facts(instance),
-                now=self._engine.config.now(),
+        variables = expression_context(
+            instance.variables or {},
+            start_user=instance.start_user,
+            task=snapshot,
+            instance=instance_facts(instance),
+            now=self._engine.config.now(),
+        )
+        try:
+            target = evaluate_formula_value(
+                expression, variables, functions=expression_functions_of(self._engine.config)
             )
-            try:
-                target = evaluate_formula_value(
-                    expression, variables, functions=expression_functions_of(self._engine.config)
-                )
-            except FormulaError as exc:
-                raise EngineExecutionError(
-                    f"改派公式求值失败（job={job.id}，{expression!r}）：{exc}"
-                ) from exc
-            if not isinstance(target, str) or not target:
-                raise EngineExecutionError(
-                    f"改派公式须返回单个非空人（job={job.id}，{expression!r} → {target!r}）"
-                )
-        else:  # escalate：宿主目录的上级；查无 → 故障单（不静默丢，spec §5.1）
-            org = self._engine.config.org
-            if org is None:
-                raise EngineExecutionError(
-                    f"escalate 需要组织目录（EngineConfig.org），job={job.id}"
-                )
-            target_manager = org.manager_of(task.assignee)
-            if not target_manager:
-                raise EngineExecutionError(
-                    f"escalate 查无上级：{task.assignee}（job={job.id}）→ 故障单"
-                )
-            target = target_manager
+        except FormulaError as exc:
+            raise EngineExecutionError(
+                f"超时{strategy}公式求值失败（job={job.id}，{expression!r}）：{exc}"
+            ) from exc
+        if not isinstance(target, str) or not target:
+            raise EngineExecutionError(
+                f"超时{strategy}公式须返回单个非空人（job={job.id}，{expression!r} → {target!r}）"
+            )
+        if strategy != "reassign":
             kernel.record_event(
                 DomainEvent.TASK_ESCALATED,
                 {"task_id": task.id, "from": task.assignee, "to": target},

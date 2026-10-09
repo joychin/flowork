@@ -127,7 +127,12 @@ class OrgDirectory:
         return self.users_with_role(name)
 
     def manager_of(self, user_id: str) -> str | None:
-        """转上级：吃 user id 返回其 manager；吃 ``org:{code}`` 返回部门负责人。"""
+        """转上级：吃 user id 返回其 manager；吃 ``org:{code}`` 返回部门负责人。
+
+        ``agent:{id}`` → 本实现**没有 agent 表**（静态目录只描述人），返回 None；
+        要 agent 问责链请用持久化目录（DirectoryStore，其 manager_of 走 owner）
+        或宿主自实现。单跳不递归（spec §9 丰富面口径，2026-10-09 第十四轮）。
+        """
         if user_id.startswith("org:"):
             return self.department_head(user_id[4:])
         info = self.users.get(user_id.removeprefix("user:").removeprefix("agent:"))

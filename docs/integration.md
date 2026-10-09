@@ -11,6 +11,7 @@ uv run flowork validate examples/01_simple_approval.json
 uv run flowork demo-full                  # 全流程 DoD 演示（事件回放）
 uv run flowork retire <code>              # 定义退役（purge 物理清除 / drift 文件对账）
 uv run flowork instance vars <iid>        # 实例变量面（vars-set 写 / var-history 血缘）
+uv run flowork task claimable <user>      # 我可认领的待办（候选关联：具体人 ∪ 组引用经目录展开）
 ```
 
 嵌入使用：`pip install -e .` 后 `from flowork.engine.engine import ProcessEngine`。
@@ -144,7 +145,11 @@ FLOWORK_TEST_PG_URL=postgresql+psycopg://... uv run pytest -m needs_postgres   #
 - **UI 设计器**：`designer/`（React Flow）已可用——Spec 唯一事实源、schema 驱动表单、
   校验闭环；任务页/Console 随产品 v1 M-C。
 - **组织系统**：替换 `EngineConfig.org`（实现 `OrgDirectory` 同形接口或适配现有库；
-  持久化目录 `flowork.directory.DirectoryStore` 已起步，M-A）。
+  持久化目录 `flowork.directory.DirectoryStore` 已起步，M-A）。引擎只消费
+  `snapshot`（身份定格）/ `delegation_of`（委托）/ `admins`（无参与者兜底）
+  三个方法——**不含任何组织模型语义**（「上级」由图纸表达式给出，见
+  `escalate_to`）；`manager_of`/`is_member`/`subjects_in` 是 contrib 词汇与
+  候选组展开的数据源（取人语义归宿主，spec §5.5）。
 
 ## 运维要点
 

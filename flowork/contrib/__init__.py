@@ -12,13 +12,21 @@
     )
 
 位点统一（原「两处注册面」已收敛为一）：条件位与取人位同一套词汇——
-- ``manager_of(one_user) → one_user``：吃 user:/agent: 或裸 id 返回其上级；
-  吃 ``org:`` 返回部门负责人；吃 ``role:`` 报错；查无返回 null（None 传播）。
+- ``manager_of(one_user) → one_user``：返回其上级。人 → 主属部门主管；
+  ``agent:{id}`` → 负责人 owner（单跳，不递归到部门主管）；吃 ``org:`` 返回
+  部门负责人；吃 ``role:`` 报错；查无返回 null（None 传播）。
 - ``users_with_role(string) → users``：角色直接成员（subjects_in("role:…")）。
 - ``has_role(one_user, string) → bool``：谓词（条件位使用，取人位会被拒）。
 查无一律返回 None/空，不抛异常（None/空传播契约，spec §5.5）；目录未配置报
 ContribDirectoryMissing——技术故障留给故障单（第 8 章错误二分）。
 CEL 面的函数是**纯读闭包**（无 ctx、无副作用——路由决策只属于引擎+条件求值）。
+
+返回值经注册面统一抬升到 CEL 值域（``_registry._lift``）：宿主写函数时按
+FunctionSignature 声明类型、返回 Python 原生值即可——``bool`` 经抬升才能在
+``!has_role(...)`` 与 ``cond ? a : b`` 里参与 CEL 运算符重载（celpy 按 CEL
+类型分派，原生 bool 会被判无匹配重载而报错）。**参数侧反之**：celpy 传进来的
+已是 CEL 值，函数收到的事实缺键仍是 Python ``None``——把 null 当人喂给
+``manager_of`` 是技术故障，CEL 里必须先用 ``x != null ? ... : ...`` 判空。
 """
 
 from __future__ import annotations

@@ -100,7 +100,44 @@ class ReadDirectoryMixin(RoleDirectoryMixin):
         return self._read(("user_exists", user_id), produce)
 
     def manager_of(self, user_id: str) -> str | None:
-        return self.department_head(self.department_of(user_id) or "")
+        """转上级（spec §9 丰富面）：人 → 主属部门主管；`org:` → 部门负责人；
+        `agent:` → 负责人（owner，单跳）。
+
+        口径统一（2026-10-09 第十四轮）：静态 OrgDirectory 与持久化本身
+        对带前缀主体必须一致。**单跳不递归**——「agent owner → 所属部门主管 →
+        上级」那条链是产品文档里的策略，由宿主在自己的词汇里组合，不进本方法
+        （函数的语义只回答「这个主体的问责上级是谁」）。
+        """
+        agent_id = user_id[6:] if user_id.startswith("agent:") else None
+        if agent_id is None and user_id.startswith("user:"):
+            user_id = user_id[5:]
+
+        def produce() -> str | None:
+            if user_id.startswith("org:"):
+                return self.department_head(user_id[4:])
+            if agent_id is not None:
+                return self._agent_owner_cached(agent_id)
+            # 裸 id：先按人找（既有语义），人不存在再按 agent 找 owner
+            if self.user_exists(user_id):
+                return self.department_head(self.department_of(user_id) or "")
+            return self._agent_owner_cached(user_id)
+
+        return self._read(("manager_of", user_id, agent_id), produce)
+
+    def _agent_owner_cached(self, agent_id: str) -> str | None:
+        """agent owner 的读缓存包装（AgentDirectoryMixin.agent_owner 不缓存）。
+
+        直接查表而不跨 Mixin 派发：Mixin 的 self 类型链对 mypy 不可见
+        （同 users_with_role 的显式经 RoleDirectoryMixin 处理，此处更简单）。
+        """
+        from flowork.directory.orm import AgentRow
+
+        def produce() -> str | None:
+            with self._factory() as session:
+                row = session.get(AgentRow, agent_id)
+                return row.owner_user_id if row else None
+
+        return self._read(("agent_owner", agent_id), produce)
 
     def department_of(self, user_id: str) -> str | None:
         def produce() -> str | None:

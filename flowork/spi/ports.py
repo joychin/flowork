@@ -47,7 +47,12 @@ class OrgDirectory(Protocol):
         ...
 
     def manager_of(self, user: str) -> str | None:
-        """转上级：超时 escalate 的引擎自动行为（吃 org: 返回部门负责人）。"""
+        """转上级（宿主词汇的数据源，如 contrib 的 ``manager_of`` 函数）。
+
+        ``agent:{id}`` → 负责人 owner（单跳）；吃 ``org:`` 返回部门负责人。
+        引擎自身不再消费本方法（超时 escalate 的目标自 v2.3 第十四轮起由图纸的
+        ``escalate_to`` 表达式给出——取人语义归宿主，spec §5.5）。
+        """
         ...
 
     def snapshot(self, subject: str) -> dict[str, Any]:

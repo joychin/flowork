@@ -90,6 +90,10 @@ class TaskDeadline(BaseModel):
     action: DeadlineAction = DeadlineAction.NOTIFY
     # reassign 改派目标：CEL 表达式（fire 时求值，task.* 可用——spec §4.2/C.4）
     reassign_to: str | None = None
+    # escalate 升级目标：CEL 表达式，*必填*（v2.3 第十四轮，spec §5.1）——
+    # 引擎不再自带「上级」概念（组织模型归宿主，spec §5.5 分工铁律）；
+    # 科层组织的图纸写法：escalate_to='manager_of(task.assignee)'
+    escalate_to: str | None = None
 
 
 def effective_deadlines(spec: Any) -> list[TaskDeadline]:

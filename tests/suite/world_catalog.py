@@ -19,6 +19,11 @@ from tests.suite.world_flows_hr import (
 )
 from tests.suite.world_flows_knot import countersign_knot_definition
 from tests.suite.world_flows_material import material_master_definition
+from tests.suite.world_flows_mix import (
+    participant_ladder_definition,
+    participant_void_definition,
+    route_mix_definition,
+)
 from tests.suite.world_flows_subprocess import (
     call_child_definition,
     call_grand_definition,
@@ -55,6 +60,10 @@ BUILDERS: dict[str, Callable[[], ProcessDefinition]] = {
     "suite_deadline_terminate": lambda: instance_deadline_definition("terminate"),
     "suite_message": message_definition,
     "suite_lifecycle": lifecycle_definition,
+    # —— 混用世界（找人 × CEL × 环境变量；连线规则 × 找人 × 环境变量）——
+    "suite_participant_ladder": participant_ladder_definition,
+    "suite_participant_void": participant_void_definition,
+    "suite_route_mix": route_mix_definition,
     "suite_fragile": fragile_definition,
     # —— 真实蓝图世界（金赛+BPO 五文档）——
     "suite_material_master": material_master_definition,
@@ -85,6 +94,9 @@ STORE_WORLD_CODES = [
     "suite_message",
     "suite_lifecycle",
     "suite_fragile",
+    "suite_participant_ladder",
+    "suite_participant_void",
+    "suite_route_mix",
     "suite_material_master",
     "suite_task_publish",
     "suite_onboard_task",
@@ -98,6 +110,7 @@ STATIC_WORLD_CODES = [
     "suite_supplier_check",
     "suite_purchase",
     "suite_branch_matrix",
+    "suite_participant_void",  # 兜底臂要看 admins（静态目录独有）
 ]
 
 

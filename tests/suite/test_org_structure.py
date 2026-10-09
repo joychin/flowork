@@ -96,6 +96,35 @@ def test_identity_snapshot(org_store: DirectoryStore, static_engine: ProcessEngi
     assert org_store.snapshot("ghost_user") == {}
 
 
+@covers("org.manager_of_parity")
+def test_manager_of_parity_between_materializations(
+    org_store: DirectoryStore, static_engine: ProcessEngine
+) -> None:
+    """两种物化对带前缀主体口径一致（回归：此前持久化版不认 `user:`/`org:`）。
+
+    实测背景（2026-10-09）：静态版剥 `user:`/`agent:` 且认 `org:`，持久化版都不认
+    ——同一份图纸换目录实现行为就变。现在两边同口径；人字段写裸 id 仍是推荐写法
+    （spec §5.4 v2.3 第十四轮），认前缀是宿主侧的宽容。
+    """
+    static_org: OrgDirectory = static_engine.config.org  # type: ignore[assignment]
+    for subject in ("u_dev_wu", "user:u_dev_wu"):
+        assert org_store.manager_of(subject) == "u_lead_be" == static_org.manager_of(subject)
+    assert org_store.manager_of("org:rd_be") == "u_lead_be" == static_org.manager_of("org:rd_be")
+    assert org_store.manager_of("org:nope") is None
+    assert org_store.manager_of("u_nobody") is None
+
+
+@covers("org.manager_of_agent_owner")
+def test_manager_of_resolves_agent_to_owner(org_store: DirectoryStore) -> None:
+    """agent 主体 → 负责人（单跳）：问责链 root，不再返回 None。
+
+    单跳不递归——「owner → 所属部门主管 → 上级」是宿主策略，由宿主词汇组合。
+    """
+    assert org_store.manager_of("agent:ag_expense_bot") == "u_cash"  # owner
+    assert org_store.manager_of("ag_expense_bot") == "u_cash"  # 裸 id 回退 agent 查找
+    assert org_store.manager_of("agent:ghost_bot") is None
+
+
 # —— Agent 一等身份 ——
 
 

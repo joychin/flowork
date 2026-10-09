@@ -237,7 +237,7 @@ node_registry.register("http_request", HttpRequestSpec, HttpRequestBehavior,
       "reject_target": "fill",
       "deadlines": [
         {"after_minutes": 1152, "action": "notify"},
-        {"after_minutes": 1440, "action": "escalate"}
+        {"after_minutes": 1440, "action": "escalate", "escalate_to": "manager_of(task.assignee)"}
       ]},
     {"code": "notify", "kind": "service_task", "action": "send_slack",
       "params": {"channel": "#finance"}},
@@ -372,7 +372,7 @@ git 里的 YAML/JSON 文件      ← 编辑态事实来源：人和 AI 只改这
 |---|---|
 | notify | 提醒，不处理（多条 notify deadline＝多级预警：T-3 天、T-1 天…各提醒一次） |
 | reassign | 按 4.2 CEL 表达式改派人（超时求值可用 task.*） |
-| escalate | 引擎自动转上级：调 OrgDirectory.manager_of（宿主实现可内部沿部门树向上），查无上级 → 故障单，不静默丢 |
+| escalate | **目标由图纸给**（`escalate_to` CEL 表达式，必填）：求值出人 → 升级改派并记 `task_escalated`；求值出空 → 故障单，不静默丢。引擎不含「上级」概念（spec §5.5 分工铁律）——科层组织图纸写法 `escalate_to='manager_of(task.assignee)'`【v2.3 第十四轮】 |
 | auto_approve | 自动通过 |
 | auto_reject | 自动驳回 |
 
@@ -409,7 +409,19 @@ git 里的 YAML/JSON 文件      ← 编辑态事实来源：人和 AI 只改这
 
 ### 5.4 主体（Subject）：统一写「一个人/角色/代理/部门」
 
-格式：`user:{id}` | `role:{name}` | `agent:{id}` | `org:{code}`（前三种 ✓ 现状，`org` 【v2】新增——部门树场景：candidate_groups 可挂 org:，认领时按目录判断归属）。凡写人的字段（assignee/candidate/recipients/start_user）都用此格式。内核**不存**用户表、不校验用户存在（对齐 C7 IdentityService 惯例）；表达式里的取人由宿主注册的函数完成（5.5），引擎需要的「人↔组」关系判断走 OrgDirectory 端口（第 9 章）。
+**两种字段两套写法【v2.3 第十四轮口径修正】**：
+- **人字段写裸 id**（规范写法）：`assignee` / `candidate_users` / `recipients` / `start_user` 等指向具体人的位置写目录里的 id 原样（`u_zhang`、`bot1`）。
+- **组字段带前缀**：`candidate_groups` 写 `role:{name}` / `org:{code}`——前缀是**组引用的类型标签**，引擎与目录实现都按 `split_group` 解析（`org:` 即部门树，认领时按目录判断归属）。
+
+**`user:` 前缀的地位（诚实口径）**：前缀**在部分路径上互认**、并非全局归一——
+- 互认（已实现）：候选判定（`tasks/candidates.py::person_key` 剥前缀比对，认领守卫与候选查询维度共用）、目录 `manager_of`（两种物化都剥）；
+- **不互认**（原样字符串比较）：委托替换、`auto_pass_originator`、`handled_assignees`、认领后的 `assignee` 比对。
+
+因此混写（同一人在不同字段一半带前缀一半不带）在互认路径上看着正常、在不互认路径上静默错过（如发起人自动通过失效）。**推荐一律裸 id**；要全库归一需在引擎各比较点统一走 `person_key`，属独立批次。
+
+（此前 §5.4 曾要求人字段也带 `user:` 前缀，但引擎多数路径从不解析它——两个目录实现当时一个认一个不认，是一句引擎不兑现的承诺。前缀的实际价值在组引用：它是类型标签。人是不是 agent 走 `acted_as_agent` 标志与宿主目录，不走字符串装饰。）
+
+内核**不存**用户表、不校验人是否存在（对齐 C7 IdentityService 惯例）；表达式里的取人由宿主注册的函数完成（5.5），引擎需要的「人↔组」关系判断走 OrgDirectory 端口（第 9 章）。
 
 **宿主视角使用模型（三句话）**：进——发起时给 `initiator`，节点取人要么图纸直接写 Subject、要么从契约输入（`input.approver`）拿、要么注册自定义函数教内核算；记——token 表记走到哪个节点、task 表记谁在办、history 表记谁办过（含身份快照，5.6）；出——查询 API（我的待办、实例详情、搜索）随时读这些事实。内核是「只认 id、不管 id 是谁」的流转记账引擎。
 
@@ -445,7 +457,7 @@ register("finance_path", fn, params=[],           returns="groups")
 register("approvers_of", fn, params=["one_user"], returns="mixed")
 ```
 
-**`flowork.contrib` 便利包**（可选，一行挂上，纯基于 OrgDirectory 端口实现）：`manager_of(one_user)→one_user`（吃 user:/agent: 返回其上级；吃 org: 返回部门负责人——部门负责人数据由宿主目录自定；吃 role: 设计期报错）、`users_with_role(string)→users`、`has_role(one_user, string)→bool`。部门类词汇（org_of、dept_leader 等）的数据源无端口支撑，不进 contrib，由宿主注册。
+**`flowork.contrib` 便利包**（可选，一行挂上，纯基于 OrgDirectory 端口实现）：`manager_of(one_user)→one_user`（返回其上级；吃 `org:` 返回部门负责人——数据由宿主目录自定；吃 `role:` 设计期报错；**agent 主体 → owner**）、`users_with_role(string)→users`、`has_role(one_user, string)→bool`。部门类词汇（org_of、dept_leader 等）的数据源无端口支撑，不进 contrib，由宿主注册。
 
 | 使用位置 | 接受的返回 | 引擎行为 |
 |---|---|---|
@@ -591,7 +603,7 @@ CRUD：新增与更新＝同一操作 `deploy`——**纯数据写入（INSERT �
 class OrgDirectory(Protocol):            # ◐ v2.1 瘦身定稿：引擎必需的四方法
     def is_member(self, user: str, group: str) -> bool: ...        # 人→组：候选命中判断（引擎查「张三属不属于这个组」）
     def subjects_in(self, group: str) -> list[str]: ...            # 组→人：候选列表展开（直接成员，不含子部门，5.5）
-    def manager_of(self, user: str) -> str | None: ...             # 转上级：超时 escalate 的引擎自动行为
+    def manager_of(self, user: str) -> str | None: ...             # 转上级（*宿主词汇的数据源*，如 contrib 的 manager_of 函数；引擎自身不再消费【v2.3 第十四轮】）
     def snapshot(self, subject: str) -> dict: ...                  # 身份快照：完成事务内定格操作者当时的岗位/角色/部门（5.6）
 
 class ExpressionFunctions(Protocol):     # ✓ CEL 自定义函数来源（4.3，已接线；contrib.cel_vocabulary 三词汇）
@@ -601,7 +613,7 @@ class EventSink(Protocol):               # ✗ 事件外发（默认=outbox 轮�
     def emit(self, envelope: dict) -> None: ...
 ```
 
-**目录的默认实现与强制程度（显式选择，不强制实现）**：默认给**静态目录**（配置文件写死映射，小团队、demo、CI 裸跑够用）；空配置时四方法返回 False/[]/None/{}。validate 对「图纸用了 role:/org: 组主体而目录为空配置」给**警告**（deploy 不拦，后果＝组待办无人能认领，宿主部署时已见过警告）；escalate 查无上级→故障单（5.1，不静默丢）。纯服务编排、agent 编排类宿主根本不用组主体，完全不需要实现目录。
+**目录的默认实现与强制程度（显式选择，不强制实现）**：默认给**静态目录**（配置文件写死映射，小团队、demo、CI 裸跑够用）；空配置时四方法返回 False/[]/None/{}。validate 对「图纸用了 role:/org: 组主体而目录为空配置」给**警告**（deploy 不拦，后果＝组待办无人能认领，宿主部署时已见过警告）；escalate 目标由图纸的 escalate_to 表达式给出（5.1），不再要求目录实现 manager_of。纯服务编排、agent 编排类宿主根本不用组主体，完全不需要实现目录。
 
 铁律（CI 强制）：内核模块 import 任何插件包即红灯。
 
@@ -772,7 +784,7 @@ v2.2 增补对标的直接来源（核实于 2026-10-07）：对标产品 基准
 背景：以 对标产品 基准版本 行为基准代码逐文件对拍内核设计，再对标 jBPM / Activiti 血统（Flowable、Camunda 7）/ Zeebe 8 / Temporal / WS-HumanTask，落七项修改：
 
 1. **§2.3 all 汇聚放行判定定稿**（本轮最重要，正确性修复）：现状「等全部直接入边 settled」在上游条件分支未命中时永久死锁。改为可达性语义（除已停靠令牌外无未完令牌可达即放行；只看未完令牌，旧 settled 令牌不算数），与 Flowable（静态可达性＋活跃执行扫描）、Zeebe 8.6（#10031）同族；对标产品「来源无令牌＝满足」为同步建令牌模型下的简化特例，因 v2 消息节点引入异步到达不可沿用，故一步到位。§2.4 映射表两行联动（并行/包容汇聚都指回 2.3）。
-2. **§5.1 超时改 deadline 列表形态**（对齐 WS-HumanTask「多 deadline 各挂 escalation」）：`deadlines: [{after_minutes, action}]` 五动作（notify/reassign/escalate/auto_approve/auto_reject）；多 notify＝多级预警（对标产品 timeoutWarning1..5 的标准形态替代）；escalate＝OrgDirectory.manager_of（宿主可内部沿树向上）→查无上级转故障单；现状 TimeoutPolicy 为退化形态，validate 兼容、semantic diff 等价。§2.5/§4.2/§3.3/C.3/C.5 联动。
+2. **§5.1 超时改 deadline 列表形态**（对齐 WS-HumanTask「多 deadline 各挂 escalation」）：`deadlines: [{after_minutes, action}]` 五动作（notify/reassign/escalate/auto_approve/auto_reject）；多 notify＝多级预警（对标产品 timeoutWarning1..5 的标准形态替代）；escalate＝**图纸给目标**（`escalate_to` CEL 表达式，必填；v2.3 第十四轮起引擎不再调 OrgDirectory.manager_of）→查无转故障单；现状 TimeoutPolicy 为退化形态，validate 兼容、semantic diff 等价。§2.5/§4.2/§3.3/C.3/C.5 联动。
 3. **实例级 deadline 新增**（§3.1 字段/§3.3 示例/§3.4+§14 deadline_at/§7 语义/§10 事件）：Temporal 原生 Workflow Execution Timeout 同款；BPMN 系需子流程边界定时事件建模，flowork 取声明式字段。新事件 instance_deadline_reached（增补 13→14）。
 4. **§5.1 驳回落点豁免 auto_pass 成文**：现状靠解析器 manual_participants 短路隐式实现（行为等价于 对标产品 doOnRejectedActivity），升格为语义保证，防「发起人驳回→重提交→又被跳过」打转及未来重构丢失。
 5. **anticipate 只读 API 新增**（§11/§12/§13，MCP 首批 16→17 加 anticipate_task）：预判提交后果，主流引擎无等价物，定位 AI 原生差异点。
@@ -861,7 +873,7 @@ Zeebe inputCollection/outputCollection 契约实装（multi-instance-call-design
 
 ### C.2 主体与参与人（见 §5.5）
 
-Subject：`user:{id} | agent:{id} | role:{name} | org:{code}`；ParticipantSet 两槽；函数类型词汇（参数与返回共用，另含 CEL 原生标量）：one_user/users/groups/mixed/bool。
+Subject：人字段＝**裸 id**（`u_zhang` / `bot1`，引擎不解析前缀）、组字段＝`role:{name}` | `org:{code}`【v2.3 第十四轮，见 5.4】；ParticipantSet 两槽；函数类型词汇（参数与返回共用，另含 CEL 原生标量）：one_user/users/groups/mixed/bool。
 
 ### C.3 状态枚举（全部封闭，validate 拒绝未知值）
 
@@ -881,11 +893,11 @@ Subject：`user:{id} | agent:{id} | role:{name} | org:{code}`；ParticipantSet �
 | prev_task | 上一站已完成任务快照 {assignee, outcome, comment, finished_at, used_time}（条件+取人位；查无不注入，F2；used_time 为自然时长口径——暂停剔除待定） |
 | node("code") | 引擎注入函数 → 平铺 {assignee, outcome, comment, finished_at, used_time, runs, skipped, item_count, approve_count, disapprove_count}（runs=已结束轮数；票数取最近轮令牌三计数；查无＝固定形状：人物 null 计数 0，F2） |
 
-contrib 签名（便利包，可选，纯基于 OrgDirectory 端口实现）：`manager_of(one_user)→one_user`（吃 user:/agent: 返回其上级；吃 org: 返回部门负责人；吃 role: 设计期报错）、`users_with_role(string)→users`、`has_role(one_user, string)→bool`。部门类词汇（org_of 等）数据源无端口支撑，由宿主注册。自定义函数注册必须带全签名（参数＋返回，词汇表见 5.5）；内核注册表出厂为空。词汇目录（标识符＋函数，含中文 label 与位点）权威在 `expr/catalog.py`。
+contrib 签名（便利包，可选，纯基于 OrgDirectory 端口实现）：`manager_of(one_user)→one_user`（返回其上级；吃 `org:` 返回部门负责人；吃 `role:` 设计期报错；**agent 主体 → owner**）、`users_with_role(string)→users`、`has_role(one_user, string)→bool`。部门类词汇（org_of 等）数据源无端口支撑，由宿主注册。自定义函数注册必须带全签名（参数＋返回，词汇表见 5.5）；内核注册表出厂为空。词汇目录（标识符＋函数，含中文 label 与位点）权威在 `expr/catalog.py`。
 
 ### C.5 词法与单位规则【v2 定义】
 
-- code：`^[a-z][a-z0-9-]{0,99}$`；Subject：`^(user|role|agent|org):[A-Za-z0-9_@.\-+]+$`；id 一律 UUID 字符串。
+- code：`^[a-z][a-z0-9-]{0,99}$`；**组引用**：`^(role|org):[A-Za-z0-9_@.\-+]+$`（人字段＝裸 id，不设前缀约束）；id 一律 UUID 字符串。
 - searchable 变量仅限 string/number/boolean（object/array 标 searchable → validate 报错）。
 - correlation_key 表达式必须求值为 string（否则设计期报错）。
 - 会签出口＝CEL 布尔公式（4.2；缺省＝该侧全票），旧专用语法 BNF 已随位点统一退役。

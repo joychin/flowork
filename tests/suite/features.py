@@ -36,6 +36,9 @@ FEATURES: dict[str, tuple[str, ...]] = {
         "route.parallel_fork",
         "join.any_absorb",
         "join.all_gate",
+        # —— 混用世界族（连线规则 × 找人 × 环境变量）——
+        "route.fact_gate",
+        "route.mixed_formula",
     ),
     "countersign": (
         "countersign.parallel",
@@ -75,6 +78,11 @@ FEATURES: dict[str, tuple[str, ...]] = {
         "participant.delegation",
         "participant.auto_pass_originator",
         "participant.no_participant_to_admins",
+        # —— 混用世界族（找人 × CEL × 环境变量）——
+        "participant.expression_mixed",
+        "participant.expression_fact_chain",
+        "participant.host_functions",
+        "participant.null_spread",
     ),
     "lifecycle": (
         "lifecycle.start_idempotency_reject",
@@ -133,6 +141,9 @@ FEATURES: dict[str, tuple[str, ...]] = {
         "org.is_member_groups",
         "org.snapshot",
         "org.manager_reroute",
+        # —— 混用世界族与端口口径（2026-10-09 第十四轮）——
+        "org.manager_of_parity",
+        "org.manager_of_agent_owner",
     ),
     "message": (
         "message.buffered_first",

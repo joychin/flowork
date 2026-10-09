@@ -164,6 +164,11 @@ def _check_subject_literals(
                 for j, d in enumerate(getattr(node, "deadlines", None) or [])
                 if d.reassign_to
             )
+            positions.extend(
+                (f"{node.code}.deadlines[{j}].escalate_to", d.escalate_to)
+                for j, d in enumerate(getattr(node, "deadlines", None) or [])
+                if d.escalate_to
+            )
         elif node.kind == KIND_CC_TASK:
             positions.extend(
                 (f"{node.code}.recipients[{i}]", e)

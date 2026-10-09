@@ -85,6 +85,7 @@ def schedule_deadline_jobs(ctx: RuntimeNodeContext, spec: UserTaskSpec, task_id:
                     "after_minutes": deadline.after_minutes,
                     "deadline_index": index,
                     **({"reassign_to": deadline.reassign_to} if deadline.reassign_to else {}),
+                    **({"escalate_to": deadline.escalate_to} if deadline.escalate_to else {}),
                 },
             )
         )

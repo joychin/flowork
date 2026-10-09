@@ -26,7 +26,6 @@ if TYPE_CHECKING:
 __all__ = [
     "check_advance_policy",
     "check_branch_rules",
-    "check_deadlines",
     "check_structure",
     "check_variables_and_org",
     "check_wait_nodes",
@@ -205,28 +204,6 @@ def check_advance_policy(
             )
         # 「all 挂条件分支臂」不再告警：v2 §2.3 可达性放行下未命中臂不阻塞
         # （包容网关映射 = branch + all 汇聚，见 spec §2.4）
-
-
-def check_deadlines(
-    definition: ProcessDefinition,
-    error: IssueFn,
-) -> None:
-    """超时动作列表（v2.2 §5.1/C.5）。"""
-    for node in definition.nodes:
-        deadlines = list(getattr(node, "deadlines", None) or [])
-        if len(deadlines) > 8:
-            error(
-                "user_task.deadlines.too_many",
-                f"超时动作列表上限 8 条（当前 {len(deadlines)}）",
-                node=node.code,
-            )
-        for deadline in deadlines:
-            if deadline.action == "reassign" and not deadline.reassign_to:
-                error(
-                    "user_task.deadline.reassign_target_missing",
-                    "reassign 动作必须带改派目标（reassign_to）",
-                    node=node.code,
-                )
 
 
 def check_wait_nodes(definition: ProcessDefinition, error: IssueFn) -> None:

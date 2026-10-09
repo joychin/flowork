@@ -143,12 +143,21 @@ def test_reassign_deadline_transfers_task():
     assert [(t.activity_code, t.assignee) for t in tasks] == [("a", "u_backup")]
 
 
-def test_escalate_goes_to_manager_and_no_manager_raises_incident():
-    """验收：escalate＝目录上级改派；查无上级 → 故障单（不静默丢）。"""
+def test_escalate_goes_to_expression_target_and_failure_raises_incident():
+    """验收：escalate 目标由 `escalate_to` 表达式给出（v2.3 第十四轮）。
+
+    引擎不含「上级」概念（spec §5.5 分工铁律）——科层组织在图纸里写
+    `manager_of(task.assignee)`；求值出空 → 故障单（不静默丢）。
+    """
+    from flowork import contrib
+
     org = OrgDirectory.from_dict(
         {"users": {"u_a": {"manager": "u_boss"}, "u_b": {}}, "departments": {}}
     )
-    engine, clock = build_engine(org)
+    clock = FakeClock()
+    engine = ProcessEngine(
+        EngineConfig(now=clock, org=org, expression_functions=contrib.cel_vocabulary(org))
+    )
     deploy(
         engine,
         FlowBuilder("esc_flow")
@@ -156,7 +165,13 @@ def test_escalate_goes_to_manager_and_no_manager_raises_incident():
         .user_task(
             "a",
             assignee="'u_a'",
-            deadlines=[TaskDeadline(after_minutes=15, action="escalate")],
+            deadlines=[
+                TaskDeadline(
+                    after_minutes=15,
+                    action="escalate",
+                    escalate_to="manager_of(task.assignee)",
+                )
+            ],
         )
         .end()
         .connect("start", "a")
@@ -165,11 +180,11 @@ def test_escalate_goes_to_manager_and_no_manager_raises_incident():
     )
     instance_id = engine.runtime.start_process("esc_flow", start_user="u_s")
     clock.advance(15)
-    engine.jobs.tick()  # u_a 有上级 u_boss → 改派
+    engine.jobs.tick()  # u_a 有上级 u_boss → 升级改派
     assert [t.assignee for t in engine.task.list_tasks(instance_id=instance_id)] == ["u_boss"]
     assert events_named(engine, DomainEvent.TASK_ESCALATED.value)
 
-    # 无上级者（u_b 是顶层）触发 escalate → 故障单
+    # 无上级者（u_b 是顶层）：表达式求值出 None → 故障单
     deploy(
         engine,
         FlowBuilder("esc_top")
@@ -177,7 +192,13 @@ def test_escalate_goes_to_manager_and_no_manager_raises_incident():
         .user_task(
             "b",
             assignee="'u_b'",
-            deadlines=[TaskDeadline(after_minutes=15, action="escalate")],
+            deadlines=[
+                TaskDeadline(
+                    after_minutes=15,
+                    action="escalate",
+                    escalate_to="manager_of(task.assignee)",
+                )
+            ],
         )
         .end()
         .connect("start", "b")
@@ -192,6 +213,30 @@ def test_escalate_goes_to_manager_and_no_manager_raises_incident():
             session.scalars(select(IncidentRow).where(IncidentRow.instance_id == top_id)).first()
             is not None
         )
+
+
+def test_escalate_works_without_directory_engine():
+    """无目录引擎也能升级：目标纯来自图纸，引擎零组织假设（spec §5.5）。"""
+    engine, clock = build_engine()  # 无 org
+    deploy(
+        engine,
+        FlowBuilder("esc_nodir")
+        .start()
+        .user_task(
+            "a",
+            assignee="'u_a'",
+            deadlines=[TaskDeadline(after_minutes=15, action="escalate", escalate_to="'u_lead'")],
+        )
+        .end()
+        .connect("start", "a")
+        .connect("a", "end")
+        .build(),
+    )
+    instance_id = engine.runtime.start_process("esc_nodir", start_user="u_s")
+    clock.advance(15)
+    engine.jobs.tick()
+    assert [t.assignee for t in engine.task.list_tasks(instance_id=instance_id)] == ["u_lead"]
+    assert events_named(engine, DomainEvent.TASK_ESCALATED.value)
 
 
 def test_legacy_timeout_field_equivalent():
@@ -407,5 +452,5 @@ def test_reassign_expression_error_becomes_incident():
     session = engine.session_factory()
     job = session.scalars(_select(_JobRow)).first()
     session.close()
-    assert job is not None and "改派公式求值失败" in (job.last_error or "")
+    assert job is not None and "超时reassign公式求值失败" in (job.last_error or "")
     assert engine.runtime.list_incidents(), "改派公式错必须落故障单（首败即记）"

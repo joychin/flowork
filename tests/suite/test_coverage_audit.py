@@ -18,6 +18,7 @@ PILOT_DIR = SUITE_DIR.parent / "pilot"
 
 # 黑盒白名单：套件只允许 import 公共面（引擎门面/目录/定义层/错误/事件/装配工具）
 ALLOWED_FLOWORK_MODULES = {
+    "flowork.api",  # 唯一公开门面（宿主自定义词汇/端口需经它取类型）
     "flowork.contrib",
     "flowork.definitions.builtin",
     "flowork.definitions.builder",
