@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| 文档版本 | v2.2（v2.1 基础上按 对标产品 基准版本 行为基准对标＋开源引擎对标增补：all 汇聚放行语义、deadline 列表、实例时限、anticipate API；第七轮评审记录见附录 B） |
-| 日期 | 2026-10-07 |
+| 文档版本 | v2.3（v2.2 基础上按 对标产品 对标两轮定稿：动作票数语义/复活最近一轮/前视跳过列非目标/WorkCalendar 诚实化；第八轮评审记录见附录 B；§4.1/§4.2 的 v2.3 标记为 2026-10-08 条件单轨化与位点统一批，本次统一升版） |
+| 日期 | 2026-10-09 |
 | 上游文档 | [kernel-v2-plan.md](./kernel-v2-plan.md)（调研与选型依据） |
 | 读者 | 内核实现者（按本文可直接开写代码）、插件作者、AI 编码代理（本文即防跑偏的契约） |
 | 现状标注 | ✓=已实现（以 flowork M0–M6 代码为准）｜◐=已有但需改造｜✗=新增 |
@@ -48,7 +48,7 @@
 
 **范围**：流程内核 v2 的完整规格——图纸怎么写（定义）、怎么跑（实例）、任务怎么分派与完成、什么情况停、对外开什么口子。
 
-**非目标**：表单/权限/通知等插件规格（另文）；多副本部署细则；webhook 出站与链路追踪（P2 占位）；BPMN XML 导入导出；提交时自选下一节点（BPMN 系引擎均无此路由模式，人的选择用输出变量＋条件边表达，见 2.4 注）；催办/提醒类动作（UrgeTask 形态，归宿主或通知插件）。
+**非目标**：表单/权限/通知等插件规格（另文）；多副本部署细则；webhook 出站与链路追踪（P2 占位）；BPMN XML 导入导出；提交时自选下一节点（BPMN 系引擎均无此路由模式，人的选择用输出变量＋条件边表达，见 2.4 注）；催办/提醒类动作（UrgeTask 形态，归宿主或通知插件）；**前视式自动跳过参与者【v2.3】**（「他后面还会审、这关免审」的 participateLater 形态——主流引擎零实现，且需用未来变量做决策、失效模式是审批链空洞且审计不可见；「同一人别重复审批」由 auto_pass_participated/previous 向后看覆盖，前视信息只做 anticipate 只读提示，依据见 对标明细.md A7）。
 
 ## 2. 流程图纸的三要素：节点、连线、推进策略
 
@@ -262,7 +262,7 @@ node_registry.register("http_request", HttpRequestSpec, HttpRequestBehavior,
 | wf_process_instance 流程实例 | id；definition_code；definition_version【v2→major+revision】；**definition_snapshot**（发起时图纸全文抄本，不可变——快照原则的实现）；business_key（业务单号，仅查询用）；state（running；【v2】扩 paused/terminated）；start_user；variables（JSON）；parent_id/parent_token_id（作为子流程时的父指针）；deadline_at【v2.2】（实例时限到期时刻，图纸顶层 deadline 按 WorkCalendar 折算后物化）；version（乐观锁）；started_at/finished_at/updated_at | 一次流程运转的全部持久状态 |
 | wf_token 令牌 | id；instance_id；token_no（实例内自增）；activity_code（当前在哪个节点）；source_activity_code（从哪来）；state（unfinished/finished）；item_count/approve_count/disapprove_count（会签 应办/同意/驳回计数）；approval_exit（会签出口判定结果）；reject_flag（驳回产生的令牌）；manual_participants（人工调整的参与人）；created_at/finished_at | 「走到哪了」的记号；会签计数在此不在任务上 |
 | wf_task 人工任务（活表） | id；instance_id；token_id；activity_code；name；assignee；task_type（approval/assist）；state（ready/completed/cancelled）；context_payload（审批卡片数据，AI 预审共用）；root_task_id（加签/委派链，指回原任务）；【v2】priority/due_at；created_at | 还没办完的人工任务 |
-| wf_task_history 已办（只插入不改） | 同上 + task_id；outcome（agree/reject/transfer/auto_pass/withdrawn）；comment；acted_by；**acted_as_agent**（是否 AI 代理代办）；**idempotency_key**（完成幂等）；**actor_context**（身份快照 JSON 袋，完成事务内定格，见 5.6）【v2.1】；cause_token_id（驳回复活的关联）；cost_seconds（耗时）；created_at | 审计的唯一真相，append-only |
+| wf_task_history 已办（只插入不改） | 同上 + task_id；outcome（agree/reject/transfer/auto_pass/withdrawn/assist/assist_cancel【v2.3：协办交还与随主任务收口】/cancelled/simulated 预留）；comment；acted_by；**acted_as_agent**（是否 AI 代理代办）；**idempotency_key**（完成幂等）；**actor_context**（身份快照 JSON 袋，完成事务内定格，见 5.6）【v2.1】；cause_token_id（驳回复活的关联）；cost_seconds（耗时）；created_at | 审计的唯一真相，append-only |
 | wf_job 系统任务 | id；job_type（timer/async）；state（scheduled/…/dead-letter 分级）；run_at；retry_count/max_retries（默认 3）；instance_id；payload；result_payload；last_error；【v2】worker_id/lease_until/next_retry_at | 定时与异步执行；重试与死信状态机在此 |
 | wf_incident 故障单 | id；instance_id；message；error_class；state（open/resolved）；resolution（resume/cancel，【v2】扩 retry/skip/fail）；created_at/resolved_at | 系统自己搞不定的错误 |
 | wf_event_outbox 事件流水 | id（UUID）；event_name；instance_id；payload；occurred_at | 与业务变更同事务写入 |
@@ -349,13 +349,19 @@ git 里的 YAML/JSON 文件      ← 编辑态事实来源：人和 AI 只改这
 
 - 单人节点：assignee 调 complete（带 output，按 3.2 契约校验后写入变量）→ 令牌离开。
 - 会签节点：按 approve_exit/disapprove_exit 判定（CEL 公式，4.2）——比如 `task.approve_count * 100 >= task.item_count * 50` 且 3 人中 2 人同意即过；驳回出口同理；缺省不配＝该侧全票。
-- 驳回：outcome=reject，令牌按 reject_target 回退（未配则回上一人工节点）；被驳回的任务复活=生成**新**任务行，旧行进历史（cause_token_id 关联）✓。**驳回落点豁免自动通过【v2.2 成文】**：驳回产生的令牌、经 manual_participants 定格的参与者**不应用** auto_pass_* 策略——否则「发起人驳回→重新提交→又被 auto_pass 跳过」原地打转；现状由解析器 manual 短路隐式实现（participants/resolver.py），此处升格为语义保证，防未来重构丢掉（对标产品 doOnRejectedActivity 同规则）。
+- 驳回：outcome=reject，令牌按 reject_target 回退（未配则回上一人工节点）；被驳回的任务复活=生成**新**任务行，旧行进历史（cause_token_id 关联）✓。**复活圈定「最近一轮」【v2.3 定稿，2026-10-09 拍板】**：复活名单＝目标节点**最近一个已完结令牌**名下的办理人（按 token_no 取最大；无完结令牌才回退到该节点全部非取消历史）——多轮驳回时名单不随轮次膨胀。与主流引擎的**刻意差异**在此声明：BPMN 系引擎（Camunda/Flowable/jBPM）重入活动时按定义**重新解析**办理人（人可能换、离职者自动剔除）；flowork 复活**原办理人**——驳回就是退回给原审批人重新表态，这是国内审批语义，不是缺失。兜底：原办理人名单为空（如首节点发起人）时走正常表达式解析。**驳回落点豁免自动通过【v2.2 成文】**：驳回产生的令牌、经 manual_participants 定格的参与者**不应用** auto_pass_* 策略——否则「发起人驳回→重新提交→又被 auto_pass 跳过」原地打转；现状由解析器 manual 短路隐式实现（participants/resolver.py），此处升格为语义保证，防未来重构丢掉（对标产品 doOnRejectedActivity 同规则）。
 
 **任务动作全集（每个都是 API，详见第 11 章）**：claim（从候选里认领）/ unclaim / complete / reject / transfer（转办，保持待办换人）/ assist（委派：生成 task_type=assist 的子任务，root_task_id 指回原任务，原任务保留在负责人名下）/ complete_assist（受托人交还）/ add_countersigner（加签）。
 
-**任务状态（对齐现状存储，不新增状态列）**：活表 state ∈ `ready | completed | cancelled`；「已认领」＝ ready 且 assignee 已固定（不设独立 claimed 态）；终态语义在历史的 outcome 里（agree/reject/transfer/auto_pass/withdrawn，✓ 现状值）。已被他人认领再认领 → `TaskAlreadyClaimedError`。
+**任务状态（对齐现状存储，不新增状态列）**：活表 state ∈ `ready | completed | cancelled`；「已认领」＝ ready 且 assignee 已固定（不设独立 claimed 态）；终态语义在历史的 outcome 里（agree/reject/transfer/auto_pass/withdrawn/assist/assist_cancel/cancelled；✓ 现状值 + v2.3 增 assist_cancel）。已被他人认领再认领 → `TaskAlreadyClaimedError`。
 
-**超时【v2.2 定稿：deadline 列表形态，对齐 WS-HumanTask】**：任务可挂一组有序动作 `deadlines: [{after_minutes, action}]`（自进入节点起算，按 WorkCalendar 工作日历折算——SPI 端口，默认自然时间；after_minutes 必须为正整数，同一节点上限 8 条）。动作枚举五种：
+**动作的票数语义【v2.3 定稿，2026-10-09 拍板】**（会签计数 item_count/approve_count/disapprove_count 只被下列动作改变）：
+
+- **transfer（转办）＝票随人走**：原任务归档为 transfer（不计票），新任务完成后正常计一票——即「这一票由被转办人代为行使」，审计上谁代行有记录。转办不增加也不减少应办总数。
+- **add_countersigner（加签）＝加签人各占一票**：item_count 随名单同步增加，每个加签人完成即计票——加签是「增加表决权」，不是「只增加把关人」。若业务想要「只要意见、不改票权」的形态，用 assist/consult（意见不占票），两条路天然分流，不引入按加签组归并票数的机制（对标产品 rootTaskId 组算一票的形态不采纳——行业对拍：主流引擎无票数概念，无从对齐，且归并会让 item_count 与任务行数失去对应）。
+- assist/complete_assist 不计票（委派是「看一眼/搭把手」，不改变节点完成条件）✓ 现状。
+
+**超时【v2.2 定稿：deadline 列表形态，对齐 WS-HumanTask】**：任务可挂一组有序动作 `deadlines: [{after_minutes, action}]`（自进入节点起算，after_minutes 必须为正整数，同一节点上限 8 条；**现状＝自然分钟直算到期时刻**——`now + after_minutes`，WorkCalendar 端口尚未接线【v2.3 诚实化标注：历史耗时全行业一律墙钟、零引擎按人算日历，双日历口径明确不做；该端口收敛方向＝删除或仅用于 deadline 到期时刻折算，随第二批收口，见 对标明细.md A5】）。动作枚举五种：
 
 | action | 行为 |
 |---|---|
@@ -756,6 +762,18 @@ v2.2 增补对标的直接来源（核实于 2026-10-07）：对标产品 基准
 7. **开工项 +3**：P0-7（汇聚放行）、P1-8（deadline 演进）、P1-9（anticipate）。
 
 讨论过但**不采纳**：审批托付按流程限定作用域（delegation_of 加流程参）——与第六轮「OrgDirectory 瘦身为引擎必需四方法」定稿冲突，托付替换可在宿主目录/表达式层组合实现，记下不做。对拍确认不借的 对标产品 设计：驳回复活改写历史行（flowork 新任务行＋cause_token_id 更优）、Redis 分布式锁、引擎内线程池异步推进、connection 空节点、实例 bak 归档体系、单 int 版本号。
+
+
+### 第八轮（2026-10-09，v2.2→v2.3，对标产品 对标两轮定稿）
+
+背景：先以 对标产品 基准版本 行为基准源码逐文件对拍内核现状（产出 [对标明细.md](./对标明细.md) + [对标明细详设.md](./对标明细详设.md)，A 档 11 项候选），再以主流开源引擎源码级对拍校准（[delta-industry-benchmark.md](./delta-industry-benchmark.md)：Camunda 7.23/8、Flowable 7、jBPM 7.74、Temporal、SpiffWorkflow、Conductor）。用户拍板采纳综合建议。本轮落 spec 四项：
+
+1. **动作票数语义定稿（§5.1 新增块）**：transfer＝票随人走（转办不增减应办总数、被转办人完成计一票）；add_countersigner＝加签人各占一票（item_count 随名单同步增加）；assist 不计票。「不占票的加签」用 assist/consult 表达，两路分流——对标产品 rootTaskId 组算一票的归并形态不采纳（主流引擎无票数概念无从对齐，且归并破坏 item_count 与任务行数对应）。
+2. **驳回复活圈定「最近一轮」（§5.1 驳回条款）**：复活名单＝目标节点最近一个已完结令牌（token_no 最大）名下办理人，多轮驳回名单不膨胀；无完结令牌才回退全量历史。同时声明与主流的**刻意差异**：BPMN 系引擎重入时按定义重新解析办理人，flowork 复活原办理人（国内审批语义），原名单为空时兜底走表达式解析。
+3. **前视式自动跳过列入非目标（§1）**：「他后面还会审、这关免审」（participateLater 形态）——主流引擎零实现（GitHub 全域 lookAheadParticipants 零命中）、需用未来变量决策、失效模式是审批链空洞且审计不可见；向后看三策略（auto_pass_originator/previous/participated）覆盖真实诉求，前视信息只做 anticipate 只读提示。
+4. **WorkCalendar 表述诚实化（§5.1 超时）**：现状＝自然分钟直算（端口零消费，spec 原文「按 WorkCalendar 折算」与实现不符）；行业事实＝历史耗时全行业一律墙钟、零引擎按人算日历（C7 按人算的 Task 参数是死参数、Flowable 已删），**双日历口径明确不做**；端口收敛方向（删除或仅接 deadline 到期折算）随第二批拍板。
+
+撤回下游守卫（撤回策略与取消范围的拍板④）由下游闸门自然覆盖，其 spec 条款随第二批 A2 实施落地。行业对标三大事实与四批实施排序见 delta 文档；实施纪律新增一条共识：**可见优于静默**（本轮所有引擎坑几乎都是静默形态——静默删子任务/默认不清理/静默截断人数/静默跳过校验）。
 
 ## 附录 C：类型清单（须提前定义的全集）
 
