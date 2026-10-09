@@ -28,6 +28,9 @@ class RoleDirectoryMixin:
     def _user(self, session: Session, user_id: str) -> OrgUserRow:
         raise NotImplementedError
 
+    def _write_done(self) -> None:
+        raise NotImplementedError
+
     # —— 写 ——
 
     def create_role(
@@ -36,7 +39,10 @@ class RoleDirectoryMixin:
         *,
         name: str = "",
         default_scope_org_unit: str | None = None,
+        acted_by: str = "system",
     ) -> None:
+        from flowork.directory.audit import record_audit
+
         _validate_code("角色", code)
         with self._factory() as session, session.begin():
             if session.get(RoleRow, code) is not None:
@@ -46,10 +52,25 @@ class RoleDirectoryMixin:
             session.add(
                 RoleRow(code=code, name=name, default_scope_org_unit=default_scope_org_unit)
             )
+            record_audit(
+                session,
+                "role.create",
+                f"role:{code}",
+                {"default_scope": default_scope_org_unit},
+                acted_by=acted_by,
+            )
+        self._write_done()
 
     def assign_role(
-        self, user_id: str, role_code: str, *, org_unit_code: str | None = None
+        self,
+        user_id: str,
+        role_code: str,
+        *,
+        org_unit_code: str | None = None,
+        acted_by: str = "system",
     ) -> None:
+        from flowork.directory.audit import record_audit
+
         with self._factory() as session, session.begin():
             role = session.get(RoleRow, role_code)
             if role is None:
@@ -75,6 +96,14 @@ class RoleDirectoryMixin:
             session.add(
                 RoleAssignmentRow(user_id=user_id, role_code=role_code, org_unit_code=org_unit_code)
             )
+            record_audit(
+                session,
+                "role.assign",
+                f"role:{role_code}",
+                {"user": user_id, "scope": effective},
+                acted_by=acted_by,
+            )
+        self._write_done()
 
     # —— 读 ——
 

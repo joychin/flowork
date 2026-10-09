@@ -7,8 +7,9 @@ v1 竖切仅两张表（部门/用户）；角色与授权表（role/role_assign
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
-from sqlalchemy import DateTime, Index, Integer, String
+from sqlalchemy import JSON, DateTime, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from flowork.clock import utc_now
@@ -92,3 +93,36 @@ class AgentCredentialRow(Base):
     salt: Mapped[str] = mapped_column(String(32))
     issued_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class DelegationRow(Base):
+    """审批委托（engine-v1 01 §5）：from 在 [since, until] 窗口内待办转 to。
+
+    单跳不递归（A→B、B→C 时 A 的待办只到 B）；窗口端点 None=该侧无限。
+    """
+
+    __tablename__ = "org_delegation"
+    __table_args__ = (Index("ix_delegation_from", "delegate_from"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    delegate_from: Mapped[str] = mapped_column(String(64))
+    delegate_to: Mapped[str] = mapped_column(String(64))
+    since: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    reason: Mapped[str] = mapped_column(String(500), default="")
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
+
+
+class DirectoryAuditRow(Base):
+    """目录写审计（追加只写）：谁在何时改了什么（部门/用户/角色/委托/Agent）。"""
+
+    __tablename__ = "org_directory_audit"
+    __table_args__ = (Index("ix_dir_audit_time", "created_at"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    action: Mapped[str] = mapped_column(String(64))  # org_unit.create / role.assign / ...
+    entity: Mapped[str] = mapped_column(String(200))  # org_unit:d_eng / user:u_a / ...
+    detail: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    acted_by: Mapped[str] = mapped_column(String(64), default="system")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)

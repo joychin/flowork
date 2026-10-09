@@ -52,6 +52,9 @@ class AgentDirectoryMixin:
     def _user(self, session: Session, user_id: str) -> OrgUserRow:
         raise NotImplementedError
 
+    def _write_done(self) -> None:
+        raise NotImplementedError
+
     # —— 注册与状态 ——
 
     def register_agent(
@@ -62,7 +65,10 @@ class AgentDirectoryMixin:
         owner_user_id: str,
         org_unit_code: str | None = None,
         on_behalf_of_user: str | None = None,
+        acted_by: str = "system",
     ) -> AgentInfo:
+        from flowork.directory.audit import record_audit
+
         _validate_code("Agent", agent_id)
         with self._factory() as session, session.begin():
             if session.get(AgentRow, agent_id) is not None:
@@ -82,6 +88,14 @@ class AgentDirectoryMixin:
                     status="trial",
                 )
             )
+            record_audit(
+                session,
+                "agent.register",
+                f"agent:{agent_id}",
+                {"owner": owner_user_id, "on_behalf_of": on_behalf_of_user},
+                acted_by=acted_by,
+            )
+        self._write_done()
         return AgentInfo(agent_id, name, owner_user_id, org_unit_code, on_behalf_of_user, "trial")
 
     def agent_info(self, agent_id: str) -> AgentInfo:
@@ -94,19 +108,21 @@ class AgentDirectoryMixin:
             row = session.get(AgentRow, agent_id)
             return row.owner_user_id if row else None
 
-    def activate_agent(self, agent_id: str) -> None:
-        self._transition(agent_id, "active", from_={"trial"})
+    def activate_agent(self, agent_id: str, *, acted_by: str = "system") -> None:
+        self._transition(agent_id, "active", from_={"trial"}, acted_by=acted_by)
 
-    def suspend_agent(self, agent_id: str) -> None:
-        self._transition(agent_id, "suspended", from_={"trial", "active"})
+    def suspend_agent(self, agent_id: str, *, acted_by: str = "system") -> None:
+        self._transition(agent_id, "suspended", from_={"trial", "active"}, acted_by=acted_by)
 
-    def resume_agent(self, agent_id: str) -> None:
-        self._transition(agent_id, "active", from_={"suspended"})
+    def resume_agent(self, agent_id: str, *, acted_by: str = "system") -> None:
+        self._transition(agent_id, "active", from_={"suspended"}, acted_by=acted_by)
 
     # —— 凭证 ——
 
-    def issue_credential(self, agent_id: str) -> str:
+    def issue_credential(self, agent_id: str, *, acted_by: str = "system") -> str:
         """签发凭证：明文仅此一次返回，库中只存 scrypt 哈希。"""
+        from flowork.directory.audit import record_audit
+
         secret = secrets.token_urlsafe(24)
         salt = secrets.token_hex(8)
         cred_id = uuid.uuid4().hex[:12]
@@ -122,6 +138,14 @@ class AgentDirectoryMixin:
                     salt=salt,
                 )
             )
+            record_audit(
+                session,
+                "agent_credential.issue",
+                f"agent:{agent_id}",
+                {"credential_id": cred_id},
+                acted_by=acted_by,
+            )
+        self._write_done()
         return f"{_TOKEN_PREFIX}{cred_id}-{secret}"
 
     def verify_credential(self, token: str) -> str | None:
@@ -142,13 +166,23 @@ class AgentDirectoryMixin:
                 return None
             return agent.agent_id
 
-    def revoke_credential(self, token: str) -> None:
+    def revoke_credential(self, token: str, *, acted_by: str = "system") -> None:
+        from flowork.directory.audit import record_audit
+
         remainder = token.removeprefix(_TOKEN_PREFIX)
         cred_id, _, _ = remainder.partition("-")
         with self._factory() as session, session.begin():
             cred = session.get(AgentCredentialRow, cred_id)
             if cred is not None and cred.revoked_at is None:
                 cred.revoked_at = utc_now()
+                record_audit(
+                    session,
+                    "agent_credential.revoke",
+                    f"agent:{cred.agent_id}",
+                    {"credential_id": cred_id},
+                    acted_by=acted_by,
+                )
+        self._write_done()
 
     # —— 内部 ——
 
@@ -158,12 +192,24 @@ class AgentDirectoryMixin:
             raise DirectoryError(f"Agent {agent_id!r} 不存在")
         return row
 
-    def _transition(self, agent_id: str, to_status: str, *, from_: set[str]) -> None:
+    def _transition(
+        self, agent_id: str, to_status: str, *, from_: set[str], acted_by: str = "system"
+    ) -> None:
+        from flowork.directory.audit import record_audit
+
         with self._factory() as session, session.begin():
             row = self._agent(session, agent_id)
             if row.status not in from_:
                 raise DirectoryError(f"Agent {agent_id!r} 状态 {row.status} 不可转为 {to_status}")
             row.status = to_status
+            record_audit(
+                session,
+                "agent.transition",
+                f"agent:{agent_id}",
+                {"to": to_status},
+                acted_by=acted_by,
+            )
+        self._write_done()
 
     @staticmethod
     def _info(row: AgentRow) -> AgentInfo:

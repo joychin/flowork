@@ -1,25 +1,27 @@
-"""持久化目录（M-A）：部门树 + 用户 + 角色范围化授权 + OrgDirectory 查询面。
+"""持久化目录（M-A）：部门树 + 用户写面与组合根。
 
 语义对齐 docs/product/engine-v1/01-身份与组织模型.md §2：
 - manager_of(user) = user 主属部门的 manager_user_id（部门属性，非用户属性）；
 - users_with_role 范围解析见 roles.py（子树→逐级向上→全局，最近命中层胜出）；
-- delegation_of 为竖切占位（委托表随 M-A 全量落地）。
+- 委托读写见 delegation.py；读面（含缓存）见 queries.py；
+- 全部写方法带审计留痕（audit.py，同事务）与缓存失效（_write_done）。
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from flowork.directory.agents import AgentDirectoryMixin
-from flowork.directory.common import DirectoryError, _like_prefix, _validate_code
+from flowork.directory.audit import record_audit
+from flowork.directory.common import DirectoryError, _validate_code
+from flowork.directory.delegation import DelegationDirectoryMixin
 from flowork.directory.orm import OrgUnitRow, OrgUserRow
-from flowork.directory.roles import RoleDirectoryMixin
-from flowork.participants.org_directory import split_group
+from flowork.directory.queries import ReadDirectoryMixin
 
 __all__ = ["DirectoryError", "DirectoryStore", "OrgUnitInfo", "UserInfo"]
 
@@ -43,14 +45,22 @@ class UserInfo:
     status: str
 
 
-class DirectoryStore(AgentDirectoryMixin, RoleDirectoryMixin):
-    """DB 版组织目录：写操作短事务，读操作满足 OrgDirectoryLike 协议。"""
+class DirectoryStore(ReadDirectoryMixin, AgentDirectoryMixin, DelegationDirectoryMixin):
+    """DB 版组织目录：写操作短事务（审计+缓存失效），读操作满足 OrgDirectoryLike。
+
+    RoleDirectoryMixin 经 ReadDirectoryMixin 继承（读面包裹入缓存）。
+    """
 
     def __init__(self, factory: sessionmaker[Session]) -> None:
         self._factory = factory
+        self._cache: dict[tuple[Any, ...], Any] = {}
         bind = factory.kw.get("bind")
         if isinstance(bind, Engine):
             OrgUnitRow.metadata.create_all(bind)  # 幂等：org_* 表挂共享元数据
+
+    def _write_done(self) -> None:
+        """写后全清读缓存（engine-v1 01 §2：目录变更频率极低，全清粒度足够）。"""
+        self._cache.clear()
 
     # —— 写：部门 ——
 
@@ -61,6 +71,7 @@ class DirectoryStore(AgentDirectoryMixin, RoleDirectoryMixin):
         name: str = "",
         parent_code: str | None = None,
         manager_user_id: str | None = None,
+        acted_by: str = "system",
     ) -> OrgUnitInfo:
         _validate_code("部门", code)
         with self._factory() as session, session.begin():
@@ -81,9 +92,23 @@ class DirectoryStore(AgentDirectoryMixin, RoleDirectoryMixin):
                     path=path,
                 )
             )
+            record_audit(
+                session,
+                "org_unit.create",
+                f"org_unit:{code}",
+                {"name": name, "parent": parent_code, "manager": manager_user_id},
+                acted_by=acted_by,
+            )
+        self._write_done()
         return OrgUnitInfo(code, name, parent_code, manager_user_id, path)
 
-    def move_org_unit(self, code: str, *, parent_code: str | None) -> OrgUnitInfo:
+    def move_org_unit(
+        self,
+        code: str,
+        *,
+        parent_code: str | None,
+        acted_by: str = "system",
+    ) -> OrgUnitInfo:
         with self._factory() as session, session.begin():
             unit = self._unit(session, code)
             if parent_code is not None:
@@ -93,13 +118,35 @@ class DirectoryStore(AgentDirectoryMixin, RoleDirectoryMixin):
                 self._assert_not_ancestor(session, code, parent_code)
             unit.parent_code = parent_code
             info = self._recompute_subtree_paths(session, unit, parent_code)
+            record_audit(
+                session,
+                "org_unit.move",
+                f"org_unit:{code}",
+                {"parent": parent_code},
+                acted_by=acted_by,
+            )
+        self._write_done()
         return info
 
-    def set_org_unit_manager(self, code: str, *, manager_user_id: str | None) -> None:
+    def set_org_unit_manager(
+        self,
+        code: str,
+        *,
+        manager_user_id: str | None,
+        acted_by: str = "system",
+    ) -> None:
         with self._factory() as session, session.begin():
             self._unit(session, code).manager_user_id = manager_user_id
+            record_audit(
+                session,
+                "org_unit.set_manager",
+                f"org_unit:{code}",
+                {"manager": manager_user_id},
+                acted_by=acted_by,
+            )
+        self._write_done()
 
-    def delete_org_unit(self, code: str) -> None:
+    def delete_org_unit(self, code: str, *, acted_by: str = "system") -> None:
         with self._factory() as session, session.begin():
             self._unit(session, code)
             children = session.scalars(
@@ -113,8 +160,10 @@ class DirectoryStore(AgentDirectoryMixin, RoleDirectoryMixin):
                 )
             ).all()
             if active_users:
-                raise DirectoryError(f"部门 {code!r} 存在在职用户，需先迁移")
+                raise DirectoryError(f"部门 {code!r} 存在职用户，需先迁移")
             session.query(OrgUnitRow).filter(OrgUnitRow.code == code).delete()
+            record_audit(session, "org_unit.delete", f"org_unit:{code}", {}, acted_by=acted_by)
+        self._write_done()
 
     # —— 写：用户 ——
 
@@ -125,6 +174,7 @@ class DirectoryStore(AgentDirectoryMixin, RoleDirectoryMixin):
         name: str = "",
         org_unit_code: str | None = None,
         status: str = "active",
+        acted_by: str = "system",
     ) -> UserInfo:
         _validate_code("用户", user_id)
         with self._factory() as session, session.begin():
@@ -135,84 +185,23 @@ class DirectoryStore(AgentDirectoryMixin, RoleDirectoryMixin):
             session.add(
                 OrgUserRow(user_id=user_id, name=name, org_unit_code=org_unit_code, status=status)
             )
+            record_audit(
+                session,
+                "user.create",
+                f"user:{user_id}",
+                {"name": name, "org_unit": org_unit_code, "status": status},
+                acted_by=acted_by,
+            )
+        self._write_done()
         return UserInfo(user_id, name, org_unit_code, status)
 
-    def set_user_status(self, user_id: str, status: str) -> None:
+    def set_user_status(self, user_id: str, status: str, *, acted_by: str = "system") -> None:
         with self._factory() as session, session.begin():
             self._user(session, user_id).status = status
-
-    # —— 读：OrgDirectoryLike 面 ——
-
-    def is_member(self, user: str, group: str) -> bool:
-        """人→组（spec §9）：role: 按范围化角色、org: 按直属部门；裸名视同角色。"""
-        kind, name = split_group(group)
-        if not name:
-            return False
-        if kind == "org":
-            return user in self.users_in_department(name)
-        return user in self.users_with_role(name)
-
-    def subjects_in(self, group: str) -> list[str]:
-        """组→人：直接成员（不含子部门）。"""
-        kind, name = split_group(group)
-        if not name:
-            return []
-        if kind == "org":
-            return self.users_in_department(name)
-        return self.users_with_role(name)
-
-    def snapshot(self, subject: str) -> dict[str, object]:
-        """身份快照（spec §5.6）：宿主审计策略待接，先返回部门事实。"""
-        department = self.department_of(subject.removeprefix("user:"))
-        return {"department": department} if department else {}
-
-    def user_exists(self, user_id: str) -> bool:
-        with self._factory() as session:
-            return session.get(OrgUserRow, user_id) is not None
-
-    def manager_of(self, user_id: str) -> str | None:
-        return self.department_head(self.department_of(user_id) or "")
-
-    def department_of(self, user_id: str) -> str | None:
-        with self._factory() as session:
-            user = session.get(OrgUserRow, user_id)
-            return user.org_unit_code if user else None
-
-    def department_head(self, department: str) -> str | None:
-        with self._factory() as session:
-            unit = session.get(OrgUnitRow, department)
-            return unit.manager_user_id if unit else None
-
-    def parent_department(self, department: str) -> str | None:
-        with self._factory() as session:
-            unit = session.get(OrgUnitRow, department)
-            return unit.parent_code if unit else None
-
-    def users_in_department(self, department: str, *, recursive: bool = False) -> list[str]:
-        with self._factory() as session:
-            unit = self._unit(session, department)
-            if recursive:
-                rows = session.scalars(
-                    select(OrgUnitRow.code).where(
-                        OrgUnitRow.path.like(_like_prefix(f"{unit.path}/"), escape="\\")
-                    )
-                ).all()
-                codes = {department, *rows}
-            else:
-                codes = {department}
-            users = session.scalars(
-                select(OrgUserRow.user_id).where(
-                    OrgUserRow.org_unit_code.in_(codes), OrgUserRow.status == "active"
-                )
-            ).all()
-            return list(users)
-
-    def delegation_of(self, user_id: str, when: datetime | None = None) -> str | None:
-        return None  # 委托表随 M-A 全量落地（01 §5）
-
-    @property
-    def admins(self) -> list[str]:
-        return []  # M-A 全量：由平台角色 admin 档提供（02-权限模型 §3）
+            record_audit(
+                session, "user.set_status", f"user:{user_id}", {"status": status}, acted_by=acted_by
+            )
+        self._write_done()
 
     # —— 内部 ——
 

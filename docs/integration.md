@@ -41,7 +41,10 @@ v2 扩展面（`flowork/persistence/orm_v2.py`）：
 | wf_route_decision | 路由决策审计（逐条件边 result、selected、求值快照） |
 
 目录表（M-A，`flowork/directory/orm.py`）：org_unit / org_user / org_role /
-org_role_assignment / org_agent / org_agent_credential。
+org_role_assignment / org_agent / org_agent_credential / org_delegation（审批委托，
+窗口式单跳替换）/ org_directory_audit（目录写审计，追加只写：action/entity/
+detail/acted_by）。目录读面带进程内缓存（写操作全清失效）；admins＝org_role
+的 admin 档持有人（to_admins 兜底名单同源）。
 
 ## 超时调度
 
