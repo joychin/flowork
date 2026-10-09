@@ -302,3 +302,21 @@ Flowable 形态重立（节点级具名日历+注册表+发布期校验）。
 测试：tests/semantics/test_delta_batch2.py 9 例。699 passed（剔除并行 WIP 的 2 例 stale
 registry/world_catalog 与其 3 个未完成测试文件——builtin 已注册 wait kind 而常量清单未更新，
 属该会话待办，与本批无关）。五道门（范围内）全绿。
+
+**测试方案落地批 B·构造矩阵（2026-10-09，批次 A 同日续）**：
+① 子流程构造族（suite_call_matrix/child/grand 八维度）+ 引擎修复：sub_process_finished
+原只挡 running，paused/suspended 子被当已结算——改终态集合判定（当前唤醒机制下原缺陷
+不可达，防御性对齐 docstring）。
+② 分流构造族（suite_branch_matrix 七情形+混合票）+ `sequence_audit.py` 留痕序列断言
+帮手（route 逐边 result/variable 血缘/event 序列；形状实测钉死：edges 只含条件边、
+默认边不进 edges、无条件边落空行）。
+③ 会签×驳回×时限耦合世界（suite_countersign_knot 六走查）+ 引擎修复：转办/改派
+克隆任务行后未触发 timer Job 丢失（被移交人无限时窗）——carry_deadline_jobs 档位
+跟随等待实体重绑（run_at 不变，原 Job done+carried_to）；改派走查改钉新语义
+（若产品要「改派重置时限」回退 f917669 即可）。
+④ 运行形态参数化（tests/edge/test_shapes.py 四形态：内存/文件/跨副本触发/双 tick CAS）。
+⑤ wait kind 入册（node.wait + suite_wait_duration + xfail 占位，行为接线后摘除）；
+test_builtin_kinds_registered 显式补 KIND_WAIT。
+发现挂账：route_audit snapshot.now 取 utc_now 而非 EngineConfig.now（FakeClock 下
+审计时刻与任务时刻不一致，待修）；父 terminate 不级联子实例（孤儿运行，开放问题
+已在 test_construct_subprocess 钉住）。
