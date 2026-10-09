@@ -9,8 +9,9 @@ uv sync                                   # 安装依赖（Python >= 3.11，uv �
 uv run pytest                             # 全量测试（必须全绿才能提交）
 uv run pytest --cov=flowork --cov-report=term-missing   # 覆盖率（照明指标，不作提交门禁——对标 Temporal/Airflow/Argo）
 uv run pytest -m randomized               # 随机结构生成测试（默认排除，显式开门）
-uv run ruff check flowork tests examples  # 静态检查
-uv run ruff format flowork tests examples # 格式化（提交前）
+uv run pytest -m needs_postgres           # PostgreSQL 冒烟套件（默认排除；未设 FLOWORK_TEST_PG_URL 时自动 docker 起删容器）
+uv run ruff check flowork tests examples migrations  # 静态检查
+uv run ruff format flowork tests examples migrations # 格式化（提交前）
 uv run mypy flowork                       # 类型检查（strict）
 uv run lint-imports                       # 分层契约门禁（内核禁止 import contrib）
 uv run python examples/ai_review_demo.py  # 自定义节点 demo

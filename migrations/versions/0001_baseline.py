@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from alembic import op
 
-import flowork.directory.orm  # noqa: F401  注册目录表（org_*）
+import flowork.directory.orm
 import flowork.persistence.orm_v2  # noqa: F401  注册 v2 表（wf_message_* 等）
 from flowork.persistence.orm import Base
 
