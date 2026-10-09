@@ -7,7 +7,8 @@
 ```bash
 uv sync                                   # 安装依赖（Python >= 3.11，uv 管理）
 uv run pytest                             # 全量测试（必须全绿才能提交）
-uv run pytest --cov=flowork --cov-report=term-missing   # 覆盖率（内核包目标 >= 90%）
+uv run pytest --cov=flowork --cov-report=term-missing   # 覆盖率（照明指标，不作提交门禁——对标 Temporal/Airflow/Argo）
+uv run pytest -m randomized               # 随机结构生成测试（默认排除，显式开门）
 uv run ruff check flowork tests examples  # 静态检查
 uv run ruff format flowork tests examples # 格式化（提交前）
 uv run mypy flowork                       # 类型检查（strict）
@@ -21,6 +22,7 @@ cd designer && npm install && npm run dev   # 前端 http://localhost:5173，/ap
 
 提交规范：conventional commits（`feat:` / `fix:` / `test:` / `docs:` / `chore:`），每任务一提交。
 **五道门全绿才允许提交：pytest + ruff check + ruff format --check + mypy + lint-imports。**
+回归测试（修 bug 配套的测试）命名或注释须带来源（issue 号/批次号/走查发现）——让测试携带「我为什么存在」。
 
 ## 包结构地图（一屏）
 
@@ -246,3 +248,19 @@ contrib.web）」+ 静态纪律测试 `tests/test_projection_surface.py`「投�
 （含 cli demo 与 web 试算两处函数内隐藏深路径）；契约一 source 补漏 directory。
 目录残留债不动：engine 巨包拆分/tasks 改名/validator 子包化/orm_v2 收口——
 随 Alembic 后重排刀（spec §15）一批处理。
+
+**测试方案落地批 A·地基（2026-10-09，依据 docs_research/flowork测试方案-2026-10.md；
+与 对标产品-delta 批并行，工作区分离）**：
+① pytest marker 体系（slow/quarantined/randomized/needs_http 注册 + --strict-markers，
+addopts 默认排除后三者——重档测试显式开门，防红灯失去含义）。
+② 覆盖审计第四重「引擎→矩阵」反向（test_node_features_cover_engine_kinds：
+registry.kinds() 每个 kind 必须有 node.<kind> 条目；test_builtin_kinds_registered
+改 KIND_* 常量集合相等——新增 kind 不入册即红灯）。
+③ pilot 走查层并入矩阵：审计扫描扩至 suite+pilot 两目录，30 个 pilot 测试补
+@covers（新增 subprocess.{input,output}_mapping/child_reject/child_recover、
+fault.admin_move_token、version.instance_snapshot 六条目），
+pilot 三处白名单外 import 合规化（ProcessInstanceRow→runtime.variables_of）。
+④ 悬空检查 helper `tests/suite/invariants.py::assert_no_dangling`（显式调用不
+autouse，exclude 豁免有意留运行态的实例），接入场景随机两测试。
+⑤ 覆盖率口径改「照明指标，不作提交门禁」+ 回归测试带来源纪律入提交规范。
+矩阵自此覆盖 tests/suite 与 tests/pilot 全部走查（678 测试全绿）。
