@@ -63,7 +63,6 @@ EXPECTED_SURFACE = frozenset(
         "UnknownHandler",
         "UnknownNodeKind",
         "ValidateIssue",
-        "WorkCalendar",
         "create_registry",
         "engine_functions",
         "evaluate_condition",

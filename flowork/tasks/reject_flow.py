@@ -94,6 +94,9 @@ class RejectMixin:
         task = ctx.session.get(TaskRow, task_id)
         if task is None or task.state != "ready":
             raise TaskNotAvailableError(f"任务不可驳回（不存在或已处理）：{task_id}")
+        from flowork.tasks.actions import assert_action_allowed
+
+        assert_action_allowed("reject", task)  # 动作表守卫（v2.3 A1：状态×类型×认领态）
         instance = self._instance(ctx, task.instance_id)
         self._claim_task_action(ctx, task, instance)  # 版本抢占+复验（关双 outcome 竞态窗）
         # 变量留痕归因：驳回携带的 variables 与驳回复活路径写变量记 task_reject

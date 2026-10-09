@@ -74,7 +74,6 @@ from flowork.spi.ports import (
     ExpressionFunctions,
     FunctionSignature,
     OrgDirectory,
-    WorkCalendar,
 )
 from flowork.tasks.models import (
     EventInfo,
@@ -137,7 +136,6 @@ __all__ = [
     "UnknownHandler",
     "UnknownNodeKind",
     "ValidateIssue",
-    "WorkCalendar",
     "create_registry",
     "engine_functions",
     "evaluate_condition",

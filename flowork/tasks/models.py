@@ -25,6 +25,9 @@ class TaskInfo(BaseModel):
     priority: int = 50  # v2.2（spec §3.4）：0–100，小→大＝低→高
     due_at: datetime | None = None  # 首条 deadline 到期时刻（无超时配置为 None）
     created_at: datetime | None = None
+    # v2.3 第二批（A1）：服务端算完的可用动作清单（状态×类型×认领态；谁能做归宿主权限）。
+    # 主流引擎均不下发此面——AI/前端拿到任务即知能做什么。
+    available_actions: list[str] = []
 
 
 class TaskHistoryInfo(TaskInfo):

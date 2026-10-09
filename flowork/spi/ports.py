@@ -20,7 +20,6 @@ __all__ = [
     "ExpressionFunctions",
     "FunctionSignature",
     "OrgDirectory",
-    "WorkCalendar",
 ]
 
 
@@ -29,13 +28,6 @@ class Clock(Protocol):
     """时钟端口：注入以支持超时场景的确定性测试。"""
 
     def now(self) -> datetime: ...
-
-
-@runtime_checkable
-class WorkCalendar(Protocol):
-    """工作日历端口：自然时间与工作时间的换算（默认实现=自然时间）。"""
-
-    def duration_minutes(self, start: datetime, end: datetime) -> int: ...
 
 
 @runtime_checkable

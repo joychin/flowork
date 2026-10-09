@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| 文档版本 | v2.3（v2.2 基础上按 对标产品 对标两轮定稿：动作票数语义/复活最近一轮/前视跳过列非目标/WorkCalendar 诚实化；第八轮评审记录见附录 B；§4.1/§4.2 的 v2.3 标记为 2026-10-08 条件单轨化与位点统一批，本次统一升版） |
+| 文档版本 | v2.3（v2.2 基础上按 对标产品 对标两轮定稿＋两批实施：动作票数语义/复活最近一轮/前视跳过列非目标（第八轮）；撤回下游闸门/动作表与 available_actions/WorkCalendar 端口删除（第九批，见附录 B）；§4.1/§4.2 的 v2.3 标记为 2026-10-08 条件单轨化与位点统一批，统一升版） |
 | 日期 | 2026-10-09 |
 | 上游文档 | [kernel-v2-plan.md](./kernel-v2-plan.md)（调研与选型依据） |
 | 读者 | 内核实现者（按本文可直接开写代码）、插件作者、AI 编码代理（本文即防跑偏的契约） |
@@ -259,7 +259,7 @@ node_registry.register("http_request", HttpRequestSpec, HttpRequestBehavior,
 
 | 表/对象 | 字段（现状 ✓，【v2】为改造） | 说明 |
 |---|---|---|
-| wf_process_instance 流程实例 | id；definition_code；definition_version【v2→major+revision】；**definition_snapshot**（发起时图纸全文抄本，不可变——快照原则的实现）；business_key（业务单号，仅查询用）；state（running；【v2】扩 paused/terminated）；start_user；variables（JSON）；parent_id/parent_token_id（作为子流程时的父指针）；deadline_at【v2.2】（实例时限到期时刻，图纸顶层 deadline 按 WorkCalendar 折算后物化）；version（乐观锁）；started_at/finished_at/updated_at | 一次流程运转的全部持久状态 |
+| wf_process_instance 流程实例 | id；definition_code；definition_version【v2→major+revision】；**definition_snapshot**（发起时图纸全文抄本，不可变——快照原则的实现）；business_key（业务单号，仅查询用）；state（running；【v2】扩 paused/terminated）；start_user；variables（JSON）；parent_id/parent_token_id（作为子流程时的父指针）；deadline_at【v2.2】（实例时限到期时刻，图纸顶层 deadline 按自然分钟折算后物化——WorkCalendar 已删，见 §9）；version（乐观锁）；started_at/finished_at/updated_at | 一次流程运转的全部持久状态 |
 | wf_token 令牌 | id；instance_id；token_no（实例内自增）；activity_code（当前在哪个节点）；source_activity_code（从哪来）；state（unfinished/finished）；item_count/approve_count/disapprove_count（会签 应办/同意/驳回计数）；approval_exit（会签出口判定结果）；reject_flag（驳回产生的令牌）；manual_participants（人工调整的参与人）；created_at/finished_at | 「走到哪了」的记号；会签计数在此不在任务上 |
 | wf_task 人工任务（活表） | id；instance_id；token_id；activity_code；name；assignee；task_type（approval/assist）；state（ready/completed/cancelled）；context_payload（审批卡片数据，AI 预审共用）；root_task_id（加签/委派链，指回原任务）；【v2】priority/due_at；created_at | 还没办完的人工任务 |
 | wf_task_history 已办（只插入不改） | 同上 + task_id；outcome（agree/reject/transfer/auto_pass/withdrawn/assist/assist_cancel【v2.3：协办交还与随主任务收口】/cancelled/simulated 预留）；comment；acted_by；**acted_as_agent**（是否 AI 代理代办）；**idempotency_key**（完成幂等）；**actor_context**（身份快照 JSON 袋，完成事务内定格，见 5.6）【v2.1】；cause_token_id（驳回复活的关联）；cost_seconds（耗时）；created_at | 审计的唯一真相，append-only |
@@ -351,7 +351,11 @@ git 里的 YAML/JSON 文件      ← 编辑态事实来源：人和 AI 只改这
 - 会签节点：按 approve_exit/disapprove_exit 判定（CEL 公式，4.2）——比如 `task.approve_count * 100 >= task.item_count * 50` 且 3 人中 2 人同意即过；驳回出口同理；缺省不配＝该侧全票。
 - 驳回：outcome=reject，令牌按 reject_target 回退（未配则回上一人工节点）；被驳回的任务复活=生成**新**任务行，旧行进历史（cause_token_id 关联）✓。**复活圈定「最近一轮」【v2.3 定稿，2026-10-09 拍板】**：复活名单＝目标节点**最近一个已完结令牌**名下的办理人（按 token_no 取最大；无完结令牌才回退到该节点全部非取消历史）——多轮驳回时名单不随轮次膨胀。与主流引擎的**刻意差异**在此声明：BPMN 系引擎（Camunda/Flowable/jBPM）重入活动时按定义**重新解析**办理人（人可能换、离职者自动剔除）；flowork 复活**原办理人**——驳回就是退回给原审批人重新表态，这是国内审批语义，不是缺失。兜底：原办理人名单为空（如首节点发起人）时走正常表达式解析。**驳回落点豁免自动通过【v2.2 成文】**：驳回产生的令牌、经 manual_participants 定格的参与者**不应用** auto_pass_* 策略——否则「发起人驳回→重新提交→又被 auto_pass 跳过」原地打转；现状由解析器 manual 短路隐式实现（participants/resolver.py），此处升格为语义保证，防未来重构丢掉（对标产品 doOnRejectedActivity 同规则）。
 
-**任务动作全集（每个都是 API，详见第 11 章）**：claim（从候选里认领）/ unclaim / complete / reject / transfer（转办，保持待办换人）/ assist（委派：生成 task_type=assist 的子任务，root_task_id 指回原任务，原任务保留在负责人名下）/ complete_assist（受托人交还）/ add_countersigner（加签）。
+**任务动作全集（每个都是 API，详见第 11 章）**：claim（从候选里认领）/ unclaim / complete / reject / transfer（转办，保持待办换人）/ assist（委派：生成 task_type=assist 的子任务， root_task_id 指回原任务，原任务保留在负责人名下；**主任务终态（complete/reject）同事务收口其协办待办，outcome=assist_cancel【v2.3 第一批】**）/ complete_assist（受托人交还）/ add_countersigner（加签）/ withdraw（撤回本人的已办，见下）。
+
+**动作表与 available_actions【v2.3 第二批 A1】**：动作可用性由**引擎的动作表**声明——按 `(state × task_type × 认领态)` 三维判定（tasks/actions.py，形态对齐 jBPM 的 操作×状态 声明表；**不是**节点级配置——BPMN 无此位置、主流引擎不做节点级动作白名单）。`TaskInfo.available_actions` 由服务端算完下发（已认领的审批任务＝complete/reject/transfer/assist/add_countersigner/unclaim；候选任务＝claim；协办任务＝complete_assist）——**主流引擎均不下发此面**（C7/C8/Flowable 的任务响应逐字段核实无 permissions 字段），AI/前端拿到任务即知能做什么，属三面同构的差异点。分组借 Camunda 8 动词切分：work（complete/reject＝出结果）与 dispatch（transfer/assist/add_countersigner/claim/unclaim＝转移办理权）；**谁能做属宿主权限（M-A/插件），表只回答"这个任务当前允许哪些动作"**。
+
+**撤回（withdraw）【v2.3 第二批 A2 定稿，拍板④】**：撤回本人的已办（agree）任务＝**取消当前全部未完令牌 + 在原节点新建令牌与待办**（"取消当前+新建上游"，不改写历史——对齐全行业"完成不可变"铁律；Camunda 8 用独立权限 MODIFY_PROCESS_INSTANCE 管实例修改，flowork 将其归类为实例修改类动作，开放面授权归宿主）。**下游闸门**：本节点正向可达的下游（图遍历，不评条件）存在**人工进展**——非取消已办、或工作节点（user_task/call_activity）的已完结令牌——则**拒绝撤回并提示改用驳回**（错误携带进展明细：哪个节点、谁、什么结果）；穿透节点（branch/cc_task/start/end）的即时完结不拦（对齐 对标产品 穿透 CONNECTION/CIRCULATE 口径）。闸门生效后"取消全部未完令牌"与"只取消下游"等价（下游全未办时并行兄弟亦无已办）——不需要精细取消算法。撤回策略扩展（如"下游未读才可撤"的 UNREAD 档）后置：flowork 任务面暂无已读态。
 
 **任务状态（对齐现状存储，不新增状态列）**：活表 state ∈ `ready | completed | cancelled`；「已认领」＝ ready 且 assignee 已固定（不设独立 claimed 态）；终态语义在历史的 outcome 里（agree/reject/transfer/auto_pass/withdrawn/assist/assist_cancel/cancelled；✓ 现状值 + v2.3 增 assist_cancel）。已被他人认领再认领 → `TaskAlreadyClaimedError`。
 
@@ -361,7 +365,7 @@ git 里的 YAML/JSON 文件      ← 编辑态事实来源：人和 AI 只改这
 - **add_countersigner（加签）＝加签人各占一票**：item_count 随名单同步增加，每个加签人完成即计票——加签是「增加表决权」，不是「只增加把关人」。若业务想要「只要意见、不改票权」的形态，用 assist/consult（意见不占票），两条路天然分流，不引入按加签组归并票数的机制（对标产品 rootTaskId 组算一票的形态不采纳——行业对拍：主流引擎无票数概念，无从对齐，且归并会让 item_count 与任务行数失去对应）。
 - assist/complete_assist 不计票（委派是「看一眼/搭把手」，不改变节点完成条件）✓ 现状。
 
-**超时【v2.2 定稿：deadline 列表形态，对齐 WS-HumanTask】**：任务可挂一组有序动作 `deadlines: [{after_minutes, action}]`（自进入节点起算，after_minutes 必须为正整数，同一节点上限 8 条；**现状＝自然分钟直算到期时刻**——`now + after_minutes`，WorkCalendar 端口尚未接线【v2.3 诚实化标注：历史耗时全行业一律墙钟、零引擎按人算日历，双日历口径明确不做；该端口收敛方向＝删除或仅用于 deadline 到期时刻折算，随第二批收口，见 对标明细.md A5】）。动作枚举五种：
+**超时【v2.2 定稿：deadline 列表形态，对齐 WS-HumanTask】**：任务可挂一组有序动作 `deadlines: [{after_minutes, action}]`（自进入节点起算，after_minutes 必须为正整数，同一节点上限 8 条；**自然分钟直算到期时刻**（`now + after_minutes`；【v2.3 第二批定稿】after_minutes 恒为自然分钟——历史耗时全行业一律墙钟、零引擎按人算日历，双日历口径不做，WorkCalendar 死端口已删除（见 §9）；将来若需工作日口径，按 Flowable 形态重立：节点级具名日历+引擎级注册表+发布期校验名字，见 对标明细.md A5）。动作枚举五种：
 
 | action | 行为 |
 |---|---|
@@ -563,7 +567,7 @@ CRUD：新增与更新＝同一操作 `deploy`——**纯数据写入（INSERT �
 
 ## 9. SPI 端口（内核的标准插座，内核只依赖协议）
 
-现有 3 个端口 ✓（默认实现保证内核可裸跑可单测）：`Clock.now()`；`WorkCalendar.duration_minutes(start,end)`；`OrgDirectory`（【v2.1】瘦身为引擎必需四方法，见下）。（**死端口收口，2026-10-09**：Notifier 删除——notify 动作实际直接 `record_event` 落 outbox，事件即内核原生通知面，端口零消费多余；ResourceProvider 删除——M-B 预声明零消费，落地时按实际形状重声明。VariableStore 端口于变量 I/O 批删除——零引用零实现：变量持久化由实例行 JSON 列承担，schema 边界校验落在 contract.py 四边界，外部读写走 §11 RuntimeService 变量面。）
+现有 2 个端口 ✓（默认实现保证内核可裸跑可单测）：`Clock.now()`；`OrgDirectory`（【v2.1】瘦身为引擎必需四方法，见下）。（**死端口收口，2026-10-09**：Notifier 删除——notify 动作实际直接 `record_event` 落 outbox，事件即内核原生通知面，端口零消费多余；ResourceProvider 删除——M-B 预声明零消费，落地时按实际形状重声明；**WorkCalendar 删除【v2.3 第二批 A5】——全仓零消费的死端口，且行业对拍确认双日历口径零实现（历史耗时一律墙钟、C7 按人算的参数是死参数、Flowable 已删）**；将来要工作日超时按 Flowable 形态重立（节点级具名日历+注册表+发布期校验），不复活本端口。VariableStore 端口于变量 I/O 批删除——零引用零实现：变量持久化由实例行 JSON 列承担，schema 边界校验落在 contract.py 四边界，外部读写走 §11 RuntimeService 变量面。）
 
 **找人分工（v2.1 定稿）**：取人（组→人）＝表达式词汇，全部宿主注册（5.5，内核零内置，contrib 三个便利函数基于本端口实现）；关系判断（人→组）与身份定格＝**引擎自己的行为**，走本端口——方向相反，自定义函数表达不了（「我的待办」要算张三属不属于 role:finance，是引擎在问，不是图纸在问）。
 
@@ -775,6 +779,16 @@ v2.2 增补对标的直接来源（核实于 2026-10-07）：对标产品 基准
 
 撤回下游守卫（撤回策略与取消范围的拍板④）由下游闸门自然覆盖，其 spec 条款随第二批 A2 实施落地。行业对标三大事实与四批实施排序见 delta 文档；实施纪律新增一条共识：**可见优于静默**（本轮所有引擎坑几乎都是静默形态——静默删子任务/默认不清理/静默截断人数/静默跳过校验）。
 
+### 第九轮（2026-10-09，v2.3 续，对标第二批实施）
+
+第八轮拍板后的第二批落地（依据 对标明细详设.md A1/A2/A5 修正版），落 spec 三项：
+
+1. **撤回语义定稿（§5.1 新增块，拍板④落地）**：撤回＝取消当前全部未完令牌+原节点新建（"取消当前+新建上游"，不改写历史，对齐全行业"完成不可变"铁律）；**下游闸门**＝正向可达下游（图遍历不评条件）存在人工进展（非取消已办，或 user_task/call_activity 的已完结令牌）即拒绝并提示改用驳回，错误携带进展明细；穿透节点（branch/cc_task/start/end）的即时完结不拦（对齐 对标产品 穿透 CONNECTION/CIRCULATE；pilot leave 实证 branch 即刻完结曾误拦，首版实现即踩此坑后修正）。闸门生效后取消范围不再需要精细算法（拍板④由本闸门自然覆盖）。撤回归类**实例修改类**动作，授权归宿主开放面。行业零实现，flowork 首创。
+2. **动作表与 available_actions（§5.1 新增块，A1 修正版落地）**：动作可用性＝引擎声明表按 (state × task_type × 认领态) 判定（tasks/actions.py），**不是**节点级配置；`TaskInfo.available_actions` 服务端算完下发——主流引擎均无此面（三引擎任务响应逐字段核实），AI/前端拿到任务即知能做什么。分组：work（complete/reject）/dispatch（transfer/assist/add_countersigner/claim/unclaim）。
+3. **WorkCalendar 端口删除（§5.1 超时/§9，A5 收口）**：全仓零消费死端口；行业对拍定论＝历史耗时全行业一律墙钟、零引擎按人算日历（C7 按人算的 Task 参数是死参数、Flowable 已删），双日历口径不做；after_minutes 定稿为恒自然分钟。将来要工作日超时按 Flowable 形态重立（节点级具名日历+引擎级注册表+发布期校验），不复活本端口。公开面符号删除（api 快照测试同步）。
+
+同批工程事实：实现中发现并修复首版闸门的穿透误拦（见 1）；并行会话的等待节点 WIP 同处工作区，全量套件的两例红（registry/world_catalog）属该 WIP 的未完成状态，与本批无关。
+
 ## 附录 C：类型清单（须提前定义的全集）
 
 原则：**跨边界的类型提前定，业务语义类型不进内核**（Money/TicketPriority 之类由插件用 JSON Schema format 扩展表达）。五条边界：图纸↔引擎、表达式↔变量、函数↔校验器、API/事件↔外部、数据库↔代码。
@@ -824,7 +838,7 @@ contrib 签名（便利包，可选，纯基于 OrgDirectory 端口实现）：`
 - searchable 变量仅限 string/number/boolean（object/array 标 searchable → validate 报错）。
 - correlation_key 表达式必须求值为 string（否则设计期报错）。
 - 会签出口＝CEL 布尔公式（4.2；缺省＝该侧全票），旧专用语法 BNF 已随位点统一退役。
-- 单位：时长一律分钟（after_minutes、WorkCalendar），落盘秒数；金额无单位纯数值；时区全 UTC。
+- 单位：时长一律分钟（after_minutes），落盘秒数；金额无单位纯数值；时区全 UTC。
 - deadlines：after_minutes 必须为正整数；同一节点上限 8 条；顶层实例时限 deadline 为单对象（非列表）。
 - priority 取值 0–100（小→大＝低→高），默认 50。
 

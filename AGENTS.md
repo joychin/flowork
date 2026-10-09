@@ -284,3 +284,21 @@ autouse，exclude 豁免有意留运行态的实例），接入场景随机两�
 守卫抢占实例行，再 expire 重读任务行复验，ObjectDeletedError 归一 TaskNotAvailableError；接线
 _assert_operable/_complete/_reject 三点）。678 测试全绿。第二批（A2 撤回守卫+A1 动作表+A5 端口
 收口）待启动。
+
+**对标第二批落地（2026-10-09，spec v2.3 第九轮；与等待节点 WIP 并行会话同工作区，文件互不重叠）**：
+① A2 撤回下游闸门：`downstream_basin`（graph.py，upstream_basin 对偶）界定本节点正向可达
+下游；人工进展＝非取消已办 ∪ 工作节点（user_task/call_activity）已完结令牌——穿透节点
+（branch/cc_task）即时完结不拦（对齐 对标产品 穿透 CONNECTION/CIRCULATE；**实现即踩坑**：
+首版把 branch 的即时完结当进展，pilot leave 撤回被误拦，修正后判据只认工作节点）。下游有
+进展→拒绝并提示改用驳回（错误带进展明细）；闸门生效后"取消全部未完令牌"与"只取消下游"
+等价（拍板④自然覆盖）。withdraw 归类实例修改类动作（授权归宿主）。
+② A1 动作表+available_actions：`tasks/actions.py` 按 (state×task_type×认领态) 声明动作可用性
+（jBPM 操作表形态，非节点级配置）；TaskInfo.available_actions 服务端算完下发（主流引擎均无
+此面——AI/前端拿到任务即知能做什么）；入口守卫接线 _assert_operable(action=...)/_complete/
+_reject；分组 work/dispatch（Camunda 8 动词切分）。
+③ A5 WorkCalendar 端口删除（死端口收口第三例）：spi/api/快照测试三处同步；spec §5.1 定稿
+after_minutes 恒自然分钟、§9 端口清单 3→2、§3.1/附录 C 残留引用清理；将来要工作日超时按
+Flowable 形态重立（节点级具名日历+注册表+发布期校验）。
+测试：tests/semantics/test_delta_batch2.py 9 例。699 passed（剔除并行 WIP 的 2 例 stale
+registry/world_catalog 与其 3 个未完成测试文件——builtin 已注册 wait kind 而常量清单未更新，
+属该会话待办，与本批无关）。五道门（范围内）全绿。

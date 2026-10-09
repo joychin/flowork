@@ -14,7 +14,12 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from flowork.definitions.definition import ProcessDefinition
 
-__all__ = ["can_reach_end", "forward_reachable", "upstream_basin"]
+__all__ = [
+    "can_reach_end",
+    "downstream_basin",
+    "forward_reachable",
+    "upstream_basin",
+]
 
 
 def upstream_basin(definition: ProcessDefinition, node_code: str) -> frozenset[str]:
@@ -26,6 +31,22 @@ def upstream_basin(definition: ProcessDefinition, node_code: str) -> frozenset[s
             if flow.source not in seen:
                 seen.add(flow.source)
                 frontier.append(flow.source)
+    return frozenset(seen)
+
+
+def downstream_basin(definition: ProcessDefinition, node_code: str) -> frozenset[str]:
+    """从 ``node_code`` 出发沿连线可达的节点集合（含自身，经环）——upstream_basin 的对偶。
+
+    撤回下游闸门（v2.3 第二批 A2）用它界定「本节点的下游」；不评条件：
+    未命中的条件分支也在集合内（保守方向——多拒不少拒）。
+    """
+    seen = {node_code}
+    frontier = [node_code]
+    while frontier:
+        for flow in definition.outgoing(frontier.pop()):
+            if flow.target not in seen:
+                seen.add(flow.target)
+                frontier.append(flow.target)
     return frozenset(seen)
 
 

@@ -31,9 +31,14 @@ class TaskReworkMixin:
         raise NotImplementedError
 
     def _ready_task(
-        self, ctx: CommandContext, task_id: str, expected_type: str | None = None
+        self,
+        ctx: CommandContext,
+        task_id: str,
+        expected_type: str | None = None,
+        *,
+        action: str | None = None,
     ) -> TaskRow:
-        """待办加载与守卫由 TaskOpsMixin 提供。"""
+        """待办加载与守卫（含动作表判定）由 TaskOpsMixin 提供。"""
         raise NotImplementedError
 
     def _clone_task(
@@ -69,7 +74,7 @@ class TaskReworkMixin:
     ) -> list[TaskInfo]:
         from flowork.definitions.builtin import UserTaskSpec
 
-        task = self._ready_task(ctx, task_id)
+        task = self._ready_task(ctx, task_id, action="add_countersigner")
         token = ctx.session.get(TokenRow, task.token_id)
         assert token is not None
         # 名单口径对齐：节点原名单 ∪ 已有手动名单 ∪ 新人 → item_count 与可办名单一致
@@ -135,7 +140,9 @@ class TaskReworkMixin:
             raise TaskNotAvailableError("实例已结束，不可撤回")
         ctx.touch(instance)
         kernel = self._engine.kernel_for(ctx)
-        # 取消该办理之后产生的全部未完令牌（简化：撤回即回退到当前节点）
+        self._assert_downstream_idle(ctx, instance, history.activity_code)
+        # 取消该办理之后产生的全部未完令牌（闸门已保证下游未办：取消全部
+        # 未完与只取消下游等价——并行兄弟此刻亦无已办，见 spec §5.1 拍板④）
         for token in kernel.tokens(ctx.session, instance.id, states=(TokenState.UNFINISHED.value,)):
             kernel.cancel_token(ctx.session, token)
         # 原节点重建：新令牌 + 原办理人待办
@@ -156,3 +163,53 @@ class TaskReworkMixin:
         )
         tasks = kernel.tasks(ctx.session, instance.id, token_id=token.id)
         return self._task_info(tasks[0])
+
+    def _assert_downstream_idle(
+        self, ctx: CommandContext, instance: ProcessInstanceRow, activity_code: str
+    ) -> None:
+        """撤回下游闸门（v2.3 第二批 A2，spec §5.1 拍板④）。
+
+        本节点正向可达的下游存在**人工进展** → 拒绝撤回（提示改用驳回）——
+        否则撤回等于一次没有驳回留痕的隐式整体驳回。进展判据两条：
+        ① 下游存在非取消已办（TaskHistory——branch/cc/service 不产生任务历史，
+        天然只统计人工办理）；② 下游**工作节点**（user_task/call_activity）存在
+        已完结令牌——穿透节点（branch/cc_task/start/end）的即时完结**不拦**，
+        对齐 对标产品 getChildRevokeActivityCodes 穿透 CONNECTION/CIRCULATE
+        的口径（pilot leave 实证：branch 即刻完结曾误拦）。判据保守方向：不评
+        条件，未命中分支上的人工进展同样拦截。行业零实现，flowork 首创
+        （delta-industry-benchmark §2）。
+        """
+        from sqlalchemy import select
+
+        from flowork.definitions.graph import downstream_basin
+
+        kernel = self._engine.kernel_for(ctx)
+        definition = kernel.definition_of(ctx.session, instance)
+        downstream = downstream_basin(definition, activity_code) - {activity_code}
+        if not downstream:
+            return
+        from flowork.persistence.orm import TaskHistoryRow as _History
+        from flowork.runtime.lifecycle import TokenState as _State
+
+        progressed: list[str] = []
+        codes = tuple(downstream)
+        for row in ctx.session.scalars(
+            select(_History).where(
+                _History.instance_id == instance.id,
+                _History.activity_code.in_(codes),
+                _History.outcome != "cancelled",
+            )
+        ):
+            progressed.append(f"节点 {row.activity_code} 由 {row.assignee} 办理（{row.outcome}）")
+        if not progressed:
+            work_kinds = {"user_task", "call_activity"}
+            for token in kernel.tokens(ctx.session, instance.id):
+                if token.state != _State.FINISHED.value or token.activity_code not in codes:
+                    continue
+                node = definition.node(token.activity_code)
+                if node is not None and node.kind in work_kinds:
+                    progressed.append(f"节点 {token.activity_code} 已完结（令牌）")
+        if progressed:
+            raise TaskNotAvailableError(
+                "下游已办理，不可撤回；请使用驳回（已产生进展：" + "；".join(progressed[:3]) + "）"
+            )
