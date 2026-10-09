@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from sqlalchemy.orm import Session
 
     from flowork.engine.config import EngineConfig
+    from flowork.engine.kernel import Kernel
     from flowork.persistence.orm import ProcessInstanceRow, TaskRow, TokenRow
 
 __all__ = ["TokenRecordsMixin"]
@@ -101,8 +102,14 @@ class TokenRecordsMixin:
         session.flush()
 
     def cancel_token(self, session: Session, token: TokenRow) -> None:
-        """取消令牌并撤销其未办任务（任务落历史 outcome=cancelled）。"""
+        """取消令牌并撤销其未办任务（任务落历史 outcome=cancelled）。
+
+        先经行为取消钩子（runtime/behavior.py 契约的全仓首个调用点）：
+        等待节点在此关订阅、删到时 Job——竞速收尾/终止/实例时限路径统一覆盖。
+        """
         from flowork.persistence.orm import TaskHistoryRow
+
+        self._notify_cancel(session, token)
 
         for task in self.tasks(session, token.instance_id, token_id=token.id):
             session.add(
@@ -124,3 +131,21 @@ class TokenRecordsMixin:
         token.state = TokenState.CANCELLED.value
         token.finished_at = self.config.now()
         session.flush()
+
+    def _notify_cancel(self, session: Session, token: TokenRow) -> None:
+        """行为取消钩子（registry 中介，无行为/节点缺失时静默跳过）。"""
+        from typing import cast
+
+        from flowork.engine.context import RuntimeNodeContext
+        from flowork.persistence.orm import ProcessInstanceRow
+
+        kernel = cast("Kernel", self)
+        instance = session.get(ProcessInstanceRow, token.instance_id)
+        if instance is None:
+            return
+        node = kernel.definition_of(session, instance).node(token.activity_code)
+        if node is None or kernel.registry.behavior_cls(node.kind) is None:
+            return
+        kernel.behavior_of(node).on_cancel(
+            RuntimeNodeContext(kernel, session, instance, node, token)
+        )

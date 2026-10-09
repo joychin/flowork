@@ -40,6 +40,7 @@ class DomainEvent(StrEnum):
     PROCESS_RESUMED = "process_resumed"
     PROCESS_TERMINATED = "process_terminated"
     INSTANCE_DEADLINE_REACHED = "instance_deadline_reached"  # v2.2（spec §10）
+    TIMER_FIRED = "timer_fired"  # spec §7 定时器行承诺事件；等待节点到时首发
     TASK_ESCALATED = "task_escalated"
     # —— 变量 I/O（spec §10：仅外部更新命令发射；引擎内部写变量不发——防刷屏）——
     VARIABLES_UPDATED = "variables_updated"

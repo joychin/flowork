@@ -34,6 +34,9 @@ class DeadlineStrategiesMixin:
         if kind == "instance_deadline":
             self._apply_instance_deadline(ctx, job, kernel)
             return
+        if kind == "wait_timeout":
+            self._apply_wait_timeout(ctx, job, kernel)
+            return
         strategy = job.payload.get("strategy", "notify")
         task_id = job.payload.get("task_id")
         task = ctx.session.get(TaskRow, task_id) if task_id else None
@@ -63,6 +66,49 @@ class DeadlineStrategiesMixin:
                 self._execute_strategy(ctx, strategy, task_id)
         except TaskNotAvailableError:
             job.result_payload = {**(job.result_payload or {}), "skipped": "task already finished"}
+
+    def _apply_wait_timeout(self, ctx: CommandContext, job: JobRow, kernel: Any) -> None:
+        """等待节点到时（spec §7.2）：订阅置 elapsed 留痕 → timer_fired → 推进。
+
+        竞速仲裁零新代码：命中先落则订阅已 matched、令牌已完结——按跳过结案
+        （不重试不死信）；到时先落则订阅行置 elapsed（waiting 反查只看 open、
+        防重只看 matched，两处消费方不受影响），finish_wait 走 elapsed 路由。
+        纯延时模式无订阅行，直接推进。
+        """
+        from sqlalchemy import update
+
+        from flowork.persistence.orm import MessageSubscriptionRow, TokenRow
+
+        token_id = job.payload.get("token_id")
+        token = ctx.session.get(TokenRow, token_id) if token_id else None
+        if token is None or token.state != TokenState.UNFINISHED.value:
+            job.result_payload = {**(job.result_payload or {}), "skipped": "wait already resolved"}
+            return
+        instance = ctx.session.get(ProcessInstanceRow, job.instance_id)
+        if instance is None or instance.state in ("completed", "cancelled", "terminated"):
+            job.result_payload = {**(job.result_payload or {}), "skipped": "instance finished"}
+            return
+        ctx.touch(instance)
+        kernel.record_event(
+            DomainEvent.TIMER_FIRED,
+            {
+                "kind": "wait_timeout",
+                "activity_code": job.payload.get("activity_code"),
+                "after_minutes": job.payload.get("after_minutes"),
+            },
+            instance.id,
+        )
+        ctx.session.execute(
+            update(MessageSubscriptionRow)
+            .where(
+                MessageSubscriptionRow.token_id == str(token_id),
+                MessageSubscriptionRow.state == "open",
+            )
+            .values(state="elapsed")
+        )
+        from flowork.tasks.wait import finish_wait
+
+        finish_wait(kernel, ctx.session, instance, token, result="elapsed")
 
     def _apply_instance_deadline(self, ctx: CommandContext, job: JobRow, kernel: Any) -> None:
         """实例时限到点（v2.2 spec §7）：mark 打标继续跑 / cancel 作废 / terminate 终止。"""

@@ -223,3 +223,142 @@ def test_pause_blocks_consume_and_resume_polls_buffer():
     assert [t.activity_code for t in engine.task.list_tasks(instance_id=instance_id)] == ["after"]
     assert _buffer_count(engine) == 0
     assert engine.runtime.variables_of(instance_id) == {"a": 1}
+
+
+# —— ⑦ 到时侧：纯延时 / 竞速 / 暂停冻结（spec §7.2 三模式） ————
+
+
+class _Clock:
+    def __init__(self) -> None:
+        from datetime import datetime
+
+        self.now = datetime(2026, 10, 9, 9, 0, 0)
+
+    def __call__(self):
+        return self.now
+
+    def advance(self, minutes: int) -> None:
+        from datetime import timedelta
+
+        self.now += timedelta(minutes=minutes)
+
+
+def _clock_engine() -> tuple[ProcessEngine, _Clock]:
+    from flowork.engine.config import EngineConfig
+
+    clock = _Clock()
+    return ProcessEngine(EngineConfig(now=clock)), clock
+
+
+def test_pure_delay_advances_on_time():
+    engine, clock = _clock_engine()
+    instance_id = _deploy_and_start(engine, _wait_flow(timeout={"after_minutes": 5}))
+    assert [t.activity_code for t in engine.task.list_tasks(instance_id=instance_id)] == []
+
+    clock.advance(4)
+    engine.jobs.tick()
+    assert [t.activity_code for t in engine.task.list_tasks(instance_id=instance_id)] == []
+
+    clock.advance(2)
+    engine.jobs.tick()
+    assert [t.activity_code for t in engine.task.list_tasks(instance_id=instance_id)] == ["after"]
+    events = [e.event_name for e in engine.history.events(instance_id)]
+    assert "timer_fired" in events  # spec §7 承诺事件首发
+
+
+def test_race_timeout_first_routes_on_elapsed():
+    engine, clock = _clock_engine()
+    definition = (
+        FlowBuilder("wf")
+        .start()
+        .wait("w", message={"name": "m1"}, timeout={"after_minutes": 5})
+        .user_task("late", assignee="'u_late'")
+        .user_task("ok", assignee="'u_ok'")
+        .end()
+        .connect("start", "w")
+        .flow("w", "late", condition="wait.result == 'elapsed'")
+        .flow("w", "ok", condition="wait.result == 'matched'")
+        .connect("late", "end")
+        .connect("ok", "end")
+        .build()
+    )
+    instance_id = _deploy_and_start(engine, definition)
+    clock.advance(6)
+    engine.jobs.tick()
+    assert [t.activity_code for t in engine.task.list_tasks(instance_id=instance_id)] == ["late"]
+    # 迟到的消息不复活：订阅已 elapsed，publish 落缓冲返回 False
+    assert engine.messages.publish_message("m1", payload={"a": 1}) is False
+
+
+def test_race_message_first_then_timer_skips():
+    engine, clock = _clock_engine()
+    instance_id = _deploy_and_start(
+        engine, _wait_flow(message={"name": "m1"}, timeout={"after_minutes": 5})
+    )
+    engine.messages.publish_message("m1", payload={"a": 1}, message_id="w1")
+    assert [t.activity_code for t in engine.task.list_tasks(instance_id=instance_id)] == ["after"]
+
+    clock.advance(6)
+    assert engine.jobs.tick() == 0  # 到时 Job 已随命中清理，无 Job 可执行
+
+
+def test_pause_freezes_wait_timer():
+    engine, clock = _clock_engine()
+    instance_id = _deploy_and_start(engine, _wait_flow(timeout={"after_minutes": 5}))
+    engine.runtime.pause_process(instance_id, actor="u_ops")
+    clock.advance(10)
+    engine.jobs.tick()
+    assert [t.activity_code for t in engine.task.list_tasks(instance_id=instance_id)] == []
+
+    engine.runtime.resume_process(instance_id, actor="u_ops")  # run_at 顺延暂停时长
+    engine.jobs.tick()  # 尚未到期（顺延后）
+    assert [t.activity_code for t in engine.task.list_tasks(instance_id=instance_id)] == []
+    clock.advance(10)
+    engine.jobs.tick()
+    assert [t.activity_code for t in engine.task.list_tasks(instance_id=instance_id)] == ["after"]
+
+
+def test_terminate_closes_subscription_and_job():
+    engine, _clock = _clock_engine()
+    instance_id = _deploy_and_start(
+        engine, _wait_flow(message={"name": "m1"}, timeout={"after_minutes": 5})
+    )
+    engine.runtime.terminate_process(instance_id, actor="u_ops")
+    assert _open_subscriptions(engine, instance_id) == []
+    with engine.session_factory() as session:
+        from flowork.persistence.orm import JobRow
+
+        jobs = list(
+            session.scalars(
+                select(JobRow).where(JobRow.instance_id == instance_id, JobRow.state == "scheduled")
+            ).all()
+        )
+        assert jobs == []  # 到时 Job 随 on_cancel 清理
+
+
+def test_any_join_race_closes_loser_subscription():
+    engine, _clock = _clock_engine()
+    definition = (
+        FlowBuilder("wf")
+        .start()
+        .wait("wa", message={"name": "ma"})
+        .wait("wb", message={"name": "mb"})
+        .user_task("merge", assignee="'u1'", advance_policy="any")
+        .end()
+        .connect("start", "wa")
+        .connect("start", "wb")
+        .connect("wa", "merge")
+        .connect("wb", "merge")
+        .connect("merge", "end")
+        .build()
+    )
+    instance_id = _deploy_and_start(engine, definition)
+    assert len(_open_subscriptions(engine, instance_id)) == 2  # 双等待并行
+
+    engine.messages.publish_message("mb", payload={"winner": "b"}, message_id="wb1")
+    # 先到者赢：merge(any) 放行 → 竞速收尾取消败者 wa → 其订阅关闭
+    assert [t.activity_code for t in engine.task.list_tasks(instance_id=instance_id)] == ["merge"]
+    assert _open_subscriptions(engine, instance_id) == []
+    assert (
+        engine.messages.publish_message("ma", payload={}, message_id="wa1") is False
+    )  # 败者订阅已关
