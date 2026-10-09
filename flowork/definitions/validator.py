@@ -26,6 +26,7 @@ from flowork.definitions.validator_rules import (
     check_deadlines,
     check_structure,
     check_variables_and_org,
+    check_wait_nodes,
 )
 from flowork.errors import DefinitionError
 
@@ -105,6 +106,7 @@ def validate_definition(
     check_advance_policy(definition, warning)
     check_deadlines(definition, error)
     check_node_semantics(definition, error, warning)
+    check_wait_nodes(definition, error)
     check_condition_legality(definition, error, warning)
     check_variable_references(definition, error, warning, expression_functions=expression_functions)
     check_start_on_message(definition, error, warning, expression_functions=expression_functions)

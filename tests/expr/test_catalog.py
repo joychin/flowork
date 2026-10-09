@@ -18,10 +18,11 @@ from flowork.spi.ports import FunctionSignature
 
 def test_catalog_reserved_identifiers_and_positions():
     assert reserved_identifiers() == frozenset(
-        {"initiator", "instance", "now", "prev_task", "task"}
+        {"initiator", "instance", "now", "prev_task", "task", "wait"}
     )
     assert positions_of("task") == frozenset({"reassign", "exit"})
-    assert positions_of("prev_task") == frozenset({"condition", "subjects"})
+    assert positions_of("prev_task") == frozenset({"condition", "subjects", "wait_correlation"})
+    assert positions_of("wait") == frozenset({"condition"})  # 仅等待节点出边条件（§7.2）
     assert positions_of("initiator") == positions_of("now")
     assert positions_of("instance") == positions_of("now")  # 全位点全局词
     assert positions_of("amount") == frozenset()  # 非保留词
@@ -33,7 +34,7 @@ def test_engine_function_catalog():
 
     entry = engine_functions()["node"]
     assert entry.params == ("string",) and entry.returns == "map"
-    assert entry.positions == frozenset({"condition", "subjects"})
+    assert entry.positions == frozenset({"condition", "subjects", "wait_correlation"})
 
 
 def test_catalog_entries_carry_chinese_labels():
@@ -44,6 +45,7 @@ def test_catalog_entries_carry_chinese_labels():
         "now": "求值时刻",
         "prev_task": "上一站",
         "task": "当前任务快照",
+        "wait": "等待结果",
     }
 
 

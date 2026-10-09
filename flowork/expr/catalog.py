@@ -9,7 +9,9 @@
 
 位点词汇（与 ``validator.iter_expression_positions`` 的 kind 一致）：
 condition（连线条件）/ subjects（取人 assignee·assignees·recipients）/
-reassign（超时改派）/ exit（会签出口）/ mapping_input·mapping_output（子流程映射）。
+reassign（超时改派）/ exit（会签出口）/ mapping_input·mapping_output（子流程映射，
+后者亦承载等待节点 output 映射——同款子上下文语义）/
+wait_correlation（等待节点关联键，实例上下文求值）。
 """
 
 from __future__ import annotations
@@ -28,7 +30,15 @@ __all__ = [
 ]
 
 ALL_POSITIONS = frozenset(
-    {"condition", "subjects", "reassign", "exit", "mapping_input", "mapping_output"}
+    {
+        "condition",
+        "subjects",
+        "reassign",
+        "exit",
+        "mapping_input",
+        "mapping_output",
+        "wait_correlation",
+    }
 )
 
 
@@ -82,7 +92,7 @@ IDENTIFIER_CATALOG: tuple[IdentifierEntry, ...] = (
         name="prev_task",
         type="map",
         label="上一站",
-        positions=frozenset({"condition", "subjects"}),
+        positions=frozenset({"condition", "subjects", "wait_correlation"}),
         note="最近一条已完成任务（含会签最后一票/加签/改派后的办理人）；"
         "查无＝条件不满足/贡献空（预检温和）",
     ),
@@ -92,6 +102,14 @@ IDENTIFIER_CATALOG: tuple[IdentifierEntry, ...] = (
         label="当前任务快照",
         positions=frozenset({"reassign", "exit"}),
         note="同名不同方言：改派位=id/assignee/outcome/created_at/deadline_at；出口位=三计数",
+    ),
+    IdentifierEntry(
+        name="wait",
+        type="map",
+        label="等待结果",
+        positions=frozenset({"condition"}),
+        note="result=matched(消息到了)|elapsed(时间到了)；message_name/message_id"
+        "（signal 广播唤醒与纯延时=null）；仅等待节点出边条件可用（spec §7.2）",
     ),
 )
 
@@ -103,7 +121,7 @@ ENGINE_FUNCTION_CATALOG: tuple[FunctionEntry, ...] = (
         params=("string",),
         returns="map",
         label="点名查节点事实",
-        positions=frozenset({"condition", "subjects"}),
+        positions=frozenset({"condition", "subjects", "wait_correlation"}),
         note='node("code")：runs/skipped/最近轮 assignee·outcome·comment·'
         "finished_at·used_time/最近轮票数；查无＝固定形状（人物 null、计数 0）",
     ),

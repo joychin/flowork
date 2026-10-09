@@ -1,6 +1,7 @@
 """内置节点类型：与自定义类型走同一注册机制（dogfooding，边界 G4）。
 
-内置 kind：start / end / user_task / service_task / call_activity / cc_task / branch。
+内置 kind：start / end / user_task / service_task / call_activity / cc_task / branch / wait
+（wait 的定义在 wait_node.py，本文件挂 300 行红线拆出）。
 
 用户词汇（对齐现代工作流产品，无「网关」）：
 - 条件分支（branch）：出边挂条件，route_mode 决定匹配方式；
@@ -22,6 +23,13 @@ from flowork.definitions.node import (
     TaskDeadline,
     TimeoutPolicy,
 )
+from flowork.definitions.wait_node import (
+    KIND_WAIT,
+    WaitMessage,
+    WaitSpec,
+    WaitTimeout,
+    register_wait_node,
+)
 
 if TYPE_CHECKING:
     from flowork.runtime.registry import NodeRegistry
@@ -34,6 +42,7 @@ __all__ = [
     "KIND_SERVICE_TASK",
     "KIND_START",
     "KIND_USER_TASK",
+    "KIND_WAIT",
     "BranchSpec",
     "CallActivitySpec",
     "CcTaskSpec",
@@ -42,6 +51,9 @@ __all__ = [
     "ServiceTaskSpec",
     "StartSpec",
     "UserTaskSpec",
+    "WaitMessage",
+    "WaitSpec",
+    "WaitTimeout",
     "register_builtin_nodes",
 ]
 
@@ -283,3 +295,4 @@ def register_builtin_nodes(registry: NodeRegistry) -> None:
             ],
         },
     )
+    register_wait_node(registry)

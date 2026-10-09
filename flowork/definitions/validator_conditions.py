@@ -20,6 +20,7 @@ from flowork.definitions.builtin import (
     KIND_CALL_ACTIVITY,
     KIND_CC_TASK,
     KIND_USER_TASK,
+    KIND_WAIT,
 )
 from flowork.definitions.flow import MAX_FORMULA_LENGTH
 
@@ -36,7 +37,8 @@ __all__ = [
 
 IssueFn = Callable[..., None]
 
-# 位点 kind → 规则名前缀（连线位沿用既有 condition.* 规则名，节点位用 expression.*）
+# 位点 kind → 规则名前缀（连线位沿用既有 condition.* 规则名，节点位用 expression.*，
+# 等待节点关联键用 wait.correlation.*）
 _RULE_PREFIX = {
     "condition": "condition",
     "subjects": "expression",
@@ -44,6 +46,7 @@ _RULE_PREFIX = {
     "exit": "expression",
     "mapping_input": "expression",
     "mapping_output": "expression",
+    "wait_correlation": "wait.correlation",
 }
 
 
@@ -95,6 +98,22 @@ def iter_expression_positions(definition: ProcessDefinition) -> Iterator[tuple[s
         if node.kind == KIND_CALL_ACTIVITY:
             for target, expression in (getattr(node, "input_mappings", None) or {}).items():
                 yield "mapping_input", f"{node.code}.input_mappings.{target}", expression, node.code
+            for target, expression in (getattr(node, "output_mappings", None) or {}).items():
+                yield (
+                    "mapping_output",
+                    f"{node.code}.output_mappings.{target}",
+                    expression,
+                    node.code,
+                )
+        if node.kind == KIND_WAIT:
+            message = getattr(node, "message", None)
+            if message is not None and message.correlation_key:
+                yield (
+                    "wait_correlation",
+                    f"{node.code}.message.correlation_key",
+                    message.correlation_key,
+                    node.code,
+                )
             for target, expression in (getattr(node, "output_mappings", None) or {}).items():
                 yield (
                     "mapping_output",

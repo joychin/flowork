@@ -14,8 +14,8 @@ from flowork.definitions.builtin import (
     KIND_START,
     KIND_USER_TASK,
 )
-from flowork.definitions.wait_node import KIND_WAIT
 from flowork.definitions.node import FlowNode
+from flowork.definitions.wait_node import KIND_WAIT
 from flowork.errors import UnknownHandler, UnknownNodeKind
 from flowork.runtime.behavior import NodeBehavior
 from flowork.runtime.registry import HandlerRegistry, NodeRegistry, create_registry

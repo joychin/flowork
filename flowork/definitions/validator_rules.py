@@ -14,6 +14,8 @@ from flowork.definitions.builtin import (
     KIND_BRANCH,
     KIND_END,
     KIND_START,
+    KIND_USER_TASK,
+    KIND_WAIT,
     RouteMode,
 )
 
@@ -27,6 +29,7 @@ __all__ = [
     "check_deadlines",
     "check_structure",
     "check_variables_and_org",
+    "check_wait_nodes",
 ]
 
 IssueFn = Callable[..., None]
@@ -222,5 +225,49 @@ def check_deadlines(
                 error(
                     "user_task.deadline.reassign_target_missing",
                     "reassign 动作必须带改派目标（reassign_to）",
+                    node=node.code,
+                )
+
+
+def check_wait_nodes(definition: ProcessDefinition, error: IssueFn) -> None:
+    """等待节点结构规则（spec §7.2 / wait-node.md §6）。"""
+    from flowork.expr.cel import FormulaError, collect_references
+
+    nodes = {n.code: n for n in definition.nodes}
+    wait_sources = {n.code for n in definition.nodes if n.kind == KIND_WAIT}
+    for flow in definition.flows:
+        if not flow.condition or flow.source in wait_sources:
+            continue
+        try:  # 语法问题已由 condition.formula.invalid 报告，此处只管位点
+            idents, _functions = collect_references(flow.condition)
+        except FormulaError:
+            continue
+        if "wait" in idents:
+            error(
+                "condition.wait_source",
+                "wait.* 仅等待节点出边条件可用（spec §7.2）",
+                flow=flow.flow_code(),
+            )
+    for node in definition.nodes:
+        if node.kind == KIND_WAIT:
+            message = getattr(node, "message", None)
+            timeout = getattr(node, "timeout", None)
+            if message is None and timeout is None:
+                error(
+                    "wait.mode.required",
+                    "等待节点须声明 message 或 timeout 至少其一（双缺=什么都不等）",
+                    node=node.code,
+                )
+            if message is not None and not message.name.strip():
+                error("wait.message.name_empty", "等待消息声明缺 name", node=node.code)
+            if not definition.outgoing(node.code):
+                error("wait.exit.required", "等待节点必须有出边", node=node.code)
+        if node.kind == KIND_USER_TASK:
+            reject_target = getattr(node, "reject_target", None)
+            target_node = nodes.get(reject_target) if reject_target else None
+            if target_node is not None and target_node.kind == KIND_WAIT:
+                error(
+                    "wait.reject_target",
+                    f"驳回目标不可为等待节点：{reject_target}（驳回复活到「等」上语义不成立）",
                     node=node.code,
                 )

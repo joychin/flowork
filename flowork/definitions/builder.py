@@ -18,7 +18,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from flowork.definitions.builtin import KIND_BRANCH, RouteMode
-from flowork.definitions.definition import DefinitionStatus, ProcessDefinition
+from flowork.definitions.definition import DefinitionStatus, ProcessDefinition, ProcessVariable
 from flowork.definitions.flow import SequenceFlow
 from flowork.definitions.node import FlowNode, MultiInstance
 
@@ -104,6 +104,27 @@ class FlowBuilder:
         """
         return self._add_node(code, KIND_BRANCH, name, {"route_mode": route_mode, **fields})
 
+    def wait(
+        self,
+        code: str,
+        name: str = "",
+        *,
+        message: dict[str, Any] | None = None,
+        output_mappings: dict[str, str] | None = None,
+        timeout: dict[str, Any] | None = None,
+        **fields: Any,
+    ) -> FlowBuilder:
+        """等待节点（spec §7.2）：等消息 / 等时长 / 两者竞速，先到者决定走向。"""
+        payload: dict[str, Any] = {}
+        if message is not None:
+            payload["message"] = message
+        if output_mappings:
+            payload["output_mappings"] = output_mappings
+        if timeout is not None:
+            payload["timeout"] = timeout
+        payload.update(fields)
+        return self._add_node(code, "wait", name, payload)
+
     def node(self, code: str, *, kind: str, name: str = "", **fields: Any) -> FlowBuilder:
         """自定义节点入口：kind 必须已在注册表注册。"""
         if not kind:
@@ -147,6 +168,7 @@ class FlowBuilder:
         major: int = 1,
         revision: int = 1,
         status: DefinitionStatus = DefinitionStatus.PUBLISHED,
+        variables: list[ProcessVariable] | None = None,
     ) -> ProcessDefinition:
         nodes: list[FlowNode] = []
         for raw in self._nodes:
@@ -160,6 +182,7 @@ class FlowBuilder:
             status=status,
             nodes=nodes,
             flows=list(self._flows),
+            variables=variables or [],
         )
 
     def _add_node(self, code: str, kind: str, name: str, fields: dict[str, Any]) -> FlowBuilder:
