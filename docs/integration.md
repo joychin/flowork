@@ -46,6 +46,21 @@ org_role_assignment / org_agent / org_agent_credential / org_delegation（审批
 detail/acted_by）。目录读面带进程内缓存（写操作全清失效）；admins＝org_role
 的 admin 档持有人（to_admins 兜底名单同源）。
 
+## 库迁移（Alembic）
+
+基线迁移与引擎启动建表（`create_schema` 的 `create_all`）同源同构——两条路
+殊途同归；增量变更走 Alembic（spec §14 尾注）：
+
+```bash
+FLOWORK_DB=/path/prod.db uv run alembic upgrade head    # 空库/增量升级（建全表）
+FLOWORK_DB=/path/legacy.db uv run alembic stamp head     # 既有 create_all 库对齐版本标记（无 DDL）
+FLOWORK_DB=/path/prod.db uv run alembic revision -m "..."  # 新增量迁移（autogenerate 对照共享元数据）
+```
+
+连接串解析：alembic 配置显式指定（测试注入）> `FLOWORK_DB`（与 web 同名
+变量，路径）> 缺省 `flowork.db`。引擎启动建表保持幂等 create_all（开发/
+测试零配置），生产升级走 alembic；两者并存不冲突（同一共享元数据）。
+
 ## 超时调度
 
 生产环境三种形态任选：

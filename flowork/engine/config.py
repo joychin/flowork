@@ -20,10 +20,6 @@ def _system_now() -> datetime:
     return utc_now()
 
 
-def _noop_notifier(event: str, payload: dict[str, object]) -> None:
-    return None
-
-
 @dataclass
 class EngineConfig:
     """引擎配置（全部有默认值，内核可裸跑）。
@@ -42,7 +38,6 @@ class EngineConfig:
     max_node_loops: int = 50
     lock_retries: int = 3
     now: Callable[[], datetime] = _system_now
-    notifier: Callable[[str, dict[str, object]], None] = _noop_notifier
     db_file: str | Path | None = None  # CLI 便利字段：设置后覆盖 db_url
     org: OrgDirectoryLike | None = None  # 组织目录（委托替换/to_admins 兜底/取人词汇数据源）
     expression_functions: ExpressionFunctions | None = None  # CEL 词汇（全表达式位，spec §4.3/§9）
