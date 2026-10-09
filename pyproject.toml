@@ -30,6 +30,7 @@ dev = [
     "httpx>=0.28.1",
     "import-linter>=2.15",
     "types-jsonschema>=4.26.0.20261006",
+    "psycopg[binary]>=3.2",
 ]
 
 [build-system]
@@ -120,12 +121,13 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = '-q --strict-markers -m "not quarantined and not randomized and not needs_http"'
+addopts = '-q --strict-markers -m "not quarantined and not randomized and not needs_http and not needs_postgres"'
 markers = [
     "slow: 跑得久但确定的重测试（默认仍跑，可用 -m 'not slow' 跳过）",
     "quarantined: 已知 flaky，默认跳过；修复前不得依赖其绿灯",
     "randomized: 随机流程结构生成测试，默认排除；-m randomized 显式运行",
     "needs_http: 需要起 HTTP 服务的插件层测试，默认排除",
+    "needs_postgres: 需要 PostgreSQL 的冒烟测试，默认排除；FLOWORK_TEST_PG_URL 指定现成实例，未设则自动 docker 起删（无 docker 整组跳过）",
 ]
 
 [tool.coverage.run]
