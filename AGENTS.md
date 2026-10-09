@@ -332,3 +332,19 @@ flowork 版）：有界随机（序列≤5 块/2 条件臂+默认边），两段
 join_gate → seed=20261014 抓到活跃令牌未收口并可复现，还原复绿；100 迭代全绿。
 至此三批 12 提交全部落地：构造层穷尽（矩阵双向锁定）+组合层随机（结构+执行
 双随机可复现）+过程层可审计（三留痕表序列断言）+多形态覆盖（四形态参数化）。
+
+**对标第三批 A8 落地+A10/A11 设计稿（2026-10-09，spec v2.3 第十轮；A11/A10 主落点被并行
+「等待节点」WIP 占用——validator*/behaviors.py，先出设计稿待其落地后动工）**：
+① A8 consult 咨询实装（engine/task_consult.py，Mixin 模式同 task_cc）：「先收集意见、原办理人
+最后拍板」两轮形态＝派生 task_type=consult 意见任务（独立工作项，不建 deadline/不进会签计数
+——**意见不占票**，outcome=agree/reject 由 type 区分）；**主任务软挂起**＝同链（root 链，转办
+保持）存在未完 consult → 主任务全动作被拦（守卫内联 _claim_task_action 咽喉，覆盖
+complete/reject/transfer/assist/加签；**MRO 教训**：Mixin 桩模式要求提供方先于消费方桩，
+TaskConsultMixin 在后其守卫被桩遮蔽——守卫改内联自含查询，不跨 Mixin 派发）；意见全交回自动
+解禁+task_consult_finished 事件；主任务 deadline 时钟照走。动作表：已认领+consult、
+consult 任务→complete_consult。行业修正落地：不抄 C7 delegation assignee 轮转。
+② A10 设计稿 simulation-dryrun-design.md（拆令牌模拟/打桩真执行两层；service_task 必须 stub；
+模拟实例一等公民=行业空白；报告复用 route_audit+stub 清单）。A11 设计稿
+deploy-validation-design.md（四层分级：L3 同发布单元引用+handler 注册=ERROR 新增、L4 目录
+实体存在性=默认 WARNING+strict 可选；subject_exists 能力参数沿用 org_configured 先例；
+validator 端口做成部署期扩展点）。测试 test_delta_batch3.py 5 例。

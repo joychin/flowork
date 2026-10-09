@@ -26,7 +26,15 @@ ACTION_GROUPS: dict[str, frozenset[str]] = {
     "dispatch": frozenset({"transfer", "assist", "add_countersigner", "claim", "unclaim"}),
 }
 
-_ASSIGNED_ACTIONS = ["complete", "reject", "transfer", "assist", "add_countersigner", "unclaim"]
+_ASSIGNED_ACTIONS = [
+    "complete",
+    "reject",
+    "transfer",
+    "assist",
+    "add_countersigner",
+    "consult",
+    "unclaim",
+]
 
 
 def allowed_actions(task: TaskRow) -> list[str]:
@@ -35,6 +43,8 @@ def allowed_actions(task: TaskRow) -> list[str]:
         return []
     if task.task_type == "assist":
         return ["complete_assist"]  # 协办只交还意见，不参与推进（spec §5.1）
+    if task.task_type == "consult":
+        return ["complete_consult"]  # 咨询意见任务：只交回意见（v2.3 A8）
     if task.assignee == "":
         return ["claim"]  # 候选任务：先认领（complete 须 assignee 已固定）
     return list(_ASSIGNED_ACTIONS)

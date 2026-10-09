@@ -193,10 +193,10 @@ class TaskOpsMixin:
     def _assert_operable(
         self, ctx: CommandContext, task: TaskRow, *, action: str | None = None
     ) -> None:
-        """任务动作统一守卫：实例态（spec §7）+ 动作表（v2.3 A1）+ 版本抢占复验。
+        """统一守卫：实例态（spec §7）+ 动作表（v2.3 A1）+ 版本抢占复验。
 
-        action 传入时按 (状态×类型×认领态) 动作表判定（tasks/actions.py）——
-        不可用即领域拒绝；不传保持仅实例态守卫（withdraw 等特殊路径自带专属守卫）。
+        action 传入时按 (状态×类型×认领态) 动作表判定（tasks/actions.py）；不传
+        保持仅实例态守卫（withdraw 等特殊路径自带专属守卫）。
         """
         instance = self._instance(ctx, task.instance_id)
         if instance.state == "suspended":
@@ -210,17 +210,17 @@ class TaskOpsMixin:
     def _claim_task_action(
         self, ctx: CommandContext, task: TaskRow, instance: ProcessInstanceRow
     ) -> None:
-        """动作抢占咽喉：立即以实例行乐观锁落写，并复验任务仍在办。
+        """动作抢占咽喉：touch 后立即 flush（版本守卫 UPDATE 抢占），再重读任务复验。
 
-        pysqlite 的 SELECT 走自动提交（每条读各自最新快照）——「读任务 → 读实例」
-        的间隙内对手提交时，实例行会读到**新版本**，提交期的版本守卫失效，
-        双方都能落 outcome（submit vs timer 双 agree，tests/edge 实证）。此处
-        touch 后立即 flush（BEGIN + 版本守卫 UPDATE 抢占），再强制重读任务行：
-        抢占开启的事务能看到对手已提交的删行 → ObjectDeletedError 归一为
-        TaskNotAvailableError；对手晚于抢占提交则阻塞在写锁上、版本守卫失败。
+        pysqlite 的 SELECT 各自最新快照——「读任务→读实例」间隙对手提交会使实例行
+        读到新版本、提交期版本守卫失效（双 agree，tests/edge submit vs timer 实证）。
+        抢占开启的事务能看到对手已提交的删行 → ObjectDeletedError 归一领域错误。
         """
         from sqlalchemy.orm.exc import ObjectDeletedError
 
+        from flowork.engine.task_consult import assert_no_open_consults
+
+        assert_no_open_consults(ctx, task)  # 咨询软挂起（v2.3 A8）
         ctx.touch(instance)
         ctx.session.flush()
         ctx.session.expire(task)

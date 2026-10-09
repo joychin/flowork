@@ -10,6 +10,7 @@ from flowork.engine.ops import CommandContext
 from flowork.engine.task_actions import TaskOpsMixin
 from flowork.engine.task_admin import TaskAdminMixin
 from flowork.engine.task_cc import TaskCcMixin
+from flowork.engine.task_consult import TaskConsultMixin
 from flowork.engine.task_rework import TaskReworkMixin
 from flowork.errors import TaskNotAvailableError
 from flowork.events.domain import DomainEvent
@@ -25,7 +26,13 @@ __all__ = ["TaskCompleteResult", "TaskService"]
 
 
 class TaskService(
-    TaskOpsMixin, TaskReworkMixin, TaskAdminMixin, TaskCcMixin, RejectMixin, AnticipateMixin
+    TaskOpsMixin,
+    TaskReworkMixin,
+    TaskAdminMixin,
+    TaskCcMixin,
+    TaskConsultMixin,
+    RejectMixin,
+    AnticipateMixin,
 ):
     """任务服务：办理 / 查询。所有操作带 actor 归因（人 or agent 可区分）。"""
 

@@ -135,6 +135,7 @@ def test_action_table_by_state_type_claim():
         "add_countersigner",
         "assist",
         "complete",
+        "consult",  # v2.3 第三批 A8：咨询（意见不占票）
         "reject",
         "transfer",
         "unclaim",
