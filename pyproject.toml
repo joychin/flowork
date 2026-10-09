@@ -120,7 +120,13 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q"
+addopts = '-q --strict-markers -m "not quarantined and not randomized and not needs_http"'
+markers = [
+    "slow: 跑得久但确定的重测试（默认仍跑，可用 -m 'not slow' 跳过）",
+    "quarantined: 已知 flaky，默认跳过；修复前不得依赖其绿灯",
+    "randomized: 随机流程结构生成测试，默认排除；-m randomized 显式运行",
+    "needs_http: 需要起 HTTP 服务的插件层测试，默认排除",
+]
 
 [tool.coverage.run]
 source = ["flowork"]
