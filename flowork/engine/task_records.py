@@ -100,9 +100,11 @@ class TaskRecordsMixin:
 
         单轨 CEL（spec §4.2）：函数表自 EngineConfig.expression_functions 拍平；
         有组织目录叠加委托替换与 to_admins 兜底，无目录走同一条 CEL 求值路径。
+        出口统一守规模护栏（max_participants，spec v2.3）：手动名单与表达式名单同守。
         """
         from flowork.expr.context import expression_functions_of
         from flowork.participants.resolver import (
+            assert_participant_limit,
             fallback_when_empty,
             resolve_participants,
             resolve_with_delegation,
@@ -114,8 +116,14 @@ class TaskRecordsMixin:
             resolution, _delegation = resolve_with_delegation(ctx, spec, config.org, functions)
             if not resolution.todo and not resolution.skipped:
                 return fallback_when_empty(ctx, spec, config.org)
-            return resolution
-        return resolve_participants(ctx, spec, functions=functions)
+        else:
+            resolution = resolve_participants(ctx, spec, functions=functions)
+        assert_participant_limit(
+            len(resolution.todo) + len(resolution.skipped),
+            config.max_participants if config is not None else None,
+            where=f"审批节点 {spec.code}",
+        )
+        return resolution
 
     def handled_assignees(self, session: Session, token_id: str) -> list[str]:
         """令牌下已实际办理过的人（排除被取消的任务）。"""

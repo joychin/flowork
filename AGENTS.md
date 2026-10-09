@@ -264,3 +264,23 @@ pilot 三处白名单外 import 合规化（ProcessInstanceRow→runtime.variabl
 autouse，exclude 豁免有意留运行态的实例），接入场景随机两测试。
 ⑤ 覆盖率口径改「照明指标，不作提交门禁」+ 回归测试带来源纪律入提交规范。
 矩阵自此覆盖 tests/suite 与 tests/pilot 全部走查（678 测试全绿）。
+
+**对标产品 对标两轮+第一批落地（2026-10-09，spec v2.3 第八轮）**：
+① 对标三篇入 docs/product/kernel-v2/：对标明细.md（A/B/C 三档速览+四拍板项，行业列
+✅⚠❌）、对标明细详设.md（A1–A11 逐项详设，行业修正版）、delta-industry-benchmark.md
+（Camunda 7.23/8、Flowable 7、jBPM 7.74、Temporal、SpiffWorkflow、Conductor 源码级对拍）。
+**行业对拍撤销 A7 前视跳过**（全行业零实现+语义不可判定+失效=审批链空洞，列 spec 非目标）、
+**推翻 A5 双日历**（全行业历史耗时一律墙钟、零引擎按人算）、修正 A1（state×task_type 动作表
+而非节点级配置）/A8（advisory 子任务而非 assignee 轮转）/A11（默认 WARNING+strict 可选+补 L3
+同单元引用层）；A9 契约按 Zeebe 定稿、A10 拆令牌模拟/打桩两层。**四语义拍板落 spec §5.1**：
+加签各占一票（不占票走 assist/consult）/转办票随人走/驳回复活圈定最近一轮（与主流"重入重解析"
+的刻意差异同步声明）/撤回取消范围随 A2 闸门。范围变更记《本期建设边界》backlog。
+② 第一批实施（A3+A4+A6 护栏+竞态窗修复）：驳回复活按 token_no 最大已完结令牌圈定（多轮驳回
+名单不膨胀）；协办随主任务 complete/reject 同事务收口（outcome=assist_cancel+事件）+ assist/
+加签 root_task_id 断链修复（此前仅 transfer 写入）；EngineConfig.max_participants=1000 护栏
+（解析位=ParticipantLimitError 挂起+故障单、加签位=请求拒绝整笔回滚，绝不截断）；**双 outcome
+竞态窗修复**（tests/edge submit vs timer 实证的双 agree：pysqlite SELECT 自动提交语义下「读任务
+→读实例」间隙对手提交会绕过版本守卫——新增 _claim_task_action 咽喉：touch+flush 立即以版本
+守卫抢占实例行，再 expire 重读任务行复验，ObjectDeletedError 归一 TaskNotAvailableError；接线
+_assert_operable/_complete/_reject 三点）。678 测试全绿。第二批（A2 撤回守卫+A1 动作表+A5 端口
+收口）待启动。

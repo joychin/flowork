@@ -34,6 +34,13 @@ def create_cc_items(ctx: RuntimeNodeContext, spec: CcTaskSpec) -> None:
         what="传阅接收人",
         instance=instance_facts(ctx.instance),
     )
+    from flowork.participants.resolver import assert_participant_limit
+
+    assert_participant_limit(
+        len(recipients),
+        config.max_participants if config is not None else None,
+        where=f"传阅节点 {spec.code} 接收人",
+    )
     for recipient in recipients:
         ctx.session.add(
             CcItemRow(

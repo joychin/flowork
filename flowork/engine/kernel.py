@@ -48,6 +48,14 @@ class NoParticipantError(EngineExecutionError):
     """审批节点无可用的参与者。"""
 
 
+class ParticipantLimitError(EngineExecutionError):
+    """参与者规模超过上限（EngineConfig.max_participants）——拒绝而非截断。
+
+    解析位（user_task/cc 进入）触发时按技术故障处理：挂起+故障单（可见、可修、
+    可 retry）；调用方位（加签）由 TaskService 拦截为请求拒绝，实例不受影响。
+    """
+
+
 class RejectTargetMissing(EngineExecutionError):
     """驳回目标节点缺失（未配置且无来源节点）。"""
 

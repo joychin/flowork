@@ -35,6 +35,16 @@ class RejectMixin:
         """实例加载由 TaskOpsMixin 提供。"""
         raise NotImplementedError
 
+    def _claim_task_action(
+        self, ctx: CommandContext, task: TaskRow, instance: ProcessInstanceRow
+    ) -> None:
+        """动作抢占咽喉（版本守卫+复验）由 TaskOpsMixin 提供。"""
+        raise NotImplementedError
+
+    def _cancel_assist_tasks(self, ctx: CommandContext, task: TaskRow) -> None:
+        """协办随主任务收口由 TaskOpsMixin 提供。"""
+        raise NotImplementedError
+
     def _result(self, ctx: CommandContext, task_id: str, outcome: str) -> TaskCompleteResult:
         """同事务结果构造由 TaskService 提供。"""
         raise NotImplementedError
@@ -85,7 +95,7 @@ class RejectMixin:
         if task is None or task.state != "ready":
             raise TaskNotAvailableError(f"任务不可驳回（不存在或已处理）：{task_id}")
         instance = self._instance(ctx, task.instance_id)
-        ctx.touch(instance)
+        self._claim_task_action(ctx, task, instance)  # 版本抢占+复验（关双 outcome 竞态窗）
         # 变量留痕归因：驳回携带的 variables 与驳回复活路径写变量记 task_reject
         ctx.write_source = "task_reject"
         ctx.write_actor = actor
@@ -111,6 +121,7 @@ class RejectMixin:
         kernel.archive_task(
             ctx.session, task, outcome="reject", comment=comment, actor=actor, as_agent=as_agent
         )
+        self._cancel_assist_tasks(ctx, task)  # 协办随主任务终态同事务收口（spec §5.1）
         kernel.record_event(
             DomainEvent.TASK_REJECTED,
             {"task_id": task.id, "assignee": task.assignee, "actor": actor},
@@ -170,13 +181,28 @@ class RejectMixin:
         kernel.record_event(DomainEvent.NODE_EXITED, {"activity_code": node.code}, instance.id)
         from sqlalchemy import select
 
-        history_rows = ctx.session.scalars(
-            select(TaskHistoryRow).where(
-                TaskHistoryRow.instance_id == instance.id,
-                TaskHistoryRow.activity_code == reject_target,
-                TaskHistoryRow.outcome != "cancelled",
+        # 复活圈定「最近一轮」（spec §5.1 v2.3）：目标节点最近一个已完结令牌
+        # （token_no 最大、非 unfinished）名下的办理人——多轮驳回名单不随轮次膨胀；
+        # 与主流「重入按定义重新解析」的刻意差异＝复活原办理人（国内审批语义）。
+        latest_settled = (
+            select(_TokenRow.id)
+            .where(
+                _TokenRow.instance_id == instance.id,
+                _TokenRow.activity_code == reject_target,
+                _TokenRow.state != TokenState.UNFINISHED.value,
             )
+            .order_by(_TokenRow.token_no.desc())
+            .limit(1)
         )
+        stmt = select(TaskHistoryRow).where(
+            TaskHistoryRow.instance_id == instance.id,
+            TaskHistoryRow.activity_code == reject_target,
+            TaskHistoryRow.outcome != "cancelled",
+        )
+        latest_token_id = ctx.session.scalars(latest_settled).first()
+        if latest_token_id is not None:
+            stmt = stmt.where(TaskHistoryRow.token_id == latest_token_id)
+        history_rows = ctx.session.scalars(stmt)
         handlers = [row.assignee for row in history_rows]
         manual = {reject_target: list(dict.fromkeys(handlers))} if handlers else None
         definition = kernel.definition_of(ctx.session, instance)

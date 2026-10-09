@@ -113,13 +113,41 @@ class TaskOpsMixin:
         task = self._ready_task(ctx, task_id)
         ctx.touch(self._instance(ctx, task.instance_id))
         kernel = self._engine.kernel_for(ctx)
-        created = [self._clone_task(ctx, task, assignee=user, task_type="assist") for user in users]
+        root = task.root_task_id or task.id
+        created = [
+            self._clone_task(ctx, task, assignee=user, task_type="assist", root=root)
+            for user in users
+        ]
         kernel.record_event(
             "task_assist_created",
             {"task_id": task_id, "users": users, "actor": actor, "comment": comment},
             task.instance_id,
         )
         return [self._task_info(t) for t in created]
+
+    def _cancel_assist_tasks(self, ctx: CommandContext, task: TaskRow) -> None:
+        """主任务终态（complete/reject）同事务收口其令牌下的协办待办。
+
+        协办不占票也不卡流程（spec §5.1）：主任务已出结果，协办意见失去时效，
+        挂着只会变脏待办——收口落历史 outcome=assist_cancel（actor=system，
+        与主任务办理动作同一事务）。转办不触发（等待未终结，协办随新办理人继续）。
+        """
+        kernel = self._engine.kernel_for(ctx)
+        for assist in kernel.tasks(ctx.session, task.instance_id, token_id=task.token_id):
+            if assist.task_type != "assist":
+                continue
+            kernel.archive_task(
+                ctx.session,
+                assist,
+                outcome="assist_cancel",
+                comment="主任务已办理，协办自动收口",
+                actor="system",
+            )
+            kernel.record_event(
+                "task_assist_cancelled",
+                {"task_id": assist.id, "root_task_id": task.id, "assignee": assist.assignee},
+                assist.instance_id,
+            )
 
     def complete_assist(self, task_id: str, actor: str, comment: str = "") -> None:
         """完成协办任务：仅归档，不推进流程。"""
@@ -160,6 +188,31 @@ class TaskOpsMixin:
             raise TaskNotAvailableError("实例已挂起（Incident 待修复），不可操作")
         if instance.state == "paused":
             raise TaskNotAvailableError("实例已暂停，恢复后才可操作")
+        self._claim_task_action(ctx, task, instance)
+
+    def _claim_task_action(
+        self, ctx: CommandContext, task: TaskRow, instance: ProcessInstanceRow
+    ) -> None:
+        """动作抢占咽喉：立即以实例行乐观锁落写，并复验任务仍在办。
+
+        pysqlite 的 SELECT 走自动提交（每条读各自最新快照）——「读任务 → 读实例」
+        的间隙内对手提交时，实例行会读到**新版本**，提交期的版本守卫失效，
+        双方都能落 outcome（submit vs timer 双 agree，tests/edge 实证）。此处
+        touch 后立即 flush（BEGIN + 版本守卫 UPDATE 抢占），再强制重读任务行：
+        抢占开启的事务能看到对手已提交的删行 → ObjectDeletedError 归一为
+        TaskNotAvailableError；对手晚于抢占提交则阻塞在写锁上、版本守卫失败。
+        """
+        from sqlalchemy.orm.exc import ObjectDeletedError
+
+        ctx.touch(instance)
+        ctx.session.flush()
+        ctx.session.expire(task)
+        try:
+            state = task.state
+        except ObjectDeletedError as exc:
+            raise TaskNotAvailableError(f"任务已被处理：{task.id}") from exc
+        if state != "ready":
+            raise TaskNotAvailableError(f"任务不可操作（不存在或已处理）：{task.id}")
 
     def _clone_task(
         self,

@@ -29,6 +29,8 @@ class EngineConfig:
         node_registry: 节点注册表；默认内置类型，可传入自定义注册表。
         history_level: 历史事件写入粒度（M6 生效）。
         max_node_loops: 单节点最大完成次数（死循环守卫）。
+        max_participants: 单节点参与者规模上限（会签名单/传阅接收人；加签后名单同守）。
+            超限＝拒绝（解析位挂起+故障单，调用方位请求拒绝），绝不静默截断。
         lock_retries: 乐观锁冲突重试次数。
     """
 
@@ -36,6 +38,7 @@ class EngineConfig:
     node_registry: NodeRegistry = field(default_factory=create_registry)
     history_level: HistoryLevel = "full"
     max_node_loops: int = 50
+    max_participants: int = 1000
     lock_retries: int = 3
     now: Callable[[], datetime] = _system_now
     db_file: str | Path | None = None  # CLI 便利字段：设置后覆盖 db_url

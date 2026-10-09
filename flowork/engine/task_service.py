@@ -129,7 +129,7 @@ class TaskService(
         if task.task_type == "assist":
             raise TaskNotAvailableError("协办任务请用 complete_assist 完成")
         instance = self._instance(ctx, task.instance_id)
-        ctx.touch(instance)
+        self._claim_task_action(ctx, task, instance)  # 版本抢占+复验（关双 agree 竞态窗）
         # 变量留痕归因：本命令内的变量变化（任务 output + 后续钩子写）记 task_output
         ctx.write_source = "task_output"
         ctx.write_actor = actor
@@ -171,6 +171,7 @@ class TaskService(
             as_agent=as_agent,
             idempotency_key=idempotency_key,
         )
+        self._cancel_assist_tasks(ctx, task)  # 协办随主任务终态同事务收口（spec §5.1）
         node = kernel.definition_of(ctx.session, instance).node(task.activity_code)
         assert node is not None, f"任务节点不存在：{task.activity_code}"
         behavior = kernel.behavior_of(node)

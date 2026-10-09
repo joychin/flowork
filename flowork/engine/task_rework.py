@@ -95,6 +95,13 @@ class TaskReworkMixin:
             )
         existing = list((token.manual_participants or {}).get(task.activity_code, []))
         merged = list(dict.fromkeys([*base_participants, *existing, *users]))
+        # 规模护栏（spec v2.3）：加签是调用方请求——超限拒绝整笔（回滚），实例不挂起
+        limit = self._engine.config.max_participants
+        if len(merged) > limit:
+            raise TaskNotAvailableError(
+                f"节点 {task.activity_code} 加签后名单 {len(merged)} 人超过上限 {limit}"
+                "（EngineConfig.max_participants）——拒绝而非截断"
+            )
         token.manual_participants[task.activity_code] = merged
         token.item_count = len(merged)
         ctx.session.flush()
@@ -104,7 +111,8 @@ class TaskReworkMixin:
             {"task_id": task_id, "users": users, "actor": actor, "comment": comment},
             task.instance_id,
         )
-        created = [self._clone_task(ctx, task, assignee=user) for user in users]
+        root = task.root_task_id or task.id
+        created = [self._clone_task(ctx, task, assignee=user, root=root) for user in users]
         return [self._task_info(t) for t in created]
 
     def withdraw(self, task_id: str, actor: str, comment: str = "") -> TaskInfo:

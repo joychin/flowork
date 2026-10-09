@@ -16,7 +16,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from flowork.engine.kernel import EngineExecutionError, NoParticipantError
+from flowork.engine.kernel import EngineExecutionError, NoParticipantError, ParticipantLimitError
 from flowork.expr.cel import FormulaError, evaluate_formula_value, references_identifier
 from flowork.expr.context import expression_context
 
@@ -27,6 +27,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "ParticipantResolution",
+    "assert_participant_limit",
     "resolve_participants",
     "resolve_subjects",
     "resolve_with_delegation",
@@ -41,6 +42,15 @@ class ParticipantResolution:
 
     todo: list[str] = field(default_factory=list)
     skipped: list[str] = field(default_factory=list)
+
+
+def assert_participant_limit(count: int, limit: int | None, *, where: str) -> None:
+    """参与者规模护栏：超限拒绝（技术故障），绝不静默截断（spec v2.3 第八轮）。"""
+    if limit is not None and count > limit:
+        raise ParticipantLimitError(
+            f"{where}解析出 {count} 名参与者，超过上限 {limit}（EngineConfig.max_participants）"
+            "——拒绝而非截断；请修正定义/接收人名单，或显式调大配置"
+        )
 
 
 def resolve_subjects(
