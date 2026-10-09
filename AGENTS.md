@@ -34,7 +34,8 @@ flowork/
 ├── spi/           端口协议：Clock/WorkCalendar/OrgDirectory/ExpressionFunctions/EventSink
 ├── events/        领域事件类型（M1 起随 Command 管线落 outbox）
 ├── tasks/ participants/ persistence/ engine/ jobs/ cli/   # 内核主体（engine 已按职责拆分多文件）
-├── directory/     目录（M-A）：组织/角色/用户/Agent 映射（agents/roles/store/orm）
+├── directory/     目录（M-A）：组织/角色/用户/Agent/委托（agents/roles/delegation/
+│                  queries 读缓存/audit 写审计/store/orm）
 ├── web/           薄 FastAPI 传输层（app.py，无业务逻辑，与 RepositoryService 一一映射）
 ├── contrib/       官方插件包——内核禁止 import 它（import-linter 契约强制）
 ├── clock.py       时间戳统一 naive UTC 的唯一出口
@@ -196,3 +197,32 @@ docs/product/ 权威索引；integration.md 补 v2 六表+目录表+CLI 清单+r
 +history_level audit 口径+对接面实况；designer/README API 表补 4 条+目录补 6 文件。
 ⑥ MCP 工具数统一为 **18**（kernel-v2 spec §13 权威；AGENTS.md 17→18；engine-v1
 01 §6/00/04 加注——8 个为 M-B 首发子集，纪律不变）。625 测试全绿。
+
+**内核收口批（2026-10-09，六提交 99b8131→6845068；用户裁定 REST/MCP=插件层后置、
+先完成内核本体，范围变更由用户记《本期建设边界》backlog）**：
+① SPI 死端口收口——Notifier/ResourceProvider 零消费删除（notify 实际直接
+record_event 落 outbox，事件即通知面；EngineConfig.notifier 死字段一并摘除），
+spec §9/engine-v1 两处/kernel-v2-plan 表述同步。
+② instance.* 判断面词汇——id/started_at/business_key 全位点注入（catalog 入册/
+expression_context 增参/九点接线：routing·resolver·cc·rework·子流程映射·超时
+改派·会签出口；route_audit 快照钉取值；dry-run 与 web 试算面注入占位形状；
+business_key 入册为本批新增决策——招标单号场景）；spec §4.3/C.4 摘「后续项」标注。
+③ CLI deploy 命令（VersionVerdict 报告：major/revision/破坏性清单/幂等去重提示）
++ CLI app 级包装层测试（tests/test_cli_app.py 七例，补测试盲区）。
+④ start_on_message 消息启动（spec §7.1 新节；设计提交 0e19605 **待用户复核**五点
+拍板：不回溯缓冲/correlation=载荷求值键==发布键防串单/start_user 缺省合成
+message:{name}/启动消费定格 matched 订阅行进 message_id 防重并集/声明表达式
+求值错=publish 技术故障）——StartMessageDecl 定义字段 + engine/message_start.py
+第三优先级匹配分支（在途节点订阅优先→启动匹配→缓冲；启动订阅=定义派生零新表）
++ validator 规则（node() 在消息上下文即 ERROR）+ 九例。
+⑤ M-A 收口半边——org_delegation 委托表（[since,until] 窗口、单跳不递归、撤销
+留痕；resolver 委托替换真正生效）+ admins=users_with_role("admin")（to_admins
+兜底同源）+ 目录读缓存（ReadDirectoryMixin 进程内缓存，写操作全清）+
+org_directory_audit 写审计（全部写方法带 keyword-only acted_by，缺省 system）；
+store 拆 queries/delegation/audit 守 300 行；SPI 四方法定稿不动（丰富面
+OrgDirectoryLike 本就承载 users_with_role/delegation_of/admins/agent_owner）。
+⑥ Alembic 基线（migrations/0001_baseline=共享元数据 create_all 同源同构；
+FLOWORK_DB 解析；既有 create_all 库 stamp head 对齐；create_all 与 upgrade head
+并存不冲突）。**663 测试全绿**。开放面（REST /v2、MCP 18、F4 设计器目录下发）
+按插件层排期，待用户启动；挂账开放问题（三契约合一/事件脱敏归属/used_time
+剔除/变量历史清理/C5 出口 assignees）不阻塞主线。
