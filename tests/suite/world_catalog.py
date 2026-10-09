@@ -11,6 +11,7 @@ from tests.suite.world_flows import (
     supplier_check_definition,
 )
 from tests.suite.world_flows_branch import branch_matrix_definition
+from tests.suite.world_flows_knot import countersign_knot_definition
 from tests.suite.world_flows_subprocess import (
     call_child_definition,
     call_grand_definition,
@@ -33,6 +34,7 @@ BUILDERS: dict[str, Callable[[], ProcessDefinition]] = {
     "suite_supplier_check": supplier_check_definition,
     "suite_purchase": purchase_definition,
     "suite_branch_matrix": branch_matrix_definition,
+    "suite_countersign_knot": countersign_knot_definition,
     "suite_wait_duration": wait_duration_definition,
     "suite_call_matrix": call_matrix_definition,
     "suite_call_child": call_child_definition,
@@ -54,6 +56,7 @@ STORE_WORLD_CODES = [
     "suite_expense",
     "suite_supplier_check",
     "suite_branch_matrix",
+    "suite_countersign_knot",
     "suite_wait_duration",
     "suite_call_matrix",
     "suite_call_child",

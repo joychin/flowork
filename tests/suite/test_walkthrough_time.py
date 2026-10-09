@@ -47,8 +47,13 @@ def test_notify_then_escalate_walkthrough(suite_engine: ProcessEngine) -> None:
 
 @covers("deadline.reassign")
 @covers_node("suite_deadline_reassign", "start", "gate", "reassign_end")
-def test_reassign_moves_task_and_skips_later_auto(suite_engine: ProcessEngine) -> None:
-    """改派档移交指定目标；deadline 绑定原任务——移交后其后的 auto 档按已终结跳过。"""
+def test_reassign_moves_task_and_carries_later_auto(suite_engine: ProcessEngine) -> None:
+    """改派档移交指定目标；超时档位跟随等待实体——移交后 auto 档兜底收口。
+
+    语义变更（2026-10-09，测试方案 B8 发现）：改派原是克隆任务行、绑定旧行的
+    auto 档 Job 找不到任务即跳过 → 被移交人拿无限时窗（SLA 缺口）。现
+    carry_deadline_jobs 把未触发档重绑新任务（run_at 不变，原 Job 置 done）。
+    """
     engine = suite_engine
     iid = engine.runtime.start_process("suite_deadline_reassign", start_user="u_dev_liu")
 
@@ -63,17 +68,14 @@ def test_reassign_moves_task_and_skips_later_auto(suite_engine: ProcessEngine) -
     )
 
     engine.config.now.advance(5)  # type: ignore[attr-defined]
-    assert engine.jobs.tick() == 1  # auto_approve 档到期被处理，但原任务已终结→跳过
+    assert engine.jobs.tick() == 1  # auto_approve 档携带到新任务，到点兜底收口
     expect_position(
         engine,
         iid,
-        nodes={"gate"},
-        tasks={("gate", "u_lead_be")},
-        note="auto 档不作用于移交后的新任务：仍待人办",
+        nodes=set(),
+        state="completed",
+        note="auto 档作用于移交后的新任务：仍无人办理即自动通过",
     )
-
-    complete_of(engine, iid, "u_lead_be")
-    expect_position(engine, iid, nodes=set(), state="completed")
 
 
 @covers("deadline.auto_approve")

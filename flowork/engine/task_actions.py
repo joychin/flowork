@@ -15,12 +15,15 @@ from flowork.persistence.orm import (
     IdentityLinkRow,
     TaskRow,
 )
+from flowork.tasks.actions import allowed_actions, assert_action_allowed
+from flowork.tasks.deadlines import carry_deadline_jobs
 from flowork.tasks.models import TaskInfo
 
 if TYPE_CHECKING:
     from flowork.engine.engine import ProcessEngine
     from flowork.persistence.orm import ProcessInstanceRow
-    from flowork.persistence.orm import TaskRow as _TaskRowT
+
+_TaskRowT = TaskRow  # 历史别名（_ready_task 返回类型注解用）
 
 __all__ = ["TaskOpsMixin"]
 
@@ -88,11 +91,12 @@ class TaskOpsMixin:
     def _transfer(
         self, ctx: CommandContext, task_id: str, to_user: str, actor: str, comment: str
     ) -> TaskInfo:
-        task = self._ready_task(ctx, task_id)
+        task = self._ready_task(ctx, task_id, action="transfer")
         ctx.touch(self._instance(ctx, task.instance_id))
         kernel = self._engine.kernel_for(ctx)
         self._emit_task_event(ctx, DomainEvent.TASK_TRANSFERRED, task, actor)
         new_task = self._clone_task(ctx, task, assignee=to_user, root=task.root_task_id or task.id)
+        carry_deadline_jobs(ctx.session, task, new_task)
         kernel.archive_task(ctx.session, task, outcome="transfer", comment=comment, actor=actor)
         return self._task_info(new_task)
 
@@ -110,7 +114,7 @@ class TaskOpsMixin:
     def _assist(
         self, ctx: CommandContext, task_id: str, users: list[str], actor: str, comment: str
     ) -> list[TaskInfo]:
-        task = self._ready_task(ctx, task_id)
+        task = self._ready_task(ctx, task_id, action="assist")
         ctx.touch(self._instance(ctx, task.instance_id))
         kernel = self._engine.kernel_for(ctx)
         root = task.root_task_id or task.id
@@ -153,7 +157,7 @@ class TaskOpsMixin:
         """完成协办任务：仅归档，不推进流程。"""
 
         def _command(ctx: CommandContext) -> None:
-            task = self._ready_task(ctx, task_id, expected_type="assist")
+            task = self._ready_task(ctx, task_id, expected_type="assist", action="complete_assist")
             ctx.touch(self._instance(ctx, task.instance_id))
             kernel = self._engine.kernel_for(ctx)
             kernel.archive_task(ctx.session, task, outcome="assist", comment=comment, actor=actor)
@@ -171,23 +175,36 @@ class TaskOpsMixin:
         return instance
 
     def _ready_task(
-        self, ctx: CommandContext, task_id: str, expected_type: str | None = None
+        self,
+        ctx: CommandContext,
+        task_id: str,
+        expected_type: str | None = None,
+        *,
+        action: str | None = None,
     ) -> _TaskRowT:
         task = ctx.session.get(TaskRow, task_id)
         if task is None or task.state != "ready":
             raise TaskNotAvailableError(f"任务不可操作（不存在或已处理）：{task_id}")
-        self._assert_operable(ctx, task)
+        self._assert_operable(ctx, task, action=action)
         if expected_type and task.task_type != expected_type:
             raise TaskNotAvailableError(f"任务类型不符（期望 {expected_type}）：{task_id}")
         return task
 
-    def _assert_operable(self, ctx: CommandContext, task: TaskRow) -> None:
-        """任务动作统一实例态守卫：挂起/暂停的实例上不可操作任何待办（spec §7）。"""
+    def _assert_operable(
+        self, ctx: CommandContext, task: TaskRow, *, action: str | None = None
+    ) -> None:
+        """任务动作统一守卫：实例态（spec §7）+ 动作表（v2.3 A1）+ 版本抢占复验。
+
+        action 传入时按 (状态×类型×认领态) 动作表判定（tasks/actions.py）——
+        不可用即领域拒绝；不传保持仅实例态守卫（withdraw 等特殊路径自带专属守卫）。
+        """
         instance = self._instance(ctx, task.instance_id)
         if instance.state == "suspended":
             raise TaskNotAvailableError("实例已挂起（Incident 待修复），不可操作")
         if instance.state == "paused":
             raise TaskNotAvailableError("实例已暂停，恢复后才可操作")
+        if action is not None:
+            assert_action_allowed(action, task)
         self._claim_task_action(ctx, task, instance)
 
     def _claim_task_action(
@@ -255,6 +272,7 @@ class TaskOpsMixin:
             priority=task.priority,
             due_at=task.due_at,
             created_at=task.created_at,
+            available_actions=allowed_actions(task),
         )
 
     def _emit_task_event(
