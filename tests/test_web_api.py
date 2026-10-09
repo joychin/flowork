@@ -40,6 +40,89 @@ def test_node_kinds_builtin(client: TestClient) -> None:
     assert "assignee" in schema["properties"]
 
 
+def test_node_kinds_form_groups_cover_fields(client: TestClient) -> None:
+    """设计器表单覆盖反向审计：注册表里每个 kind 的 schema 字段都必须进某个 form_groups。
+
+    正向是 schema 驱动（未分组字段自动落到「其他」组）；本条防「落进其他组=界面上
+    没名字」——deadlines/binding/multi_instance 曾全部掉出分组（2026-10-09 走查发现）。
+    advance_policy 例外：设计器用专属的「开始条件」选项卡控件渲染，不走 schema 表单。
+    """
+    kinds = {item["kind"]: item for item in client.get("/api/node-kinds").json()}
+    for kind, item in kinds.items():
+        props = set(item["schema"].get("properties") or {})
+        grouped = {f for g in item["ui"].get("form_groups", []) for f in g["fields"]}
+        leftover = props - grouped - set(item["form_exclude"]) - {"advance_policy"}
+        assert not leftover, f"节点 {kind} 有字段未入任何表单分组：{sorted(leftover)}"
+
+
+def test_node_kinds_designer_metadata_for_wait_and_call(client: TestClient) -> None:
+    """等待节点/子流程的设计器元数据：路径标签 + 调色板形态 + 图标（走查补齐批）。"""
+    kinds = {item["kind"]: item for item in client.get("/api/node-kinds").json()}
+    wait_ui = kinds["wait"]["ui"]
+    assert wait_ui["icon"] == "clock"
+    assert [p["label"] for p in wait_ui["palette"]] == [
+        "等待消息",
+        "延时等待",
+        "等消息+超时(竞速)",
+    ]
+    labels = wait_ui["field_labels"]
+    assert labels["message.name"] == "消息名(发布同名消息即唤醒)"
+    assert labels["timeout.after_minutes"] == "等待时长(分钟)"
+    call_ui = kinds["call_activity"]["ui"]
+    grouped_call = {f for g in call_ui["form_groups"] for f in g["fields"]}
+    assert {"binding", "multi_instance"} <= grouped_call
+    assert call_ui["field_labels"]["multi_instance.subjects"].startswith("参与主体")
+
+
+WAIT_SPEC = {
+    "code": "wait_api_demo",
+    "name": "等待演示",
+    "nodes": [
+        {"code": "start", "kind": "start"},
+        {
+            "code": "wait_pay",
+            "kind": "wait",
+            "name": "等回款",
+            "message": {"name": "payment_arrived"},
+            "timeout": {"after_minutes": 60},
+        },
+        {"code": "ok", "kind": "end"},
+        {"code": "late", "kind": "end"},
+    ],
+    "flows": [
+        {"source": "start", "target": "wait_pay"},
+        {"source": "wait_pay", "target": "ok", "condition": 'wait.result == "matched"'},
+        {"source": "wait_pay", "target": "late", "condition": 'wait.result == "elapsed"'},
+    ],
+}
+
+
+def test_dry_run_wait_assumptions(client: TestClient) -> None:
+    """试运行等待节点：缺省两面都预演；显式假设只推一面（走查补齐批）。"""
+    auto = client.post("/api/dry-run", json={"spec": WAIT_SPEC, "variables": {}}).json()
+    assert auto["ok"], auto["blocked"]
+    via_wait = [s["node"] for s in auto["steps"] if s["via_source"] == "wait_pay"]
+    assert via_wait == ["ok", "late"]
+    matched = client.post(
+        "/api/dry-run",
+        json={"spec": WAIT_SPEC, "variables": {}, "assumptions": {"wait_pay": "matched"}},
+    ).json()
+    assert [s["node"] for s in matched["steps"] if s["via_source"] == "wait_pay"] == ["ok"]
+
+
+def test_catalog_endpoint(client: TestClient) -> None:
+    """/api/catalog（F4）：判断面词汇下发，含中文标签与可用位点。"""
+    data = client.get("/api/catalog").json()
+    idents = {entry["name"]: entry for entry in data["identifiers"]}
+    assert {"initiator", "now", "instance", "prev_task", "task", "wait"} <= set(idents)
+    wait_entry = idents["wait"]
+    assert wait_entry["label"] == "等待结果"
+    assert wait_entry["positions"] == ["condition"]
+    functions = {entry["name"]: entry for entry in data["functions"]}
+    assert "node" in functions
+    assert functions["node"]["label"] == "点名查节点事实"
+
+
 def test_save_list_get_draft(client: TestClient, spec02: dict) -> None:
     saved = client.put("/api/definitions/countersign_branch", json=spec02)
     assert saved.status_code == 200

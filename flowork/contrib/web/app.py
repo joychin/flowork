@@ -20,20 +20,14 @@ from flowork.api import (
     EngineConfig,
     FloworkError,
     InvalidDefinition,
-    InvalidDefinitionData,
     IssueLevel,
-    ProcessDefinition,
     ProcessEngine,
-    UnknownNodeKind,
-    ValidateIssue,
-    evaluate_formula_value,
-    expression_functions_of,
     load_definition,
     load_definition_file,
     semantic_diff,
-    simulate_route,
-    utc_now,
 )
+from flowork.contrib.web._helpers import issues_payload, parse_spec
+from flowork.contrib.web.preview_routes import register_preview_routes
 
 __all__ = ["app", "create_app"]
 
@@ -42,31 +36,6 @@ __all__ = ["app", "create_app"]
 FORM_EXCLUDE = ("code", "kind", "hooks", "properties")
 
 EXAMPLES_DIR = Path(__file__).parent.parent.parent.parent / "examples"
-
-
-def _issues_payload(issues: list[ValidateIssue]) -> list[dict[str, Any]]:
-    return [
-        {
-            "level": issue.level.value,
-            "rule": issue.rule,
-            "message": issue.message,
-            "node": issue.node,
-            "flow": issue.flow,
-        }
-        for issue in issues
-    ]
-
-
-def _parse_spec(engine: ProcessEngine, data: Any) -> ProcessDefinition:
-    """把请求体解析为定义（未知 kind / 非法结构 → 422）。"""
-    try:
-        return load_definition(data, engine.config.node_registry)
-    except InvalidDefinitionData as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    except UnknownNodeKind as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    except DefinitionError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 def create_app(db_file: str | Path | None = None, *, seed: bool = True) -> FastAPI:
@@ -96,6 +65,9 @@ def create_app(db_file: str | Path | None = None, *, seed: bool = True) -> FastA
     @app.exception_handler(FloworkError)
     async def _flowork_error(_request: Any, exc: FloworkError) -> JSONResponse:
         return JSONResponse(status_code=422, content={"detail": str(exc)})
+
+    # 预演/试算/词汇目录(dry-run / formula/preview / catalog)在 preview_routes
+    register_preview_routes(app, engine)
 
     @app.get("/api/health")
     def health() -> dict[str, str]:
@@ -157,7 +129,7 @@ def create_app(db_file: str | Path | None = None, *, seed: bool = True) -> FastA
     def save_draft(code: str, body: dict[str, Any]) -> dict[str, Any]:
         """保存草稿（最新版本已是草稿则就地覆盖，否则新建草稿版本）。"""
         body = {**body, "code": code}
-        definition = _parse_spec(engine, body)
+        definition = parse_spec(engine, body)
         version = engine.repository.update_draft(definition)
         return {"code": code, "version": version, "status": "draft"}
 
@@ -169,7 +141,7 @@ def create_app(db_file: str | Path | None = None, *, seed: bool = True) -> FastA
         except InvalidDefinition as exc:
             raise HTTPException(
                 status_code=422,
-                detail={"message": "校验未通过，禁止发布", "issues": _issues_payload(exc.issues)},
+                detail={"message": "校验未通过，禁止发布", "issues": issues_payload(exc.issues)},
             ) from exc
         except FloworkError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -182,66 +154,18 @@ def create_app(db_file: str | Path | None = None, *, seed: bool = True) -> FastA
         }
 
     @app.post("/api/validate")
-    def validate(body: dict[str, Any]) -> dict[str, Any]:
-        """设计时校验（不落库）。body 即模板 JSON。"""
-        definition = _parse_spec(engine, body)
+    def validate(body: dict[str, Any], deploy: bool = False) -> dict[str, Any]:
+        """设计时校验（不落库）。body 即模板 JSON。
+
+        ``?deploy=true`` 追加部署期校验预演（A11 编辑期前移）：L3 引用完整性 +
+        L4 目录实体存在性，把「点发布才炸」提前到编辑期以 WARNING 呈现。
+        """
+        definition = parse_spec(engine, body)
         issues = engine.repository.validate(definition)
+        if deploy:
+            issues = issues + engine.repository.validate_deploy_preview(definition)
         errors = sum(1 for issue in issues if issue.level == IssueLevel.ERROR)
-        return {"ok": errors == 0, "issues": _issues_payload(issues)}
-
-    @app.post("/api/dry-run")
-    def dry_run(body: dict[str, Any]) -> dict[str, Any]:
-        """设计时路由预演（不落库、不执行节点行为）：按样例变量静态模拟条件路由。
-
-        body：``{"spec": 定义 JSON, "variables": {变量名: 样例值}}``。
-        """
-        definition = _parse_spec(engine, body.get("spec"))
-        raw_vars = body.get("variables")
-        variables = raw_vars if isinstance(raw_vars, dict) else {}
-        result = simulate_route(
-            definition, variables, functions=expression_functions_of(engine.config)
-        )
-        return {
-            "ok": result.ok,
-            "steps": [
-                {
-                    "node": step.node,
-                    "via_source": step.via_source,
-                    "via_reason": step.via_reason,
-                    "note": step.note,
-                }
-                for step in result.steps
-            ],
-            "warnings": result.warnings,
-            "blocked": result.blocked,
-        }
-
-    @app.post("/api/formula/preview")
-    def formula_preview(body: dict[str, Any]) -> dict[str, Any]:
-        """公式试算：CEL 对样例变量求值（含引擎配置的自定义函数），原样返回值或错误说明。
-
-        值语义（位点统一）：条件公式返回 bool，取人/映射公式返回 str/list/数值；
-        样例缺 initiator 时注入占位 ``u_initiator``，缺 now 时注入统一时钟，
-        缺 instance 时注入占位形状（id=i_preview）——试算可引用保留标识符，
-        与运行时同一注入面。
-        """
-        formula = str(body.get("formula") or "")
-        raw_vars = body.get("variables")
-        variables = dict(raw_vars) if isinstance(raw_vars, dict) else {}
-        variables.setdefault("initiator", "u_initiator")
-        variables.setdefault("now", utc_now())
-        variables.setdefault(
-            "instance", {"id": "i_preview", "started_at": utc_now(), "business_key": None}
-        )
-        try:
-            return {
-                "ok": True,
-                "result": evaluate_formula_value(
-                    formula, variables, functions=expression_functions_of(engine.config)
-                ),
-            }
-        except FloworkError as exc:
-            return {"ok": False, "error": str(exc)}
+        return {"ok": errors == 0, "issues": issues_payload(issues)}
 
     @app.post("/api/definitions/{code}/diff")
     def diff_with_published(code: str, body: dict[str, Any]) -> dict[str, Any]:
@@ -249,7 +173,7 @@ def create_app(db_file: str | Path | None = None, *, seed: bool = True) -> FastA
 
         无已发布版本时返回 first_publish=true（变更清单留空，前端按全量展示）。
         """
-        definition = _parse_spec(engine, body)
+        definition = parse_spec(engine, body)
         try:
             base_json = engine.repository.get_definition_json(code)
         except FloworkError:

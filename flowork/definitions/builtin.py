@@ -97,16 +97,26 @@ class BranchSpec(FlowNode):
 
 
 class UserTaskSpec(FlowNode):
-    """人工审批节点。assignee/assignees 每项为 CEL 表达式（spec §4.2 位点统一）：
+    """人工审批节点。四个取人字段每项为 CEL 表达式（spec §4.2/§5.5 位点统一）：
     字面人写 ``'u_a'``，发起人为保留标识符 ``initiator``，取人函数如
     ``manager_of(initiator)``（词汇经 EngineConfig.expression_functions 注册）。
+
+    候选槽（candidate_users/candidate_groups）额外接受组与混合集：返回 ``groups``
+    时**保留引用不展开**（认领时按目录判归属——明天入组的人能认领明天的待办），
+    返回 ``mixed`` 时人落候选名单、组引用落名单（运行期同一列表混存）。
     """
 
     kind: Literal["user_task"] = KIND_USER_TASK
     assignee: str | None = None
     assignees: list[str] = Field(default_factory=list)
-    candidate_users: list[str] = Field(default_factory=list)
-    candidate_groups: list[str] = Field(default_factory=list)
+    candidate_users: list[str] = Field(
+        default_factory=list,
+        description="候选公式：如 'u_a' 或 users_with_role('finance')（求值出的人可认领）",
+    )
+    candidate_groups: list[str] = Field(
+        default_factory=list,
+        description="候选组公式：如 'role:finance' 或 'org:d_eng'（认领时按目录判归属）",
+    )
     multi_instance: MultiInstance | None = None
     reject_target: str | None = None
     # —— 参与者策略（M4）：命中者自动通过（auto_pass 历史并计入同意数）——
@@ -152,149 +162,19 @@ class CcTaskSpec(FlowNode):
 def register_builtin_nodes(registry: NodeRegistry) -> None:
     """把全部内置类型注册进注册表（与自定义类型同一入口）。
 
-    ``ui`` 为设计器展示元数据：name 显示名 / category 调色板分组 /
-    shape 画布形状 / color 主色 / palette 调色板预设项（含创建时的字段默认值）/
-    form_groups 属性面板分组（title + fields，collapsed 默认折叠）。
+    ``ui`` 为设计器展示元数据，集中在 :mod:`flowork.definitions.builtin_ui`
+    （纯数据模块，本文件守 300 行红线）；字段含义见该模块 docstring。
     """
-    registry.register(
-        KIND_START,
-        StartSpec,
-        ui={
-            "name": "开始",
-            "category": "事件",
-            "shape": "circle",
-            "color": "#16a34a",
-            "icon": "play",
-            "palette": [{"label": "开始", "defaults": {}}],
-            "form_groups": [{"title": "基础", "fields": ["name"]}],
-        },
-    )
-    registry.register(
-        KIND_END,
-        EndSpec,
-        ui={
-            "name": "结束",
-            "category": "事件",
-            "shape": "circle",
-            "color": "#dc2626",
-            "icon": "stop",
-            "palette": [{"label": "结束", "defaults": {}}],
-            "form_groups": [{"title": "基础", "fields": ["name"]}],
-        },
-    )
-    registry.register(
-        KIND_BRANCH,
-        BranchSpec,
-        ui={
-            "name": "条件分支",
-            "category": "分支",
-            "shape": "rect",
-            "color": "#d97706",
-            "icon": "branch",
-            "palette": [
-                {"label": "条件分支", "defaults": {"route_mode": "first_match"}},
-                {"label": "条件分支(命中的都走)", "defaults": {"route_mode": "all_match"}},
-            ],
-            "form_groups": [{"title": "基础", "fields": ["name", "route_mode"]}],
-        },
-    )
-    registry.register(
-        KIND_USER_TASK,
-        UserTaskSpec,
-        ui={
-            "name": "审批任务",
-            "category": "任务",
-            "shape": "rect",
-            "color": "#2563eb",
-            "icon": "user",
-            "palette": [
-                {
-                    "label": "审批任务",
-                    "defaults": {
-                        "assignee": None,
-                        "multi_instance": {"mode": "parallel"},
-                        "timeout": {"due_minutes": 1440, "strategy": "notify"},
-                    },
-                }
-            ],
-            # 属性面板分组：常用在前，高级组默认折叠（渐进披露）
-            "form_groups": [
-                {"title": "基础", "fields": ["name"]},
-                {
-                    "title": "参与者",
-                    "fields": [
-                        "assignee",
-                        "assignees",
-                        "candidate_users",
-                        "candidate_groups",
-                        "no_participant_policy",
-                    ],
-                },
-                {"title": "多人审批", "fields": ["multi_instance"], "collapsed": True},
-                {
-                    "title": "自动通过",
-                    "fields": [
-                        "auto_pass_originator",
-                        "auto_pass_previous",
-                        "auto_pass_participated",
-                    ],
-                    "collapsed": True,
-                },
-                {"title": "驳回与超时", "fields": ["reject_target", "timeout"], "collapsed": True},
-            ],
-        },
-    )
-    registry.register(
-        KIND_SERVICE_TASK,
-        ServiceTaskSpec,
-        ui={
-            "name": "服务任务",
-            "category": "自动化",
-            "shape": "rect",
-            "color": "#7c3aed",
-            "icon": "settings",
-            "palette": [{"label": "服务任务", "defaults": {"action": ""}}],
-            "form_groups": [
-                {"title": "基础", "fields": ["name"]},
-                {"title": "动作", "fields": ["action", "params"]},
-            ],
-        },
-    )
-    registry.register(
-        KIND_CALL_ACTIVITY,
-        CallActivitySpec,
-        ui={
-            "name": "子流程",
-            "category": "自动化",
-            "shape": "rect",
-            "color": "#475569",
-            "icon": "box",
-            "palette": [{"label": "子流程", "defaults": {"process_code": ""}}],
-            "form_groups": [
-                {"title": "基础", "fields": ["name"]},
-                {"title": "子流程", "fields": ["process_code", "is_synchronous"]},
-                {
-                    "title": "数据映射",
-                    "fields": ["input_mappings", "output_mappings"],
-                    "collapsed": True,
-                },
-            ],
-        },
-    )
-    registry.register(
-        KIND_CC_TASK,
-        CcTaskSpec,
-        ui={
-            "name": "传阅",
-            "category": "任务",
-            "shape": "rect",
-            "color": "#0d9488",
-            "icon": "mail",
-            "palette": [{"label": "传阅", "defaults": {"recipients": []}}],
-            "form_groups": [
-                {"title": "基础", "fields": ["name"]},
-                {"title": "接收", "fields": ["recipients"]},
-            ],
-        },
-    )
+    from flowork.definitions.builtin_ui import BUILTIN_UI
+
+    for kind, spec_cls in (
+        (KIND_START, StartSpec),
+        (KIND_END, EndSpec),
+        (KIND_BRANCH, BranchSpec),
+        (KIND_USER_TASK, UserTaskSpec),
+        (KIND_SERVICE_TASK, ServiceTaskSpec),
+        (KIND_CALL_ACTIVITY, CallActivitySpec),
+        (KIND_CC_TASK, CcTaskSpec),
+    ):
+        registry.register(kind, spec_cls, ui=BUILTIN_UI[kind])
     register_wait_node(registry)

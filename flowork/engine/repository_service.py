@@ -17,15 +17,12 @@ from flowork.definitions.definition import (
     dump_definition,
     load_definition,
 )
-from flowork.definitions.validator import (
-    InvalidDefinition,
-    ValidateIssue,
-    validate_definition,
-)
+from flowork.definitions.validator import InvalidDefinition
 from flowork.definitions.versioning import VersionVerdict, compute_verdict, content_hash_of
 from flowork.engine.definition_lifecycle import DefinitionLifecycleMixin
 from flowork.engine.designer_drafts import DesignerDraftSupportMixin
 from flowork.engine.ops import CommandContext
+from flowork.engine.repository_validation import RepositoryValidationMixin
 from flowork.errors import DefinitionNotPublishedError
 from flowork.events.domain import DomainEvent
 
@@ -42,7 +39,9 @@ def _new_id() -> str:
     return uuid.uuid4().hex
 
 
-class RepositoryService(DesignerDraftSupportMixin, DefinitionLifecycleMixin):
+class RepositoryService(
+    DesignerDraftSupportMixin, DefinitionLifecycleMixin, RepositoryValidationMixin
+):
     """定义仓库服务：deploy（校验＋版本判定＋落库＋事件）/ 查询。"""
 
     def __init__(self, engine: ProcessEngine) -> None:
@@ -230,16 +229,7 @@ class RepositoryService(DesignerDraftSupportMixin, DefinitionLifecycleMixin):
             return None
         return load_definition(json.loads(row.content), self._engine.config.node_registry)
 
-    # —— 校验 / 查询 ——
-
-    def validate(self, definition: ProcessDefinition) -> list[ValidateIssue]:
-        """设计时校验（不落库；组主体×目录、CEL 函数注册表联动，spec §9/§4.3）。"""
-        return validate_definition(
-            definition,
-            self._engine.config.node_registry,
-            org_configured=self._engine.config.org is not None,
-            expression_functions=self._engine.config.expression_functions,
-        )
+    # —— 查询（校验方法在 repository_validation.Mixin：validate / validate_deploy_preview）——
 
     def get_definition(
         self, code: str, major: int | None = None, revision: int | None = None

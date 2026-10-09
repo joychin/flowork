@@ -63,7 +63,7 @@ class WaitSpec(FlowNode):
     timeout: WaitTimeout | None = None
 
 
-# 设计器 UI 元数据（与内置七种同款结构；palette 两预设=三模式中的两常用形态）
+# 设计器 UI 元数据（与内置七种同款结构；palette 三预设=三形态）
 WAIT_UI: dict[str, Any] = {
     "name": "等待",
     "category": "事件",
@@ -73,11 +73,22 @@ WAIT_UI: dict[str, Any] = {
     "palette": [
         {"label": "等待消息", "defaults": {"message": {"name": ""}}},
         {"label": "延时等待", "defaults": {"timeout": {"after_minutes": 60}}},
+        {
+            "label": "等消息+超时(竞速)",
+            "defaults": {"message": {"name": ""}, "timeout": {"after_minutes": 1440}},
+        },
     ],
     "form_groups": [
         {"title": "基础", "fields": ["name", "message", "output_mappings"]},
         {"title": "时间", "fields": ["timeout"], "collapsed": True},
     ],
+    "field_labels": {
+        "message": "等待消息",
+        "message.name": "消息名(发布同名消息即唤醒)",
+        "message.correlation_key": "关联键(CEL,进入时求值一次)",
+        "timeout.after_minutes": "等待时长(分钟)",
+        "output_mappings": "载荷映射(payload.* → 变量)",
+    },
 }
 
 
