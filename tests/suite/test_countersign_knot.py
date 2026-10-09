@@ -102,10 +102,9 @@ def test_deadline_reassign_hits_every_knot_item(suite_engine: ProcessEngine) -> 
     suite_engine.config.now.advance(5)
     suite_engine.jobs.tick()  # reassign@10：三项全移交
     assert _raw_assignees(suite_engine, iid) == {"u_lead_be"}
-    history = suite_engine.history.task_history(iid)
-    assert all(h.acted_by == "system:timeout" for h in history if h.outcome == "transfer") or any(
-        h.acted_by == "system:timeout" for h in history
-    )
+    transfers = [h for h in suite_engine.history.task_history(iid) if h.outcome == "transfer"]
+    assert len(transfers) == 3, f"三项应各改派一次，实得 {len(transfers)}"
+    assert {h.acted_by for h in transfers} == {"system:timeout"}
 
     # 移交后仍不办 → auto_approve@15 兜底收口（改派+自动通过的耦合闭环）
     suite_engine.config.now.advance(5)
