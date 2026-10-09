@@ -1,4 +1,4 @@
-"""覆盖审计（三重）：特性矩阵全覆盖、世界节点全走查、黑盒 import 纯度。
+"""覆盖审计（四重）：特性矩阵全覆盖、世界节点全走查、黑盒 import 纯度、引擎能力面入册。
 
 审计用 ast 静态扫描 @covers / @covers_node 装饰器实参与 import 语句——
 与 pytest 的执行子集无关，单独运行本文件结论一致。
@@ -9,6 +9,7 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+from flowork.runtime.registry import create_registry
 from tests.suite.features import all_features
 from tests.suite.world_catalog import all_nodes
 
@@ -105,3 +106,16 @@ def test_every_world_node_walked() -> None:
 def test_blackbox_import_purity() -> None:
     violations = _flowork_imports() - ALLOWED_FLOWORK_MODULES
     assert not violations, f"套件 import 了白名单外的内核模块（污染黑盒边界）：{sorted(violations)}"
+
+
+def test_node_features_cover_engine_kinds() -> None:
+    """引擎能力面 → 矩阵反向审计：注册表里每个 kind 都必须有 node.<kind> 特性条目。
+
+    正向审计（矩阵→测试）防「写了矩阵没测」；本条防「引擎加了能力矩阵不知道」——
+    新增 kind 而不进 features.py 时在此红灯，逼着能力清单与测试同步。
+    """
+    known = all_features()
+    missing = {f"node.{kind}" for kind in create_registry().kinds()} - known
+    assert not missing, (
+        f"注册表存在矩阵外的节点类型（先入 features.py 再写测试）：{sorted(missing)}"
+    )

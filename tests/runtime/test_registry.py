@@ -5,6 +5,15 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
+from flowork.definitions.builtin import (
+    KIND_BRANCH,
+    KIND_CALL_ACTIVITY,
+    KIND_CC_TASK,
+    KIND_END,
+    KIND_SERVICE_TASK,
+    KIND_START,
+    KIND_USER_TASK,
+)
 from flowork.definitions.node import FlowNode
 from flowork.errors import UnknownHandler, UnknownNodeKind
 from flowork.runtime.behavior import NodeBehavior
@@ -22,15 +31,16 @@ class PingBehavior(NodeBehavior):
 
 
 def test_builtin_kinds_registered():
+    """内置 kind 恰为 KIND_* 常量全集（相等而非超集：新增 kind 必须显式入此清单）。"""
     registry = create_registry()
-    assert set(registry.kinds()) >= {
-        "start",
-        "end",
-        "user_task",
-        "service_task",
-        "call_activity",
-        "cc_task",
-        "branch",
+    assert set(registry.kinds()) == {
+        KIND_START,
+        KIND_END,
+        KIND_USER_TASK,
+        KIND_SERVICE_TASK,
+        KIND_CALL_ACTIVITY,
+        KIND_CC_TASK,
+        KIND_BRANCH,
     }
 
 
