@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from typing import Any
 
 import typer
@@ -15,7 +14,7 @@ from flowork.api import EngineConfig, FloworkError, ProcessEngine
 instance_app = typer.Typer(help="实例操作（变量读写/血缘）", no_args_is_help=True)
 console = Console()
 
-DbOption = typer.Option(Path("flowork.db"), help="SQLite 数据库文件")
+DbOption = typer.Option("flowork.db", help="SQLite 文件路径或数据库 URL")
 
 
 def _parse_assignments(items: list[str]) -> dict[str, Any]:
@@ -33,7 +32,7 @@ def _parse_assignments(items: list[str]) -> dict[str, Any]:
 
 
 @instance_app.command("vars")
-def vars_(instance_id: str, db: Path = DbOption) -> None:
+def vars_(instance_id: str, db: str = DbOption) -> None:
     """读实例变量值全集（JSON 输出，供脚本消费）。"""
     engine = ProcessEngine(EngineConfig(db_file=db))
     try:
@@ -50,7 +49,7 @@ def vars_(instance_id: str, db: Path = DbOption) -> None:
 def vars_set(
     instance_id: str,
     assignments: list[str] = typer.Argument(..., help="K=V 赋值（V 按 JSON 解析，失败退回字符串）"),
-    db: Path = DbOption,
+    db: str = DbOption,
     actor: str = typer.Option(..., "--as", help="操作者（归因必填，写留痕与事件）"),
     reason: str = typer.Option("", "--reason", help="改值原因（入 variables_updated 事件）"),
     as_agent: bool = typer.Option(False, "--as-agent", help="以 agent 身份归因"),
@@ -76,7 +75,7 @@ def var_history(
     instance_id: str,
     name: str = typer.Option("", "--name", help="按键过滤"),
     limit: int = typer.Option(50, "--limit"),
-    db: Path = DbOption,
+    db: str = DbOption,
 ) -> None:
     """变量血缘（改前/改后 + 写方归因，倒序）。"""
     engine = ProcessEngine(EngineConfig(db_file=db))

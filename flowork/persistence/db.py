@@ -49,6 +49,19 @@ def file_url(path: str | Path) -> str:
     return f"sqlite:///{Path(path)}"
 
 
+def url_from_value(value: str | Path) -> str:
+    """路径或完整 URL 归一（spec §14 支持矩阵）。
+
+    值含 ``://`` 视为完整 SQLAlchemy 连接串原样返回（如
+    ``postgresql+psycopg://user:pw@host/db``），否则按 SQLite 文件路径包装。
+    ``resolve_db_url`` 与 migrations/env.py 共用本件，契约单源。
+    """
+    text = str(value)
+    if "://" in text:
+        return text
+    return file_url(text)
+
+
 def session_factory(engine: Engine) -> sessionmaker[Session]:
     return sessionmaker(bind=engine, expire_on_commit=False, future=True)
 
@@ -60,4 +73,5 @@ __all__ = [
     "file_url",
     "memory_url",
     "session_factory",
+    "url_from_value",
 ]

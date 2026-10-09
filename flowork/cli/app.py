@@ -33,7 +33,7 @@ EXAMPLES = Path(__file__).parent.parent.parent / "examples"
 
 
 @app.command()
-def init(db: Path = typer.Option(Path("flowork.db"), help="SQLite 数据库文件")) -> None:
+def init(db: str = typer.Option("flowork.db", help="SQLite 文件路径或数据库 URL")) -> None:
     """初始化数据库（建表）。"""
     engine = ProcessEngine(EngineConfig(db_file=db))
     console.print(f"[green]✓[/green] 数据库已初始化：{db}")
@@ -41,7 +41,7 @@ def init(db: Path = typer.Option(Path("flowork.db"), help="SQLite 数据库文�
 
 
 @app.command()
-def tick(db: Path = typer.Option(Path("flowork.db"), help="SQLite 数据库文件")) -> None:
+def tick(db: str = typer.Option("flowork.db", help="SQLite 文件路径或数据库 URL")) -> None:
     """执行全部到期超时 Job（外部定时器形态：cron/systemd 周期调用）。"""
     engine = ProcessEngine(EngineConfig(db_file=db))
     processed = engine.jobs.tick()
@@ -50,7 +50,11 @@ def tick(db: Path = typer.Option(Path("flowork.db"), help="SQLite 数据库文�
 
 
 @app.command()
-def retire(code: str, db: Path = typer.Option(Path("flowork.db")), reason: str = "") -> None:
+def retire(
+    code: str,
+    db: str = typer.Option("flowork.db", help="SQLite 文件路径或数据库 URL"),
+    reason: str = "",
+) -> None:
     """retire 定义：不接新实例，在跑跑完（spec §6.2）。"""
     engine = ProcessEngine(EngineConfig(db_file=db))
     count = engine.repository.retire(code, actor="cli", reason=reason)
@@ -61,7 +65,7 @@ def retire(code: str, db: Path = typer.Option(Path("flowork.db")), reason: str =
 @app.command()
 def purge(
     code: str,
-    db: Path = typer.Option(Path("flowork.db")),
+    db: str = typer.Option("flowork.db", help="SQLite 文件路径或数据库 URL"),
     force: bool = typer.Option(False, "--force", help="物理删除不可逆，必须显式确认"),
 ) -> None:
     """purge 定义：物理删除全部版本行（仅 CLI；有实例引用则拒绝）。"""
@@ -74,7 +78,7 @@ def purge(
 @app.command()
 def drift(
     directory: Path = typer.Argument(..., help="git 定义目录（*.json）"),
-    db: Path = typer.Option(Path("flowork.db")),
+    db: str = typer.Option("flowork.db", help="SQLite 文件路径或数据库 URL"),
 ) -> None:
     """git 与库对账：未部署/库多余/库落后 三张清单（spec §6.5）。"""
     engine = ProcessEngine(EngineConfig(db_file=db))
@@ -113,7 +117,7 @@ def validate(template: Path = typer.Argument(..., help="模板 JSON 文件路径
 @app.command()
 def deploy(
     template: Path = typer.Argument(..., help="模板 JSON 文件路径"),
-    db: Path = typer.Option(Path("flowork.db"), help="SQLite 数据库文件"),
+    db: str = typer.Option("flowork.db", help="SQLite 文件路径或数据库 URL"),
     target_major: int | None = typer.Option(
         None, help="维护分支：在该 major 最新 revision 上续发（spec §6.2）"
     ),

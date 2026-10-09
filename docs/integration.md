@@ -57,9 +57,26 @@ FLOWORK_DB=/path/legacy.db uv run alembic stamp head     # 既有 create_all 库
 FLOWORK_DB=/path/prod.db uv run alembic revision -m "..."  # 新增量迁移（autogenerate 对照共享元数据）
 ```
 
-连接串解析：alembic 配置显式指定（测试注入）> `FLOWORK_DB`（与 web 同名
-变量，路径）> 缺省 `flowork.db`。引擎启动建表保持幂等 create_all（开发/
-测试零配置），生产升级走 alembic；两者并存不冲突（同一共享元数据）。
+连接串解析：alembic 配置显式指定（测试注入）> `FLOWORK_DB` > 缺省
+`flowork.db`；`FLOWORK_DB` 的值含 `://` 视为完整数据库 URL，否则按 SQLite
+文件路径（同一规则实现于 `persistence.db.url_from_value`，引擎 `db_file` /
+CLI `--db` / web `FLOWORK_DB` 三处共用）。引擎启动建表保持幂等 create_all
+（开发/测试零配置），生产升级走 alembic；两者并存不冲突（同一共享元数据）。
+
+**PostgreSQL（spec §14 支持矩阵：生产一等）**：连接串直接可用，不改代码：
+
+```bash
+FLOWORK_DB=postgresql+psycopg://user:pw@host:5432/flowork uv run alembic upgrade head
+FLOWORK_DB=postgresql+psycopg://user:pw@host:5432/flowork uv run flowork tick
+FLOWORK_DB=postgresql+psycopg://user:pw@host:5432/flowork uv run uvicorn flowork.contrib.web.app:app
+```
+
+PG 驱动 `psycopg[binary]` 在 dev 依赖组。冒烟套件（方言/并发/迁移链）：
+
+```bash
+uv run pytest -m needs_postgres          # 未设环境变量时自动 docker 起删一次性容器；无 docker 整组跳过
+FLOWORK_TEST_PG_URL=postgresql+psycopg://... uv run pytest -m needs_postgres   # 用现成实例
+```
 
 ## 超时调度
 
@@ -113,8 +130,8 @@ FLOWORK_DB=/path/prod.db uv run alembic revision -m "..."  # 新增量迁移（a
 | 旧快照并发写（丢失更新） | 乐观锁 `StaleDataError` | `tests/edge/test_hardening.py` |
 
 > SQLite 默认部署（WAL）下单写者进一步天然串行；生产多副本换 PostgreSQL 时，
-> 上述机制不变，仅需关注 `touch` 冲突在所选隔离级别下的重试表现
-> （Alembic 基线迁移随 /v2 批落地）。
+> 上述机制不变（连接串与部署命令见「库迁移」节）；乐观锁冲突在所选隔离级别
+> 下的重试表现由 `tests/pg/` 冒烟套件在真 PG 上对照验证。
 
 ## 与后续系统对接（二期入口已预留）
 

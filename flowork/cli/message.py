@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import typer
 from rich.console import Console
 from rich.table import Table
@@ -13,12 +11,12 @@ from flowork.api import EngineConfig, FloworkError, ProcessEngine
 message_app = typer.Typer(help="消息面（等待反查）", no_args_is_help=True)
 console = Console()
 
-DbOption = typer.Option(Path("flowork.db"), help="SQLite 数据库文件")
+DbOption = typer.Option("flowork.db", help="SQLite 文件路径或数据库 URL")
 
 
 @message_app.command("waiting")
 def waiting(
-    db: Path = DbOption,
+    db: str = DbOption,
     name: str = typer.Option(None, help="按消息名过滤"),
     correlation_key: str = typer.Option(None, help="按关联键过滤"),
 ) -> None:

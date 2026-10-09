@@ -10,6 +10,7 @@ from pathlib import Path
 from flowork.clock import utc_now
 from flowork.events.domain import DomainEvent
 from flowork.participants.org_directory import OrgDirectoryLike
+from flowork.persistence.db import url_from_value
 from flowork.runtime.registry import NodeRegistry, create_registry
 from flowork.spi.ports import ExpressionFunctions
 
@@ -44,14 +45,20 @@ class EngineConfig:
     strict_deploy_validation: bool = False
     lock_retries: int = 3
     now: Callable[[], datetime] = _system_now
-    db_file: str | Path | None = None  # CLI 便利字段：设置后覆盖 db_url
+    db_file: str | Path | None = None  # CLI 便利字段：设置后覆盖 db_url（路径或完整 URL）
     org: OrgDirectoryLike | None = None  # 组织目录（委托替换/to_admins 兜底/取人词汇数据源）
     expression_functions: ExpressionFunctions | None = None  # CEL 词汇（全表达式位，spec §4.3/§9）
 
 
 def resolve_db_url(config: EngineConfig) -> str:
+    """db_file 覆盖 db_url：值是完整连接串时原样透传，否则按 SQLite 文件路径包装。
+
+    ``FLOWORK_DB=postgresql+psycopg://...`` 与 ``--db postgresql+psycopg://...``
+    因此可直接启动 CLI/web（spec §14 支持矩阵）。归一规则见
+    ``persistence.db.url_from_value``（与 migrations/env.py 单源）。
+    """
     if config.db_file is not None:
-        return f"sqlite:///{Path(config.db_file)}"
+        return url_from_value(config.db_file)
     return config.db_url
 
 
