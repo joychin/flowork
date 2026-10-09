@@ -18,8 +18,21 @@ from flowork.spi.ports import FunctionSignature
 
 def test_catalog_reserved_identifiers_and_positions():
     assert reserved_identifiers() == frozenset(
-        {"initiator", "instance", "now", "prev_task", "task", "wait"}
+        {
+            "initiator",
+            "instance",
+            "now",
+            "prev_task",
+            "task",
+            "wait",
+            "subject",  # A9 多实例子流程（v2.3 第四批）
+            "child_total",
+            "child_completed",
+            "child_failed",
+        }
     )
+    assert positions_of("subject") == frozenset({"mapping_input"})
+    assert positions_of("child_total") == frozenset({"completion"})
     assert positions_of("task") == frozenset({"reassign", "exit"})
     assert positions_of("prev_task") == frozenset({"condition", "subjects", "wait_correlation"})
     assert positions_of("wait") == frozenset({"condition"})  # 仅等待节点出边条件（§7.2）
@@ -46,6 +59,10 @@ def test_catalog_entries_carry_chinese_labels():
         "prev_task": "上一站",
         "task": "当前任务快照",
         "wait": "等待结果",
+        "subject": "当前迭代主体",  # A9 多实例子流程（v2.3 第四批）
+        "child_total": "子实例总数",
+        "child_completed": "已完成子实例数",
+        "child_failed": "失败子实例数",
     }
 
 

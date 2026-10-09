@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import Field
 
+from flowork.definitions.call_instance import CallInstanceConfig
 from flowork.definitions.node import (
     FlowNode,
     MultiInstance,
@@ -128,13 +129,12 @@ class ServiceTaskSpec(FlowNode):
 
 
 class CallActivitySpec(FlowNode):
-    """子流程调用：process_code 指向被调流程定义；数据映射 M5 完整实现。"""
+    """子流程调用：process_code 指向被调定义；数据映射 M5。"""
 
     kind: Literal["call_activity"] = KIND_CALL_ACTIVITY
     process_code: str = ""
-    # v2.3 A11（Zeebe bindingType 同义）：latest=运行期解析最新版（缺省）；
-    # deployment=部署时必须已发布（ERROR）。
-    binding: Literal["latest", "deployment"] = "latest"
+    binding: Literal["latest", "deployment"] = "latest"  # A11：deployment=部署时须已发布
+    multi_instance: CallInstanceConfig | None = None  # A9 多实例（每人一子实例，index 聚合）
     is_synchronous: bool = True
     input_mappings: dict[str, str] = Field(default_factory=dict)
     output_mappings: dict[str, str] = Field(default_factory=dict)

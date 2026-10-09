@@ -38,6 +38,7 @@ ALL_POSITIONS = frozenset(
         "mapping_input",
         "mapping_output",
         "wait_correlation",
+        "completion",
     }
 )
 
@@ -102,6 +103,35 @@ IDENTIFIER_CATALOG: tuple[IdentifierEntry, ...] = (
         label="当前任务快照",
         positions=frozenset({"reassign", "exit"}),
         note="同名不同方言：改派位=id/assignee/outcome/created_at/deadline_at；出口位=三计数",
+    ),
+    IdentifierEntry(
+        name="subject",
+        type="subject",
+        label="当前迭代主体",
+        positions=frozenset({"mapping_input"}),
+        note="多实例子流程（A9）：fan-out 第 k 个 subject——输入映射按子求值时注入，"
+        "如 input_mappings={'dept': 'subject'}＝每子拿自己的切片",
+    ),
+    IdentifierEntry(
+        name="child_total",
+        type="int",
+        label="子实例总数",
+        positions=frozenset({"completion"}),
+        note="多实例子流程完成公式的三计数（A9）：child_total=计划数",
+    ),
+    IdentifierEntry(
+        name="child_completed",
+        type="int",
+        label="已完成子实例数",
+        positions=frozenset({"completion"}),
+        note="state==completed 的子实例数",
+    ),
+    IdentifierEntry(
+        name="child_failed",
+        type="int",
+        label="失败子实例数",
+        positions=frozenset({"completion"}),
+        note="∈terminated/cancelled/failed——公式可表达「任一失败即整体失败」或「忽略失败」",
     ),
     IdentifierEntry(
         name="wait",

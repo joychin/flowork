@@ -385,3 +385,15 @@ route_decision 行不受影响=报告数据源）；不建任何 Job；history.i
 ④ 报告 F2 现查模式（不预存）；执行错直抛试跑调用方（模拟失败=定义会挂）。真实路径零影响
 （回归断言）。测试 6 例；范围内 744 全绿。**第三批（A8/A10/A11）就此完结**；剩第四批 A9
 多实例子流程（大件）。
+
+**对标第四批 A9 落地（2026-10-09，spec v2.3 第十三轮——多实例子流程，对标系列完结）**：
+Zeebe inputCollection/outputCollection 契约（multi-instance-call-design.md）：① CallActivitySpec
+.multi_instance（definitions/call_instance.py 拆分守行数）——subjects 取人表达式每人一子实例
+（parent_index 列记迭代序，迁移 0003 幂等化：基线 create_all 新库已含列则跳过，batch 多列
+追加的伪循环依赖实证后改 op.add_column+存在性守卫）；输入映射按子求值注入 `subject`
+（catalog@mapping_input）。② completion 公式（child_total/completed/failed 三计数，
+catalog@completion 新位点+iter_expression_positions 接入）只做提前收工——命中终止剩余
+running 子（撤令牌待办对齐 terminate）；child_failed 表达「一子失败即阻断/忽略失败」；
+不做失败机制（C7 教训）。③ collect=index 对齐聚合（失败位 null 占位、完成序无关）；
+merge 仅单子（validator 拦 MI+merge=last-wins C7 痛点）。④ subprocess_mi.py 拆分；
+builder extra 袋 dict 归一 _mi_config。测试 11 例；范围内 766 全绿。**对标四批全部完结**。

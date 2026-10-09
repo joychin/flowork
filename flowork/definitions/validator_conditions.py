@@ -13,7 +13,7 @@ ExpressionFunctions 注册表签名。未声明变量 ERROR（K8s CRD 体验）�
 from __future__ import annotations
 
 from collections.abc import Callable, Iterator
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from flowork.definitions.builtin import (
     KIND_BRANCH,
@@ -37,6 +37,15 @@ __all__ = [
 
 IssueFn = Callable[..., None]
 
+
+def _mi_config(node: Any) -> Any:
+    """multi_instance 归一（builder extra 袋 dict → CallInstanceConfig；仅 call_activity）。"""
+    from flowork.definitions.call_instance import CallInstanceConfig
+
+    mi = getattr(node, "multi_instance", None) if node.kind == "call_activity" else None
+    return None if mi is None else CallInstanceConfig(**mi) if isinstance(mi, dict) else mi
+
+
 # 位点 kind → 规则名前缀（连线位沿用既有 condition.* 规则名，节点位用 expression.*，
 # 等待节点关联键用 wait.correlation.*）
 _RULE_PREFIX = {
@@ -47,6 +56,7 @@ _RULE_PREFIX = {
     "mapping_input": "expression",
     "mapping_output": "expression",
     "wait_correlation": "wait.correlation",
+    "completion": "call_mi.completion",  # A9：MI 完成公式（三计数注入，catalog@completion）
 }
 
 
@@ -96,6 +106,10 @@ def iter_expression_positions(definition: ProcessDefinition) -> Iterator[tuple[s
                     node.code,
                 )
         if node.kind == KIND_CALL_ACTIVITY:
+            mi = _mi_config(node)
+            if mi is not None and mi.completion != "all":  # A9 完成公式位
+                where = f"{node.code}.multi_instance.completion"
+                yield "completion", where, mi.completion, node.code
             for target, expression in (getattr(node, "input_mappings", None) or {}).items():
                 yield "mapping_input", f"{node.code}.input_mappings.{target}", expression, node.code
             for target, expression in (getattr(node, "output_mappings", None) or {}).items():
@@ -153,6 +167,18 @@ def check_node_semantics(
                 )
         if node.kind == KIND_CC_TASK and not getattr(node, "recipients", None):
             warning("cc_task.no_recipients", "传阅节点未配置接收人", node=node.code)
+        mi = _mi_config(node)
+        if mi is not None:
+            if not mi.subjects:
+                error("call_mi.subjects_empty", "多实例子流程未配置 subjects", node=node.code)
+            if mi.output_mode == "merge":
+                error(
+                    "call_mi.merge_forbidden",
+                    "MI 的 merge=逐子覆写（last-wins），须用 collect",
+                    node=node.code,
+                )
+            if mi.completion != "all" and not mi.completion.strip():
+                error("call_mi.completion_empty", "completion 公式为空", node=node.code)
 
 
 def check_condition_legality(

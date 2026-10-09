@@ -20,13 +20,22 @@ branch_labels = None
 depends_on = None
 
 
+def _has_column(name: str) -> bool:
+    insp = sa.inspect(op.get_bind())
+    return name in {c["name"] for c in insp.get_columns("wf_process_instance")}
+
+
 def upgrade() -> None:
-    with op.batch_alter_table("wf_process_instance") as batch:
-        batch.add_column(
-            sa.Column("simulated", sa.Boolean(), nullable=False, server_default=sa.false())
-        )
+    # 基线 0001=create_all（共享元数据）——新库已含本列则幂等跳过（仅旧库需要追加）
+    if _has_column("simulated"):
+        return
+    op.add_column(
+        "wf_process_instance",
+        sa.Column("simulated", sa.Boolean(), nullable=False, server_default=sa.false()),
+    )
 
 
 def downgrade() -> None:
-    with op.batch_alter_table("wf_process_instance") as batch:
-        batch.drop_column("simulated")
+    if not _has_column("simulated"):
+        return
+    op.drop_column("wf_process_instance", "simulated")

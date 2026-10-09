@@ -81,6 +81,8 @@ class ProcessInstanceRow(Base):
     # v2.3 第三批 A10：模拟实例（试跑）——service_task 恒 stub、不建任务/传阅/Job、
     # 事件不投 outbox（CommandContext.suppress_events）；查询面默认隔离（可含）
     simulated: Mapped[bool] = mapped_column(Boolean, default=False)
+    # v2.3 第四批 A9：多实例子流程的迭代序号（index 对齐聚合的锚；单子/非子流程为 None）
+    parent_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     __table_args__ = (
         Index(

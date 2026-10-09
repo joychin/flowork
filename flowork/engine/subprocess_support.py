@@ -41,12 +41,18 @@ _CHILD_SETTLED_STATES = frozenset({"completed", "terminated", "cancelled", "fail
 
 
 def _mapping_values(
-    where: str, mappings: dict[str, str], ctx: RuntimeNodeContext, owner: ProcessInstanceRow
+    where: str,
+    mappings: dict[str, str],
+    ctx: RuntimeNodeContext,
+    owner: ProcessInstanceRow,
+    *,
+    extra: dict[str, object] | None = None,
 ) -> dict[str, object]:
     """映射右侧逐条 CEL 求值（owner 提供变量与 initiator；错→技术故障）。
 
     裸标识符直传且键缺失 → None（数据缺失≠求值错：子实例被管理员修复直达
     终态等场景，对齐旧 ``.get`` 直传语义）；其余表达式（运算/函数/字段选择）严格。
+    extra＝额外注入标识符（A9 多实例：当前迭代的 ``subject``）。
     """
     config = ctx.kernel.engine.config if ctx.kernel.engine else None
     from flowork.tasks.facts import instance_facts
@@ -56,6 +62,8 @@ def _mapping_values(
         start_user=owner.start_user,
         instance=instance_facts(owner),
     )
+    if extra:
+        variables = {**variables, **extra}
     values: dict[str, object] = {}
     for target, expression in mappings.items():
         if _BARE_IDENT.match(expression) and expression not in variables:
@@ -73,7 +81,12 @@ def _mapping_values(
 
 
 def start_sub_process(ctx: RuntimeNodeContext, spec: CallActivitySpec) -> None:
-    """在同一事务内启动子流程实例（输入映射：子变量 ← 父上下文求值）。"""
+    """在同一事务内启动子流程实例（输入映射：子变量 ← 父上下文求值）。
+
+    多实例（A9）：subjects 逐个解析＝每人一个子实例（index 记 parent_index），
+    输入映射按子求值并注入 ``subject``；空集合＝零子实例（sub_process_finished
+    立即放行＝Zeebe skip 语义）。
+    """
     assert ctx.token is not None
     from flowork.persistence.orm import ProcessDefinitionRow, ProcessInstanceRow
 
@@ -90,6 +103,11 @@ def start_sub_process(ctx: RuntimeNodeContext, spec: CallActivitySpec) -> None:
         raise DefinitionNotPublishedError(f"子流程定义未发布：{spec.process_code}")
     definition = load_definition(json.loads(row.content), ctx.kernel.registry)
     assert ctx.instance is not None
+    if spec.multi_instance is not None:
+        from flowork.engine.subprocess_mi import start_mi_children
+
+        start_mi_children(ctx, spec, row, definition)
+        return
     input_variables = _mapping_values("输入映射", spec.input_mappings, ctx, ctx.instance)
     child = ProcessInstanceRow(
         id=uuid.uuid4().hex,
@@ -127,6 +145,10 @@ def sub_process_finished(ctx: RuntimeNodeContext, spec: CallActivitySpec) -> boo
     """
     assert ctx.token is not None
     children = _children_of(ctx.session, ctx.instance.id, ctx.token.id)
+    if spec.multi_instance is not None:
+        from flowork.engine.subprocess_mi import mi_finish
+
+        return mi_finish(ctx, spec, children)
     if any(child.state not in _CHILD_SETTLED_STATES for child in children):
         return False
     for child in children:

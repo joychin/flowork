@@ -127,7 +127,7 @@
 | end | 终点，令牌到这里消失；全消失则实例完成 | 无 |
 | user_task | 人工任务：等人操作（定义详见第 5.1 章） | assignee/assignees/candidate_users/candidate_groups（取人，支持表达式）；multi_instance（会签，见下）；reject_target（驳回到哪个节点）；auto_pass_originator/previous/participated（命中者自动通过）；no_participant_policy（找不到人：raise 报错/to_admins 转管理员）；deadlines（超时动作列表，见 5.1；【v2.2】现状单策略 timeout 为其退化形态，validate 兼容读取） |
 | service_task | 系统任务：程序自动执行（详见 5.2） | action（在 HandlerRegistry 注册的动作名，引擎内形态）；params（参数字典）；【v2】mode: handler\|worker（worker＝外部程序领取执行，此时 job_type 声明任务类型，见 5.2） |
-| call_activity | 子流程：调起另一个流程定义当一个节点用 | process_code；binding【v2.3 第十一批】（latest 缺省=运行期解析最新版，目标未发布 deploy 仅 WARNING；deployment=部署时必须已发布，ERROR——Zeebe bindingType 同义）；is_synchronous（同步等它跑完/异步不管）；input_mappings/output_mappings（变量进出映射） |
+| call_activity | 子流程：调起另一个流程定义当一个节点用 | process_code；binding【v2.3 第十一批】（latest 缺省=运行期解析最新版，目标未发布 deploy 仅 WARNING；deployment=部署时必须已发布，ERROR——Zeebe bindingType 同义）；**multi_instance【v2.3 第十三批 A9】**（subjects 取人表达式＝每人一子实例，parent_index 记迭代序；input_mappings 按子求值注入 `subject`；completion 公式注入 child_total/completed/failed 只做提前收工；output collect＝index 对齐聚合 null 占位，空集合＝立即完成）｜is_synchronous（同步等它跑完/异步不管）；input_mappings/output_mappings（变量进出映射） |
 | cc_task | 传阅：给人看一眼，不卡流程 | recipients（接收人列表，支持表达式）；advance_policy 恒 any |
 | branch | 条件分支锚点 | route_mode：first_match（命中一条即走）/all_match（命中的都走） |
 | wait | 等待节点：停下来等一条消息/一段时间/两者竞速，先到者决定走向（见 7.2） | message（{name, correlation_key?}，进入时求值快照）；output_mappings（载荷→变量映射，缺省全量合并）；timeout（{after_minutes}，纯延时即等待时长本身）。结果词汇 wait.* 仅出边条件 |
@@ -829,6 +829,17 @@ v2.2 增补对标的直接来源（核实于 2026-10-07）：对标产品 基准
 4. **报告**（engine/simulation.py，F2 现查模式不预存）：终态＋令牌时间线＋stub 清单（performs_external_work 节点到访）＋卡点（首个未完令牌所在）＋路由轨迹（wf_route_decision 现查——F3 资产天然数据源）。**报告诚实呈现覆盖度**：stub 与卡点都是发现。执行错（如公式错）按既有二分直接抛给试跑调用方（模拟失败=定义会挂， Caller 即诊断对象）。
 5. 真实路径零影响（回归断言：真实启动仍建任务/发事件）；builder 产 FlowNode extra 袋的 getattr 惯例延续（同第十一轮）。
 
+### 第十三轮（2026-10-09，v2.3 续，对标第四批 A9 落地——多实例子流程，对标系列完结）
+
+Zeebe inputCollection/outputCollection 契约实装（multi-instance-call-design.md）：
+
+1. **fan-out**：subjects 逐个解析（取人语义：查无传播→零子实例＝节点立即完成，skip 语义）＝每人一个子实例（`parent_index` 列记迭代序，迁移 0003）；输入映射按子求值并注入保留标识符 `subject`（catalog@mapping_input——`input_mappings={"dept": "subject"}` 每子拿自己的切片）。
+2. **汇聚**：completion 公式（注入 `child_total/child_completed/child_failed`，catalog@completion 新位点）**只做提前收工**——命中即终止剩余 running 子（撤令牌与待办，对齐 terminate 形态；suspended/paused 属管理员域不动）；缺省 all＝全员结算；失败计数入 `child_failed`，公式可表达「一子失败即阻断」（completed==total）或「忽略失败」。**不做失败机制**（C7 教训：提前完成丢失「谁反对」）。
+3. **聚合**：collect＝输出按 parent_index 对齐聚合 list（失败子位＝null 占位，下标稳定、完成序无关）；merge 仅限单子（validator ERROR 拦 MI+merge——多子逐子覆写即 last-wins，C7 公开痛点）。
+4. **validator/catalog**：subjects 空/merge+MI/completion 空三规则（ERROR）；`subject`、三计数入目录（目录即版本承诺：加词=小版本）；completion 位接入 iter_expression_positions（表驱动静态检查）。
+5. **工程**：subprocess_mi.py 拆分（行数红线）；builder extra 袋 dict→CallInstanceConfig 归一（`_mi_config`，同第十一轮 getattr 惯例）；迁移幂等化（基线 create_all 新库已含列则跳过——alembic 幂等测试实证 batch 多列追加的伪循环依赖，改 `op.add_column`+存在性守卫）。
+
+**对标四批（A 档 8 项 + 修复 + 竞态窗）就此全部完结**：第一批修正确性、第二批立守卫、第三批上能力面、第四批 Zeebe 契约。行业修正版清单与拍板记录见 对标明细.md 三篇。
 ## 附录 C：类型清单（须提前定义的全集）
 
 原则：**跨边界的类型提前定，业务语义类型不进内核**（Money/TicketPriority 之类由插件用 JSON Schema format 扩展表达）。五条边界：图纸↔引擎、表达式↔变量、函数↔校验器、API/事件↔外部、数据库↔代码。
