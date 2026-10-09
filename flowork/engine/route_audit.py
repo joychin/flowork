@@ -61,6 +61,8 @@ def snapshot_of(variables: dict[str, Any], node_calls: dict[str, Any]) -> dict[s
         snapshot["instance"] = _jsonable(dict(variables["instance"]))
     if "prev_task" in variables:
         snapshot["prev_task"] = _jsonable(dict(variables["prev_task"]))
+    if "wait" in variables:
+        snapshot["wait"] = _jsonable(dict(variables["wait"]))
     if node_calls:
         snapshot["node"] = _jsonable(node_calls)
     return snapshot

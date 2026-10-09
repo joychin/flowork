@@ -22,9 +22,11 @@ from flowork.api import (
     validate_definition,
 )
 from flowork.cli.instance import instance_app
+from flowork.cli.message import message_app
 
 app = typer.Typer(help="flowork 流程引擎 CLI", no_args_is_help=True)
 app.add_typer(instance_app, name="instance")
+app.add_typer(message_app, name="message")
 console = Console()
 
 EXAMPLES = Path(__file__).parent.parent.parent / "examples"

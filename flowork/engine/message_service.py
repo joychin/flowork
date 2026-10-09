@@ -1,16 +1,16 @@
 """消息服务（kernel-v2 spec §7/P1-1）：缓冲、TTL、按关联键匹配订阅。
 
-- ``publish_message(name, correlation_key, payload, message_id, ttl_seconds)``：
-  先到（无 open 订阅）进缓冲区；命中 open 订阅即关联（先来先服务）。
-  message_id 全局唯一防重——重复发布静默忽略（幂等）。
-- ``subscribe(instance, token, node, name, correlation_key)``：等待方登记订阅；
-  登记时反查缓冲区，命中未过期消息立即关联（消息先到竞态）。
-- 关联动作（同事务）：订阅置 matched、缓冲行消费、载荷合并进实例变量
-  （走 input 契约 node_output 边界，与人工任务完成的写入路径同一条）、
-  发 ``message_correlated``。等待节点行为（首版后置，spec §2.4）观察 matched
-  后推进；当前引擎侧由 ``signal`` 唤醒广播同款机制衔接。
-- ``signal(name)``：广播——唤醒（matched）所有在等该名字的订阅，不带数据。
-- correlation_key 为**求值后**键值；CEL 表达式求值属等待节点行为（expr/cel.py）。
+- ``publish_message``：先到（无 open 订阅）进缓冲（TTL）；命中即关联（FCFS）；
+  message_id 全局唯一防重（重复静默忽略）。
+- ``subscribe``：登记订阅并反查缓冲（消息先到竞态）；命中即完整关联动作
+  （同事务）：matched＋载荷写入（按等待节点 output 映射，缺省全量；input
+  契约 node_output 边界把关）＋ ``message_correlated``＋推进（等待节点）。
+- ``correlate_message``：同步关联（不缓冲）——命中回传签收凭证/无人在等
+  None/重复幂等回放（spec §7.2 配套面，Zeebe correlate 同款）。
+- ``waiting``：open 订阅反查（谁在等什么，运维面）。
+- ``signal(name)``：广播唤醒所有同名 open 订阅（不带数据）。
+- 暂停实例的订阅不消费（全动作拦截——消息落缓冲，恢复反查补消费）。
+- session 级共用件与查询实现在 engine.message_query（守 300 行红线）。
 """
 
 from __future__ import annotations
@@ -83,7 +83,7 @@ class MessageService:
             # 暂停不消费，消息落下一优先级），命中走完整管线（映射+推进）。
             subscription = self._first_open_subscription(ctx, name, correlation_key)
             if subscription is not None:
-                from flowork.engine.message_query import hit_subscription
+                from flowork.engine.message_flow import hit_subscription
 
                 if hit_subscription(
                     ctx, self._engine, subscription, dict(payload or {}), message_id=message_id_
@@ -125,7 +125,7 @@ class MessageService:
         """登记订阅；命中缓冲区未过期消息立即关联（消息先到竞态，spec §7）。"""
 
         def _command(ctx: CommandContext) -> bool:
-            from flowork.engine.message_query import subscribe_open
+            from flowork.engine.message_flow import subscribe_open
 
             return subscribe_open(
                 ctx,
@@ -156,26 +156,9 @@ class MessageService:
 
     def signal(self, name: str) -> int:
         """广播唤醒（spec §7）：matched 所有在等该名字的 open 订阅，不带数据。"""
+        from flowork.engine.message_flow import broadcast_signal
 
-        def _command(ctx: CommandContext) -> int:
-            self._purge_expired(ctx)
-            rows = ctx.session.scalars(
-                select(MessageSubscriptionRow).where(
-                    MessageSubscriptionRow.name == name,
-                    MessageSubscriptionRow.state == "open",
-                )
-            ).all()
-            kernel = self._engine.kernel_for(ctx)
-            for row in rows:
-                row.state = "matched"
-                kernel.record_event(
-                    DomainEvent.MESSAGE_CORRELATED,
-                    self._correlated_payload(row, {}, None),
-                    row.instance_id,
-                )
-            return len(rows)
-
-        return self._engine.execute(_command)
+        return broadcast_signal(self._engine, name)
 
     def _first_open_subscription(
         self, ctx: CommandContext, name: str, correlation_key: str
@@ -225,6 +208,29 @@ class MessageService:
                 ) from exc
         return write
 
+    def correlate_message(
+        self,
+        name: str,
+        correlation_key: str = "",
+        payload: dict[str, Any] | None = None,
+        *,
+        message_id: str | None = None,
+    ) -> dict[str, Any] | None:
+        """同步关联（不缓冲）：命中回传签收凭证，无人在等返回 None（§7.2）。"""
+        from flowork.engine import message_query as _mq
+
+        return _mq.correlate_message(
+            self._engine, name, correlation_key, payload, message_id=message_id
+        )
+
+    def waiting(
+        self, name: str | None = None, correlation_key: str | None = None
+    ) -> list[dict[str, Any]]:
+        """等待实例反查（open 订阅，运维面）。"""
+        from flowork.engine import message_query as _mq
+
+        return _mq.waiting(self._engine, name=name, correlation_key=correlation_key)
+
     # —— 内部 ——
 
     def _correlate(
@@ -271,16 +277,14 @@ class MessageService:
         message_id: str | None,
     ) -> dict[str, Any]:
         """message_correlated 统一载荷形状（消息关联与 signal 唤醒同款）。"""
-        return {
-            "name": subscription.name,
-            "correlation_key": subscription.correlation_key,
-            "message_id": message_id,
-            "node_id": subscription.node_id,
-            "payload_keys": sorted(payload),
-        }
+        from flowork.engine.message_flow import correlated_payload
+
+        return correlated_payload(subscription, payload, message_id)
 
     def _purge_expired(self, ctx: CommandContext) -> None:
-        ctx.session.execute(delete(MessageBufferRow).where(MessageBufferRow.expires_at < utc_now()))
+        from flowork.engine.message_flow import purge_expired
+
+        purge_expired(ctx.session)
 
     def _emit(
         self,
@@ -290,9 +294,6 @@ class MessageService:
         correlation_key: str,
         instance_id: str | None,
     ) -> None:
-        kernel = self._engine.kernel_for(ctx)
-        kernel.record_event(
-            event,
-            {"name": name, "correlation_key": correlation_key},
-            instance_id,
-        )
+        from flowork.engine.message_flow import emit_message_event
+
+        emit_message_event(self._engine, ctx, event, name, correlation_key, instance_id)

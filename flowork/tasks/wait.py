@@ -40,7 +40,7 @@ class WaitBehavior(NodeBehavior):
         assert isinstance(spec, WaitSpec)
         if spec.message is not None:
             assert ctx.token is not None
-            from flowork.engine.message_query import subscribe_open
+            from flowork.engine.message_flow import subscribe_open
 
             command_ctx = ctx.kernel.command_ctx
             assert command_ctx is not None, "等待节点订阅须在命令事务内登记"

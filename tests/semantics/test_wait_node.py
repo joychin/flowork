@@ -362,3 +362,93 @@ def test_any_join_race_closes_loser_subscription():
     assert (
         engine.messages.publish_message("ma", payload={}, message_id="wa1") is False
     )  # 败者订阅已关
+
+
+# —— ⑧ 配套面：correlate_message / waiting / 路由审计快照（spec §7.2 §5） ————
+
+
+def test_correlate_hit_returns_receipt_and_advances():
+    engine = ProcessEngine()
+    engine.repository.deploy(_wait_flow(message={"name": "m1"}))
+    instance_id = engine.runtime.start_process("wf", start_user="u_start", business_key="BK-7")
+
+    result = engine.messages.correlate_message("m1", payload={"a": 1}, message_id="c1")
+    assert result == {
+        "matched": True,
+        "duplicate": False,
+        "instance_id": instance_id,
+        "node_id": "w",
+        "message_name": "m1",
+        "business_key": "BK-7",
+        "definition_code": "wf",
+    }
+    assert [t.activity_code for t in engine.task.list_tasks(instance_id=instance_id)] == ["after"]
+
+
+def test_correlate_no_subscriber_returns_none_without_buffering():
+    engine = ProcessEngine()
+    engine.repository.deploy(_wait_flow(message={"name": "m1"}))
+    assert engine.messages.correlate_message("m1", payload={"a": 1}) is None
+    assert _buffer_count(engine) == 0  # 不缓冲：消息不留存
+
+
+def test_correlate_duplicate_replays_first_receipt():
+    engine = ProcessEngine()
+    engine.repository.deploy(_wait_flow(message={"name": "m1"}))
+    instance_id = engine.runtime.start_process("wf", start_user="u_start")
+    first = engine.messages.correlate_message("m1", payload={"a": 1}, message_id="dup")
+    assert first is not None and first["duplicate"] is False
+
+    second = engine.messages.correlate_message("m1", payload={"a": 2}, message_id="dup")
+    assert second is not None and second["duplicate"] is True  # 幂等回放
+    assert second["instance_id"] == first["instance_id"]
+    assert engine.runtime.variables_of(instance_id) == {"a": 1}  # 不二次消费
+
+
+def test_correlate_paused_instance_returns_none():
+    engine = ProcessEngine()
+    engine.repository.deploy(_wait_flow(message={"name": "m1"}))
+    instance_id = engine.runtime.start_process("wf", start_user="u_start")
+    engine.runtime.pause_process(instance_id, actor="u_ops")
+    assert engine.messages.correlate_message("m1", payload={"a": 1}) is None
+    assert _buffer_count(engine) == 0  # 暂停拦截且不留存
+
+
+def test_waiting_lists_open_subscriptions():
+    engine = ProcessEngine()
+    engine.repository.deploy(_wait_flow(message={"name": "m1"}))
+    instance_id = engine.runtime.start_process("wf", start_user="u_start", business_key="BK-9")
+    rows = engine.messages.waiting(name="m1")
+    assert len(rows) == 1
+    assert rows[0]["instance_id"] == instance_id
+    assert rows[0]["node_id"] == "w"
+    assert rows[0]["business_key"] == "BK-9"
+    assert rows[0]["definition_code"] == "wf"
+    engine.messages.correlate_message("m1", payload={}, message_id="w9")
+    assert engine.messages.waiting() == []  # 消费后不在等待列表
+
+
+def test_route_audit_snapshots_wait_result():
+    engine, clock = _clock_engine()
+    definition = (
+        FlowBuilder("wf")
+        .start()
+        .wait("w", message={"name": "m1"}, timeout={"after_minutes": 5})
+        .user_task("late", assignee="'u_late'")
+        .end()
+        .connect("start", "w")
+        .flow("w", "late", condition="wait.result == 'elapsed'")
+        .connect("w", "end")
+        .connect("late", "end")
+        .build()
+    )
+    instance_id = _deploy_and_start(engine, definition)
+    clock.advance(6)
+    engine.jobs.tick()
+    decisions = engine.history.route_decisions(instance_id)
+    wait_decision = next(d for d in decisions if d.source_activity == "w")
+    assert wait_decision.snapshot["wait"] == {
+        "result": "elapsed",
+        "message_name": None,
+        "message_id": None,
+    }
