@@ -10,6 +10,11 @@ from tests.suite.world_flows import (
     purchase_definition,
     supplier_check_definition,
 )
+from tests.suite.world_flows_subprocess import (
+    call_child_definition,
+    call_grand_definition,
+    call_matrix_definition,
+)
 from tests.suite.world_flows_time import (
     deadline_auto_definition,
     deadline_notify_definition,
@@ -25,6 +30,9 @@ BUILDERS: dict[str, Callable[[], ProcessDefinition]] = {
     "suite_expense": expense_definition,
     "suite_supplier_check": supplier_check_definition,
     "suite_purchase": purchase_definition,
+    "suite_call_matrix": call_matrix_definition,
+    "suite_call_child": call_child_definition,
+    "suite_call_grand": call_grand_definition,
     "suite_deadline_notify": deadline_notify_definition,
     "suite_deadline_reassign": deadline_reassign_definition,
     "suite_deadline_auto": deadline_auto_definition,
@@ -41,6 +49,9 @@ BUILDERS: dict[str, Callable[[], ProcessDefinition]] = {
 STORE_WORLD_CODES = [
     "suite_expense",
     "suite_supplier_check",
+    "suite_call_matrix",
+    "suite_call_child",
+    "suite_call_grand",
     "suite_deadline_notify",
     "suite_deadline_reassign",
     "suite_deadline_auto",

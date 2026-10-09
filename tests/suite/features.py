@@ -25,6 +25,7 @@ FEATURES: dict[str, tuple[str, ...]] = {
         "subprocess.output_mapping",
         "subprocess.child_reject",
         "subprocess.child_recover",
+        "subprocess.version_snapshot",
     ),
     "route": (
         "route.first_match",

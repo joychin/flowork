@@ -34,6 +34,11 @@ __all__ = ["resume_parent_if_waiting", "start_sub_process", "sub_process_finishe
 
 _BARE_IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
+# 子实例「已结算」= 终态；running/paused/suspended 一律未结算（回归：原只挡 running，
+# 暂停/挂起中的子实例被当已结算，父侧无输出映射直通）。cancelled/failed 算结算：
+# 管理员修复/强杀场景（对齐 _mapping_values 的缺键 None 语义）。
+_CHILD_SETTLED_STATES = frozenset({"completed", "terminated", "cancelled", "failed"})
+
 
 def _mapping_values(
     where: str, mappings: dict[str, str], ctx: RuntimeNodeContext, owner: ProcessInstanceRow
@@ -114,10 +119,14 @@ def start_sub_process(ctx: RuntimeNodeContext, spec: CallActivitySpec) -> None:
 
 
 def sub_process_finished(ctx: RuntimeNodeContext, spec: CallActivitySpec) -> bool:
-    """同步子流程：全部子实例完结时父节点完成（输出映射写回父变量）。"""
+    """同步子流程：全部子实例结算后父节点完成（输出映射写回父变量）。
+
+    结算=终态（completed/terminated/cancelled/failed）；paused/suspended 的
+    子实例阻塞父侧——多子场景下其余子完成时，父不得绕过暂停中的兄弟子直通。
+    """
     assert ctx.token is not None
     children = _children_of(ctx.session, ctx.instance.id, ctx.token.id)
-    if any(child.state == "running" for child in children):
+    if any(child.state not in _CHILD_SETTLED_STATES for child in children):
         return False
     for child in children:
         if child.state == "completed":
