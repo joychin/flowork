@@ -24,8 +24,11 @@ export function Icon({ name, size = 14 }: { name?: string; size?: number }) {
       return <svg {...common}><rect x="2.4" y="4.4" width="11.2" height="9" rx="1.4" stroke="currentColor" strokeWidth="1.4" /><path d="M2.4 7h11.2M6 2.4h4v2H6z" stroke="currentColor" strokeWidth="1.4" /></svg>
     case 'branch':
       return <svg {...common}><path d="M2.5 4h5M2.5 12h5M7.5 4c2.8 0 3.6 2.2 4 4M7.5 12c2.8 0 3.6-2.2 4-4" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" /><circle cx="12.4" cy="8" r="1.3" fill="currentColor" /></svg>
+    case 'clock':
+      return <svg {...common}><circle cx="8" cy="8" r="5.6" stroke="currentColor" strokeWidth="1.4" fill="none" /><path d="M8 4.8V8l2.3 1.6" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" /></svg>
     default:
-      return null
+      // 未知图标名兜底:实心小方点(带 ui.icon 的节点不再无声消失)
+      return <svg {...common}><rect x="5" y="5" width="6" height="6" rx="1.2" fill="currentColor" /></svg>
   }
 }
 
@@ -134,6 +137,7 @@ function RectNodeImpl({ data, selected }: NodeProps) {
       {handles(d, actions)}
       {issueBadge(d.issueLevel)}
       {d.kind === 'branch' && <BranchModeBadge mode={d.routeMode} />}
+      {d.badge && <span className="node-pill" title="节点关键参数(点节点可改)">{d.badge}</span>}
       <span className="fnode-icon" style={{ background: `${color}1a`, color }}>
         <Icon name={d.meta?.ui?.icon} />
       </span>
@@ -180,25 +184,35 @@ function SmoothEdgeImpl(props: EdgeProps) {
   const select = useStore((s) => s.select)
   const reconnectFlow = useStore((s) => s.reconnectFlow)
   const showToast = useStore((s) => s.showToast)
-  // 改道拖拽:选中后从两端拖点拖到目标节点身上松手;多线汇入同一节点时拖点按兄弟偏移错开
+  // 改道拖拽:选中后从两端拖点拖到目标节点身上松手;也可直接抓线身拖(按按下点靠近哪端改哪端)。
+  // 多线汇入同一节点时拖点按兄弟偏移错开
   const [rehover, setRehover] = useState<string | null>(null)
   const rehoverRef = useRef<string | null>(null)
-  const startReconnect = useCallback(
-    (end: 'source' | 'target') => (e: React.PointerEvent) => {
-      e.stopPropagation()
-      e.preventDefault()
-      // 几何命中:遍历节点矩形判断落点(不依赖 elementFromPoint —— 改接拖动期间
-      // 其他节点可能被聚焦 CSS 置 pointer-events:none,DOM 命中会穿透;矩形判定免疫)
-      const nodeUnder = (cx: number, cy: number) => {
-        for (const el of document.querySelectorAll('.react-flow__node')) {
-          if (el.classList.contains('dragging')) continue
-          const r = el.getBoundingClientRect()
-          if (cx >= r.x && cx <= r.x + r.width && cy >= r.y && cy <= r.y + r.height) {
-            return el.getAttribute('data-id')
-          }
-        }
-        return null
+  const movedRef = useRef(false)
+  const nodeUnder = useCallback((cx: number, cy: number): string | null => {
+    // 命中盒外扩 12 视觉像素:fitView 缩放下节点视觉盒很小(可到 ~60x20),
+    // 精确落盒极易 miss;miss 曾静默失败(拖了没反应),是「改接不好用」的主因
+    const PAD = 12
+    for (const el of document.querySelectorAll('.react-flow__node')) {
+      if (el.classList.contains('dragging')) continue
+      const r = el.getBoundingClientRect()
+      if (cx >= r.x - PAD && cx <= r.x + r.width + PAD && cy >= r.y - PAD && cy <= r.y + r.height + PAD) {
+        return el.getAttribute('data-id')
       }
+    }
+    return null
+  }, [])
+  const markHover = useCallback((id: string | null) => {
+    for (const el of document.querySelectorAll('.fk-rehover')) el.classList.remove('fk-rehover')
+    if (id) document.querySelector(`.react-flow__node[data-id="${id}"]`)?.classList.add('fk-rehover')
+  }, [])
+  const beginReconnect = useCallback(
+    (end: 'source' | 'target') => (e: { clientX: number; clientY: number; stopPropagation?: () => void; preventDefault?: () => void }) => {
+      e.stopPropagation?.()
+      e.preventDefault?.()
+      movedRef.current = false
+      const startX = e.clientX
+      const startY = e.clientY
       const valid = (a: string, b: string) => {
         const st = useStore.getState().spec
         if (!st || a === b) return false
@@ -208,14 +222,24 @@ function SmoothEdgeImpl(props: EdgeProps) {
         return true
       }
       const onMove = (ev: PointerEvent) => {
+        if (!movedRef.current && Math.hypot(ev.clientX - startX, ev.clientY - startY) > 3) movedRef.current = true
         const id2 = nodeUnder(ev.clientX, ev.clientY)
-        if (id2 !== rehoverRef.current) { rehoverRef.current = id2; setRehover(id2) }
+        if (id2 !== rehoverRef.current) {
+          rehoverRef.current = id2
+          markHover(id2)
+          setRehover(id2)
+        }
       }
       const finish = (ev: PointerEvent, cancel: boolean) => {
         cleanup()
         if (cancel) return
+        if (!movedRef.current) return // 原地点击(无拖动):当作普通选中,不打扰
         const dropId = nodeUnder(ev.clientX, ev.clientY)
-        if (!dropId || dropId === source || dropId === target) return
+        if (!dropId) {
+          showToast('改接未落在节点上 — 已取消(把线拖到目标节点身上松手)')
+          return
+        }
+        if (dropId === source || dropId === target) return
         const next = end === 'target' ? { source, target: dropId } : { source: dropId, target }
         if (!valid(next.source, next.target)) {
           showToast('无法改接:end 不可出线 / start 不可入线')
@@ -230,6 +254,7 @@ function SmoothEdgeImpl(props: EdgeProps) {
         window.removeEventListener('pointerup', onUp)
         window.removeEventListener('keydown', onKey)
         rehoverRef.current = null
+        markHover(null)
         setRehover(null)
         document.body.classList.remove('fk-dragging')
       }
@@ -238,7 +263,17 @@ function SmoothEdgeImpl(props: EdgeProps) {
       window.addEventListener('pointerup', onUp)
       window.addEventListener('keydown', onKey)
     },
-    [source, target, reconnectFlow, showToast],
+    [source, target, reconnectFlow, showToast, nodeUnder, markHover],
+  )
+  // 整条线可拖:选中后在线身按下即开始改接,**恒改终点(箭头端)** ——「把 A→B 的线拖到 C」
+  // 语义就是箭头指向 C;要改起点用起点端的拖点手柄。未选中时这次按下只负责选中(上层
+  // onClick),下一次按下才拖 —— 与拖点手柄行为一致
+  const onEdgeBodyPointerDown = useCallback(
+    (e: React.PointerEvent) => {
+      if (!selected) return
+      beginReconnect('target')(e)
+    },
+    [selected, beginReconnect],
   )
   const srcOff = d?.srcOffset ?? 0
   const tgtOff = d?.tgtOffset ?? 0
@@ -246,7 +281,18 @@ function SmoothEdgeImpl(props: EdgeProps) {
   // 同时仍骑在自己的线上;多线兄弟偏移(±18px)保证互相不叠
   const [startPt, endPt] = selected ? sampleEdgePath(path, 36, 36) : [{ x: sourceX, y: sourceY }, { x: targetX, y: targetY }]
   return (
-    <g className={dragFocus ? 'drag-focus' : undefined} onClick={() => select({ type: 'edge', id })} style={{ cursor: 'pointer' }}>
+    <g
+      className={dragFocus ? 'drag-focus' : undefined}
+      onClick={() => select({ type: 'edge', id })}
+      onPointerDown={onEdgeBodyPointerDown}
+      onContextMenu={(e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        select({ type: 'edge', id })
+        useStore.getState().openContextMenu({ x: e.clientX, y: e.clientY, kind: 'edge', id })
+      }}
+      style={{ cursor: 'pointer' }}
+    >
       <BaseEdge id={id} path={path} markerEnd={markerEnd} style={{ stroke: active ? '#2f6bff' : hit ? '#16a34a' : '#9aa8bd', strokeWidth: active || hit ? 2.2 : 1.6 }} />
       {label ? (
         <EdgeText
@@ -271,14 +317,14 @@ function SmoothEdgeImpl(props: EdgeProps) {
           <div
             className={`fk-reconnect ${rehover ? 'armed' : ''}`}
             style={{ left: startPt.x, top: startPt.y + srcOff, transform: 'translate(-50%, -50%)' }}
-            onPointerDown={startReconnect('source')}
-            title="拖到别的节点 = 改接起点(Esc 取消)"
+            onPointerDown={beginReconnect('source')}
+            title="拖到别的节点 = 改接起点(Esc 取消);也可直接抓线身拖"
           />
           <div
             className={`fk-reconnect ${rehover ? 'armed' : ''}`}
             style={{ left: endPt.x, top: endPt.y + tgtOff, transform: 'translate(-50%, -50%)' }}
-            onPointerDown={startReconnect('target')}
-            title="拖到别的节点 = 改接终点(Esc 取消)"
+            onPointerDown={beginReconnect('target')}
+            title="拖到别的节点 = 改接终点(Esc 取消);也可直接抓线身拖"
           />
         </EdgeLabelRenderer>
       )}

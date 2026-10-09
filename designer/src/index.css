@@ -212,6 +212,32 @@ input, select, textarea { font-family: inherit; }
 .fk-reconnect:hover { transform: translate(-50%, -50%) scale(1.35); }
 .fk-reconnect.armed { border-color: #16a34a; background: #f0fff4; }
 
+/* 改接拖动悬停:目标节点绿色描边(松手/移开即清,由拖拽会话直接 DOM 维护) */
+.react-flow__node.fk-rehover { outline: 2px solid #16a34a !important; outline-offset: 3px; border-radius: 14px; }
+
+/* 右键菜单:节点/连线各一组动作;fixed 定位跟指针,靠边折返由组件计算 */
+.ctx-menu {
+  position: fixed; z-index: 1100; min-width: 176px; background: #fff;
+  border: 1px solid var(--line); border-radius: 10px; padding: 6px;
+  box-shadow: 0 12px 36px rgba(15, 23, 42, 0.16);
+  animation: ctx-pop 0.1s ease-out;
+}
+@keyframes ctx-pop { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: scale(1); } }
+.ctx-menu-title {
+  font-size: 11px; color: #7a8699; padding: 2px 8px 6px;
+  border-bottom: 1px solid var(--line); margin-bottom: 4px; white-space: nowrap;
+}
+.ctx-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  width: 100%; padding: 6px 8px; border: 0; background: none; border-radius: 6px;
+  font-size: 12.5px; color: var(--ink); cursor: pointer; text-align: left;
+}
+.ctx-item:hover:not(:disabled) { background: #f0f4ff; color: #2f6bff; }
+.ctx-item:disabled { opacity: 0.4; cursor: not-allowed; }
+.ctx-item.danger { color: #dc2626; }
+.ctx-item.danger:hover:not(:disabled) { background: #fff1f0; color: #dc2626; }
+.ctx-hint { font-size: 10.5px; color: #94a3b8; }
+
 /* 拖线中:所有节点显示虚线环提示「可以放到我身上」(排除连线来源节点自己) */
 .react-flow:has(.react-flow__connection) .react-flow__node {
   outline: 2px dashed rgba(47, 107, 255, 0.45); outline-offset: 4px; border-radius: 14px;
@@ -593,3 +619,48 @@ input, select, textarea { font-family: inherit; }
   border-radius: 4px; padding: 0 4px; margin-top: 2px; background: #fff;
 }
 .diff-detail { min-width: 0; }
+
+/* 对象数组编辑器(对象数组编辑器:每条一个嵌套子表单) */
+.obj-array { display: flex; flex-direction: column; gap: 8px; }
+.obj-array-item { border: 1px solid var(--line); border-radius: 8px; padding: 8px; background: #fbfcfe; }
+.obj-array-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+.obj-array-no { font-size: 11px; font-weight: 700; color: #64748b; }
+
+/* 流程设置折叠节(入参契约/实例时限/消息启动) */
+.ps-section { border-top: 1px solid var(--line); margin-top: 10px; padding-top: 8px; }
+.ps-section-head {
+  display: flex; align-items: center; gap: 6px; width: 100%;
+  background: none; border: 0; padding: 4px 2px; cursor: pointer;
+  font-size: 12.5px; font-weight: 600; color: var(--ink); text-align: left;
+}
+.ps-section-head .opt { margin-left: auto; }
+.ps-section-body { padding: 4px 2px 8px; display: flex; flex-direction: column; gap: 8px; }
+
+/* 试运行等待节点假设区 */
+.dryrun-assumptions { border: 1px dashed var(--line); border-radius: 8px; padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+.dryrun-assumptions-title { font-size: 11px; color: #7a8699; }
+
+/* 部署期校验预览勾选 */
+.deploy-check { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #64748b; padding: 4px 2px; cursor: pointer; }
+
+/* 节点关键参数徽章(等待/子流程/服务任务的画布摘要) */
+.node-pill {
+  position: absolute; top: -9px; left: -6px; max-width: 150px; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left;
+  background: #fff; border: 1px solid currentColor; border-radius: 8px;
+  font-size: 10px; font-weight: 600; padding: 0 5px; line-height: 15px;
+  opacity: 0.92; pointer-events: none;
+}
+
+/* 公式词汇点选(连线条件编辑器) */
+.formula-chips { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 6px; align-items: center; }
+.chip-group { display: inline-flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.chip-title { font-size: 10.5px; color: #94a3b8; margin-right: 2px; }
+.chip {
+  border: 1px solid var(--line); background: #fff; border-radius: 20px;
+  font-size: 11px; padding: 1px 8px; cursor: pointer; color: var(--ink);
+  transition: 0.12s;
+}
+.chip:hover { border-color: #2f6bff; color: #2f6bff; background: #f0f4ff; }
+.chip.reserved { border-style: dashed; }
+.chip.fn { font-family: ui-monospace, monospace; }

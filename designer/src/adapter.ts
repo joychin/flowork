@@ -10,6 +10,7 @@ export type NodeData = {
   name: string
   kind: string
   routeMode: string | null
+  badge: string | null
   meta: NodeKindMeta | undefined
   issueLevel: 'error' | 'warning' | null
   pendingConnect: boolean
@@ -25,6 +26,31 @@ export function hitFromSteps(steps: { node: string; via_source: string | null }[
     steps.filter((s) => s.via_source).map((s) => edgeId(s.via_source!, s.node)),
   )
   return { nodes, edges }
+}
+
+/** 节点关键参数徽章:等待(等什么/等多久/竞速)、子流程(被调 code)、服务任务(action)。
+    画布上一眼可辨,不必点开属性面板 —— 值来自节点字段,纯派生。 */
+function badgeOf(n: Spec['nodes'][number]): string | null {
+  const clip = (s: string, n = 14) => (s.length > n ? `${s.slice(0, n)}…` : s)
+  if (n.kind === 'wait') {
+    const msg = (n.message as { name?: string } | null | undefined)?.name
+    const mins = (n.timeout as { after_minutes?: number } | null | undefined)?.after_minutes
+    if (msg && mins != null) return `⚡ ${clip(String(msg))}·${mins}分`
+    if (msg) return `✉ ${clip(String(msg))}`
+    if (mins != null) return `⏱ ${mins}分`
+    return '⚠ 未配置等待'
+  }
+  if (n.kind === 'call_activity') {
+    const pc = typeof n.process_code === 'string' ? n.process_code : ''
+    if (!pc) return '⚠ 未选子流程'
+    const mi = n.multi_instance as { subjects?: unknown[] } | null | undefined
+    return mi?.subjects?.length ? `↳ ${clip(pc)} ×${mi.subjects.length}` : `↳ ${clip(pc)}`
+  }
+  if (n.kind === 'service_task') {
+    const a = typeof n.action === 'string' ? n.action : ''
+    return a ? `⚙ ${clip(a)}` : '⚠ 未选动作'
+  }
+  return null
 }
 
 const SIZE: Record<string, { w: number; h: number }> = {
@@ -100,9 +126,10 @@ export function toFlowElements(
     const meta = metaByKind[n.kind]
     const size = nodeSize(meta)
     const pos = spec.layout[n.code] ?? { x: 0, y: 0 }
+    const badge = badgeOf(n)
     const sig = [
       pos.x, pos.y, n.kind, n.name ?? '', typeof n.route_mode === 'string' ? n.route_mode : '',
-      nodeIssues.get(n.code) ?? '', pendingConnect === n.code ? 1 : 0,
+      badge ?? '', nodeIssues.get(n.code) ?? '', pendingConnect === n.code ? 1 : 0,
       hit?.nodes.has(n.code) ? 1 : 0,
       selected?.type === 'node' && selected.id === n.code ? 1 : 0,
       uiSig(n.kind),
@@ -125,6 +152,7 @@ export function toFlowElements(
         name: n.name || n.code,
         kind: n.kind,
         routeMode: typeof n.route_mode === 'string' ? n.route_mode : null,
+        badge,
         meta,
         issueLevel: nodeIssues.get(n.code) ?? null,
         pendingConnect: pendingConnect === n.code,

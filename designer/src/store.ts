@@ -47,12 +47,15 @@ type StoreState = {
   connectMenu: {
     sx: number; sy: number; fx: number; fy: number; source: string; bx: number; bw: number
   } | null
+  /** 右键菜单:节点/连线各一组动作,坐标为视口固定定位 */
+  ctxMenu: { x: number; y: number; kind: 'node' | 'edge'; id: string } | null
   past: string[]
   future: string[]
 }
 
 type StoreActions = {
   bootstrap: () => Promise<void>
+  refreshListing: () => Promise<void>
   openDefinition: (code: string) => Promise<void>
   createDefinition: (code: string, name: string) => Promise<void>
   backToListing: () => void
@@ -75,19 +78,25 @@ type StoreActions = {
   cancelPaletteDrag: () => void
   openConnectMenu: (m: { sx: number; sy: number; fx: number; fy: number; source: string; bx: number; bw: number }) => void
   closeConnectMenu: () => void
+  openContextMenu: (m: { x: number; y: number; kind: 'node' | 'edge'; id: string }) => void
+  closeContextMenu: () => void
+  /** 复制节点:克隆 kind 与全部字段,code 自动顺延,落点右下偏移,选中新节点 */
+  duplicateNode: (code: string) => void
+  /** 默认边切换:同源互斥;设为默认时清掉自身的条件(默认边不挂条件) */
+  toggleDefaultEdge: (source: string, target: string) => void
   select: (sel: Selection) => void
   deleteSelection: () => void
   setNodePos: (code: string, x: number, y: number) => void
   setRightTab: (tab: RightTab) => void
   applySpecJson: (json: string) => boolean
-  validateNow: () => Promise<void>
+  validateNow: (deploy?: boolean) => Promise<void>
   saveNow: () => Promise<void>
   publish: () => Promise<void>
   setPublishOpen: (open: boolean) => void
   loadPublishDiff: () => Promise<void>
   openDryRun: () => void
   closeDryRun: () => void
-  runDryRun: (variables: Record<string, unknown>) => Promise<boolean>
+  runDryRun: (variables: Record<string, unknown>, assumptions?: Record<string, string>) => Promise<boolean>
   relayout: () => void
   undo: () => void
   redo: () => void
@@ -117,6 +126,7 @@ export const useStore = create<Store>((set, get) => ({
   dryRun: null,
   paletteDrag: null,
   connectMenu: null,
+  ctxMenu: null,
   past: [],
   future: [],
 
@@ -124,6 +134,10 @@ export const useStore = create<Store>((set, get) => ({
     const meta = await api.nodeKinds()
     const metaByKind = Object.fromEntries(meta.map((m) => [m.kind, m]))
     set({ meta, metaByKind })
+    await reloadListing(set)
+  },
+
+  async refreshListing() {
     await reloadListing(set)
   },
 
@@ -282,6 +296,51 @@ export const useStore = create<Store>((set, get) => ({
     set({ connectMenu: null })
   },
 
+  openContextMenu(m) {
+    set({ ctxMenu: m })
+  },
+
+  closeContextMenu() {
+    set({ ctxMenu: null })
+  },
+
+  duplicateNode(code) {
+    const { spec } = get()
+    if (!spec) return
+    const src = spec.nodes.find((n) => n.code === code)
+    if (!src) return
+    const newCode = nextNodeCode(spec, src.kind)
+    get().mutate((draft) => {
+      const pos = draft.layout[code] ?? { x: 0, y: 0 }
+      draft.nodes.push({ ...structuredClone(src), code: newCode, name: src.name ? `${src.name} 副本` : '' })
+      draft.layout[newCode] = { x: pos.x + 40, y: pos.y + 64 }
+    })
+    set({ selection: { type: 'node', id: newCode }, rightTab: 'props' })
+    get().showToast(`已复制为「${newCode}」— 连线请从出线口拖出`)
+  },
+
+  toggleDefaultEdge(source, target) {
+    const { spec } = get()
+    if (!spec) return
+    const flow = spec.flows.find((f) => f.source === source && f.target === target)
+    if (!flow) return
+    const willBeDefault = !flow.is_default
+    get().mutate((draft) => {
+      for (const f of draft.flows) {
+        if (f.source === source) f.is_default = false
+      }
+      const f = draft.flows.find((x) => x.source === source && x.target === target)
+      if (!f) return
+      if (willBeDefault) {
+        f.is_default = true
+        f.condition = null // 默认边不挂条件(引擎校验同款约束)
+      } else {
+        f.is_default = false
+      }
+    })
+    get().showToast(willBeDefault ? `已设 ${source} 的默认边 → ${target}(原条件已清)` : '已取消默认边')
+  },
+
   /** 拖动边的端点改道:替换 source/target(带自环/重复/存在性检查) */
   reconnectFlow(oldSource, oldTarget, source, target) {
     const { spec } = get()
@@ -365,11 +424,11 @@ export const useStore = create<Store>((set, get) => ({
     }
   },
 
-  async validateNow() {
+  async validateNow(deploy = false) {
     const { spec } = get()
     if (!spec) return
     try {
-      const result = await api.validate(spec)
+      const result = await api.validate(spec, deploy)
       set({ issues: result.issues })
     } catch (err) {
       set({ issues: [{ level: 'error', rule: 'spec.invalid', message: String(err), node: null, flow: null }] })
@@ -443,11 +502,11 @@ export const useStore = create<Store>((set, get) => ({
     set({ dryRunOpen: false })
   },
 
-  async runDryRun(variables) {
+  async runDryRun(variables, assumptions) {
     const { spec } = get()
     if (!spec) return false
     try {
-      const result = await api.dryRun(spec, variables)
+      const result = await api.dryRun(spec, variables, assumptions)
       set({ dryRun: result })
       if (result.ok) get().showToast(`预演完成:路径经过 ${result.steps.length} 个节点`)
       else get().showToast('预演发现无法路由的分支 — 详见预演结果')

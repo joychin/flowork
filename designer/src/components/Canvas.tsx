@@ -40,6 +40,7 @@ import {
 import { findEdgeNear } from "../edgeInsert";
 import { useStore } from "../store";
 import { ConnectMenu } from "./ConnectMenu";
+import { ContextMenu } from "./ContextMenu";
 import { edgeTypes, nodeTypes, Icon } from "./FlowNodes";
 
 export function Canvas() {
@@ -505,6 +506,18 @@ function CanvasInner() {
           select(null);
           setPendingConnect(null);
         }}
+        onNodeContextMenu={(event, node) => {
+          event.preventDefault();
+          select({ type: "node", id: node.id });
+          useStore.getState().openContextMenu({ x: event.clientX, y: event.clientY, kind: 'node', id: node.id });
+        }}
+        onEdgeContextMenu={(event, edge) => {
+          event.preventDefault();
+          select({ type: "edge", id: edge.id });
+          useStore.getState().openContextMenu({ x: event.clientX, y: event.clientY, kind: 'edge', id: edge.id });
+        }}
+        onPaneContextMenu={(event) => event.preventDefault()}
+        onMoveStart={() => useStore.getState().closeContextMenu()}
         isValidConnection={isValidConnection}
         onlyRenderVisibleElements
         // 拖节点到视口边缘时不自动平移画布 —— 画布跟着鼠标跑是"失控/卡"手感的来源
@@ -540,6 +553,7 @@ function CanvasInner() {
         closeHint={() => setHintOpen(false)}
       />
       <ConnectMenu />
+      <ContextMenu />
       {paletteDrag &&
         createPortal(
           <div ref={ghostRef} className="palette-ghost" style={{ opacity: 0 }}>
