@@ -189,6 +189,7 @@ node_registry.register("http_request", HttpRequestSpec, HttpRequestBehavior,
 | flows | list[SequenceFlow] | [] | 连线列表（见 2.2） |
 | variables | list[ProcessVariable] | [] | 变量声明。**现状：仅供设计器变量选择器与 dry-run 取样，不约束运行时传参**（见 3.2 的 v2 改造） |
 | deadline | {after_minutes, strategy} / null | null | 【v2.2 新增】实例级时限：整单最大存活时间，strategy=mark/cancel/terminate（见第 7 章）。对齐 Temporal Workflow Execution Timeout（原生实例级超时）；BPMN 系引擎需以子流程边界定时事件建模，flowork 取声明式字段 |
+| start_on_message | list[{name, correlation_key?, input_mappings?, start_user?, business_key?}] | [] | 【v2 新增】消息启动声明：发布该名消息即发起实例（见 7.1）。启动订阅＝定义派生——published 即生效、retire 即失效，不落订阅表 |
 | layout | dict[code→{x,y}] | {} | 画布坐标，纯展示数据，引擎不消费，semantic diff 忽略 |
 
 `ProcessVariable`：`{name, type: string|number|boolean|list, label, sample}` ✓。
@@ -322,6 +323,7 @@ git 里的 YAML/JSON 文件      ← 编辑态事实来源：人和 AI 只改这
 | 超时改派 | deadlines[].action=reassign 时的 reassign_to | `manager_of(task.assignee)`（fire 时求值，task.* 见 C.4；结果须单个非空人） | ✓ |
 | 会签出口 | multi_instance 的 approve_exit/disapprove_exit | `task.approve_count * 100 >= task.item_count * 50`、`task.approve_count >= 2 && task.disapprove_count == 0`（task.* 计数快照，见 C.4；缺省＝该侧全票） | ✓ |
 | 消息关联键 | 等待节点的 correlation_key | `"input.order_no"`（求值结果用于匹配） | 随等待节点 |
+| 消息启动位 | start_on_message[] 的 correlation_key / input_mappings 右侧 / start_user / business_key | `payload.order_no`（求值于**消息上下文** payload.*+now，见 7.1；correlation/start_user/business_key 须 string） | ✓（7.1） |
 | 子流程映射 | input_mappings/output_mappings 的右侧 | `input.amount * 1.0`（输入在父上下文、输出在子上下文求值；裸标识符缺键→None） | ✓ |
 
 ### 4.3 CEL 求值语义【v2 改造】
@@ -521,10 +523,26 @@ CRUD：新增与更新＝同一操作 `deploy`——**纯数据写入（INSERT �
 | 机制 | 等什么 | 语义 |
 |---|---|---|
 | 定时器（现状 timeout/timer job ✓，成文） | 等到某个时刻 | UTC 计时；到期发 `timer_fired` 再推进。实例暂停期间冻结，恢复后按工作日历顺延 |
-| **消息**（✗ 新增） | 等一个外部事件带数据来 | 发布 `publish_message(name, correlation_key, payload, message_id, ttl_seconds)`。等待节点登记订阅 `(name, correlation_key)`——correlation_key 是 CEL 表达式（4.2），求值结果如报销单号用于匹配。**先到的消息进缓冲区**（wf_message_buffer，message_id 唯一防重，TTL 过期清理），订阅出现时按先来先服务关联；关联成功 → 载荷按节点 output 映射写入变量（与人工任务完成的写入路径同一条）→ 推进。订阅生命周期：节点离开（完成/取消/实例终止）即关，暂停期间保持。消息也可启动实例（start_on_message，message_id 唯一保证至多启动一个） |
+| **消息**（✗ 新增） | 等一个外部事件带数据来 | 发布 `publish_message(name, correlation_key, payload, message_id, ttl_seconds)`。等待节点登记订阅 `(name, correlation_key)`——correlation_key 是 CEL 表达式（4.2），求值结果如报销单号用于匹配。**先到的消息进缓冲区**（wf_message_buffer，message_id 唯一防重，TTL 过期清理），订阅出现时按先来先服务关联；关联成功 → 载荷按节点 output 映射写入变量（与人工任务完成的写入路径同一条）→ 推进。订阅生命周期：节点离开（完成/取消/实例终止）即关，暂停期间保持。消息也可启动实例（start_on_message，见 7.1） |
 | **信号**（✗ 新增） | 等一声广播（不带数据） | `signal(name)`：唤醒所有在等这个名字的订阅。与消息的分工：信号只唤醒不写数据，消息带数据且点对点 |
 
 **实例时限（deadline）【v2.2 新增】**：图纸顶层 `deadline: {after_minutes, strategy}`，strategy ∈ mark（实例打超时标记＋发事件，流程继续跑）/ cancel（作废）/ terminate（终止）。发起时按工作日历折算 deadline_at 物化进实例表，到点由 timer job 触发 `instance_deadline_reached` 事件并执行策略；实例已完成则静默不触发。暂停期间冻结、恢复后顺延（与节点定时器同规则）。依据：Temporal 的 Workflow Execution Timeout 是原生实例级超时（限制实例总生命周期）；BPMN 系引擎无原生等价物（要拿子流程包住主流程再挂中断型定时边界事件）——flowork 取声明式字段，不逼用户画「定时炸弹并行分支」。
+
+### 7.1 start_on_message：消息启动实例【v2 新增，2026-10-09 定稿】
+
+定义顶层声明 `start_on_message: [{name, correlation_key?, input_mappings?, start_user?, business_key?}]`（列表可多条，常见一条）——**启动订阅＝定义派生**：published 定义即生效、retire 即失效，不落订阅表（部署动作天然增删订阅，零表结构变更）。
+
+- **匹配顺序**（publish 内，同事务）：在途节点订阅优先（既有 FCFS）→ 启动匹配 → 缓冲。同一消息先喂给在等实例，未被消费才可启动新实例。
+- **消息上下文**：`payload.*`（消息载荷）+ `now`。实例尚不存在——initiator/prev_task/instance 等不可用（静态检查同 mapping_output 先例：变量引用不查，payload 形状消息侧才知；语法与函数注册表照查）。
+- **correlation_key**（可选）：声明位表达式对消息上下文求值，结果须 string 且**等于 publish 携带的 correlation_key** 才命中（防串单）；未声明 → name 命中即启动。
+- **input_mappings**（可选）：右侧表达式于消息上下文求值 → 启动变量，过 input 契约 start 边界（越界拒收，P0-6）。
+- **start_user**（可选表达式，须 string）：缺省合成 `message:{name}`（initiator 解析为此值，归因可追溯）。
+- **business_key**（可选表达式，须 string）：→ 实例业务键（招标单号等对账场景）。
+- **幂等与防重定格**：重复 publish 同 message_id 在匹配前静默忽略（既有）；启动消费把消息定格为 matched 订阅行（node_id=`(start)`），进「buffer ∪ 订阅定格」防重并集——同 message 至多启动一个实例。
+- **不回溯缓冲**：部署时刻起算——部署前到达的缓冲消息不被启动匹配消费（避免「一部署冒出一批实例」的意外）；缓冲消息仍只在节点订阅登记时被反查（第 7 章既有语义不变）。
+- **事件**：命中启动＝message_received + process_started（payload 增 `start_message: {name, message_id}`）+ message_correlated（定格记录配套，node_id=`(start)`）。
+- **错误语义**：声明位表达式求值错 / 非 string → **技术故障**（错误二分，第 8 章）：publish 命令失败（消息不落库不缓冲），错误信息带定义 code 与表达式——不静默吞、不伪装成未命中。
+- **版本语义**：start_on_message 变更＝定义内容变更（content_hash / minor 续发）；不新增破坏性规则（在途订阅为派生态，无残留状态需迁移）。
 
 ## 8. 错误模型：什么算「业务上的不通过」，什么算「系统坏了」
 
@@ -771,6 +789,7 @@ Subject：`user:{id} | agent:{id} | role:{name} | org:{code}`；ParticipantSet �
 | 命名空间 | 类型来源 |
 |---|---|
 | input.* | 按 input JSON Schema |
+| payload.* | 消息上下文（仅 start_on_message 位，7.1）：消息载荷，形状消息侧才知（静态不查引用） |
 | vars.* | 运行时（静态检查按声明，未声明按 any 降级为警告） |
 | task.* | **位点相关快照**（静态检查：非可用位引用 task.* 即 ERROR task_unavailable）——超时改派位 ✓：{id, assignee, outcome:null, created_at, deadline_at}（fire 时注入，活任务无 outcome）；会签出口位 ✓：{item_count, approve_count, disapprove_count}（每次办理后注入）；条件求值/输出映射位注入为后续项（开放问题 C5） |
 | initiator | subject |
