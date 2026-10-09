@@ -59,9 +59,9 @@
 | Clock | ✓ | 确定性测试 |
 | WorkCalendar | ✓ | 工时换算（审批 SLA 用） |
 | OrgDirectory | ◐ 扩展 | 现有 manager_of/users_with_role；对齐 SCIM 形状（User/Group/manager 指针），加 roles、delegation |
-| Notifier | ◐ 改造 | 改为 outbox 订阅分发（事件已同事务落表） |
+| Notifier | 已删（2026-10-09 死端口收口） | notify 实际直接 record_event 落 outbox，事件即通知面，零消费删除 |
 | **ExpressionFunctions**（新增） | ✗ | CEL 自定义函数注册：`manager_of()`/`role()` 等走这里→转 OrgDirectory。这是「语言与词典」的缝 |
-| **ResourceProvider**（新增） | ✗ | D4 资源注册表端口 |
+| **ResourceProvider**（新增） | 已删（2026-10-09 死端口收口） | M-B 预声明零消费；落地时按实际形状重声明 |
 | **EventSink / Exporter**（新增） | ✗ | 事件外发（CloudEvents 信封）；默认=outbox 轮询器 |
 | Storage | 评估 | persistence/ 已有实现，评估是否升格 Protocol（多副本 PG 路线的需要） |
 

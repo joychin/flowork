@@ -19,9 +19,7 @@ __all__ = [
     "ExpressionFunction",
     "ExpressionFunctions",
     "FunctionSignature",
-    "Notifier",
     "OrgDirectory",
-    "ResourceProvider",
     "WorkCalendar",
 ]
 
@@ -99,23 +97,7 @@ class ExpressionFunctions(Protocol):
 
 
 @runtime_checkable
-class ResourceProvider(Protocol):
-    """表单/权限等资源类型的注册与获取（M8/M9 接入口）。"""
-
-    def resource_types(self) -> Mapping[str, type]: ...
-
-    def get(self, resource_type: str, resource_id: str) -> Any | None: ...
-
-
-@runtime_checkable
 class EventSink(Protocol):
     """事件外发（默认=outbox 轮询；webhook 实现挂这）。"""
 
     def emit(self, envelope: dict[str, object]) -> None: ...
-
-
-@runtime_checkable
-class Notifier(Protocol):
-    """通知端口：默认 no-op——事件已落 outbox，消息推送是订阅方。"""
-
-    def notify(self, event: str, payload: Mapping[str, object]) -> None: ...

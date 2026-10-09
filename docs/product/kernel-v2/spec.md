@@ -539,11 +539,11 @@ CRUD：新增与更新＝同一操作 `deploy`——**纯数据写入（INSERT �
 
 ## 9. SPI 端口（内核的标准插座，内核只依赖协议）
 
-现有 4 个端口 ✓（默认实现保证内核可裸跑可单测）：`Clock.now()`；`WorkCalendar.duration_minutes(start,end)`；`Notifier.notify(event,payload)`（【v2】默认实现改为 outbox 分发器）；`OrgDirectory`（【v2.1】瘦身为引擎必需四方法，见下）。（VariableStore 端口于变量 I/O 批删除——零引用零实现：变量持久化由实例行 JSON 列承担，schema 边界校验落在 contract.py 四边界，外部读写走 §11 RuntimeService 变量面。）
+现有 3 个端口 ✓（默认实现保证内核可裸跑可单测）：`Clock.now()`；`WorkCalendar.duration_minutes(start,end)`；`OrgDirectory`（【v2.1】瘦身为引擎必需四方法，见下）。（**死端口收口，2026-10-09**：Notifier 删除——notify 动作实际直接 `record_event` 落 outbox，事件即内核原生通知面，端口零消费多余；ResourceProvider 删除——M-B 预声明零消费，落地时按实际形状重声明。VariableStore 端口于变量 I/O 批删除——零引用零实现：变量持久化由实例行 JSON 列承担，schema 边界校验落在 contract.py 四边界，外部读写走 §11 RuntimeService 变量面。）
 
 **找人分工（v2.1 定稿）**：取人（组→人）＝表达式词汇，全部宿主注册（5.5，内核零内置，contrib 三个便利函数基于本端口实现）；关系判断（人→组）与身份定格＝**引擎自己的行为**，走本端口——方向相反，自定义函数表达不了（「我的待办」要算张三属不属于 role:finance，是引擎在问，不是图纸在问）。
 
-【v2】新增 3 个端口、重构 OrgDirectory、扩展现有 1 个端口（签名如下）：
+【v2】新增 2 个端口、重构 OrgDirectory（签名如下；ResourceProvider 曾在此预声明，2026-10-09 死端口收口删除）：
 
 ```python
 class OrgDirectory(Protocol):            # ◐ v2.1 瘦身定稿：引擎必需的四方法
@@ -554,10 +554,6 @@ class OrgDirectory(Protocol):            # ◐ v2.1 瘦身定稿：引擎必需�
 
 class ExpressionFunctions(Protocol):     # ✓ CEL 自定义函数来源（4.3，已接线；contrib.cel_vocabulary 三词汇）
     def functions(self) -> Mapping[str, Callable]: ...
-
-class ResourceProvider(Protocol):        # ✗ 表单/权限等资源类型的注册与获取（M8/M9 接入口）
-    def resource_types(self) -> Mapping[str, type]: ...
-    def get(self, resource_type: str, resource_id: str) -> Any | None: ...
 
 class EventSink(Protocol):               # ✗ 事件外发（默认=outbox 轮询；webhook 实现挂这）
     def emit(self, envelope: dict) -> None: ...

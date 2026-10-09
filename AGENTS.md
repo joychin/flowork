@@ -31,7 +31,7 @@ flowork/
 ├── runtime/       运行时：behavior(NodeBehavior+NodeContext) registry(注册表) lifecycle(状态枚举)
 ├── expr/          表达式层：cel(CEL 沙箱+静态检查) catalog(词汇目录) context(上下文装配)
 │                  conditions(条件求值薄层)
-├── spi/           端口协议：Clock/WorkCalendar/OrgDirectory/ExpressionFunctions/EventSink/Notifier
+├── spi/           端口协议：Clock/WorkCalendar/OrgDirectory/ExpressionFunctions/EventSink
 ├── events/        领域事件类型（M1 起随 Command 管线落 outbox）
 ├── tasks/ participants/ persistence/ engine/ jobs/ cli/   # 内核主体（engine 已按职责拆分多文件）
 ├── directory/     目录（M-A）：组织/角色/用户/Agent 映射（agents/roles/store/orm）
