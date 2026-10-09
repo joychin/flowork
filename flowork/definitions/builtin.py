@@ -1,13 +1,12 @@
 """内置节点类型：与自定义类型走同一注册机制（dogfooding，边界 G4）。
 
-内置 kind：start / end / user_task / service_task / call_activity / cc_task / branch / wait
-（wait 的定义在 wait_node.py，本文件挂 300 行红线拆出）。
+内置 kind：start/end/user_task/service_task/call_activity/cc_task/branch/wait
+（wait 定义在 wait_node.py，本文件挂 300 行红线拆出）。
 
 用户词汇（对齐现代工作流产品，无「网关」）：
 - 条件分支（branch）：出边挂条件，route_mode 决定匹配方式；
 - 同时进行：任意节点多条无条件出边即并行，无需专门节点；
-- 开始条件（advance_policy）：多条入边节点的推进策略 any/all，
-  汇聚语义在目标节点上，不在分支节点上（对齐 对标产品 preCondition）。
+- 开始条件（advance_policy）：多条入边 any/all；汇聚语义在目标节点上。
 """
 
 from __future__ import annotations
@@ -133,6 +132,9 @@ class CallActivitySpec(FlowNode):
 
     kind: Literal["call_activity"] = KIND_CALL_ACTIVITY
     process_code: str = ""
+    # v2.3 A11（Zeebe bindingType 同义）：latest=运行期解析最新版（缺省）；
+    # deployment=部署时必须已发布（ERROR）。
+    binding: Literal["latest", "deployment"] = "latest"
     is_synchronous: bool = True
     input_mappings: dict[str, str] = Field(default_factory=dict)
     output_mappings: dict[str, str] = Field(default_factory=dict)

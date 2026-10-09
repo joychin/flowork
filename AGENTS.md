@@ -233,6 +233,17 @@ FLOWORK_DB 解析；既有 create_all 库 stamp head 对齐；create_all 与 upg
 按插件层排期，待用户启动；挂账开放问题（三契约合一/事件脱敏归属/used_time
 剔除/变量历史清理/C5 出口 assignees）不阻塞主线。
 
+**等待节点批（2026-10-09，spec §7.2 实施；设计=wait-node.md v3 六拍板点收口；行业依据=docs_research 六引擎调研）**：
+内置第八种 kind=wait——三模式合一（等消息/等时长/竞速，Conductor WAIT 先例）：message（correlation_key
+进入求值快照）+output_mappings（裸投影缺键 None/缺省全量合并，input 契约把关）+timeout{after_minutes}；
+完成三路统一 finish_wait（matched/elapsed/signal），结果词汇 wait.* 仅出边条件不落变量（route_audit 钉快照）；
+命中推进经 NodeBehavior.advances_on_message 标志中介（宿主纯订阅仅关联）；到时=timer_fired 兑现+订阅置
+elapsed 留痕；on_cancel 钩子全仓首接线（cancel_token→关订阅删 Job，竞速收尾/终止统一覆盖）；暂停=全动作
+拦截（命中落缓冲、恢复 retro_poll 补消费）；配套面 correlate_message（同步签收凭证/幂等回放/不缓冲）+
+waiting 反查+CLI message waiting；零新表零列。周期触发明确不做（调度域）。拆分：wait_node.py/tasks/wait.py/
+message_flow.py+message_query.py 守 300 行红线。多事件竞速=并行+any 汇聚图组合（无事件网关节点）。
+测试 21 例（semantics/test_wait_node.py）；suite 占位批时钟闭包修复后转绿。
+
 **公开面+插件位结构批（2026-10-09，结构评审落地三件套：立公开面/插件位/反向纪律）**：
 ① `flowork/api.py` 唯一公开门面（66 符号冻结：引擎四服务+消息/Job worker 面/定义
 DSL/校验/试算/CEL 值求值/词汇目录/SPI 端口/错误体系/返回模型/OrgDirectoryLike）；
@@ -348,3 +359,16 @@ consult 任务→complete_consult。行业修正落地：不抄 C7 delegation as
 deploy-validation-design.md（四层分级：L3 同发布单元引用+handler 注册=ERROR 新增、L4 目录
 实体存在性=默认 WARNING+strict 可选；subject_exists 能力参数沿用 org_configured 先例；
 validator 端口做成部署期扩展点）。测试 test_delta_batch3.py 5 例。
+
+**对标第三批 A11 落地（2026-10-09，spec v2.3 第十一轮；等待节点批已释放 validator 落点）**：
+部署期引用校验 L3+L4（definitions/validator_deploy.py——与纯设计时 validator*.py 分居，
+这两层要查库/查注册表/查目录，只由 deploy 事务内调用）：① L3 call_activity 引入 `binding`
+字段（latest 缺省=运行期解析最新版、目标未发布仅 WARNING，先子后父合法；deployment=部署时
+必须已发布 ERROR，Zeebe bindingType 同义；自引用合法跳过）；service_task handler 未注册=
+WARNING（**实施修订**：先 deploy 后 register 是既有合法模式，strict 升 ERROR）。② L4 取人位
+CEL 字面量经 subject_exists 钩子（duck-typing 探测 org 丰富面，不动 SPI 四方法）：False=
+WARNING、strict ERROR、None=零噪音跳过。③ EngineConfig.strict_deploy_validation=False 缺省
+——L3/L4 默认 WARNING 留痕（可见优于静默），True 升 ERROR 拦发布；string_literals（lark
+STRING_LIT）宿于 validator_deploy.py（cel.py 行数红线）。字面量提取踩坑入档：builder 产的
+节点是 FlowNode extra 袋（未传字段不在袋），一切取人位访问须 getattr（同 iter_expression_
+positions 惯例）。A10 设计稿就绪待下一批（落点已释放）。测试 9 例；范围内 738 全绿。

@@ -39,6 +39,9 @@ class EngineConfig:
     history_level: HistoryLevel = "full"
     max_node_loops: int = 50
     max_participants: int = 1000
+    # v2.3 第三批 A11：部署期 L3/L4（引用完整性/目录实体存在性）默认 WARNING；
+    # True 时升 ERROR 拦发布（fail-fast 部署）。
+    strict_deploy_validation: bool = False
     lock_retries: int = 3
     now: Callable[[], datetime] = _system_now
     db_file: str | Path | None = None  # CLI 便利字段：设置后覆盖 db_url

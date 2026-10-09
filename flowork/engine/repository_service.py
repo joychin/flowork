@@ -17,7 +17,11 @@ from flowork.definitions.definition import (
     dump_definition,
     load_definition,
 )
-from flowork.definitions.validator import ValidateIssue, validate_definition
+from flowork.definitions.validator import (
+    InvalidDefinition,
+    ValidateIssue,
+    validate_definition,
+)
 from flowork.definitions.versioning import VersionVerdict, compute_verdict, content_hash_of
 from flowork.engine.definition_lifecycle import DefinitionLifecycleMixin
 from flowork.engine.designer_drafts import DesignerDraftSupportMixin
@@ -71,6 +75,22 @@ class RepositoryService(DesignerDraftSupportMixin, DefinitionLifecycleMixin):
             assert_valid(
                 definition, self._engine.config.node_registry
             )  # org_configured 联动在 validate()（deploy 保持强校验语义）
+            # 部署期 L3/L4（v2.3 第三批 A11，spec §6）：引用完整性 + 目录实体存在性
+            # ——默认 WARNING 留痕（可见优于静默），strict_deploy_validation 升 ERROR 拦发布。
+            from flowork.definitions.validator import IssueLevel
+            from flowork.definitions.validator_deploy import check_deploy_references
+
+            hook = getattr(self._engine.config.org, "subject_exists", None)  # L4 钩子
+            deploy_issues = check_deploy_references(
+                definition,
+                session=ctx.session,
+                handlers=self._engine.handlers.names(),
+                subject_exists=hook if callable(hook) else None,
+                strict=self._engine.config.strict_deploy_validation,
+            )
+            blocking = [i for i in deploy_issues if i.level == IssueLevel.ERROR]
+            if blocking:
+                raise InvalidDefinition(blocking)
 
             # 规范化 round-trip：哈希与构造路径无关（bare build 薄形态/registry 全形态一致）
             content = dump_definition(definition)

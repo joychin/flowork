@@ -115,11 +115,11 @@
 | 并行网关（AND，全走） | 任意节点多条无条件出边（自动并行）＋ 汇聚点 advance_policy=all（放行判定见 2.3） |
 | 包容网关（OR，命中都走） | branch 节点（route_mode=all_match）＋ 汇聚点 advance_policy=all（可达性放行使未命中分支不阻塞，见 2.3） |
 | branch 节点本身 | 纯路由锚点，无副作用。价值：决策落点进审计日志、静态校验有挂靠、AI 改流程时有明确操作对象 |
-| 事件网关/消息等待 | 【v2 新增】等待节点（见第 7 章），首版后置 |
+| 事件网关/消息等待 | 等待节点 wait（见 7.2，2026-10-09 已实施）：等消息/等时长/竞速三模式合一；多事件竞速=并行分支+any 汇聚图组合，等齐=+all 汇聚 |
 
 **关于「提交时自选下一节点」**：BPMN 系引擎（jBPM/Activiti/Flowable/Zeebe）均无此路由模式，flowork 也不做内核语义——人的选择用**输出变量＋条件边**表达（对标产品 的 alternativeFlag 属标准外私货，主流量表不跟）。设计器可提供「选择题」交互把选项落成枚举变量，引擎语义零新增。
 
-### 2.5 内置七种节点类型（kind）字段表 ✓
+### 2.5 内置八种节点类型（kind）字段表 ✓
 
 | kind | 一句话 | 专有字段（公共字段见 2.1） |
 |---|---|---|
@@ -127,9 +127,10 @@
 | end | 终点，令牌到这里消失；全消失则实例完成 | 无 |
 | user_task | 人工任务：等人操作（定义详见第 5.1 章） | assignee/assignees/candidate_users/candidate_groups（取人，支持表达式）；multi_instance（会签，见下）；reject_target（驳回到哪个节点）；auto_pass_originator/previous/participated（命中者自动通过）；no_participant_policy（找不到人：raise 报错/to_admins 转管理员）；deadlines（超时动作列表，见 5.1；【v2.2】现状单策略 timeout 为其退化形态，validate 兼容读取） |
 | service_task | 系统任务：程序自动执行（详见 5.2） | action（在 HandlerRegistry 注册的动作名，引擎内形态）；params（参数字典）；【v2】mode: handler\|worker（worker＝外部程序领取执行，此时 job_type 声明任务类型，见 5.2） |
-| call_activity | 子流程：调起另一个流程定义当一个节点用 | process_code；is_synchronous（同步等它跑完/异步不管）；input_mappings/output_mappings（变量进出映射） |
+| call_activity | 子流程：调起另一个流程定义当一个节点用 | process_code；binding【v2.3 第十一批】（latest 缺省=运行期解析最新版，目标未发布 deploy 仅 WARNING；deployment=部署时必须已发布，ERROR——Zeebe bindingType 同义）；is_synchronous（同步等它跑完/异步不管）；input_mappings/output_mappings（变量进出映射） |
 | cc_task | 传阅：给人看一眼，不卡流程 | recipients（接收人列表，支持表达式）；advance_policy 恒 any |
 | branch | 条件分支锚点 | route_mode：first_match（命中一条即走）/all_match（命中的都走） |
+| wait | 等待节点：停下来等一条消息/一段时间/两者竞速，先到者决定走向（见 7.2） | message（{name, correlation_key?}，进入时求值快照）；output_mappings（载荷→变量映射，缺省全量合并）；timeout（{after_minutes}，纯延时即等待时长本身）。结果词汇 wait.* 仅出边条件 |
 
 **会签（MultiInstance，user_task 专属字段）**：
 
@@ -329,7 +330,7 @@ git 里的 YAML/JSON 文件      ← 编辑态事实来源：人和 AI 只改这
 ### 4.3 CEL 求值语义【v2 改造】
 
 - **变量命名空间**：`input.*`（流程契约输入）、`vars.*`（运行中变量）、`task.*`（任务快照，超时改派/会签出口位注入，见 C.4）、`initiator`（发起人 Subject，全位点注入）。
-- **判断面事实目录**（expression-dataface F0–F3，2026-10-08 落地）：`now`（求值时刻，统一时钟 naive UTC，一次装配钉一时刻——组内多条公式同刻；全位点）、`instance`（实例全局事实 {id, started_at, business_key}，全位点注入；2026-10-09 内核收口批落地，模拟面试算面注入占位形状）、`prev_task`（上一站已完成任务，条件+取人位；查无不注入，静态预检温和跳过）、`node("code")`（引擎注入函数，点名查节点事实：runs/skipped/最近轮人物与票数；查无＝固定形状）——与变量读写面（§10 variables_updated、§11 变量三方法）互补。词汇目录权威在 `expr/catalog.py`（保留词与位点白名单表驱动），validator 规则名 `*.{name}_unavailable`。路由决策审计落 `wf_route_decision`（§14），查询面 `history.route_decisions`。
+- **判断面事实目录**（expression-dataface F0–F3，2026-10-08 落地）：`now`（求值时刻，统一时钟 naive UTC，一次装配钉一时刻——组内多条公式同刻；全位点）、`instance`（实例全局事实 {id, started_at, business_key}，全位点注入；2026-10-09 内核收口批落地，模拟面试算面注入占位形状）、`prev_task`（上一站已完成任务，条件+取人位；查无不注入，静态预检温和跳过）、`node("code")`（引擎注入函数，点名查节点事实：runs/skipped/最近轮人物与票数；查无＝固定形状）、`wait`（等待结果 {result=matched|elapsed, message_name, message_id}，仅等待节点出边条件位，2026-10-09 §7.2 批）——与变量读写面（§10 variables_updated、§11 变量三方法）互补。词汇目录权威在 `expr/catalog.py`（保留词与位点白名单表驱动），validator 规则名 `*.{name}_unavailable`。路由决策审计落 `wf_route_decision`（§14），查询面 `history.route_decisions`。
 - **自定义函数**：经 SPI 端口 `ExpressionFunctions` 注册（第 9 章），**必须声明参数与返回类型**（词汇表 one_user/users/groups/mixed/bool，兼容性检查见 5.5）。**内核函数注册表出厂为空**——取人词汇全部由宿主注册（v2.1 定稿，理由见 5.5）；`flowork.contrib` 便利包提供 `manager_of` / `users_with_role` / `has_role` 三个常见词汇，纯基于 OrgDirectory 端口实现，一行代码挂上。
 - **设计时检查**：`validate` 阶段做 CEL 静态检查（**全位点**，validator_conditions）——
   编译护栏/引用未声明变量/未注册函数与参数个数直接报错（K8s CRD 校验同款体验）；
@@ -553,6 +554,19 @@ CRUD：新增与更新＝同一操作 `deploy`——**纯数据写入（INSERT �
 - **事件**：命中启动＝process_started（payload 增 `start_message: {name, message_id}`）+ message_correlated（定格记录配套，node_id=`(start)`）；message_received 仅缓冲路径发（与节点直接命中同口径）。
 - **错误语义**：声明位表达式求值错 / 非 string → **技术故障**（错误二分，第 8 章）：publish 命令失败（消息不落库不缓冲），错误信息带定义 code 与表达式——不静默吞、不伪装成未命中。
 - **版本语义**：start_on_message 变更＝定义内容变更（content_hash / minor 续发）；不新增破坏性规则（在途订阅为派生态，无残留状态需迁移）。
+
+### 7.2 等待节点（wait）【2026-10-09 实施，wait-node.md v3 设计】
+
+三模式合一（Conductor WAIT 先例）：**等消息**（订阅式关联，基建与第 7 章消息机制同源）、**等时长**（纯延时）、**两者竞速**（先到者决定走向——SF 回调+TimeoutSeconds 形态）。多事件竞速与等齐用图组合表达（并行分支 + any/all 汇聚），无事件网关节点。
+
+- **进入**：实例上下文求值 correlation_key 一次并快照（非 string=技术故障）→ `subscribe` 登记（反查缓冲，消息先到 FCFS）；声明 timeout 则登记 timer Job（`kind="wait_timeout"`）。`message`/`timeout` 至少其一（validator 把关）。
+- **命中**（同事务）：matched 定格（message_id 防重）→ 载荷按 `output_mappings` 白名单写入（右侧表达式于消息上下文 `payload.*`+`now` 求值，裸投影缺键得 None；未声明=全量合并，Zeebe 默认同款；均过 input 契约 node_output 边界）→ 推进。**推进仅对等待节点**（NodeBehavior.advances_on_message 标志中介——宿主在任意节点上的纯订阅用法保持仅关联不推进）。
+- **到时**：订阅行置 `elapsed` 留痕 → `timer_fired` 事件（spec §7 定时器行承诺兑现）→ 推进（无载荷写入）。竞速仲裁零新代码：命中与到时各经 touch 乐观锁，先落者赢、后到跳过（不重试不死信）。
+- **取消清理**：`cancel_token` 经行为 on_cancel 钩子（全仓首个调用点）关订阅+删到时 Job——any 汇聚竞速收尾/终止/实例时限统一覆盖。
+- **暂停**：全动作拦截原则——订阅保持、命中落缓冲（TTL），恢复后 open 订阅反查补消费；定时器冻结恢复顺延（既有规则）。
+- **结果词汇**：`wait.result`（matched|elapsed）、`wait.message_name`、`wait.message_id`（signal 唤醒=null）——仅出边条件、不落实例变量；路由审计快照钉 wait 键。
+- **配套面**：`correlate_message`（同步关联：不缓冲、命中回传签收凭证 {instance_id/node_id/business_key/definition_code}、无人在等 None、重复幂等回放——Zeebe correlate 端点同款）；`waiting` 反查（open 订阅谁在等，CLI `flowork message waiting`）。api 面零新符号（dict 返回）。
+- **明确不做**：周期性触发（调度域，用户裁定）、等到绝对时刻（CEL 日期表达式后置）、边界事件/中断式等待（长期观察）。
 
 ## 8. 错误模型：什么算「业务上的不通过」，什么算「系统坏了」
 
@@ -795,6 +809,15 @@ v2.2 增补对标的直接来源（核实于 2026-10-07）：对标产品 基准
 
 1. **consult 咨询实装（§5.1 动作全集/票数块/动作表联动）**：「先收集意见、原办理人最后拍板」＝派生 task_type=consult 意见任务（独立工作项：独立记录/意见/审计，不建 deadline、不进会签计数——**意见不占票**，outcome=agree/reject 由 type=consult 区分语义）；**主任务软挂起**＝同链（root_task_id 链，转办保持链）存在未完 consult → 主任务所有动作被拦（守卫挂 _claim_task_action 咽喉，覆盖 complete/reject/transfer/assist/加签，不引入新任务状态——意见全交回即解禁，复活零成本）；最后一条交回发 task_consult_finished 事件；主任务自身 deadline 时钟照走（咨询不豁免时限）。与 add_countersigner 分流：占票的加签/不占票的咨询。行业修正落地：不抄 C7 delegation 的 assignee 轮转。
 2. **MRO 教训（工程）**：Mixin 桩模式要求提供方在 MRO 中先于消费方桩——TaskConsultMixin 位于 TaskOpsMixin 之后导致其守卫实现被桩遮蔽；守卫改为内联自含查询（task_actions.py），跨 Mixin 派发不再依赖基类顺序。
+
+### 第十一轮（2026-10-09，v2.3 续，对标第三批 A11 落地）
+
+部署期引用校验 L3+L4 实装（definitions/validator_deploy.py，由 deploy 在事务内调用——与纯设计时 validator*.py 分居：这两层要查库/查注册表/查目录）：
+
+1. **L3 定义内引用**：call_activity 引入 `binding` 字段（§2.5）——deployment 绑定＝目标未发布 deploy 期 **ERROR**（Zeebe deployment binding 同义）；latest（缺省）＝**WARNING**（子流程可独立部署、运行期解析最新版，先子后父合法）；自引用（递归流程首版）合法跳过。service_task handler 未注册＝**WARNING**（实施修订：先 deploy 后 register_handler 是既有合法模式，测试即此用法）；strict 升 ERROR。
+2. **L4 目录实体存在性**：取人位（assignee/assignees/candidate_users/recipients/reassign_to）CEL 表面量经 `subject_exists` 钩子（duck-typing 探测 org 丰富面，不动 SPI 四方法）；False＝WARNING、strict ERROR；None＝静默跳过（目录未实现该能力，零噪音——行业一致：组织实体引用部署期不校验，flowork 自持目录有能力做但默认不拦发布）。
+3. **纪律落地**：`EngineConfig.strict_deploy_validation=False`（缺省）——全部 L3/L4 默认 WARNING 留痕（logger），可见优于静默；True 时升 ERROR 拦发布（fail-fast）。字面量提取 `string_literals`（lark AST，STRING_LIT token——宿主于 validator_deploy.py，cel.py 行数红线）。
+4. A10（模拟试跑）设计稿就绪待下一批（simulation-dryrun-design.md；落点 behaviors.py 已随等待节点批释放）。
 
 ## 附录 C：类型清单（须提前定义的全集）
 
