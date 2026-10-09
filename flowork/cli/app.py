@@ -1,4 +1,4 @@
-"""flowork CLI：init / validate / demo / demo-full（最终 DoD 演示）。"""
+"""flowork CLI：init / validate / deploy / retire / purge / drift / tick / instance 组 / demo。"""
 
 from __future__ import annotations
 
@@ -16,6 +16,7 @@ from flowork.definitions.node import MultiInstance
 from flowork.definitions.validator import IssueLevel, validate_definition
 from flowork.engine.config import EngineConfig
 from flowork.engine.engine import ProcessEngine
+from flowork.errors import FloworkError
 from flowork.runtime.registry import create_registry
 
 app = typer.Typer(help="flowork 流程引擎 CLI", no_args_is_help=True)
@@ -101,6 +102,57 @@ def validate(template: Path = typer.Argument(..., help="模板 JSON 文件路径
         table.add_row(f"[{color}]{issue.level.value}[/{color}]", issue.rule, where, issue.message)
     console.print(table)
     raise typer.Exit(code=1)
+
+
+@app.command()
+def deploy(
+    template: Path = typer.Argument(..., help="模板 JSON 文件路径"),
+    db: Path = typer.Option(Path("flowork.db"), help="SQLite 数据库文件"),
+    target_major: int | None = typer.Option(
+        None, help="维护分支：在该 major 最新 revision 上续发（spec §6.2）"
+    ),
+    force_major_reason: str = typer.Option(
+        "", help="覆盖破坏性判定为 major+1（必须带理由，进事件）"
+    ),
+    allow_minor_reason: str = typer.Option(
+        "", help="覆盖破坏性判定为 minor 续发（必须带理由，进事件）"
+    ),
+) -> None:
+    """deploy 定义：版本判定 + 发布（deploy 即 publish；含幂等去重与破坏性清单）。"""
+    registry = create_registry()
+    engine = ProcessEngine(EngineConfig(db_file=db))
+    try:
+        definition = load_definition_file(template, registry)
+        verdict = engine.repository.deploy(
+            definition,
+            published_by="cli",
+            target_major=target_major,
+            force_major_reason=force_major_reason,
+            allow_minor_reason=allow_minor_reason,
+        )
+    except FloworkError as exc:
+        console.print(f"[red]✗ deploy 失败[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+    finally:
+        engine.close()
+
+    if verdict.identical_to is not None:
+        console.print(
+            f"[yellow]=[/yellow] {definition.code} 内容与 "
+            f"v{verdict.identical_to[0]}.{verdict.identical_to[1]} 完全相同——"
+            "幂等去重，不增版本不发事件"
+        )
+        return
+    tag = "[red]破坏性[/red]" if verdict.breaking else "兼容"
+    version = f"v{verdict.next_major}.{verdict.next_revision}"
+    console.print(f"[green]✓[/green] {definition.code} 发布为 {version}（{tag}）")
+    if verdict.triggered_rules:
+        table = Table(title="触发的破坏性规则")
+        table.add_column("规则")
+        table.add_column("说明")
+        for rule in verdict.triggered_rules:
+            table.add_row(rule.rule, rule.detail)
+        console.print(table)
 
 
 @app.command()

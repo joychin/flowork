@@ -6,10 +6,11 @@
 uv sync                                   # Python >= 3.11
 uv run pytest                             # 全量测试
 uv run flowork init --db flowork.db       # 初始化 SQLite 库
+uv run flowork deploy <template.json>     # 部署定义（版本判定/幂等去重/破坏性清单）
 uv run flowork validate examples/01_simple_approval.json
 uv run flowork demo-full                  # 全流程 DoD 演示（事件回放）
-uv run flowork retire <code>             # 定义退役（purge 物理清除 / drift 文件对账）
-uv run flowork instance vars <iid>       # 实例变量面（vars-set 写 / var-history 血缘）
+uv run flowork retire <code>              # 定义退役（purge 物理清除 / drift 文件对账）
+uv run flowork instance vars <iid>        # 实例变量面（vars-set 写 / var-history 血缘）
 ```
 
 嵌入使用：`pip install -e .` 后 `from flowork.engine.engine import ProcessEngine`。
