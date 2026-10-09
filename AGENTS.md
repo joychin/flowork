@@ -320,3 +320,15 @@ test_builtin_kinds_registered 显式补 KIND_WAIT。
 发现挂账：route_audit snapshot.now 取 utc_now 而非 EngineConfig.now（FakeClock 下
 审计时刻与任务时刻不一致，待修）；父 terminate 不级联子实例（孤儿运行，开放问题
 已在 test_construct_subprocess 钉住）。
+
+**测试方案落地批 C·随机结构（2026-10-09，方案三批完结）**：
+`tests/suite/random_gen.py` 随机流程结构生成器（Zeebe RandomProcessGenerator 的
+flowork 版）：有界随机（序列≤5 块/2 条件臂+默认边），两段式「先决策结构再发射」；
+执行计划=(结构,n) 纯函数，驳回注入=换 reject+补 start 重报+全量重放（只落单人
+多任务）；生成闸 assert_valid（非法=生成器 bug）。`test_random_structure.py`
+（randomized marker 默认排除，FLOWORK_RANDOM_ITER 默认 30）：跨结构不变量
+（无悬空/历史无重复/条件路由行必有择道/子实例一致/映射回传）+失败三段日志
+（种子+定义 JSON+计划卡点，generate(seed) 即复现）。DoD 实验：临时改坏
+join_gate → seed=20261014 抓到活跃令牌未收口并可复现，还原复绿；100 迭代全绿。
+至此三批 12 提交全部落地：构造层穷尽（矩阵双向锁定）+组合层随机（结构+执行
+双随机可复现）+过程层可审计（三留痕表序列断言）+多形态覆盖（四形态参数化）。
