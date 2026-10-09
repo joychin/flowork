@@ -95,6 +95,8 @@ class Kernel(TaskRecordsMixin, TokenRecordsMixin):
     # —— 事件 ——
 
     def record_event(self, name: str, payload: dict[str, Any], instance_id: str | None) -> None:
+        if self.command_ctx is not None and self.command_ctx.suppress_events:
+            return  # 模拟实例（v2.3 A10）：事件不投 outbox（试跑不得惊动订阅方）
         self.events.append((name, payload, instance_id))
         if instance_id and self.command_ctx is not None:
             self.command_ctx.instances_touched.add(instance_id)

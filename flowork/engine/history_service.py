@@ -132,10 +132,19 @@ class HistoryService(ArchiveMixin):
         return result
 
     def instances(
-        self, *, state: str | None = None, definition_code: str | None = None, limit: int = 100
+        self,
+        *,
+        state: str | None = None,
+        definition_code: str | None = None,
+        limit: int = 100,
+        include_simulated: bool = False,
     ) -> list[InstanceInfo]:
+        """实例查询（默认隔离模拟实例——试跑不进业务视图，v2.3 A10）。"""
+
         def _command(ctx: CommandContext) -> Any:
             stmt = select(ProcessInstanceRow).order_by(ProcessInstanceRow.started_at.desc())
+            if not include_simulated:
+                stmt = stmt.where(ProcessInstanceRow.simulated.is_(False))
             if state:
                 stmt = stmt.where(ProcessInstanceRow.state == state)
             if definition_code:
@@ -152,6 +161,7 @@ class HistoryService(ArchiveMixin):
                     started_at=row.started_at,
                     finished_at=row.finished_at,
                     parent_id=row.parent_id,
+                    simulated=row.simulated,
                 )
                 for row in ctx.session.scalars(stmt.limit(limit))
             ]

@@ -372,3 +372,16 @@ WARNING、strict ERROR、None=零噪音跳过。③ EngineConfig.strict_deploy_v
 STRING_LIT）宿于 validator_deploy.py（cel.py 行数红线）。字面量提取踩坑入档：builder 产的
 节点是 FlowNode extra 袋（未传字段不在袋），一切取人位访问须 getattr（同 iter_expression_
 positions 惯例）。A10 设计稿就绪待下一批（落点已释放）。测试 9 例；范围内 738 全绿。
+
+**对标第三批 A10 落地（2026-10-09，spec v2.3 第十二轮——模拟试跑收口，第三批完结）**：
+模拟实例（simulated）第二层实装：① start_process(simulated=)/RuntimeService.simulate()→
+SimulationReport（终态+令牌时间线+stub 清单+卡点+路由轨迹）；实例行 simulated 列（Alembic
+0002）。② 行为分支五点——**kind 知识住行为**：NodeBehavior.performs_external_work 类属性
+声明外部副作用（kind 守卫测试曾拦下 simulation.py 的 kind 分支，改为行为契约）；user_task
+进入即完成（approval_exit=simulated，不走 auto_pass 票数）、service_task 恒 stub（绝不执行
+handler）、cc 不建传阅、call 递归传播、wait 冻结为卡点（不订阅不建 Job）。③ 隔离（行业
+空白一等公民化）：CommandContext.suppress_events——事件不投 outbox（试跑不惊动订阅方；
+route_decision 行不受影响=报告数据源）；不建任何 Job；history.instances() 默认排除模拟。
+④ 报告 F2 现查模式（不预存）；执行错直抛试跑调用方（模拟失败=定义会挂）。真实路径零影响
+（回归断言）。测试 6 例；范围内 744 全绿。**第三批（A8/A10/A11）就此完结**；剩第四批 A9
+多实例子流程（大件）。

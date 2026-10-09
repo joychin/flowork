@@ -62,6 +62,10 @@ class NodeBehavior:
     不得改变路由（路由决策只属于 get_outgoing + 条件求值 + 引擎）。
     """
 
+    # v2.3 A10：本类节点在真实运行中执行外部副作用（handler/外部调用）——
+    # 模拟试跑恒 stub（绝不执行），报告据此列 stub 清单。kind 知识住在行为里。
+    performs_external_work: bool = False
+
     def __init__(self, spec: FlowNode) -> None:
         self.spec = spec
 

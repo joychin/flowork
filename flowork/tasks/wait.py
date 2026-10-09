@@ -38,6 +38,8 @@ class WaitBehavior(NodeBehavior):
         assert isinstance(ctx, RuntimeNodeContext)
         spec = self.spec
         assert isinstance(spec, WaitSpec)
+        if ctx.instance.simulated:  # v2.3 A10：模拟冻结（不订阅不建 Job）——卡点即报告发现
+            return
         if spec.message is not None:
             assert ctx.token is not None
             from flowork.engine.message_flow import subscribe_open

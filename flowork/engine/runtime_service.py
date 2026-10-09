@@ -39,6 +39,7 @@ class RuntimeService(InstanceLifecycleMixin, IncidentMixin, VariableActionsMixin
         revision: int | None = None,
         idempotency_key: str | None = None,
         reuse: Literal["reject", "return_existing", "allow_duplicate"] = "reject",
+        simulated: bool = False,
     ) -> str:
         """发起流程（使用已发布定义的快照）。返回实例 ID。
 
@@ -68,6 +69,7 @@ class RuntimeService(InstanceLifecycleMixin, IncidentMixin, VariableActionsMixin
                 revision,
                 idempotency_key,
                 reuse,
+                simulated=simulated,
             )
 
         try:
@@ -137,6 +139,7 @@ class RuntimeService(InstanceLifecycleMixin, IncidentMixin, VariableActionsMixin
         idempotency_key: str | None,
         reuse: Literal["reject", "return_existing", "allow_duplicate"],
         start_message: dict[str, str] | None = None,
+        simulated: bool = False,
     ) -> str:
         import json
 
@@ -171,8 +174,11 @@ class RuntimeService(InstanceLifecycleMixin, IncidentMixin, VariableActionsMixin
             variables=dict(variables or {}),
             parent_id=parent_instance_id,
             parent_token_id=parent_token_id,
+            simulated=simulated,
         )
         ctx.session.add(instance)
+        if simulated:  # v2.3 A10：模拟静默（事件不投 outbox；不建实例时限 Job）
+            ctx.suppress_events = True
         # 变量留痕：出生 before 显式播种为空——发起变量记 birth 行（old=None）
         ctx.variable_before[instance.id] = {}
         # v2.2（spec §7）：实例时限物化——按 after_minutes 折算 deadline_at（自然时间）
@@ -185,7 +191,7 @@ class RuntimeService(InstanceLifecycleMixin, IncidentMixin, VariableActionsMixin
                 minutes=definition.deadline.after_minutes
             )
         ctx.session.flush()
-        if definition.deadline is not None:
+        if definition.deadline is not None and not simulated:
             import uuid as _uuid
 
             from flowork.persistence.orm import JobRow
@@ -217,6 +223,32 @@ class RuntimeService(InstanceLifecycleMixin, IncidentMixin, VariableActionsMixin
             raise InstanceNotFoundError(f"定义 {code} 缺少 start 节点")
         kernel.activate(ctx.session, instance, start_node)
         return instance.id
+
+    def simulate(
+        self,
+        code: str,
+        *,
+        variables: dict[str, Any] | None = None,
+        start_user: str = "simulator",
+        major: int | None = None,
+        revision: int | None = None,
+    ) -> Any:
+        """整图试跑（v2.3 A10）：模拟启动并自动推到卡点/终态，返回 SimulationReport。
+
+        条件边按初始变量**真求值**；service_task 恒 stub、wait 冻结为卡点、
+        事件不投 outbox——报告复用路由审计（wf_route_decision）+ 令牌时间线。
+        """
+        from flowork.engine.simulation import build_report
+
+        instance_id = self.start_process(
+            code,
+            start_user=start_user,
+            variables=variables,
+            major=major,
+            revision=revision,
+            simulated=True,
+        )
+        return build_report(self._engine, instance_id)
 
     def get_instance(self, instance_id: str) -> InstanceInfo:
         def _command(ctx: CommandContext) -> Any:

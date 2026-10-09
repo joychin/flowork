@@ -71,6 +71,7 @@ class InstanceInfo(BaseModel):
     started_at: datetime | None = None
     finished_at: datetime | None = None
     parent_id: str | None = None
+    simulated: bool = False  # v2.3 A10：模拟实例标记（查询面默认隔离）
 
 
 class EventInfo(BaseModel):

@@ -102,6 +102,7 @@ def start_sub_process(ctx: RuntimeNodeContext, spec: CallActivitySpec) -> None:
         variables=dict(input_variables),
         parent_id=ctx.instance.id,
         parent_token_id=ctx.token.id,
+        simulated=ctx.instance.simulated,  # v2.3 A10：模拟递归传播
     )
     ctx.session.add(child)
     ctx.session.flush()

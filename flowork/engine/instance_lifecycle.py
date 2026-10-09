@@ -142,4 +142,5 @@ def _to_info(instance: ProcessInstanceRow) -> InstanceInfo:
         started_at=instance.started_at,
         finished_at=instance.finished_at,
         parent_id=instance.parent_id,
+        simulated=instance.simulated,
     )

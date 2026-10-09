@@ -78,6 +78,9 @@ class ProcessInstanceRow(Base):
     # v2.2（spec §7）：实例时限——发起时物化到期时刻；mark 策略打标（流程继续跑）
     deadline_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     deadline_marked: Mapped[bool] = mapped_column(Boolean, default=False)
+    # v2.3 第三批 A10：模拟实例（试跑）——service_task 恒 stub、不建任务/传阅/Job、
+    # 事件不投 outbox（CommandContext.suppress_events）；查询面默认隔离（可含）
+    simulated: Mapped[bool] = mapped_column(Boolean, default=False)
 
     __table_args__ = (
         Index(

@@ -260,7 +260,7 @@ node_registry.register("http_request", HttpRequestSpec, HttpRequestBehavior,
 
 | 表/对象 | 字段（现状 ✓，【v2】为改造） | 说明 |
 |---|---|---|
-| wf_process_instance 流程实例 | id；definition_code；definition_version【v2→major+revision】；**definition_snapshot**（发起时图纸全文抄本，不可变——快照原则的实现）；business_key（业务单号，仅查询用）；state（running；【v2】扩 paused/terminated）；start_user；variables（JSON）；parent_id/parent_token_id（作为子流程时的父指针）；deadline_at【v2.2】（实例时限到期时刻，图纸顶层 deadline 按自然分钟折算后物化——WorkCalendar 已删，见 §9）；version（乐观锁）；started_at/finished_at/updated_at | 一次流程运转的全部持久状态 |
+| wf_process_instance 流程实例 | id；definition_code；definition_version【v2→major+revision】；**definition_snapshot**（发起时图纸全文抄本，不可变——快照原则的实现）；business_key（业务单号，仅查询用）；state（running；【v2】扩 paused/terminated）；start_user；variables（JSON）；parent_id/parent_token_id（作为子流程时的父指针）；deadline_at【v2.2】（实例时限到期时刻，图纸顶层 deadline 按自然分钟折算后物化——WorkCalendar 已删，见 §9）；simulated【v2.3 第十二批 A10】（模拟实例标记：试跑不建任务/传阅/Job、事件不投 outbox、查询面默认隔离）；version（乐观锁）；started_at/finished_at/updated_at | 一次流程运转的全部持久状态 |
 | wf_token 令牌 | id；instance_id；token_no（实例内自增）；activity_code（当前在哪个节点）；source_activity_code（从哪来）；state（unfinished/finished）；item_count/approve_count/disapprove_count（会签 应办/同意/驳回计数）；approval_exit（会签出口判定结果）；reject_flag（驳回产生的令牌）；manual_participants（人工调整的参与人）；created_at/finished_at | 「走到哪了」的记号；会签计数在此不在任务上 |
 | wf_task 人工任务（活表） | id；instance_id；token_id；activity_code；name；assignee；task_type（approval/assist）；state（ready/completed/cancelled）；context_payload（审批卡片数据，AI 预审共用）；root_task_id（加签/委派链，指回原任务）；【v2】priority/due_at；created_at | 还没办完的人工任务 |
 | wf_task_history 已办（只插入不改） | 同上 + task_id；outcome（agree/reject/transfer/auto_pass/withdrawn/assist/assist_cancel【v2.3：协办交还与随主任务收口】/cancelled/simulated 预留）；comment；acted_by；**acted_as_agent**（是否 AI 代理代办）；**idempotency_key**（完成幂等）；**actor_context**（身份快照 JSON 袋，完成事务内定格，见 5.6）【v2.1】；cause_token_id（驳回复活的关联）；cost_seconds（耗时）；created_at | 审计的唯一真相，append-only |
@@ -618,7 +618,7 @@ class EventSink(Protocol):               # ✗ 事件外发（默认=outbox 轮�
 | 组 | 方法 | 现状 |
 |---|---|---|
 | 定义 | `deploy / validate / dry_run / semantic_diff / verdict(预演) / get_definition / list_definitions / retire / purge / definition_drift` | ✓ 全部（P0-4/P1-6；get_definition 参数为 code/major/revision） |
-| 实例 | `start_process(code, variables, start_user, business_key?, major?, revision?, idempotency_key?, reuse?)`；`pause / resume / terminate / get_instance`；`update_variables(instance_id, updates, *, actor, as_agent?, reason?)` / `variables_of(instance_id)` / `variable_history(instance_id, *, name?, limit, offset?)`【变量 I/O 批，2026-10-08】 | ✓ 全部（幂等三策略 P0-5；pause/resume/terminate P1-3；分页为 offset 式非游标） |
+| 实例 | `start_process(code, variables, start_user, business_key?, major?, revision?, idempotency_key?, reuse?)`；`pause / resume / terminate / get_instance`；`update_variables(instance_id, updates, *, actor, as_agent?, reason?)` / `variables_of(instance_id)` / `variable_history(instance_id, *, name?, limit, offset?)`【变量 I/O 批，2026-10-08】；**`simulate`【v2.3 第十二批 A10】（整图试跑→SimulationReport：条件边真求值、service_task 恒 stub、wait 冻结为卡点、事件不投 outbox、报告复用路由审计）** | ✓ 全部（幂等三策略 P0-5；pause/resume/terminate P1-3；分页为 offset 式非游标） |
 | 任务 | `get_task / list_tasks / claim / unclaim / complete / reject / transfer / assist / complete_assist / add_countersigner / list_cc_tasks / mark_cc_read`；`anticipate(task_id, outcome) → {node_exit, instance_complete}` | ✓ 全部（anticipate 只读预判，P1） |
 | 系统 | `signal / publish_message`【v2】；`activate_jobs / complete_job / fail_job`【v2】；`list_incidents / resolve_incident / move_token` | ✓ 全部（消息 P1-1；worker 租约 P1-2；resolve 五动作 P1-4） |
 
@@ -818,6 +818,16 @@ v2.2 增补对标的直接来源（核实于 2026-10-07）：对标产品 基准
 2. **L4 目录实体存在性**：取人位（assignee/assignees/candidate_users/recipients/reassign_to）CEL 表面量经 `subject_exists` 钩子（duck-typing 探测 org 丰富面，不动 SPI 四方法）；False＝WARNING、strict ERROR；None＝静默跳过（目录未实现该能力，零噪音——行业一致：组织实体引用部署期不校验，flowork 自持目录有能力做但默认不拦发布）。
 3. **纪律落地**：`EngineConfig.strict_deploy_validation=False`（缺省）——全部 L3/L4 默认 WARNING 留痕（logger），可见优于静默；True 时升 ERROR 拦发布（fail-fast）。字面量提取 `string_literals`（lark AST，STRING_LIT token——宿主于 validator_deploy.py，cel.py 行数红线）。
 4. A10（模拟试跑）设计稿就绪待下一批（simulation-dryrun-design.md；落点 behaviors.py 已随等待节点批释放）。
+
+### 第十二轮（2026-10-09，v2.3 续，对标第三批 A10 落地——模拟试跑第二层）
+
+模拟实例（simulated）实装（simulation-dryrun-design.md 第二层；第一层令牌模拟仍属 dry_run 域）：
+
+1. **入口与标记**：`start_process(..., simulated=True)` 与 `RuntimeService.simulate(code, variables) -> SimulationReport`；实例行 `simulated` 列（迁移 0002）。条件边按初始变量**真求值**（与令牌模拟层的显式选择相反）。
+2. **行为分支五点**（kind 知识住在行为里——`NodeBehavior.performs_external_work` 类属性声明外部副作用，引擎核心零 kind 分支，kind 守卫测试实证）：user_task 进入即完成（approval_exit=simulated，不建任务、不走 auto_pass 票数语义）；service_task 恒 **stub**（行业共识：模拟绝不执行真实副作用）；cc_task 不建传阅件；call_activity 递归传播 simulated（子实例同标记）；wait 冻结为卡点（不订阅、不建到时 Job——**卡点即报告发现**）。
+3. **隔离（行业空白，flowork 一等公民化）**：事件不投 outbox（`CommandContext.suppress_events`——试跑不得惊动订阅方；路由审计行不受影响=报告数据源）；不建任何 Job（含实例时限）；`history.instances()` 默认排除模拟实例（`include_simulated=True` 可含）。
+4. **报告**（engine/simulation.py，F2 现查模式不预存）：终态＋令牌时间线＋stub 清单（performs_external_work 节点到访）＋卡点（首个未完令牌所在）＋路由轨迹（wf_route_decision 现查——F3 资产天然数据源）。**报告诚实呈现覆盖度**：stub 与卡点都是发现。执行错（如公式错）按既有二分直接抛给试跑调用方（模拟失败=定义会挂， Caller 即诊断对象）。
+5. 真实路径零影响（回归断言：真实启动仍建任务/发事件）；builder 产 FlowNode extra 袋的 getattr 惯例延续（同第十一轮）。
 
 ## 附录 C：类型清单（须提前定义的全集）
 

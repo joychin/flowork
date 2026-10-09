@@ -93,6 +93,8 @@ class UserTaskBehavior(NodeBehavior):
         spec = self.spec
         assert isinstance(spec, UserTaskSpec)
         assert ctx.token is not None
+        if ctx.instance.simulated:  # v2.3 A10：模拟不建任务（try_complete 模拟分支放行）
+            return
         from flowork.participants.resolver import ParticipantResolution
 
         resolution: ParticipantResolution = ctx.kernel.resolve_participants(ctx, spec)
@@ -198,6 +200,9 @@ class UserTaskBehavior(NodeBehavior):
         assert isinstance(spec, UserTaskSpec)
         token = ctx.token
         assert token is not None
+        if ctx.instance.simulated:  # v2.3 A10：模拟即完成（不走 auto_pass 票数语义）
+            token.approval_exit = "simulated"
+            return True
         mi = spec.multi_instance
         from flowork.tasks.facts import instance_facts
 
@@ -228,10 +233,14 @@ class UserTaskBehavior(NodeBehavior):
 class ServiceTaskBehavior(NodeBehavior):
     """系统节点：执行 HandlerRegistry 中注册的动作。"""
 
+    performs_external_work = True  # 模拟试跑恒 stub（v2.3 A10）
+
     def on_enter(self, ctx: NodeContext) -> None:
         assert isinstance(ctx, RuntimeNodeContext)
         spec = self.spec
         assert isinstance(spec, ServiceTaskSpec)
+        if ctx.instance.simulated:  # v2.3 A10：stub（行业共识：模拟绝不执行外部副作用）
+            return
         if not spec.action:
             return
         handler = ctx.kernel.handlers.resolve(spec.action)
@@ -275,4 +284,5 @@ class CcTaskBehavior(NodeBehavior):
         assert isinstance(ctx, RuntimeNodeContext)
         spec = self.spec
         assert isinstance(spec, CcTaskSpec)
-        create_cc_items(ctx, spec)
+        if not ctx.instance.simulated:  # v2.3 A10：模拟不建传阅件
+            create_cc_items(ctx, spec)

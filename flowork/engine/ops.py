@@ -47,6 +47,9 @@ class CommandContext:
     write_actor: str | None = None
     write_as_agent: bool = False
     write_reason: str | None = None
+    # v2.3 A10：模拟实例的事件静默（record_event 直通丢弃——不投 outbox，
+    # 杜绝订阅方对试跑做出真实反应；route_decision 行不受影响=报告数据源）
+    suppress_events: bool = False
 
     def touch(self, instance: ProcessInstanceRow) -> None:
         """写命令统一守卫：触碰实例行（updated_at），提交时触发 version 乐观锁。
