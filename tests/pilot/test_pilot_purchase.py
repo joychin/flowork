@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 
 from flowork.engine.engine import ProcessEngine
 from tests.pilot.conftest import activities_of, complete_of, reject_of
+from tests.suite.features import covers
 
 
 def start_purchase(pilot: ProcessEngine, amount: int, supplier: str = "S-001") -> str:
@@ -16,6 +17,7 @@ def start_purchase(pilot: ProcessEngine, amount: int, supplier: str = "S-001") -
     )
 
 
+@covers("route.default_edge")
 def test_purchase_small_direct(pilot: ProcessEngine):
     """<10万：主管直通完结。"""
     instance_id = start_purchase(pilot, 50000)
@@ -23,6 +25,7 @@ def test_purchase_small_direct(pilot: ProcessEngine):
     assert pilot.runtime.get_instance(instance_id).state == "completed"
 
 
+@covers("route.parallel_fork", "join.all_gate")
 def test_purchase_parallel_join(pilot: ProcessEngine):
     """10万~50万：法务/财务并行 → 与汇聚 → 完结。"""
     instance_id = start_purchase(pilot, 300000)
@@ -34,6 +37,7 @@ def test_purchase_parallel_join(pilot: ProcessEngine):
     assert pilot.runtime.get_instance(instance_id).state == "completed"
 
 
+@covers("reject.cancel_sibling_tokens", "reject.node_target")
 def test_purchase_reject_inside_parallel_cancels_sibling(pilot: ProcessEngine):
     """并行分支内驳回：财务否决 → 法务兄弟分支令牌被取消 → 整体回退主管。"""
     instance_id = start_purchase(pilot, 300000)
@@ -52,6 +56,7 @@ def test_purchase_reject_inside_parallel_cancels_sibling(pilot: ProcessEngine):
     assert pilot.runtime.get_instance(instance_id).state == "completed"
 
 
+@covers("node.call_activity", "subprocess.input_mapping", "subprocess.output_mapping")
 def test_purchase_big_with_subprocess(pilot: ProcessEngine):
     """≥50万：总经理 → 供应商合规子流程（同步）→ 完结；输入输出映射生效。"""
     instance_id = start_purchase(pilot, 800000, supplier="ACME")
@@ -71,20 +76,12 @@ def test_purchase_big_with_subprocess(pilot: ProcessEngine):
     )
     assert pilot.runtime.get_instance(children[0].id).state == "completed"
     assert pilot.runtime.get_instance(instance_id).state == "completed"
-    variables = pilot.execute(
-        lambda ctx: (
-            ctx.session.get(
-                __import__(
-                    "flowork.persistence.orm", fromlist=["ProcessInstanceRow"]
-                ).ProcessInstanceRow,
-                instance_id,
-            ).variables
-        )
-    )
+    variables = pilot.runtime.variables_of(instance_id)
     assert variables.get("compliance") == "pass"  # 子→父输出映射
     assert variables.get("paid") is True
 
 
+@covers("subprocess.child_reject", "reject.to_start")
 def test_purchase_subprocess_reject_to_originator(pilot: ProcessEngine):
     """子流程内驳回到发起：发起人（父发起人）重报 → 子完成 → 父恢复完结。"""
     instance_id = start_purchase(pilot, 800000)
@@ -102,6 +99,7 @@ def test_purchase_subprocess_reject_to_originator(pilot: ProcessEngine):
     assert pilot.runtime.get_instance(instance_id).state == "completed"
 
 
+@covers("fault.admin_move_token", "subprocess.child_recover")
 def test_purchase_subprocess_incident_recovery(pilot: ProcessEngine):
     """子流程内引擎错误 → 子挂起 → 修复 resume → 办结 → 父恢复。
 
@@ -122,6 +120,7 @@ def test_purchase_subprocess_incident_recovery(pilot: ProcessEngine):
     assert pilot.runtime.get_instance(instance_id).state == "completed"  # 父恢复
 
 
+@covers("deadline.auto_approve")
 def test_purchase_timeout_auto_approve():
     """采购主管节点超时自动通过（模拟时钟，确定性）。"""
     from flowork.definitions.builder import FlowBuilder

@@ -6,6 +6,7 @@ from flowork.definitions.builder import FlowBuilder
 from flowork.definitions.builtin import RouteMode
 from flowork.engine.engine import ProcessEngine
 from tests.pilot.conftest import activities_of, complete_of, reject_of
+from tests.suite.features import covers
 
 
 def start_contract(
@@ -16,6 +17,7 @@ def start_contract(
     )
 
 
+@covers("route.default_edge")
 def test_contract_legal_only_default(pilot: ProcessEngine):
     """小额非紧急：只走法务 → 默认边直达或汇聚 → 完成。"""
     instance_id = start_contract(pilot, amount=50000)
@@ -23,6 +25,7 @@ def test_contract_legal_only_default(pilot: ProcessEngine):
     assert pilot.runtime.get_instance(instance_id).state == "completed"
 
 
+@covers("route.all_match", "join.all_gate")
 def test_contract_finance_branch_only(pilot: ProcessEngine):
     """大额非紧急：法务 + 财务；财务先到或汇聚直接通过。"""
     instance_id = start_contract(pilot, amount=200000)
@@ -32,6 +35,7 @@ def test_contract_finance_branch_only(pilot: ProcessEngine):
     assert pilot.runtime.get_instance(instance_id).state == "completed"
 
 
+@covers("route.all_match", "join.any_absorb", "reject.cancel_sibling_tokens")
 def test_contract_urgent_both_branches(pilot: ProcessEngine):
     """大额紧急：财务 + 总经理两分支同时激活；或汇聚任一到达即通过并取消另一分支。"""
     instance_id = start_contract(pilot, amount=200000, urgent=True)
@@ -51,6 +55,7 @@ def test_contract_urgent_both_branches(pilot: ProcessEngine):
     assert ("finance_review", "cancelled") in outcomes
 
 
+@covers("join.any_absorb", "reject.cancel_sibling_tokens")
 def test_contract_finance_first_then_gm_cancelled(pilot: ProcessEngine):
     """对偶场景：财务先到 → 总经理分支被取消。"""
     instance_id = start_contract(pilot, amount=200000, urgent=True)
@@ -62,6 +67,7 @@ def test_contract_finance_first_then_gm_cancelled(pilot: ProcessEngine):
     assert pilot.task.list_tasks(instance_id=instance_id) == []  # 总经理待办被撤
 
 
+@covers("reject.node_target")
 def test_contract_finance_reject_to_legal(pilot: ProcessEngine):
     """财务驳回归法务重办。"""
     instance_id = start_contract(pilot, amount=200000)
@@ -73,6 +79,7 @@ def test_contract_finance_reject_to_legal(pilot: ProcessEngine):
     assert pilot.runtime.get_instance(instance_id).state == "completed"
 
 
+@covers("reject.node_target", "reject.cancel_sibling_tokens")
 def test_contract_gm_reject_to_legal(pilot: ProcessEngine):
     """总经理驳回归法务（另一分支目标一致性）。"""
     instance_id = start_contract(pilot, amount=200000, urgent=True)
@@ -86,6 +93,7 @@ def test_contract_gm_reject_to_legal(pilot: ProcessEngine):
     assert finance_token.state == "cancelled"
 
 
+@covers("version.instance_snapshot", "route.formula")
 def test_contract_version_snapshot_isolation(pilot: ProcessEngine):
     """版本演进：v1 在途实例按发起时快照跑完，v2 新规则只影响新实例。
 
@@ -129,6 +137,7 @@ def test_contract_version_snapshot_isolation(pilot: ProcessEngine):
     assert "finance_review" not in v1_activities
 
 
+@covers("ops.transfer")
 def test_contract_claim_and_transfer_combo(pilot: ProcessEngine):
     """认领 + 转办组合：法务任务转给同事，同事又转回后办理。"""
     instance_id = start_contract(pilot, amount=200000)

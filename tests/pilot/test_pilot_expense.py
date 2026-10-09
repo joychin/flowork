@@ -6,6 +6,7 @@ import pytest
 
 from flowork.engine.engine import ProcessEngine
 from tests.pilot.conftest import activities_of, complete_of, reject_of
+from tests.suite.features import covers
 
 
 def assignees_of(pilot: ProcessEngine, instance_id: str) -> set[str]:
@@ -21,6 +22,7 @@ def start_expense(pilot: ProcessEngine, amount: int) -> str:
 # —— 金额矩阵 ——
 
 
+@covers("route.first_match", "route.formula", "participant.delegation", "ops.cc_read")
 @pytest.mark.parametrize("amount", [300, 5000, 20000])
 def test_expense_amount_matrix(pilot: ProcessEngine, amount: int):
     """三档金额各走正确路径并完结（含 service 打款与法务传阅）。"""
@@ -43,14 +45,10 @@ def test_expense_amount_matrix(pilot: ProcessEngine, amount: int):
         cc = pilot.task.list_cc_tasks(recipient="u_fa1")
         assert len(cc) == 1  # 法务留档传阅
     # 打款动作已执行（service 节点写入 paid 变量）
-    from flowork.persistence.orm import ProcessInstanceRow
-
-    variables = pilot.execute(
-        lambda ctx: ctx.session.get(ProcessInstanceRow, instance_id).variables
-    )
-    assert variables.get("paid") is True
+    assert pilot.runtime.variables_of(instance_id).get("paid") is True
 
 
+@covers("participant.delegation")
 def test_expense_supervisor_delegation_to_dave(pilot: ProcessEngine):
     """委托：u_li 的审批由受托人 u_dave 承接。"""
     instance_id = start_expense(pilot, 500)
@@ -59,6 +57,7 @@ def test_expense_supervisor_delegation_to_dave(pilot: ProcessEngine):
     assert pilot.runtime.get_instance(instance_id).state == "completed"
 
 
+@covers("countersign.approve_ratio", "countersign.auto_pass_remaining")
 def test_expense_finance_50_percent_and_auto_pass(pilot: ProcessEngine):
     """中额会签 >=50%：1/2 即达成，另一人记 auto_pass。"""
     instance_id = start_expense(pilot, 5000)
@@ -70,6 +69,7 @@ def test_expense_finance_50_percent_and_auto_pass(pilot: ProcessEngine):
     assert ("u_cai2", "agree") in outcomes
 
 
+@covers("reject.explicit_target", "query.task_history_append_only")
 def test_expense_finance_reject_back_to_supervisor_then_pass(pilot: ProcessEngine):
     """财务驳回 → 主管重办 → 重提通过（多级驳回链第一环）。"""
     instance_id = start_expense(pilot, 5000)
@@ -88,6 +88,7 @@ def test_expense_finance_reject_back_to_supervisor_then_pass(pilot: ProcessEngin
     assert ("finance_review", "auto_pass") in outcomes
 
 
+@covers("reject.to_start", "variables.reroute_pending_branch", "query.tokens")
 def test_expense_supervisor_reject_to_originator_then_change_amount(pilot: ProcessEngine):
     """退回发起人：主管驳回到 start → 发起人重报（改金额）→ 分流路径随之改变。
 
@@ -110,6 +111,7 @@ def test_expense_supervisor_reject_to_originator_then_change_amount(pilot: Proce
     assert "director_review" not in tokens and "finance_review" not in tokens
 
 
+@covers("lifecycle.task_idempotency")
 def test_expense_idempotent_complete_in_countersign(pilot: ProcessEngine):
     """中额会签幂等：同键重复提交不产生第二次推进。"""
     instance_id = start_expense(pilot, 5000)
@@ -127,6 +129,7 @@ def test_expense_idempotent_complete_in_countersign(pilot: ProcessEngine):
     assert len(agrees) == 1  # 只有第一条真实提交
 
 
+@covers("ops.add_countersigner", "countersign.approve_ratio")
 def test_expense_add_countersigner_midway(pilot: ProcessEngine):
     """会签中途加签：item_count 联动，三人 >=50% 需 2 票。"""
     instance_id = start_expense(pilot, 5000)

@@ -14,10 +14,12 @@ from tests.suite.features import all_features
 from tests.suite.world_catalog import all_nodes
 
 SUITE_DIR = Path(__file__).parent
+PILOT_DIR = SUITE_DIR.parent / "pilot"
 
 # 黑盒白名单：套件只允许 import 公共面（引擎门面/目录/定义层/错误/事件/装配工具）
 ALLOWED_FLOWORK_MODULES = {
     "flowork.contrib",
+    "flowork.definitions.builtin",
     "flowork.definitions.builder",
     "flowork.definitions.contract",
     "flowork.definitions.definition",
@@ -37,7 +39,13 @@ ALLOWED_FLOWORK_MODULES = {
 
 
 def _suite_sources() -> list[Path]:
-    return sorted(path for path in SUITE_DIR.glob("*.py") if path.name != "__init__.py")
+    """套件 + pilot 走查层的全部源文件（两层共用同一张特性矩阵与黑盒边界）。"""
+    return sorted(
+        path
+        for directory in (SUITE_DIR, PILOT_DIR)
+        for path in directory.glob("*.py")
+        if path.name != "__init__.py"
+    )
 
 
 def _decorator_strings() -> tuple[set[str], set[tuple[str, str]]]:

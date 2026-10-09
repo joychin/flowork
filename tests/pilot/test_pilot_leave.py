@@ -4,12 +4,14 @@ from __future__ import annotations
 
 from flowork.engine.engine import ProcessEngine
 from tests.pilot.conftest import activities_of, complete_of, reject_of
+from tests.suite.features import covers
 
 
 def start_leave(pilot: ProcessEngine, days: int, user: str = "u_zhang") -> str:
     return pilot.runtime.start_process("leave_request", start_user=user, variables={"days": days})
 
 
+@covers("route.formula", "ops.cc_read")
 def test_leave_short_path(pilot: ProcessEngine):
     """≤3 天：主管 → HR 备案 → 传阅发起人 → 结束。"""
     instance_id = start_leave(pilot, 2)
@@ -21,6 +23,7 @@ def test_leave_short_path(pilot: ProcessEngine):
     assert len(cc) == 1  # 结果传阅发起人
 
 
+@covers("participant.auto_pass_originator", "participant.delegation")
 def test_leave_originator_is_supervisor_auto_pass(pilot: ProcessEngine):
     """发起人即主管（u_li 请假）：auto_pass_originator 生效，但委托优先——u_li 委托 u_dave，
     故 u_dave 待办（策略作用于解析后的名单：u_li 被替换为 u_dave，发起人= u_li 不在其中）。"""
@@ -33,6 +36,7 @@ def test_leave_originator_is_supervisor_auto_pass(pilot: ProcessEngine):
     assert pilot.runtime.get_instance(instance_id).state == "completed"
 
 
+@covers("countersign.sequential", "countersign.approve_all")
 def test_leave_long_path_sequential_chain(pilot: ProcessEngine):
     """>3 天：HR 串行会签 u_hr1 → u_hr2 全过。"""
     instance_id = start_leave(pilot, 5)
@@ -50,6 +54,7 @@ def test_leave_long_path_sequential_chain(pilot: ProcessEngine):
     assert chain == [("u_hr1", "agree"), ("u_hr2", "agree")]
 
 
+@covers("reject.explicit_target", "reject.cause_token")
 def test_leave_hr_reject_midway_then_full_loop(pilot: ProcessEngine):
     """串行中途 HR1 驳回 → 主管重办 → 再次串行全过（完整驳回环）。"""
     instance_id = start_leave(pilot, 4)
@@ -62,6 +67,7 @@ def test_leave_hr_reject_midway_then_full_loop(pilot: ProcessEngine):
     assert pilot.runtime.get_instance(instance_id).state == "completed"
 
 
+@covers("ops.add_countersigner", "countersign.approve_all")
 def test_leave_add_countersigner_into_sequential(pilot: ProcessEngine):
     """串行会签中途加签：新审批人进入队伍，全员 all 出口。"""
     instance_id = start_leave(pilot, 7)
@@ -76,6 +82,7 @@ def test_leave_add_countersigner_into_sequential(pilot: ProcessEngine):
     assert pilot.runtime.get_instance(instance_id).state == "completed"
 
 
+@covers("ops.withdraw")
 def test_leave_withdraw_after_hr_record(pilot: ProcessEngine):
     """撤回：主管办完后反悔 → 下游 HR 备案被取消 → 主管重新待办。"""
     instance_id = start_leave(pilot, 1)
@@ -93,6 +100,7 @@ def test_leave_withdraw_after_hr_record(pilot: ProcessEngine):
     assert pilot.runtime.get_instance(instance_id).state == "completed"
 
 
+@covers("reject.cause_token", "query.task_history_append_only")
 def test_leave_multi_round_reject_stress(pilot: ProcessEngine):
     """多轮驳回压力：三轮驳回-重提循环不死循环守卫误伤，第四轮通过。"""
     instance_id = start_leave(pilot, 4)

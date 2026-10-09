@@ -3,6 +3,7 @@
 @covers("category.feature") 标注测试覆盖的特性；@covers_node("code", "node") 标注
 走查到的节点。审计测试（test_coverage_audit.py）用 ast 静态扫描装饰器实参，
 比对 FEATURES 全集与 world_catalog.all_nodes() 全集，缺一即红灯。
+矩阵覆盖 tests/suite 与 tests/pilot 两层走查（审计扫描两目录）。
 """
 
 from __future__ import annotations
@@ -18,6 +19,12 @@ FEATURES: dict[str, tuple[str, ...]] = {
         "node.call_activity",
         "node.cc_task",
         "node.branch",
+    ),
+    "subprocess": (
+        "subprocess.input_mapping",
+        "subprocess.output_mapping",
+        "subprocess.child_reject",
+        "subprocess.child_recover",
     ),
     "route": (
         "route.first_match",
@@ -138,11 +145,13 @@ FEATURES: dict[str, tuple[str, ...]] = {
         "fault.resolve_skip",
         "fault.resolve_cancel",
         "fault.resolve_fail",
+        "fault.admin_move_token",
     ),
     "version": (
         "version.deploy_publish",
         "version.content_hash_idempotent",
         "version.breaking_rules",
+        "version.instance_snapshot",
     ),
 }
 
