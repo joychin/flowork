@@ -14,7 +14,6 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select, update
 
-from flowork.clock import utc_now
 from flowork.engine.ops import CommandContext
 from flowork.errors import FloworkError
 from flowork.events.domain import DomainEvent
@@ -78,7 +77,7 @@ class JobService:
                     job_type=job_type,
                     job_kind="worker",
                     state="scheduled",
-                    run_at=utc_now(),
+                    run_at=self._engine.config.now(),
                     max_retries=max_retries,
                     instance_id=instance_id,
                     payload=dict(payload or {}),
@@ -100,7 +99,7 @@ class JobService:
         """批量领活：领到即租住（worker_id + lease_until）；到期未交货可被重领。"""
 
         def _command(ctx: CommandContext) -> list[JobClaim]:
-            moment = utc_now()
+            moment = self._engine.config.now()  # 统一时钟（第十四轮）：租约与调度同源
             # 可领＝未持有（scheduled 且无租约），或租约到期（leased 且 lease_until<now）
             claimable = (JobRow.lease_until.is_(None)) | (JobRow.lease_until < moment)
             candidates = ctx.session.scalars(
@@ -164,7 +163,7 @@ class JobService:
         """
 
         def _command(ctx: CommandContext) -> str:
-            moment = utc_now()
+            moment = self._engine.config.now()  # 统一时钟（第十四轮）：退避与租约同源
             job = self._leased_by(ctx.session, job_id, worker_id)
             job.last_error = error
             job.retry_count += 1

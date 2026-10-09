@@ -79,7 +79,9 @@ class WaitBehavior(NodeBehavior):
         outgoing = definition.outgoing(ctx.node.code)
         engine = getattr(ctx.kernel, "engine", None)
         audit = RoutingAudit()
-        variables = evaluation_variables(ctx.instance, ctx.variables, session=ctx.session)
+        variables = evaluation_variables(
+            ctx.instance, ctx.variables, session=ctx.session, now=ctx.kernel.config.now()
+        )
         if self.resolution is not None:
             variables = {**variables, "wait": dict(self.resolution)}
         selected = select_outgoing(
@@ -111,7 +113,9 @@ class WaitBehavior(NodeBehavior):
         expression = spec.message.correlation_key if spec.message else None
         if not expression:
             return ""
-        context = evaluation_variables(ctx.instance, ctx.variables, session=ctx.session)
+        context = evaluation_variables(
+            ctx.instance, ctx.variables, session=ctx.session, now=ctx.kernel.config.now()
+        )
         try:
             value = evaluate_formula_value(expression, context, functions=_functions_of(ctx))
         except FormulaError as exc:

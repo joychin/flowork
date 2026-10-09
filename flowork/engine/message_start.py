@@ -50,7 +50,7 @@ def match_start_on_message(
     沿 _start 原样抛出（publish 整体失败，技术故障不静默）。
     """
     for code, decl in _declarations(ctx, name):
-        context = expression_context({"payload": dict(payload)})
+        context = expression_context({"payload": dict(payload)}, now=engine.config.now())
         functions = expression_functions_of(engine.config)
         if decl.correlation_key and (
             _string_of(code, "correlation_key", decl.correlation_key, context, functions)

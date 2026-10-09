@@ -115,7 +115,12 @@ class NodeBehavior:
         audit = RoutingAudit()
         selected = select_outgoing(
             outgoing,
-            evaluation_variables(ctx.instance, ctx.variables, session=ctx.session),  # type: ignore[attr-defined]
+            evaluation_variables(
+                ctx.instance,  # type: ignore[attr-defined]
+                ctx.variables,
+                session=ctx.session,  # type: ignore[attr-defined]
+                now=ctx.kernel.config.now(),
+            ),
             mode="all_match",
             functions=attach_node(
                 expression_functions_of(getattr(engine, "config", None)),

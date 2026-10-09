@@ -14,6 +14,7 @@ CEL 词汇接线（spec §4.3/§9）：``functions`` 自 EngineConfig.expression
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
+from datetime import datetime
 from typing import TYPE_CHECKING, Any, Literal
 
 from flowork.engine.kernel import EngineExecutionError, RouteError
@@ -37,6 +38,7 @@ def evaluation_variables(
     variables: Mapping[str, Any],
     *,
     session: Session | None = None,
+    now: datetime | None = None,
 ) -> dict[str, Any]:
     """构造求值上下文（expr.context.expression_context 的实例版薄包装）。
 
@@ -44,6 +46,8 @@ def evaluation_variables(
     带 session 时注入 ``prev_task`` 上一站快照（expression-dataface §2.2，
     查无＝不注入，引用预检在 select_outgoing 内温和跳过）。
     ``instance`` 全局事实（id/started_at/business_key）恒注入（§2，全位点）。
+    ``now`` 必须由引擎位点显式传入（``EngineConfig.now``——第十四轮时钟统一：
+    FakeClock 下条件求值与任务时限同源）；缺省墙钟仅供无引擎装配面。
     """
     prev_task = None
     if session is not None:
@@ -57,6 +61,7 @@ def evaluation_variables(
         start_user=getattr(instance, "start_user", None),
         prev_task=prev_task,
         instance=instance_facts(instance),
+        now=now,
     )
 
 

@@ -45,7 +45,9 @@ class BranchBehavior(NodeBehavior):
         audit = RoutingAudit()
         selected = select_outgoing(
             outgoing,
-            evaluation_variables(ctx.instance, ctx.variables, session=ctx.session),
+            evaluation_variables(
+                ctx.instance, ctx.variables, session=ctx.session, now=ctx.kernel.config.now()
+            ),
             mode=mode,
             functions=attach_node(
                 expression_functions_of(

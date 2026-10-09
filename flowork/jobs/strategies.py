@@ -178,6 +178,7 @@ class DeadlineStrategiesMixin:
                 start_user=instance.start_user,
                 task=snapshot,
                 instance=instance_facts(instance),
+                now=self._engine.config.now(),
             )
             try:
                 target = evaluate_formula_value(

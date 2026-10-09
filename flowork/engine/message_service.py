@@ -192,7 +192,7 @@ class MessageService:
         from flowork.expr.cel import FormulaError, evaluate_formula_value
         from flowork.expr.context import expression_context, expression_functions_of
 
-        context = expression_context({"payload": dict(payload)})
+        context = expression_context({"payload": dict(payload)}, now=self._engine.config.now())
         functions = expression_functions_of(self._engine.config)
         write: dict[str, Any] = {}
         for target, expression in mappings.items():

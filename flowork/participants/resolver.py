@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from flowork.engine.kernel import EngineExecutionError, NoParticipantError, ParticipantLimitError
@@ -62,6 +63,7 @@ def resolve_subjects(
     label: str = "",
     what: str = "取人",
     instance: Mapping[str, Any] | None = None,
+    now: datetime | None = None,
 ) -> list[str]:
     """对一组取人表达式（CEL）求值 → 具体人列表（保序去重）。
 
@@ -69,10 +71,11 @@ def resolve_subjects(
     语义同取人位：null/空＝查无传播；str/list[str]＝单人/多人；其他类型报错。
     label 为错误消息里的位置标注（如节点码）；what 为错误措辞（取人/传阅接收人）。
     ``instance`` 全局事实（id/started_at/business_key）可选注入，调用方持实例行时传。
+    ``now`` 必须由引擎位点显式传入（``EngineConfig.now``——第十四轮时钟统一）。
     """
     where = f"{label}：" if label else ""
     pool: list[str] = []
-    context = expression_context(variables, start_user=start_user, instance=instance)
+    context = expression_context(variables, start_user=start_user, instance=instance, now=now)
     for expression in expressions:
         if "prev_task" not in context and references_identifier(expression, "prev_task"):
             continue  # 上一站查无：贡献空（expression-dataface §3，对齐 §5.5）
@@ -132,6 +135,7 @@ def _evaluate_expressions(
         attach_node(functions, session, ctx.instance.id),
         label=spec.code,
         instance=instance_facts(ctx.instance),
+        now=ctx.kernel.config.now(),
     )
 
 

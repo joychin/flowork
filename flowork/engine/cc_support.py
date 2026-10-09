@@ -33,6 +33,7 @@ def create_cc_items(ctx: RuntimeNodeContext, spec: CcTaskSpec) -> None:
         label=spec.code,
         what="传阅接收人",
         instance=instance_facts(ctx.instance),
+        now=ctx.kernel.config.now(),
     )
     from flowork.participants.resolver import assert_participant_limit
 

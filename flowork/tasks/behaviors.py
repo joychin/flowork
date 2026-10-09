@@ -216,6 +216,7 @@ class UserTaskBehavior(NodeBehavior):
                 ctx.kernel.engine.config if ctx.kernel.engine else None
             ),
             "instance": instance_facts(ctx.instance),
+            "now": ctx.kernel.config.now(),
         }
         if exit_reached(mi.approve_exit if mi else None, side="approve", **counts):
             token.approval_exit = "agree"

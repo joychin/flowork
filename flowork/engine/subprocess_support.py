@@ -61,6 +61,7 @@ def _mapping_values(
         owner.variables or {},
         start_user=owner.start_user,
         instance=instance_facts(owner),
+        now=ctx.kernel.config.now(),
     )
     if extra:
         variables = {**variables, **extra}

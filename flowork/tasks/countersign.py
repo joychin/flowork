@@ -17,6 +17,7 @@ approve_exit / disapprove_exit 为 **CEL 公式**，求值上下文注入 ``task
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
+from datetime import datetime
 from typing import Any, Literal
 
 from flowork.expr.cel import FormulaError, evaluate_formula
@@ -38,11 +39,13 @@ def exit_reached(
     start_user: str | None = None,
     functions: Mapping[str, Callable[..., object]] | None = None,
     instance: Mapping[str, Any] | None = None,
+    now: datetime | None = None,
 ) -> bool:
     """求值会签出口公式；expr 缺省＝该侧全票（task.* = 三计数快照）。
 
     ``instance`` 全局事实可选注入（variables 已携带时免传——anticipate 经
-    evaluation_variables 自动带上）。
+    evaluation_variables 自动带上）。``now`` 必须由引擎位点显式传入
+    （``EngineConfig.now``——第十四轮时钟统一）。
     """
     if not expr:
         done = approve_count if side == "approve" else disapprove_count
@@ -58,6 +61,7 @@ def exit_reached(
             "disapprove_count": disapprove_count,
         },
         instance=instance,
+        now=now,
     )
     try:
         return evaluate_formula(expr, context, functions=functions)

@@ -173,7 +173,9 @@ class IncidentMixin:
             audit = RoutingAudit()
             outgoing = select_outgoing(
                 definition.outgoing(node.code),
-                evaluation_variables(instance, instance.variables, session=ctx.session),
+                evaluation_variables(
+                    instance, instance.variables, session=ctx.session, now=ctx.engine.config.now()
+                ),
                 mode="all_match",
                 functions=attach_node(
                     base_functions, ctx.session, instance.id, node_calls=audit.node_calls

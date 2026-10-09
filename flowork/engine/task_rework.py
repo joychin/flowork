@@ -97,6 +97,7 @@ class TaskReworkMixin:
                 attach_node(expression_functions_of(self._engine.config), ctx.session, instance.id),
                 label=task.activity_code,
                 instance=instance_facts(instance),
+                now=self._engine.config.now(),
             )
         existing = list((token.manual_participants or {}).get(task.activity_code, []))
         merged = list(dict.fromkeys([*base_participants, *existing, *users]))

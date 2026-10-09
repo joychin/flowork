@@ -60,7 +60,9 @@ class AnticipateMixin:
         assert node is not None
         spec = node if isinstance(node, UserTaskSpec) else None
         mi = spec.multi_instance if spec else None
-        variables = evaluation_variables(instance, instance.variables, session=ctx.session)
+        variables = evaluation_variables(
+            instance, instance.variables, session=ctx.session, now=ctx.engine.config.now()
+        )
         from flowork.tasks.facts import attach_node
 
         functions = attach_node(
@@ -78,6 +80,7 @@ class AnticipateMixin:
                 variables=variables,
                 start_user=instance.start_user,
                 functions=functions,
+                now=ctx.engine.config.now(),
             )
 
         if outcome == "reject":

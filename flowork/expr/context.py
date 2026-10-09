@@ -31,8 +31,10 @@ def expression_context(
     """构造求值上下文副本：变量 + 保留标识符（initiator/instance/now + 可选 task/prev_task）。
 
     显式同名变量优先（setdefault）：声明了保留词同名变量时不覆盖。
-    ``now`` 缺省取统一时钟（naive UTC，cel-python 按 UTC 解释）；可显式传入
-    钉死（测试冻结）。上下文在求值前装配一次、组内多条公式共用——因此
+    ``now`` **引擎位点必须显式传入**（``EngineConfig.now``——第十四轮时钟统一：
+    FakeClock 下条件求值、任务时限与路由审计同源）；缺省墙钟仅供无引擎的
+    装配面（dry-run 静态预检、web 公式试算——「试算此刻」语义）。
+    上下文在求值前装配一次、组内多条公式共用——因此
     **一次求值钉一个时刻**（expression-dataface 验收 E5）。
     ``prev_task`` 仅条件/取人位注入（上一站快照，查无＝不注入，调用方预检温和跳过）。
     ``instance`` 为实例全局事实（id/started_at/business_key，全位点；快照由

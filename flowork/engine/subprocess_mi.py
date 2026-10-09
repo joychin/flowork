@@ -56,6 +56,7 @@ def _mi_subjects(ctx: RuntimeNodeContext, spec: CallActivitySpec) -> list[str]:
         attach_node(expression_functions_of(config), ctx.session, ctx.instance.id),
         label=spec.code,
         instance=instance_facts(ctx.instance),
+        now=ctx.kernel.config.now(),
     )
 
 
@@ -145,6 +146,7 @@ def _completion_hit(
         {"child_total": total, "child_completed": done, "child_failed": failed},
         start_user=ctx.instance.start_user if ctx.instance else None,
         instance=instance_facts(ctx.instance) if ctx.instance else None,
+        now=ctx.kernel.config.now(),
     )
     try:
         return bool(
