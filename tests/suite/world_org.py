@@ -15,6 +15,12 @@ from pathlib import Path
 from flowork.directory.store import DirectoryStore
 from flowork.participants.org_directory import Delegation, OrgDirectory
 from flowork.persistence.db import create_db_engine, file_url, session_factory
+from tests.suite.world_org_blueprint import (
+    ORG_UNITS_BLUEPRINT,
+    ROLE_ASSIGNMENTS_BLUEPRINT,
+    ROLES_BLUEPRINT,
+    USERS_BLUEPRINT,
+)
 
 # —— 部门树：(code, 名称, 上级, 部门主管) ——
 ORG_UNITS: list[tuple[str, str, str | None, str | None]] = [
@@ -26,6 +32,7 @@ ORG_UNITS: list[tuple[str, str, str | None, str | None]] = [
     ("fin", "财务部", "hq", "u_cfo"),
     ("fin_gl", "会计组", "fin", "u_chief_acc"),
     ("pur", "采购部", "hq", "u_purch_head"),
+    *ORG_UNITS_BLUEPRINT,  # 金赛 + BPO 两棵树（真实蓝图世界）
 ]
 
 # —— 用户：(id, 姓名, 主属部门) ——
@@ -43,6 +50,7 @@ USERS: list[tuple[str, str, str]] = [
     ("u_purch_head", "吴总", "pur"),
     ("u_buyer", "郑采购", "pur"),
     ("u_compliance", "王合规", "pur"),
+    *USERS_BLUEPRINT,
 ]
 
 # —— 角色：(code, 名称, 默认范围)；授权：(用户, 角色, 显式范围|None=用默认) ——
@@ -51,6 +59,7 @@ ROLES: list[tuple[str, str, str | None]] = [
     ("dept_manager", "部门负责人", None),
     ("finance_approver", "财务审批人", None),
     ("compliance_officer", "合规专员", "pur"),
+    *ROLES_BLUEPRINT,
 ]
 ROLE_ASSIGNMENTS: list[tuple[str, str, str | None]] = [
     ("u_ceo", "ceo", None),
@@ -60,6 +69,7 @@ ROLE_ASSIGNMENTS: list[tuple[str, str, str | None]] = [
     ("u_chief_acc", "finance_approver", None),
     ("u_cash", "finance_approver", None),
     ("u_compliance", "compliance_officer", None),
+    *ROLE_ASSIGNMENTS_BLUEPRINT,
 ]
 
 # —— Agent：(id, 名称, 问责 owner, 部门, 代言用户) ——

@@ -34,9 +34,32 @@ def register_world_actions(engine: ProcessEngine) -> None:
     def explode(ctx, params):
         raise RuntimeError("外部接口炸了")
 
+    def sap_check(ctx, params):
+        """物料世界：SAP 数据检查（测试变量 mock_check_ok 模拟外部结果）。"""
+        ctx.variables["sap_check_ok"] = ctx.variables.get("mock_check_ok", True)
+
+    def sap_submit(ctx, params):
+        """物料世界：提交 SAP（mock_sap_result 模拟 S/E；S 时回填物料编码）。"""
+        result = ctx.variables.get("mock_sap_result", "S")
+        ctx.variables["sap_code"] = result
+        if result == "S":
+            ctx.variables["material_code"] = "MAT-7001"
+
+    def fetch_roster(ctx, params):
+        """任务发布：获取未参保人员清单（外部档案系统模拟）。"""
+        ctx.variables["roster_count"] = 3
+
+    def esign_send(ctx, params):
+        """合同签订：E签宝对接签订（外部签署系统模拟）。"""
+        ctx.variables["esign_status"] = "signed"
+
     engine.register_handler("make_payment", make_payment)
     engine.register_handler("echo_paid", echo_paid)
     engine.register_handler("explode", explode)
+    engine.register_handler("sap_check", sap_check)
+    engine.register_handler("sap_submit", sap_submit)
+    engine.register_handler("fetch_roster", fetch_roster)
+    engine.register_handler("esign_send", esign_send)
 
 
 def deploy_world(engine: ProcessEngine, codes: list[str]) -> None:

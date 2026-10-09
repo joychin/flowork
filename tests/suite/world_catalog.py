@@ -11,7 +11,14 @@ from tests.suite.world_flows import (
     supplier_check_definition,
 )
 from tests.suite.world_flows_branch import branch_matrix_definition
+from tests.suite.world_flows_finance import payment_definition, receipt_definition
+from tests.suite.world_flows_hr import (
+    contract_sign_definition,
+    onboard_task_definition,
+    task_publish_definition,
+)
 from tests.suite.world_flows_knot import countersign_knot_definition
+from tests.suite.world_flows_material import material_master_definition
 from tests.suite.world_flows_subprocess import (
     call_child_definition,
     call_grand_definition,
@@ -49,6 +56,13 @@ BUILDERS: dict[str, Callable[[], ProcessDefinition]] = {
     "suite_message": message_definition,
     "suite_lifecycle": lifecycle_definition,
     "suite_fragile": fragile_definition,
+    # —— 真实蓝图世界（金赛+BPO 五文档）——
+    "suite_material_master": material_master_definition,
+    "suite_task_publish": task_publish_definition,
+    "suite_onboard_task": onboard_task_definition,
+    "suite_contract_sign": contract_sign_definition,
+    "suite_receipt": receipt_definition,
+    "suite_payment": payment_definition,
 }
 
 # 持久化目录世界（DirectoryStore）部署集：admin/委托 为占位，故不含 suite_purchase
@@ -71,6 +85,12 @@ STORE_WORLD_CODES = [
     "suite_message",
     "suite_lifecycle",
     "suite_fragile",
+    "suite_material_master",
+    "suite_task_publish",
+    "suite_onboard_task",
+    "suite_contract_sign",
+    "suite_receipt",
+    "suite_payment",
 ]
 # 静态目录世界（OrgDirectory：有 admins/委托）部署集
 STATIC_WORLD_CODES = [
