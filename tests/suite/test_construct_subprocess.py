@@ -4,8 +4,8 @@
 被唤醒重评，暂停中的子实例本就不会触发唤醒——本组测试把「暂停子阻塞父侧收口」
 钉为行为语义；若未来唤醒机制改变（如父侧在任何子事件上重评），
 sub_process_finished 的结算判定（_CHILD_SETTLED_STATES）保证不回归。
-父 terminate 不级联子实例：现状为孤儿运行（与 remove_instance 的级联清理不同），
-测试按现状钉住并标注为开放问题——将来改级联时此测试红，逼一次显式决策。
+父 terminate 级联子实例（第十四轮收口，terminate_cascade.py）：原「孤儿运行」
+开放问题已修——未结算子实例（含暂停/挂起中的）随父同置终态，待办撤销留痕。
 """
 
 from __future__ import annotations
@@ -177,16 +177,15 @@ def test_child_version_snapshot(suite_engine: ProcessEngine) -> None:
     assert_no_dangling(suite_engine)
 
 
-def test_terminate_parent_child_orphan_documented(suite_engine: ProcessEngine) -> None:
-    """开放问题钉子：父 terminate 不级联子实例（子成孤儿继续运行）。
+def test_terminate_parent_cascades_to_child(suite_engine: ProcessEngine) -> None:
+    """第十四轮收口：父 terminate 级联子实例（原「孤儿运行」开放问题已修）。
 
-    与 remove_instance 的级联清理不同（spec §7 终止语义未提及子实例）。
-    将来若改为级联，此测试红灯，逼一次显式决策。
+    来源：本文件曾钉住的开放问题钉子（父 terminate 不级联、子成孤儿）+
+    2026-10-09 收口盘点——A9 多实例子流程后孤儿待办面变大，对齐
+    Camunda/Zeebe 子树终止（terminate_cascade.py）。
     """
     iid = _start_matrix(suite_engine, "nested")
     (child,) = _children_of(suite_engine, iid)
     suite_engine.runtime.terminate_process(iid, actor="admin", reason="测试终止")
     assert suite_engine.runtime.get_instance(iid).state == "terminated"
-    assert suite_engine.runtime.get_instance(child.id).state == "running"  # 孤儿
-    # 收尾清理：不把孤儿留给同库后续断言
-    suite_engine.runtime.terminate_process(child.id, actor="admin", reason="清理孤儿")
+    assert suite_engine.runtime.get_instance(child.id).state == "terminated"

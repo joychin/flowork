@@ -131,10 +131,17 @@ class DeadlineStrategiesMixin:
         if strategy == "mark":
             instance.deadline_marked = True
             return
-        states = (TokenState.UNFINISHED.value,)
-        for token in kernel.tokens(ctx.session, instance.id, states=states):
-            kernel.cancel_token(ctx.session, token)
+        from flowork.engine.terminate_cascade import cascade_terminate
+
         end_status = "cancelled" if strategy == "cancel" else "terminated"
+        cascaded = cascade_terminate(
+            self._engine,
+            ctx,
+            instance,
+            end_status=end_status,
+            actor="system:deadline",
+            reason="instance_deadline",
+        )
         kernel.complete_instance(ctx.session, instance, end_status)
         # 终态事件与 runtime 路径同款（消费端统一感知实例因何终态）
         terminal_event = (
@@ -144,7 +151,11 @@ class DeadlineStrategiesMixin:
         )
         kernel.record_event(
             terminal_event,
-            {"actor": "system:deadline", "reason": "instance_deadline"},
+            {
+                "actor": "system:deadline",
+                "reason": "instance_deadline",
+                "cascaded_instances": cascaded,
+            },
             instance.id,
         )
 

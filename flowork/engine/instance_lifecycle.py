@@ -14,7 +14,6 @@ from flowork.engine.ops import CommandContext
 from flowork.errors import InstanceNotFoundError
 from flowork.events.domain import DomainEvent
 from flowork.persistence.orm import ProcessInstanceRow
-from flowork.runtime.lifecycle import TokenState
 from flowork.tasks.models import InstanceInfo
 
 if TYPE_CHECKING:
@@ -85,7 +84,11 @@ class InstanceLifecycleMixin:
         self._engine.execute(_command)
 
     def terminate_process(self, instance_id: str, actor: str, reason: str = "") -> None:
-        """终止实例（spec §7）：管理员强杀——撤销令牌与待办，终态 terminated。"""
+        """终止实例（spec §7）：管理员强杀——整树撤令牌与待办，终态 terminated。
+
+        第十四轮：级联未结算子实例（含暂停/挂起中的）同置 terminated
+        （terminate_cascade——孤儿待办收口，对齐 Camunda/Zeebe 子树终止）。
+        """
 
         def _command(ctx: CommandContext) -> Any:
             instance = _load(ctx, instance_id)
@@ -93,29 +96,37 @@ class InstanceLifecycleMixin:
                 raise InstanceNotFoundError(f"实例 {instance_id} 已终态（{instance.state}）")
             ctx.touch(instance)
             kernel = self._engine.kernel_for(ctx)
-            states = (TokenState.UNFINISHED.value,)
-            for token in kernel.tokens(ctx.session, instance_id, states=states):
-                kernel.cancel_token(ctx.session, token)
+            from flowork.engine.terminate_cascade import cascade_terminate
+
+            cascaded = cascade_terminate(
+                self._engine, ctx, instance, end_status="terminated", actor=actor, reason=reason
+            )
             kernel.complete_instance(ctx.session, instance, "terminated")
             kernel.record_event(
-                DomainEvent.PROCESS_TERMINATED, {"actor": actor, "reason": reason}, instance_id
+                DomainEvent.PROCESS_TERMINATED,
+                {"actor": actor, "reason": reason, "cascaded_instances": cascaded},
+                instance_id,
             )
 
         self._engine.execute(_command)
 
     def cancel_process(self, instance_id: str, actor: str, reason: str = "") -> None:
-        """取消实例：撤销全部未完令牌与待办。"""
+        """取消实例：整树撤销未完令牌与待办（子实例级联 cancelled，第十四轮）。"""
 
         def _command(ctx: CommandContext) -> Any:
             instance = _load(ctx, instance_id)
             ctx.touch(instance)
             kernel = self._engine.kernel_for(ctx)
-            states = (TokenState.UNFINISHED.value,)
-            for token in kernel.tokens(ctx.session, instance_id, states=states):
-                kernel.cancel_token(ctx.session, token)
+            from flowork.engine.terminate_cascade import cascade_terminate
+
+            cascaded = cascade_terminate(
+                self._engine, ctx, instance, end_status="cancelled", actor=actor, reason=reason
+            )
             kernel.complete_instance(ctx.session, instance, "cancelled")
             kernel.record_event(
-                DomainEvent.PROCESS_CANCELLED, {"actor": actor, "reason": reason}, instance_id
+                DomainEvent.PROCESS_CANCELLED,
+                {"actor": actor, "reason": reason, "cascaded_instances": cascaded},
+                instance_id,
             )
 
         self._engine.execute(_command)
