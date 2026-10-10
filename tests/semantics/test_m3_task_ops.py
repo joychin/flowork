@@ -386,12 +386,11 @@ def test_add_countersigner_duplicate_rejected_wholesale(engine: ProcessEngine):
     with pytest.raises(TaskNotAvailableError, match="已在会签名单"):
         engine.task.add_countersigner(p1.id, users=["u_extra", "u_p2"], actor="u_p1")
     # 整笔回滚：请求里的新人 u_extra 也没被加入
-    assert sorted(
-        t.assignee for t in engine.task.list_tasks(instance_id=instance_id)
-    ) == ["u_p1", "u_p2"]
+    assert sorted(t.assignee for t in engine.task.list_tasks(instance_id=instance_id)) == [
+        "u_p1",
+        "u_p2",
+    ]
 
     # 新人加签不受影响
     engine.task.add_countersigner(p1.id, users=["u_extra"], actor="u_p1")
-    assert "u_extra" in [
-        t.assignee for t in engine.task.list_tasks(instance_id=instance_id)
-    ]
+    assert "u_extra" in [t.assignee for t in engine.task.list_tasks(instance_id=instance_id)]

@@ -459,6 +459,7 @@ def test_reassign_expression_error_becomes_incident():
     assert job is not None and "超时reassign公式求值失败" in (job.last_error or "")
     assert engine.runtime.list_incidents(), "改派公式错必须落故障单（首败即记）"
 
+
 def test_suspended_instance_deadline_frozen_not_swallowed():
     """回归（code-review 2026-10 P0-5）：挂起实例的时限 Job 不被 tick 认领。
 

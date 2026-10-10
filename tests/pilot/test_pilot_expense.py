@@ -131,11 +131,22 @@ def test_expense_idempotent_complete_in_countersign(pilot: ProcessEngine):
 
 @covers("ops.add_countersigner", "countersign.approve_ratio")
 def test_expense_add_countersigner_midway(pilot: ProcessEngine):
-    """会签中途加签：item_count 联动，三人 >=50% 需 2 票。"""
+    """会签中途加签：item_count 联动，三人 >=50% 需 2 票。
+
+    u_cai2 是原名单成员——重复加签被整笔拒绝（code-review 2026-10 P1-1：
+    修复前重复成员被克隆成第二张任务＝一人两票，出口提前达成），只加新人
+    u_hr1 后名单为三人。
+    """
+    import pytest
+
+    from flowork.errors import TaskNotAvailableError
+
     instance_id = start_expense(pilot, 5000)
     complete_of(pilot, instance_id, "u_dave")
     cai1 = pilot.task.list_tasks(instance_id=instance_id, assignee="u_cai1")[0]
-    pilot.task.add_countersigner(cai1.id, users=["u_cai2", "u_hr1"], actor="u_cai1")
+    with pytest.raises(TaskNotAvailableError, match="已在会签名单"):
+        pilot.task.add_countersigner(cai1.id, users=["u_cai2"], actor="u_cai1")
+    pilot.task.add_countersigner(cai1.id, users=["u_hr1"], actor="u_cai1")
     # 现在 3 人（cai1, cai2, hr1），>=50% 需 2 票
     complete_of(pilot, instance_id, "u_cai1")
     assert pilot.runtime.get_instance(instance_id).state == "running"  # 1/3 不足

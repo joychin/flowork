@@ -309,7 +309,7 @@ def test_mi_subjects_syntax_error_surfaced():
     运行期才挂起+故障单（未注册函数依赖注册表配置，默认 WARNING，不在此列）。"""
     engine = ProcessEngine()
     _deploy_child(engine)
-    with pytest.raises(InvalidDefinition, match="formula.invalid"):
+    with pytest.raises(InvalidDefinition, match=r"formula\.invalid"):
         engine.repository.deploy(
             FlowBuilder("bad_mi_syntax")
             .start()
