@@ -101,9 +101,10 @@ class TaskReworkMixin:
             )
         existing = list((token.manual_participants or {}).get(task.activity_code, []))
         merged = list(dict.fromkeys([*base_participants, *existing, *users]))
-        # 规模护栏（spec v2.3）：加签是调用方请求——超限拒绝整笔（回滚），实例不挂起
+        # 规模护栏（spec v2.3）：加签是调用方请求——超限拒绝整笔（回滚），实例不挂起；
+        # limit 缺省 None＝不设防（第十八轮：内核不替宿主选数值）
         limit = self._engine.config.max_participants
-        if len(merged) > limit:
+        if limit is not None and len(merged) > limit:
             raise TaskNotAvailableError(
                 f"节点 {task.activity_code} 加签后名单 {len(merged)} 人超过上限 {limit}"
                 "（EngineConfig.max_participants）——拒绝而非截断"

@@ -22,6 +22,7 @@ from __future__ import annotations
 
 from flowork.definitions.builder import FlowBuilder
 from flowork.definitions.definition import ProcessDefinition, ProcessVariable
+from flowork.definitions.node import MultiInstance
 
 # 阶梯定义引用的变量（role_suffix 供纯 CEL 拼接档）
 _LADDER_VARIABLES = [
@@ -45,8 +46,13 @@ def participant_ladder_definition() -> ProcessDefinition:
         .user_task("n_literal", "① 字面量", assignee="'u_ceo'")
         # 2 单函数
         .user_task("n_manager", "② 上级函数", assignee="manager_of(initiator)")
-        # 3 函数吃变量（环境变量 → 人）
-        .user_task("n_role_var", "③ 角色取自变量", assignee="users_with_role(duty_role)")
+        # 3 函数吃变量（环境变量 → 人；角色多人＝显式并行会签，第十八轮收紧）
+        .user_task(
+            "n_role_var",
+            "③ 角色取自变量",
+            assignee="users_with_role(duty_role)",
+            multi_instance=MultiInstance(mode="parallel"),
+        )
         # 4 函数结果 + CEL 索引
         .user_task("n_index", "④ 索引取首人", assignee='users_with_role("finance_approver")[0]')
         # 5 函数结果 + 列表拼接（去重保序）
@@ -54,12 +60,14 @@ def participant_ladder_definition() -> ProcessDefinition:
             "n_concat",
             "⑤ 拼接上级",
             assignee='users_with_role("finance_approver") + [manager_of(initiator)]',
+            multi_instance=MultiInstance(mode="parallel"),
         )
         # 6 函数结果 + comprehension 宏
         .user_task(
             "n_filter",
             "⑥ 过滤发起人",
             assignee='users_with_role("finance_approver").filter(u, u != initiator)',
+            multi_instance=MultiInstance(mode="parallel"),
         )
         # 7 谓词函数 + 三元（两边各一个函数）
         .user_task(
@@ -77,6 +85,7 @@ def participant_ladder_definition() -> ProcessDefinition:
             "n_prev_role",
             "⑨ 角色减去上一站",
             assignee="users_with_role(duty_role).filter(u, u != prev_task.assignee)",
+            multi_instance=MultiInstance(mode="parallel"),
         )
         # 10 函数吃点名节点事实
         .user_task(
@@ -151,15 +160,26 @@ def route_mix_definition() -> ProcessDefinition:
             reject_target="start",
         )
         # 臂二：函数列表成员 + 实例事实 → 取人＝函数列表
-        .user_task("arm_role", "角色臂", assignee='users_with_role("finance_approver")')
+        .user_task(
+            "arm_role",
+            "角色臂",
+            assignee='users_with_role("finance_approver")',
+            multi_instance=MultiInstance(mode="parallel"),
+        )
         # 臂三：默认臂 → 取人＝函数吃变量
-        .user_task("arm_var", "变量臂", assignee="users_with_role(duty_role)")
+        .user_task(
+            "arm_var",
+            "变量臂",
+            assignee="users_with_role(duty_role)",
+            multi_instance=MultiInstance(mode="parallel"),
+        )
         .branch("g_stage2", "二级闸门", route_mode="all_match")
         # 二级臂一：谓词函数 + 变量 + 点名节点事实
         .user_task(
             "arm_by_role",
             "二级角色臂",
             assignee='users_with_role("finance_approver").filter(u, u != initiator)',
+            multi_instance=MultiInstance(mode="parallel"),
         )
         # 二级臂二：实例事实 + 函数 + 变量
         .user_task(

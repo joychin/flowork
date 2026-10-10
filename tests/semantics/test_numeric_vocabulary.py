@@ -13,6 +13,7 @@ import pytest
 from flowork import contrib
 from flowork.definitions.builder import FlowBuilder
 from flowork.definitions.definition import ProcessDefinition, ProcessVariable
+from flowork.definitions.node import MultiInstance
 from flowork.engine.config import EngineConfig
 from flowork.engine.engine import ProcessEngine
 from flowork.errors import FloworkError
@@ -139,7 +140,11 @@ def test_split_in_subjects_position(engine: ProcessEngine):
     definition = (
         FlowBuilder("split_sign")
         .start()
-        .user_task("s", assignees=["split(approvers, ',')[0]", "split(approvers, ',')[1]"])
+        .user_task(
+            "s",
+            assignees=["split(approvers, ',')[0]", "split(approvers, ',')[1]"],
+            multi_instance=MultiInstance(mode="parallel"),
+        )
         .end()
         .connect("start", "s")
         .connect("s", "end")

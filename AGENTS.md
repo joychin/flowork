@@ -462,3 +462,21 @@ variables_updated 事件字段）；③ 迁移 0004 删表删列（downgrade 不
 前缀互认保留。**归因口径**：只有 acted_by 字符串——「这步是不是 AI 办的」不再是引擎
 可回答的问题，归宿主身份系统。engine-v1 01/02 的 Agent 身份与 agent_credential 设计
 随批废止（权限模型 L1 收为 user_token/api_key 两类）。858 测试全绿。
+
+**取人语义收口批（2026-10-10，spec v2.3 第十八轮；四问走查裁定的落地）**：
+① 单人节点多人＝错误——未声明 `multi_instance` 而解析出多名 todo →
+`ParticipantCountMismatchError`（kernel.py 错误族第四例；守卫住 `Kernel.resolve_participants`
+咽喉，task_records.py；挂起+故障单、首节点整笔回滚；宽松并行退役，skipped 不计多人，
+串行重解析不受影响）。② 人员位组引用＝设计期 ERROR——validator 规则
+`participant.group_in_subjects`（validator_rules.py，iter_expression_positions 遍历
+subjects/reassign 位 + string_literals 字面量提取）：`role:`/`org:` 字面量发布期拦，
+候选槽合法、`user:`/裸 id 不拦；运行期不做前缀特判（裸 id 铁律）——兑现 §5.5
+规范化条款既有承诺（此前代码未实现）。③ contrib 补 `users_in_org(string)→users`
+（subjects_in("org:…") 部门直接成员；取人位按部门展开唯一写法；四词汇）。
+④ `max_participants` 缺省 1000→None（内核不替宿主选数值；连带修出 task_rework
+`>` 直比较的 None 实缺陷）。组引用路线经行业对拍定案：无引擎在 assignee 位隐式
+展开（BPMN=候选池认领制、SaaS=创建时展开），取「设计期报错」+错误消息指向两条
+正路（candidate_groups / users_with_role·users_in_org）。**测试**：
+`tests/semantics/test_participant_strict.py` 13 例 + 宽松夹具 13 文件补显式
+`multi_instance`（world_flows_mix 阶梯/路由世界、lifecycle、m3、m4、delta_batch1、
+numeric、edge_stress、roles、catalog/spi 签名断言）。871 测试全绿。

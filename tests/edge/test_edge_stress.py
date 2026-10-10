@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from flowork.definitions.builder import FlowBuilder
+from flowork.definitions.node import MultiInstance
 from flowork.engine.config import EngineConfig
 from flowork.engine.engine import ProcessEngine
 from flowork.errors import TaskNotAvailableError, UnknownNodeKind
@@ -305,7 +306,9 @@ def test_paged_tasks_pagination():
     definition = (
         FlowBuilder("page")
         .start()
-        .user_task("a", assignees=["'u1'", "'u2'", "'u3'"])
+        .user_task(
+            "a", assignees=["'u1'", "'u2'", "'u3'"], multi_instance=MultiInstance(mode="parallel")
+        )
         .end()
         .connect("start", "a")
         .connect("a", "end")

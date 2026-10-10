@@ -13,9 +13,10 @@
 
 位点统一（原「两处注册面」已收敛为一）：条件位与取人位同一套词汇——
 - ``manager_of(one_user) → one_user``：返回其上级。人 → 主属部门主管；
-  AI 代理的 id → 负责人 owner（单跳，不递归到部门主管）；吃 ``org:`` 返回
-  部门负责人；吃 ``role:`` 报错；查无返回 null（None 传播）。
+  吃 ``org:`` 返回部门负责人；吃 ``role:`` 报错；查无返回 null（None 传播）。
 - ``users_with_role(string) → users``：角色直接成员（subjects_in("role:…")）。
+- ``users_in_org(string) → users``：部门直接成员（subjects_in("org:…")）——
+  取人位按部门展开的唯一写法（组引用只属于候选槽，spec §5.5）。
 - ``has_role(one_user, string) → bool``：谓词（条件位使用，取人位会被拒）。
 查无一律返回 None/空，不抛异常（None/空传播契约，spec §5.5）；目录未配置报
 ContribDirectoryMissing——技术故障留给故障单（第 8 章错误二分）。
@@ -62,6 +63,9 @@ def cel_vocabulary(org: OrgDirectoryLike) -> ExpressionFunctions:
     def users_with_role(role: str) -> list[str]:
         return list(org.subjects_in(f"role:{role}")) if role else []
 
+    def users_in_org(department: str) -> list[str]:
+        return list(org.subjects_in(f"org:{department}")) if department else []
+
     def has_role(user: str, role: str) -> bool:
         return bool(role) and org.is_member(user, f"role:{role}")
 
@@ -72,6 +76,9 @@ def cel_vocabulary(org: OrgDirectoryLike) -> ExpressionFunctions:
             ),
             "users_with_role": ExpressionFunction(
                 FunctionSignature(("string",), "users", label="按角色取人"), users_with_role
+            ),
+            "users_in_org": ExpressionFunction(
+                FunctionSignature(("string",), "users", label="按部门取人"), users_in_org
             ),
             "has_role": ExpressionFunction(
                 FunctionSignature(("one_user", "string"), "bool", label="判断角色成员"), has_role

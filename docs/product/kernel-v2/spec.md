@@ -457,12 +457,12 @@ register("finance_path", fn, params=[],           returns="groups")
 register("approvers_of", fn, params=["one_user"], returns="mixed")
 ```
 
-**`flowork.contrib` 便利包**（可选，一行挂上，纯基于 OrgDirectory 端口实现）：`manager_of(one_user)→one_user`（返回其上级；吃 `org:` 返回部门负责人——数据由宿主目录自定；吃 `role:` 设计期报错）、`users_with_role(string)→users`、`has_role(one_user, string)→bool`。部门类词汇（org_of、dept_leader 等）的数据源无端口支撑，不进 contrib，由宿主注册。
+**`flowork.contrib` 便利包**（可选，一行挂上，纯基于 OrgDirectory 端口实现）：`manager_of(one_user)→one_user`（返回其上级；吃 `org:` 返回部门负责人——数据由宿主目录自定；吃 `role:` 设计期报错）、`users_with_role(string)→users`、`users_in_org(string)→users`（部门直接成员——取人位按部门展开的唯一写法【第十八轮】）、`has_role(one_user, string)→bool`。负责人类词汇（org_of、dept_leader 等）若目录无端口支撑，由宿主注册。
 
 | 使用位置 | 接受的返回 | 引擎行为 |
 |---|---|---|
-| assignee（单人） | one_user | 进入节点展开定格为 1 人；空/多解 → no_participant_policy |
-| assignees/会签 | users、mixed | 展开定格为 N 人 |
+| assignee（单人） | one_user | 进入节点展开定格为 1 人；空 → no_participant_policy；**多人＝错误**（`ParticipantCountMismatchError`【v2.3 第十八轮】） |
+| assignees/会签 | users、mixed | 展开定格为 N 人；**未声明 multi_instance 而解析出多名＝错误**——宽松并行退役，多人必须显式声明会签【v2.3 第十八轮】 |
 | candidate 槽（candidate_users ∪ candidate_groups 联合声明） | users、groups、mixed | mixed 自动拆槽：subjects 计入 candidate_users，groups 计入 candidate_groups；groups 保留引用，认领时再展开 |
 | 连线条件 | 表达式整体必须为 bool | 见下 |
 
@@ -470,7 +470,7 @@ register("approvers_of", fn, params=["one_user"], returns="mixed")
 
 **查无结果的传播（语义契约，宿主函数须遵守）**：函数查无一律返回 None/空集合，**不抛异常**；组合表达式中 None 短路传播（整个取人表达式结果为空）；落到取人位置后走 no_participant_policy。异常只留给「目录服务不可用」类技术故障 → 故障单（对齐第 8 章错误二分）——抛异常的宿主函数＝宣告技术故障，引擎照此处理。
 
-**规范化（引擎统一处理）**：None→空集合；空集合→no_participant_policy；subjects 槽出现 role:/org: → 设计期报错（写错槽）；去重＋按字符串排序（目录返回顺序不可信，排序保证解析结果确定、审计可重放——重放靠任务定格快照＋走线记录，不重新取人）。
+**规范化（引擎统一处理）**：None→空集合；空集合→no_participant_policy；subjects 槽出现 role:/org: → 设计期报错（写错槽，规则 `participant.group_in_subjects`——**第十八轮兑现**，字面量级静态检查，表达式求值结果不可静态预判）；去重＋按字符串排序（目录返回顺序不可信，排序保证解析结果确定、审计可重放——重放靠任务定格快照＋走线记录，不重新取人；实现为保序去重，排序为后续项）。
 
 **检查强度（诚实声明）**：Subject 在 CEL 里本质是 string，静态检查只保证「是个字符串」，不保证「是合法 Subject」；槽合法性由运行时规范化兜底（上一条）。
 
@@ -877,6 +877,16 @@ Zeebe inputCollection/outputCollection 契约实装（multi-instance-call-design
 1. **删除范围**：① 目录 Agent 域全量——org_agent/org_agent_credential 两表、注册/状态机（trial-active-suspended）/凭证签发吊销校验/owner 查询、manager_of 的「找不到人按 agent 找 owner」特例（manager_of 回到纯人语义：人→部门主管、`org:`→部门负责人、查无 None）；② 引擎归因链——complete/reject/update_variables 的 as_agent 参数、wf_task_history 与 wf_variable_history 的 acted_as_agent 布尔列、CLI --as-agent、variables_updated 事件的 as_agent 字段、TaskHistoryInfo/VariableChangeInfo 字段、CommandContext.write_as_agent；③ 迁移 0004 删表删列（幂等，downgrade 不提供）；④ 测试净删 17 例（agent 生命周期/凭证/owner 升级/AI 快照定格），覆盖矩阵 org.agent_* 条目同步。
 2. **保留**：「AI 可作 assignee」能力不变——AI 是普通主体（裸 id 字符串），领待办/办理/驳回/候选认领与人同一条路。超时自动办的 actor=system:timeout 语义不变（原 as_agent=True 实为「系统代办」的混用，随删一并澄清）。`user:` 前缀互认保留（§5.4）。
 3. **归因口径**：历史与变量流水的归因＝acted_by 字符串（谁就是谁）；「这一步是不是 AI 办的」不再是引擎可回答的问题——宿主如需人机区分，自管主体命名空间或外挂审计映射。engine-v1 01/02 的 Agent 身份与 agent_credential 设计随批废止（权限模型 L1 收为 user_token/api_key 两类，AI 经宿主凭证以普通 principal 接入）。
+
+### 第十八轮（2026-10-10，v2.3 续，取人语义收口——单人多人报错/组引用设计期拦截/护栏不写死）
+
+来源：2026-10-10 用户对取人四问走查的裁定（单人节点配多人应报错；组引用要么报错要么展开；空解析应报错【核实为既有缺省，未动】；max_participants 不应写死）。组引用路线的行业对拍：BPMN 流派（Camunda/Flowable/jBPM）组概念住候选池（认领时查目录），assignee 位误写组名同样静默；SaaS 流派（对标产品等）创建时展开成具体人；**无任何引擎在 assignee 位做隐式展开**——故取「设计期报错」路线，错误消息指向两条正路（候选池 / CEL 展开函数）。
+
+1. **单人节点多人＝错误**：未声明 `multi_instance` 而解析出多名 todo → `ParticipantCountMismatchError`（技术故障：挂起+故障单，首节点整笔回滚）——宽松并行退役，多人必须显式声明会签（声明与行为一致；skipped/auto_pass 不计多人）。零兼容：既有依赖宽松下发的定义需补显式 `multi_instance`。守卫住 `Kernel.resolve_participants` 咳喉（串行重解析不受影响——该路径必带 multi_instance）。
+2. **人员位组引用＝设计期 ERROR**：`participant.group_in_subjects`——subjects（assignee/assignees/recipients）与 reassign（超时改派/升级目标）位的 `role:`/`org:` 字符串字面量发布期拦截（兑现 §5.5 规范化条款的既有承诺，此前代码未实现）；候选槽同引用合法（candidates 位跳过）；`user:` 前缀与裸 id 不拦。运行期不做前缀特判（§5.4 裸 id 铁律）。字面量提取复用 `string_literals`（lark AST）。
+3. **contrib 补 `users_in_org(string)→users`**：`subjects_in("org:…")` 直接成员——取人位按部门展开的唯一写法（此前只有 `users_with_role`；`manager_of` 只取负责人一人）。
+4. **`max_participants` 缺省 1000→None**：内核不替宿主选数值，显式配置才启用；三消费方（解析/传阅/加签）均已兼容 None（加签侧 `task_rework` 原 `>` 直比较改走 None 判断——本轮修出的实缺陷）。
+5. **测试**：`tests/semantics/test_participant_strict.py` 13 例（四收口+users_in_org 决定性判例）+ 既有宽松夹具 13 文件补显式 `multi_instance`（行为不变、声明显式化）。
 
 ## 附录 C：类型清单（须提前定义的全集）
 

@@ -13,6 +13,7 @@ import pytest
 
 from flowork import contrib
 from flowork.definitions.builder import FlowBuilder
+from flowork.definitions.node import MultiInstance
 from flowork.engine.config import EngineConfig
 from flowork.engine.engine import ProcessEngine
 from flowork.engine.kernel import EngineExecutionError, NoParticipantError
@@ -217,7 +218,11 @@ def test_function_users_with_role(org_engine: ProcessEngine):
     flow = (
         FlowBuilder("f4")
         .start()
-        .user_task("a", assignees=['users_with_role("finance")'])
+        .user_task(
+            "a",
+            assignees=['users_with_role("finance")'],
+            multi_instance=MultiInstance(mode="parallel"),
+        )
         .end()
         .connect("start", "a")
         .connect("a", "end")
@@ -250,6 +255,7 @@ def test_mixed_literal_and_function_expressions(org_engine: ProcessEngine):
             "a",
             assignee="'u_ceo'",
             assignees=['users_with_role("finance")', "manager_of(initiator)"],
+            multi_instance=MultiInstance(mode="parallel"),
         )
         .end()
         .connect("start", "a")
@@ -473,7 +479,11 @@ def test_delegation_in_multi_instance():
     flow = (
         FlowBuilder("d2")
         .start()
-        .user_task("a", assignees=["'u_bob'", "'u_fin1'"])
+        .user_task(
+            "a",
+            assignees=["'u_bob'", "'u_fin1'"],
+            multi_instance=MultiInstance(mode="parallel"),
+        )
         .end()
         .connect("start", "a")
         .connect("a", "end")

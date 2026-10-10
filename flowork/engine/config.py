@@ -31,7 +31,8 @@ class EngineConfig:
         history_level: 历史事件写入粒度（M6 生效）。
         max_node_loops: 单节点最大完成次数（死循环守卫）。
         max_participants: 单节点参与者规模上限（会签名单/传阅接收人；加签后名单同守）。
-            超限＝拒绝（解析位挂起+故障单，调用方位请求拒绝），绝不静默截断。
+            缺省 None＝不设防（内核不替宿主选数值）；显式配置后超限＝拒绝
+            （解析位挂起+故障单，调用方位请求拒绝），绝不静默截断。
         lock_retries: 乐观锁冲突重试次数。
     """
 
@@ -39,7 +40,7 @@ class EngineConfig:
     node_registry: NodeRegistry = field(default_factory=create_registry)
     history_level: HistoryLevel = "full"
     max_node_loops: int = 50
-    max_participants: int = 1000
+    max_participants: int | None = None
     # v2.3 第三批 A11：部署期 L3/L4（引用完整性/目录实体存在性）默认 WARNING；
     # True 时升 ERROR 拦发布（fail-fast 部署）。
     strict_deploy_validation: bool = False

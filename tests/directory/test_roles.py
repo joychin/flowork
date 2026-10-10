@@ -102,6 +102,7 @@ DEFINITION = {
             "name": "财务审批",
             "kind": "user_task",
             "assignee": 'users_with_role("finance")',
+            "multi_instance": {"mode": "parallel"},
         },
         {"code": "end", "name": "结束", "kind": "end"},
     ],

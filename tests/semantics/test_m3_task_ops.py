@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from flowork.definitions.builder import FlowBuilder
+from flowork.definitions.node import MultiInstance
 from flowork.engine.engine import ProcessEngine
 from flowork.errors import InstanceNotFoundError, TaskNotAvailableError
 
@@ -25,7 +26,9 @@ def linear_flow(code: str = "ops") -> FlowBuilder:
         .start()
         .user_task("a", assignee="'u_a'")
         .user_task("b", candidate_users=["'u_c1'", "'u_c2'"])
-        .user_task("c", assignees=["'u_p1'", "'u_p2'"])
+        .user_task(
+            "c", assignees=["'u_p1'", "'u_p2'"], multi_instance=MultiInstance(mode="parallel")
+        )
         .cc_task("notify", recipients=["'u_a'"])
         .end()
         .connect("start", "a")

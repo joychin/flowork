@@ -13,6 +13,7 @@ from __future__ import annotations
 import pytest
 
 from flowork.definitions.builder import FlowBuilder
+from flowork.definitions.node import MultiInstance
 from flowork.engine.config import EngineConfig
 from flowork.engine.engine import ProcessEngine
 from flowork.errors import TaskNotAvailableError
@@ -207,7 +208,7 @@ def test_add_countersigner_over_limit_rejects_whole_batch():
     flow = (
         FlowBuilder("limadd")
         .start()
-        .user_task("a", assignees=["'u1'", "'u2'"])
+        .user_task("a", assignees=["'u1'", "'u2'"], multi_instance=MultiInstance(mode="parallel"))
         .end()
         .connect("start", "a")
         .connect("a", "end")
@@ -230,7 +231,9 @@ def test_within_limit_participants_unchanged():
     flow = (
         FlowBuilder("ok")
         .start()
-        .user_task("a", assignees=["'u1'", "'u2'", "'u3'"])
+        .user_task(
+            "a", assignees=["'u1'", "'u2'", "'u3'"], multi_instance=MultiInstance(mode="parallel")
+        )
         .end()
         .connect("start", "a")
         .connect("a", "end")

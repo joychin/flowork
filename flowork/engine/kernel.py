@@ -56,6 +56,13 @@ class ParticipantLimitError(EngineExecutionError):
     """
 
 
+class ParticipantCountMismatchError(EngineExecutionError):
+    """单人审批节点（未声明 multi_instance）解析出多名参与者——拒绝宽松并行。
+
+    spec v2.3 第十八轮：多人必须显式声明会签；解析位＝技术故障（挂起+故障单，首节点整笔回滚）。
+    """
+
+
 class RejectTargetMissing(EngineExecutionError):
     """驳回目标节点缺失（未配置且无来源节点）。"""
 

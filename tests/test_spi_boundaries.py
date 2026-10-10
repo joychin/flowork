@@ -187,14 +187,15 @@ def test_contrib_manager_of_rejects_role(subject):
 
 
 def test_contrib_cel_vocabulary_port_shape():
-    """cel_vocabulary 返回 ExpressionFunctions：三词汇且带类型签名。"""
+    """cel_vocabulary 返回 ExpressionFunctions：四词汇且带类型签名。"""
     port = contrib.cel_vocabulary(ORG)
     assert callable(getattr(port, "functions", None))
     table = port.functions()
-    assert set(table) == {"manager_of", "users_with_role", "has_role"}
+    assert set(table) == {"manager_of", "users_with_role", "users_in_org", "has_role"}
     assert table["manager_of"].signature.params == ("one_user",)
     assert table["manager_of"].signature.returns == "one_user"
     assert table["users_with_role"].signature.returns == "users"
+    assert table["users_in_org"].signature.returns == "users"
     assert table["has_role"].signature.params == ("one_user", "string")
     assert table["has_role"].signature.returns == "bool"
 

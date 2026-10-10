@@ -108,6 +108,10 @@ class TaskRecordsMixin:
         - **声明了候选槽就不走兜底**——候选制下「解析不出具体办理人」是正常态，
           改走候选槽**求值**（`resolve_candidate_subjects`，与取人位同一求值面）；
         - **候选求值也空**才回兜底（to_admins / raise）——与未声明候选同一条路。
+
+        第四条（第十八轮）：**单人节点多人＝错误**——未声明 multi_instance 而
+        解析出多名 todo，拒绝宽松并行（`ParticipantCountMismatchError`），
+        多人必须显式声明会签。
         """
         from flowork.expr.context import expression_functions_of
         from flowork.participants.resolver import (
@@ -133,6 +137,14 @@ class TaskRecordsMixin:
             assert_participant_limit(
                 len(resolution.todo) + len(resolution.skipped), limit, where=where
             )
+            if spec.multi_instance is None and len(resolution.todo) > 1:
+                from flowork.engine.kernel import ParticipantCountMismatchError
+
+                raise ParticipantCountMismatchError(
+                    f"{where}（{spec.name or spec.code}）未声明会签（multi_instance）"
+                    f"但解析出 {len(resolution.todo)} 名处理人：{resolution.todo}"
+                    "——单人节点只允许一名；多人请显式声明会签或收敛取人表达式"
+                )
             return resolution
         if spec.candidate_users or spec.candidate_groups:
             candidates = resolve_candidate_subjects(ctx, spec, functions)

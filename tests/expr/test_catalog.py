@@ -79,6 +79,7 @@ def test_contrib_vocabulary_signatures_carry_labels():
     assert labels == {
         "manager_of": "取上级",
         "users_with_role": "按角色取人",
+        "users_in_org": "按部门取人",
         "has_role": "判断角色成员",
     }
 

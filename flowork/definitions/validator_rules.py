@@ -41,13 +41,33 @@ def check_variables_and_org(
     *,
     org_configured: bool | None = None,
 ) -> None:
-    """变量声明检查 + 组主体与目录配置的关系（spec §9）。"""
+    """变量声明检查 + 参与者槽位语义 + 组主体与目录配置的关系（spec §9）。"""
     for variable in definition.variables:
         if variable.searchable and variable.type not in ("string", "number", "boolean"):
             error(
                 "variables.searchable_type",
                 f"searchable 变量仅限 string/number/boolean（{variable.name}: {variable.type}）",
                 node=variable.name,
+            )
+
+    # —— 人员位组引用（第十八轮）：组引用只属于候选槽（spec §5.5「两个槽不可拍平」）
+    # —— subjects/reassign 位写 role:/org: 字面量＝想按角色/部门取人写错了位置，
+    # 运行期会变成没人能办的死待办；设计期直接拦（ERROR）。
+    from flowork.definitions.validator_deploy import string_literals
+    from flowork.definitions.validator_positions import iter_expression_positions
+
+    for kind, where, expression, node_code in iter_expression_positions(definition):
+        if kind not in ("subjects", "reassign"):
+            continue  # candidates 位组引用合法；条件/映射/出口位不是人员语义
+        refs = [lit for lit in string_literals(expression) if lit.startswith(("role:", "org:"))]
+        if refs:
+            error(
+                "participant.group_in_subjects",
+                f"人员位 {where} 出现组引用 {refs}——组引用只在候选槽"
+                "（candidate_groups）有意义；按角色/部门展开请写 "
+                "users_with_role(...) / users_in_org(...)，或改用候选池"
+                "（认领时展开，spec §5.5）",
+                node=node_code,
             )
 
     if org_configured is False:

@@ -7,6 +7,7 @@ from sqlalchemy.orm.exc import StaleDataError
 
 from flowork.definitions.builder import FlowBuilder
 from flowork.definitions.definition import load_definition_file
+from flowork.definitions.node import MultiInstance
 from flowork.engine.engine import ProcessEngine
 from flowork.errors import TaskNotAvailableError
 from tests.conftest import EXAMPLES_DIR
@@ -61,7 +62,12 @@ def test_parallel_countersign_all_by_default(engine: ProcessEngine):
     definition = (
         FlowBuilder("countersign")
         .start()
-        .user_task("audit", "会签", assignees=["'u_a'", "'u_b'"])
+        .user_task(
+            "audit",
+            "会签",
+            assignees=["'u_a'", "'u_b'"],
+            multi_instance=MultiInstance(mode="parallel"),
+        )
         .end()
         .connect("start", "audit")
         .connect("audit", "end")
