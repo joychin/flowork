@@ -101,28 +101,26 @@ class ReadDirectoryMixin(RoleDirectoryMixin):
 
     def manager_of(self, user_id: str) -> str | None:
         """转上级（spec §9 丰富面）：人 → 主属部门主管；`org:` → 部门负责人；
-        `agent:` → 负责人（owner，单跳）。
+        找不到人时按 agent 找其负责人（owner，单跳）。
 
-        口径统一（2026-10-09 第十四轮）：静态 OrgDirectory 与持久化本身
-        对带前缀主体必须一致。**单跳不递归**——「agent owner → 所属部门主管 →
-        上级」那条链是产品文档里的策略，由宿主在自己的词汇里组合，不进本方法
-        （函数的语义只回答「这个主体的问责上级是谁」）。
+        **单跳不递归**——「agent owner → 所属部门主管 → 上级」那条链是产品
+        文档里的策略，由宿主在自己的词汇里组合，不进本方法（函数的语义只
+        回答「这个主体的问责上级是谁」）。主体一律裸 id（spec §5.4）：
+        `agent:` 写法已零兼容删除（2026-10-10 第十六轮）——不再剥离，
+        `agent:{id}` 人表、agent 表都查无，返回 None。
         """
-        agent_id = user_id[6:] if user_id.startswith("agent:") else None
-        if agent_id is None and user_id.startswith("user:"):
+        if user_id.startswith("user:"):
             user_id = user_id[5:]
 
         def produce() -> str | None:
             if user_id.startswith("org:"):
                 return self.department_head(user_id[4:])
-            if agent_id is not None:
-                return self._agent_owner_cached(agent_id)
             # 裸 id：先按人找（既有语义），人不存在再按 agent 找 owner
             if self.user_exists(user_id):
                 return self.department_head(self.department_of(user_id) or "")
             return self._agent_owner_cached(user_id)
 
-        return self._read(("manager_of", user_id, agent_id), produce)
+        return self._read(("manager_of", user_id), produce)
 
     def _agent_owner_cached(self, agent_id: str) -> str | None:
         """agent owner 的读缓存包装（AgentDirectoryMixin.agent_owner 不缓存）。

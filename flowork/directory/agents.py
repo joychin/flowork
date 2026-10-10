@@ -91,7 +91,7 @@ class AgentDirectoryMixin:
             record_audit(
                 session,
                 "agent.register",
-                f"agent:{agent_id}",
+                agent_id,
                 {"owner": owner_user_id, "on_behalf_of": on_behalf_of_user},
                 acted_by=acted_by,
             )
@@ -141,7 +141,7 @@ class AgentDirectoryMixin:
             record_audit(
                 session,
                 "agent_credential.issue",
-                f"agent:{agent_id}",
+                agent_id,
                 {"credential_id": cred_id},
                 acted_by=acted_by,
             )
@@ -178,7 +178,7 @@ class AgentDirectoryMixin:
                 record_audit(
                     session,
                     "agent_credential.revoke",
-                    f"agent:{cred.agent_id}",
+                    cred.agent_id,
                     {"credential_id": cred_id},
                     acted_by=acted_by,
                 )
@@ -205,7 +205,7 @@ class AgentDirectoryMixin:
             record_audit(
                 session,
                 "agent.transition",
-                f"agent:{agent_id}",
+                agent_id,
                 {"to": to_status},
                 acted_by=acted_by,
             )

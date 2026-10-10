@@ -109,6 +109,6 @@ Worker 面（service_task mode=worker，`engine.worker_jobs`）：
 
 - **自定义节点**：`FlowNode` 子类（Spec）+ `NodeBehavior` 子类 + `config.node_registry.register(kind, spec, behavior)`。
 - **声明式钩子**：节点 `hooks={"on_exit": {"handler": "name", "params": {...}}}` + `engine.register_handler("name", fn)`。
-- **表达式函数（全位点 CEL 词汇）**：经 `ExpressionFunctions` 端口注册（必须带 FunctionSignature 签名，纯读闭包无 ctx）；一行挂官方词汇：`config.expression_functions = contrib.cel_vocabulary(org)`（manager_of/users_with_role/has_role——`manager_of` 对 `agent:` 主体返回其 owner）。取人/传阅/改派+升级/连线条件/子流程映射共用同一注册面。
+- **表达式函数（全位点 CEL 词汇）**：经 `ExpressionFunctions` 端口注册（必须带 FunctionSignature 签名，纯读闭包无 ctx）；一行挂官方词汇：`config.expression_functions = contrib.cel_vocabulary(org)`（manager_of/users_with_role/has_role——`manager_of` 对 AI 代理的 id 返回其负责人 owner）。取人/传阅/改派+升级/连线条件/子流程映射共用同一注册面。
 - **判断面事实**：公式可用 `now`/`prev_task`/`node("code")`（引擎注入，词汇目录见 spec §4.3/C.4，权威在 `expr/catalog.py`）。
 - **事件消费**：消费 `wf_event_outbox`（CloudEvents 信封，按 id 幂等；`flowork.events.consumer.IdempotentSink` 为参考实现）。

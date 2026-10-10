@@ -29,7 +29,7 @@
 | 系统任务（job/action） | 流程到这里由程序自动干活，不需要人参与 |
 | 传阅（cc） | 把这份单子给某些人「看一眼」，不卡流程、不需要他们操作 |
 | 会签 | 一个节点要好几个人都处理（或达到某个比例）才算过 |
-| 主体（Subject） | 「一个人/一个角色/一个 AI 代理」的统一写法：`user:zhangsan`、`role:manager`、`agent:bot1` |
+| 主体（Subject） | 「一个人/一个角色/一个 AI 代理」的统一写法：人与 AI 代理写裸 id（`u_zhang`、`bot1`）、组引用带前缀（`role:manager`、`org:rd_be`）【v2.3 第十六轮：`agent:` 写法删除】 |
 | 参与者表达式 | 写在图纸上的取人规则，如 `manager_of(initiator)`＝「发起人的上级」。函数由宿主自己注册，内核只管类型和校验，不内置任何取人词汇 |
 | 表达式（CEL） | 写条件用的小语言，如 `input.amount > 300`。谷歌为 Kubernetes 造的，不自造语法 |
 | 结构化条件 | 不写代码、填表式的条件（字段＋大于/等于/属于…＋值），设计器能画出来，校验最严 |
@@ -382,7 +382,7 @@ git 里的 YAML/JSON 文件      ← 编辑态事实来源：人和 AI 只改这
 - 形态依据：WS-HumanTask 1.0（OASIS，jBPM 完整实现）即「多 deadline 各挂 escalation（notification / reassignment）」；对标产品 的 timeoutWarning1..5 是其劣化实现（预警水位写死五个字段）。Camunda 7/Flowable 无内建人工任务升级（要边界定时器＋监听器自搭），flowork 直接取标准形态。
 - 实例级时限是**另一个字段**（图纸顶层 `deadline`，第 7 章），不混在任务 deadlines 里。
 
-**AI 的位置**：assignee 可以是 `agent:xxx` 主体；人也可以让 AI 代点（历史行 acted_as_agent=true 记账 ✓）。谁有权限点，属权限插件（M9），内核只记事实。
+**AI 的位置**：assignee 可以是 AI 代理的 id（写法与用户 id 相同，裸 id，如 `bot1`【v2.3 第十六轮：`agent:` 写法删除】）；人也可以让 AI 代点（历史行 acted_as_agent=true 记账 ✓）。谁有权限点，属权限插件（M9），内核只记事实。
 
 ### 5.2 系统任务（service_task）
 
@@ -410,7 +410,7 @@ git 里的 YAML/JSON 文件      ← 编辑态事实来源：人和 AI 只改这
 ### 5.4 主体（Subject）：统一写「一个人/角色/代理/部门」
 
 **两种字段两套写法【v2.3 第十四轮口径修正】**：
-- **人字段写裸 id**（规范写法）：`assignee` / `candidate_users` / `recipients` / `start_user` 等指向具体人的位置写目录里的 id 原样（`u_zhang`、`bot1`）。
+- **人字段写裸 id**（规范写法）：`assignee` / `candidate_users` / `recipients` / `start_user` 等指向具体人的位置写目录里的 id 原样（`u_zhang`、`bot1`；AI 代理同写法）【v2.3 第十六轮：`agent:` 写法已零兼容删除】。
 - **组字段带前缀**：`candidate_groups` 写 `role:{name}` / `org:{code}`——前缀是**组引用的类型标签**，引擎与目录实现都按 `split_group` 解析（`org:` 即部门树，认领时按目录判断归属）。
 
 **`user:` 前缀的地位（诚实口径）**：前缀**在部分路径上互认**、并非全局归一——
@@ -442,7 +442,7 @@ git 里的 YAML/JSON 文件      ← 编辑态事实来源：人和 AI 只改这
 数据形态统一为 `ParticipantSet`（one_user/users/groups 由引擎自动提升）：
 
 ```
-ParticipantSet = { subjects: [user:*|agent:*],   # 具体的人（已展开）
+ParticipantSet = { subjects: [<id>],             # 具体主体（人/AI 代理的裸 id，已展开）
                    groups:   [role:*|org:*] }    # 组引用（未展开，保留动态性）
 ```
 
@@ -861,6 +861,14 @@ Zeebe inputCollection/outputCollection 契约实装（multi-instance-call-design
 
 1. **时钟统一**：全表达式位 `now` 与 worker Job 租约/退避恒取 `EngineConfig.now`。盘点发现 8 个装配位点（路由条件 evaluation_variables、取人 resolve_subjects、会签出口 exit_reached、超时改派 fire 位、子流程映射、MI completion、消息 correlation 写入/启动匹配）装配上下文时未传 `now`（`expression_context` 缺省墙钟），worker Job 三处（create run_at/领活租约/失败退避）直用 `utc_now`——FakeClock 下被测对象与测试时钟不同源（route_audit 挂账「审计时刻与任务时刻不一致」同根，一并收口）。修复形态：三函数增 `now` 参数、十四调用点显式穿针（含 Review 补漏的驳回复活路径 reject_flow 侧 disapprove_exit——办理侧与驳回侧同一节点出口同一时钟；不是缺省改时钟——引擎位点必须显式传，缺省墙钟保留给无引擎装配面并写入文档）；`tests/semantics/test_clock_unification.py` 每位点一个「假钟阈值」判例（实施前 8/8 红、实施后全绿——判别力依赖阈值定在假钟未来/墙钟过去的区间）。
 2. **终止/取消＝砍树**（§7 新段）：terminate/cancel/实例时限 cancel/terminate 三入口共用 `terminate_cascade`——未结算子实例（含暂停/挂起中的）递归同置终态、待办撤销留痕、父事件带 `cascaded_instances` 清单/子事件带 `cascade_from`。翻转 `tests/suite/test_construct_subprocess` 曾钉住的「孤儿运行」开放问题钉子；`test_terminate_cascade.py` 六走查（整树/孙层/暂停子/已结算不动/时限策略/无子空清单）。
+
+### 第十六轮（2026-10-10，v2.3 续，`agent:` 写法零兼容删除——主体统一裸 id）
+
+来源：用户裁定「彻底把 `agent:` 删掉」（2026-10-10）。背景：第十四轮已定「人字段＝裸 id」，`agent:` 前缀在引擎内零解析、零语义（§5.4 明文「是不是 agent 走 acted_as_agent 标志与宿主目录，不走字符串装饰」），仅余目录参考实现两处剥离兼容与审计展示写法——纯装饰；保留它反而制造「同一主体两种写法」在非互认比较点静默失配的隐患（§5.4 诚实口径段同款问题）。
+
+1. **删除范围**：① `DirectoryStore.manager_of` 与静态 `OrgDirectory.manager_of` 的 `agent:` 剥离（AI 代理与用户一样写裸 id；裸 id 找不到人时按 agent 表找 owner 的能力不变）；② 目录写审计 subject 裸化（`agent:{id}` → 裸 id，操作类型由审计 action 承载）；③ §3.2/§5.1/§5.4、docs/API.md 与端口 docstring 写法收口；④ 测试钉零兼容（旧写法查无返回 None，不静默命中）。
+2. **零兼容**：`agent:{id}` 写法（含存量图纸）不再被解析——`manager_of("agent:x")` 人表、agent 表都查无返回 None；escalate 位这样写会在 fire 时出故障单（可见错误，不静默）。
+3. **保留**：Agent 一等身份（目录 AgentRow/凭证/状态机/owner 问责）与「AI 可作 assignee」能力原样；`user:` 前缀互认保留（§5.4）。
 
 ## 附录 C：类型清单（须提前定义的全集）
 

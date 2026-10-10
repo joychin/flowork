@@ -102,9 +102,10 @@ def test_manager_of_parity_between_materializations(
 ) -> None:
     """两种物化对带前缀主体口径一致（回归：此前持久化版不认 `user:`/`org:`）。
 
-    实测背景（2026-10-09）：静态版剥 `user:`/`agent:` 且认 `org:`，持久化版都不认
-    ——同一份图纸换目录实现行为就变。现在两边同口径；人字段写裸 id 仍是推荐写法
-    （spec §5.4 v2.3 第十四轮），认前缀是宿主侧的宽容。
+    实测背景（2026-10-09）：静态版剥 `user:` 且认 `org:`，持久化版都不认
+    ——同一份图纸换目录实现行为就变。现在两边同口径（`user:`/`org:` 互认保留）；
+    主体统一裸 id（spec §5.4 v2.3 第十四轮），`agent:` 写法已零兼容删除
+    （2026-10-10 第十六轮）——两个物化都不再剥离。
     """
     static_org: OrgDirectory = static_engine.config.org  # type: ignore[assignment]
     for subject in ("u_dev_wu", "user:u_dev_wu"):
@@ -112,17 +113,21 @@ def test_manager_of_parity_between_materializations(
     assert org_store.manager_of("org:rd_be") == "u_lead_be" == static_org.manager_of("org:rd_be")
     assert org_store.manager_of("org:nope") is None
     assert org_store.manager_of("u_nobody") is None
+    assert org_store.manager_of("agent:u_dev_wu") is None  # 旧前缀写法：零兼容
+    assert static_org.manager_of("agent:u_dev_wu") is None
 
 
 @covers("org.manager_of_agent_owner")
 def test_manager_of_resolves_agent_to_owner(org_store: DirectoryStore) -> None:
-    """agent 主体 → 负责人（单跳）：问责链 root，不再返回 None。
+    """AI 代理的 id → 负责人（单跳）：问责链 root，不再返回 None。
 
     单跳不递归——「owner → 所属部门主管 → 上级」是宿主策略，由宿主词汇组合。
+    `agent:` 写法零兼容删除（2026-10-10 第十六轮）：旧写法查无返回 None，
+    不剥离、不静默认。
     """
-    assert org_store.manager_of("agent:ag_expense_bot") == "u_cash"  # owner
-    assert org_store.manager_of("ag_expense_bot") == "u_cash"  # 裸 id 回退 agent 查找
-    assert org_store.manager_of("agent:ghost_bot") is None
+    assert org_store.manager_of("ag_expense_bot") == "u_cash"  # owner（裸 id）
+    assert org_store.manager_of("agent:ag_expense_bot") is None  # 旧前缀写法已删
+    assert org_store.manager_of("ghost_bot") is None  # 查无 agent
 
 
 # —— Agent 一等身份 ——

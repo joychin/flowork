@@ -13,7 +13,7 @@
 
 位点统一（原「两处注册面」已收敛为一）：条件位与取人位同一套词汇——
 - ``manager_of(one_user) → one_user``：返回其上级。人 → 主属部门主管；
-  ``agent:{id}`` → 负责人 owner（单跳，不递归到部门主管）；吃 ``org:`` 返回
+  AI 代理的 id → 负责人 owner（单跳，不递归到部门主管）；吃 ``org:`` 返回
   部门负责人；吃 ``role:`` 报错；查无返回 null（None 传播）。
 - ``users_with_role(string) → users``：角色直接成员（subjects_in("role:…")）。
 - ``has_role(one_user, string) → bool``：谓词（条件位使用，取人位会被拒）。

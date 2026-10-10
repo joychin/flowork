@@ -43,7 +43,9 @@ class CandidateDirectory(Protocol):
 def person_key(subject: str) -> str:
     """人 key：剥 ``user:`` 前缀（spec §5.4 前缀写法与裸 id 互认）。
 
-    ``agent:`` 不动——它是独立身份命名空间，不是同一个人的两种写法。
+    AI 代理的 id 与用户 id 是独立命名空间（分属两张表），不做归一——
+    只有 ``user:`` 是同一个人的两种写法（``agent:`` 写法已零兼容删除，
+    2026-10-10 第十六轮：agent 的 id 直接写裸 id，无前缀参与）。
     """
     return subject.removeprefix("user:")
 
