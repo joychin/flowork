@@ -109,3 +109,51 @@ def test_retire_after_deploy(tmp_path, simple):
     result = runner.invoke(app, ["retire", "cli_deploy", "--db", str(db)])
     assert result.exit_code == 0
     assert "已 retire" in result.stdout
+
+
+def test_task_claimable_lists_candidate_group_member(tmp_path):
+    """候选待办查询（A 批）：具体人直接命中；组引用须给 --org 才展开。
+
+    来源 2026-10-09：候选关联此前不经任何公开面暴露，人找不到可认领入口。
+    """
+    db = tmp_path / "claim.db"
+    org = tmp_path / "org.yaml"
+    org.write_text(
+        "users:\n"
+        "  u_fin: {roles: [finance]}\n"
+        "  u_other: {}\n"
+        "departments: {}\n"
+        "delegations: []\n"
+        "admins: [u_admin]\n",
+        encoding="utf-8",
+    )
+    flow = (
+        FlowBuilder("cli_candidate")
+        .start()
+        .user_task("pick", "候选任务", candidate_groups=["'role:finance'"])
+        .end()
+        .connect("start", "pick")
+        .connect("pick", "end")
+        .build()
+    )
+    runner.invoke(app, ["deploy", _write(tmp_path / "cand.json", flow), "--db", str(db)])
+
+    from flowork.api import EngineConfig, ProcessEngine
+
+    engine = ProcessEngine(EngineConfig(db_file=str(db)))
+    engine.runtime.start_process("cli_candidate", start_user="u_other")
+    engine.close()
+
+    hit = runner.invoke(app, ["task", "claimable", "u_fin", "--db", str(db), "--org", str(org)])
+    assert hit.exit_code == 0 and "候选任务" in hit.stdout
+
+    miss = runner.invoke(app, ["task", "claimable", "u_other", "--db", str(db), "--org", str(org)])
+    assert "没有可认领" in miss.stdout
+
+
+def test_task_claimable_rejects_bad_org_file(tmp_path):
+    """目录 YAML 不存在：报错退出而非静默答「没有待办」（防静默错答案）。"""
+    result = runner.invoke(
+        app, ["task", "claimable", "u_x", "--db", str(tmp_path / "x.db"), "--org", "/nope.yaml"]
+    )
+    assert result.exit_code == 1

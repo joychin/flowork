@@ -53,7 +53,13 @@ def check_variables_and_org(
     if org_configured is False:
         for node in definition.nodes:
             groups = list(getattr(node, "candidate_groups", None) or [])
-            prefixed = [g for g in groups if g.startswith(("role:", "org:"))]
+            # 候选槽是 CEL 表达式（B 批位点统一）——组引用写在字符串字面量里
+            # （"'role:finance'"），取字面量再判前缀；string_literals 宿 validator_deploy，
+            # 函数内延迟导入避免 validator → rules → deploy → validator 模块环。
+            from flowork.definitions.validator_deploy import string_literals
+
+            references = [lit for expr in groups for lit in string_literals(expr)]
+            prefixed = [g for g in references if g.startswith(("role:", "org:"))]
             if prefixed:
                 warning(
                     "participant.group_without_directory",

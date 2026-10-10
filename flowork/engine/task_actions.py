@@ -11,10 +11,7 @@ from typing import TYPE_CHECKING
 from flowork.engine.ops import CommandContext
 from flowork.errors import InstanceNotFoundError, TaskNotAvailableError
 from flowork.events.domain import DomainEvent
-from flowork.persistence.orm import (
-    IdentityLinkRow,
-    TaskRow,
-)
+from flowork.persistence.orm import TaskRow
 from flowork.tasks.actions import allowed_actions, assert_action_allowed
 from flowork.tasks.deadlines import carry_deadline_jobs
 from flowork.tasks.models import TaskInfo
@@ -36,32 +33,26 @@ class TaskOpsMixin:
     # —— 认领（候选任务）——
 
     def claim(self, task_id: str, user: str) -> TaskInfo:
-        """候选人认领任务：assignee 置为本人，清除候选关联。"""
+        """候选人认领任务：assignee 置为本人（候选关联保留——谁本来有资格是审计信息）。"""
         result: TaskInfo = self._engine.execute(lambda ctx: self._claim(ctx, task_id, user))
         return result
 
     def _claim(self, ctx: CommandContext, task_id: str, user: str) -> TaskInfo:
-        from sqlalchemy import select
+        from flowork.tasks.candidates import person_key, require_candidate
 
         task = ctx.session.get(TaskRow, task_id)
         if task is None or task.state != "ready":
             raise TaskNotAvailableError(f"任务不可认领（不存在或已处理）：{task_id}")
         self._assert_operable(ctx, task)
         ctx.touch(self._instance(ctx, task.instance_id))
-        candidates = {
-            row.user_id
-            for row in ctx.session.scalars(
-                select(IdentityLinkRow).where(IdentityLinkRow.task_id == task_id)
-            )
-        }
+        org = self._engine.config.org
         if task.assignee == "":
-            if user not in candidates:
-                raise TaskNotAvailableError(f"用户 {user} 不是任务 {task_id} 的候选人")
+            require_candidate(ctx.session, task_id, user, org)
             task.assignee = user
             ctx.session.flush()
             self._emit_task_event(ctx, DomainEvent.TASK_CLAIMED, task, user)
             return self._task_info(task)
-        if task.assignee != user:  # 已被认领/直派
+        if person_key(task.assignee) != person_key(user):  # 已被认领/直派
             raise TaskNotAvailableError(f"任务已被 {task.assignee} 认领")
         return self._task_info(task)
 

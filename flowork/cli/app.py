@@ -1,4 +1,4 @@
-"""flowork CLI：init / validate / deploy / retire / purge / drift / tick / instance 组 / demo。"""
+"""flowork CLI：init / validate / deploy / retire / purge / drift / tick / 三子命令组 / demo。"""
 
 from __future__ import annotations
 
@@ -23,10 +23,11 @@ from flowork.api import (
 )
 from flowork.cli.instance import instance_app
 from flowork.cli.message import message_app
+from flowork.cli.task import task_app
 
 app = typer.Typer(help="flowork 流程引擎 CLI", no_args_is_help=True)
-app.add_typer(instance_app, name="instance")
-app.add_typer(message_app, name="message")
+for _name, _sub_app in (("instance", instance_app), ("message", message_app), ("task", task_app)):
+    app.add_typer(_sub_app, name=_name)
 console = Console()
 
 EXAMPLES = Path(__file__).parent.parent.parent / "examples"

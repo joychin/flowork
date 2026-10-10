@@ -413,3 +413,26 @@ terminate/cancel/实例时限 cancel/terminate 三入口共用 terminate_cascade
 test_terminate_cascade.py 六走查。**与 escalate 批（ab0b6de）同日并行会话共享工作区**：
 本批提交信息误写「第十四轮」（escalate 批先入登记），spec 附录已归正为第十五轮；共享区
 协作纪律＝提交前用 write-tree 临时 worktree 验证暂存集（主树常混并行 WIP）。
+
+**候选认领制收口批（2026-10-09，A 批三缺口修复 + 候选槽表达式对齐 B 批；spec §5.5）**：
+候选制此前是半成品——① 配了组织目录即不可用（取人解析兜底先抛错，认领分支不可达，
+生产必踩）；② 候选组 role:/org: 引用认领时不展开（is_member 端口零引擎调用方）；
+③ 「我可认领的待办」查询维度缺失（候选关联不经任何公开面暴露）。
+**A 批三修**：resolve_participants 改三段判定（指派命中直派→候选槽求值→求值空才回兜底，
+候选槽声明即不走 to_admins）；新建 `tasks/candidates.py`（candidate_hit 两式判定＝
+人 key 对齐（user: 前缀互认）∪ 目录 is_member 组归属；require_candidate 认领守卫
+（缺目录且候选含组引用时点明原因）；candidate_task_ids 查询维度；认领与查询共用防漂移）；
+`list_tasks(candidate=)` + CLI `flowork task claimable <user> --org <yaml>`（CLI 无目录时
+组候选恒不命中，--org 是唯一接入途径；不给则如实报错）；`assignee=""` 收紧为显式
+未认领语义（原空串假值不筛）。**组引用保留不展开（spec §5.5 三处明文）**——决定性测试
+test_group_reference_stays_live_after_join（DirectoryStore 建任务后 assign_role 入组→可认领；
+「建任务时展开定格」方案在此必红）。**B 批（候选槽接入 CEL，另一会话实施、本批合提交）**：
+candidate_users/candidate_groups 每项=公式（resolve_candidate_subjects 与取人位同一求值面；
+裸名→设计期 CEL 错，零兼容）；ParticipantResolution 增 candidates 槽；位点拆出
+validator_positions.py（iter_expression_positions 收录 candidates kind、lookup_kind 归一
+subjects 防 catalog 误报；validator_conditions 守 300 行）；returns 白名单按 kind 分
+（候选槽多接受 groups/mixed＝「混合集自动拆槽」）；validator_rules 的组前缀判据改经
+string_literals（CEL 化后裸前缀失配）；测试字面量迁移（m3/m4/delta2/edge/spi 六处加引号）。
+**测试**：tests/semantics/test_candidate_claim.py 14 例（配目录可用/组展开/前缀互认/
+无目录提示/查询维度/入组活性）+ suite test_candidates.py + CLI 2 例；docs/API.md 与
+integration.md 的 list_tasks/task claimable 行随 escalate 批先行入库。860 测试全绿。

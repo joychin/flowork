@@ -96,34 +96,52 @@ class TaskRecordsMixin:
         return list(session.scalars(stmt))
 
     def resolve_participants(self, ctx: RuntimeNodeContext, spec: UserTaskSpec) -> Any:
-        """参与者解析入口：返回 ParticipantResolution（todo + skipped）。
+        """参与者解析入口：返回 ParticipantResolution（todo/skipped/candidates）。
 
         单轨 CEL（spec §4.2）：函数表自 EngineConfig.expression_functions 拍平；
         有组织目录叠加委托替换与 to_admins 兜底，无目录走同一条 CEL 求值路径。
         出口统一守规模护栏（max_participants，spec v2.3）：手动名单与表达式名单同守。
+
+        三条判定（spec §5.5，2026-10-09 B 批「候选槽表达式对齐」）：
+
+        - **指派优先于候选**：取人位解析出人 → 直派（候选槽不参与）；
+        - **声明了候选槽就不走兜底**——候选制下「解析不出具体办理人」是正常态，
+          改走候选槽**求值**（`resolve_candidate_subjects`，与取人位同一求值面）；
+        - **候选求值也空**才回兜底（to_admins / raise）——与未声明候选同一条路。
         """
         from flowork.expr.context import expression_functions_of
         from flowork.participants.resolver import (
+            ParticipantResolution,
             assert_participant_limit,
             fallback_when_empty,
+            resolve_candidate_subjects,
             resolve_participants,
             resolve_with_delegation,
         )
 
         config = self.engine.config if self.engine else None
         functions = expression_functions_of(config)
-        if config is not None and config.org is not None:
-            resolution, _delegation = resolve_with_delegation(ctx, spec, config.org, functions)
-            if not resolution.todo and not resolution.skipped:
-                return fallback_when_empty(ctx, spec, config.org)
+        org = config.org if config is not None else None
+        limit = config.max_participants if config is not None else None
+        where = f"审批节点 {spec.code}"
+
+        if org is not None:
+            resolution, _delegation = resolve_with_delegation(ctx, spec, org, functions)
         else:
             resolution = resolve_participants(ctx, spec, functions=functions)
-        assert_participant_limit(
-            len(resolution.todo) + len(resolution.skipped),
-            config.max_participants if config is not None else None,
-            where=f"审批节点 {spec.code}",
-        )
-        return resolution
+        if resolution.todo or resolution.skipped:
+            assert_participant_limit(
+                len(resolution.todo) + len(resolution.skipped), limit, where=where
+            )
+            return resolution
+        if spec.candidate_users or spec.candidate_groups:
+            candidates = resolve_candidate_subjects(ctx, spec, functions)
+            if candidates:
+                assert_participant_limit(len(candidates), limit, where=f"{where}（候选槽）")
+                return ParticipantResolution(candidates=candidates)
+        if org is not None:
+            return fallback_when_empty(ctx, spec, org)
+        return resolution  # 空结果：行为层报「没有可用参与者」
 
     def handled_assignees(self, session: Session, token_id: str) -> list[str]:
         """令牌下已实际办理过的人（排除被取消的任务）。"""

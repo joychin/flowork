@@ -54,20 +54,33 @@ class TaskService(
         *,
         instance_id: str | None = None,
         assignee: str | None = None,
+        candidate: str | None = None,
         state: str = "ready",
     ) -> list[TaskInfo]:
-        """查询待办（默认 ready；state=None 查全部）。"""
+        """查询待办（默认 ready；state=None 查全部）。
+
+        ``candidate``＝「我可认领的待办」（spec §12 过滤维度里的 candidate）：候选
+        关联含具体人（``user:`` 前缀与裸 id 互认）与组引用（认领时展开，有目录才
+        命中）。``assignee=""`` 是显式条件＝尚未认领（候选池口径，与 candidate
+        组合即「我可认领且仍在池中」）；``None`` 才是不筛。
+        """
         from sqlalchemy import select
+
+        from flowork.tasks.candidates import candidate_task_ids
 
         def _command(ctx: CommandContext) -> list[TaskInfo]:
             stmt = select(TaskRow)
             if instance_id:
                 stmt = stmt.where(TaskRow.instance_id == instance_id)
-            if assignee:
+            if assignee is not None:
                 stmt = stmt.where(TaskRow.assignee == assignee)
             if state:
                 stmt = stmt.where(TaskRow.state == state)
-            return [self._task_info(row) for row in ctx.session.scalars(stmt)]
+            rows = list(ctx.session.scalars(stmt))
+            if candidate:
+                claimable = set(candidate_task_ids(ctx.session, candidate, self._engine.config.org))
+                rows = [row for row in rows if row.id in claimable]
+            return [self._task_info(row) for row in rows]
 
         result: list[TaskInfo] = self._engine.execute(_command)
         return result

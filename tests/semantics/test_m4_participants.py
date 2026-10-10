@@ -436,7 +436,7 @@ def test_claimable_when_only_candidates_no_org():
     flow = (
         FlowBuilder("s8")
         .start()
-        .user_task("a", candidate_users=["u_x", "u_y"])
+        .user_task("a", candidate_users=["'u_x'", "'u_y'"])
         .end()
         .connect("start", "a")
         .connect("a", "end")

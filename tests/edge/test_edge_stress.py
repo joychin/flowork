@@ -242,7 +242,7 @@ def test_remove_instance_cascades_jobs_links_incidents():
         .start()
         .user_task(
             "t",
-            candidate_users=["u_x", "u_y"],
+            candidate_users=["'u_x'", "'u_y'"],
             timeout=TimeoutPolicy(due_minutes=30, strategy="auto_approve"),
         )
         .end()

@@ -142,7 +142,7 @@ def test_validate_warns_group_subjects_without_directory():
     definition = (
         FlowBuilder("grp_warn")
         .start()
-        .user_task("a", candidate_groups=["role:finance", "org:d_eng"])
+        .user_task("a", candidate_groups=["'role:finance'", "'org:d_eng'"])
         .end()
         .connect("start", "a")
         .connect("a", "end")

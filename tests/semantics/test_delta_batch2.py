@@ -173,7 +173,7 @@ def test_candidate_task_cannot_transfer(engine: ProcessEngine):
     flow = (
         FlowBuilder("cand")
         .start()
-        .user_task("a", candidate_users=["u_c1"])
+        .user_task("a", candidate_users=["'u_c1'"])
         .end()
         .connect("start", "a")
         .connect("a", "end")

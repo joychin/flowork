@@ -69,7 +69,7 @@ def _cand() -> FlowBuilder:
     return (
         FlowBuilder("hs_cand")
         .start()
-        .user_task("c", candidate_users=["u1", "u2"])
+        .user_task("c", candidate_users=["'u1'", "'u2'"])
         .end()
         .connect("start", "c")
         .connect("c", "end")

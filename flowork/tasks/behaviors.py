@@ -98,10 +98,10 @@ class UserTaskBehavior(NodeBehavior):
         from flowork.participants.resolver import ParticipantResolution
 
         resolution: ParticipantResolution = ctx.kernel.resolve_participants(ctx, spec)
+        if resolution.candidates:
+            self._create_claimable_task(ctx, resolution.candidates)
+            return
         if not resolution.todo and not resolution.skipped:
-            if spec.candidate_users or spec.candidate_groups:
-                self._create_claimable_task(ctx, spec)
-                return
             raise NoParticipantError(
                 f"审批节点 {spec.code}（{spec.name or spec.code}）没有可用参与者"
             )
@@ -127,19 +127,26 @@ class UserTaskBehavior(NodeBehavior):
         if not resolution.todo:
             self._finish_now(ctx)
 
-    def _create_claimable_task(self, ctx: RuntimeNodeContext, spec: UserTaskSpec) -> None:
-        """无指定办理人但有候选人：生成可认领任务（assignee 置空 + 候选关联）。"""
+    def _create_claimable_task(self, ctx: RuntimeNodeContext, candidates: list[str]) -> None:
+        """有候选（已求值）：生成可认领任务（assignee 置空 + 候选关联）。
+
+        候选关联＝求值后的人 ∪ 组引用，**引用保留不展开**（spec §5.5：候选制下
+        组引用保留、认领时再展开——明天入组的人能认领明天的待办）；命中判定见
+        `tasks.candidates.candidate_hit`。求值在 ``resolve_participants``
+        （候选槽与取人位同一 CEL 求值面，2026-10-09 B 批）。
+        """
         import uuid
 
         from flowork.persistence.orm import IdentityLinkRow
 
         assert ctx.token is not None
+        spec = self.spec
+        assert isinstance(spec, UserTaskSpec)
         ctx.token.item_count = 1
         ctx.token_updated()
         task = ctx.create_task(assignee="")
         schedule_deadline_jobs(ctx, spec, task.id)  # 超时策略同样适用于认领场景
-        candidates = list(spec.candidate_users) + list(spec.candidate_groups)
-        for candidate in dict.fromkeys(candidates):
+        for candidate in candidates:
             ctx.session.add(
                 IdentityLinkRow(
                     id=uuid.uuid4().hex,

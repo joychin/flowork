@@ -29,6 +29,8 @@ if TYPE_CHECKING:
 __all__ = [
     "ParticipantResolution",
     "assert_participant_limit",
+    "resolve_candidate_subjects",
+    "resolve_expression_list",
     "resolve_participants",
     "resolve_subjects",
     "resolve_with_delegation",
@@ -39,10 +41,15 @@ Functions = Mapping[str, Callable[..., object]]
 
 @dataclass
 class ParticipantResolution:
-    """解析结果：todo 待办人；skipped 策略命中（自动通过）人。"""
+    """解析结果：todo 待办人；skipped 策略命中（自动通过）人；candidates 候选槽求值结果。
+
+    candidates 非空＝节点走候选认领制（生成 assignee 空的待办 + 候选关联）；
+    与 todo/skipped 互斥（指派优先于候选，spec §5.5/B 批）。
+    """
 
     todo: list[str] = field(default_factory=list)
     skipped: list[str] = field(default_factory=list)
+    candidates: list[str] = field(default_factory=list)
 
 
 def assert_participant_limit(count: int, limit: int | None, *, where: str) -> None:
@@ -119,12 +126,28 @@ def _evaluate_expressions(
     spec: UserTaskSpec,
     functions: Functions | None,
 ) -> list[str]:
-    """解析管线内用：assignee/assignees 表达式 → 人池（错误消息带节点码）。
+    """解析管线内用：assignee/assignees 表达式 → 人池（错误消息带节点码）。"""
+    expressions = ([spec.assignee] if spec.assignee else []) + list(spec.assignees)
+    return resolve_expression_list(
+        ctx, expressions, label=spec.code, what="取人", functions=functions
+    )
+
+
+def resolve_expression_list(
+    ctx: RuntimeNodeContext,
+    expressions: list[str],
+    *,
+    label: str = "",
+    what: str = "取人",
+    functions: Functions | None = None,
+) -> list[str]:
+    """一组 CEL 取人表达式求值 → 人/组引用列表（保序去重）。
 
     取人位判断面接线（expression-dataface §2.2/§2.3）：变量带 prev_task 快照、
     函数表并入 node()——InMemoryNodeContext（无 session）裸跑不受影响。
+    取人位（assignee/assignees）与候选槽（candidate_users/candidate_groups）
+    共用本装配——spec §5.5 位点表把两者同列为「取人」位，两套求值面必然漂移。
     """
-    expressions = ([spec.assignee] if spec.assignee else []) + list(spec.assignees)
     from flowork.tasks.facts import attach_node, instance_facts, with_prev_task
 
     session = getattr(ctx, "session", None)
@@ -133,9 +156,31 @@ def _evaluate_expressions(
         with_prev_task(session, ctx.instance.id, ctx.variables),
         ctx.instance.start_user,
         attach_node(functions, session, ctx.instance.id),
-        label=spec.code,
+        label=label,
+        what=what,
         instance=instance_facts(ctx.instance),
         now=ctx.kernel.config.now(),
+    )
+
+
+def resolve_candidate_subjects(
+    ctx: RuntimeNodeContext,
+    spec: UserTaskSpec,
+    functions: Functions | None = None,
+) -> list[str]:
+    """候选槽求值（spec §5.5/§16）：candidate_users ∪ candidate_groups 逐表达式求值。
+
+    与取人位同一求值面（同一装配、同一错误二分、同一查无传播）——差异只在
+    调用位点与语义：结果物化为**候选关联**（保留组引用不展开、认领时再展开），
+    而非直接待办。返回顺序＝声明序（两个字段先后），保序去重。
+    """
+    expressions = list(getattr(spec, "candidate_users", None) or []) + list(
+        getattr(spec, "candidate_groups", None) or []
+    )
+    if not expressions:
+        return []
+    return resolve_expression_list(
+        ctx, expressions, label=spec.code, what="候选", functions=functions
     )
 
 

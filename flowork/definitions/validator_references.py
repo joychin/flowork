@@ -9,9 +9,12 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
-from flowork.definitions.validator_conditions import (
-    _RULE_PREFIX,
+from flowork.definitions.validator_positions import (
+    RULE_PREFIX as _RULE_PREFIX,
+)
+from flowork.definitions.validator_positions import (
     iter_expression_positions,
+    lookup_kind,
 )
 from flowork.expr.catalog import (
     engine_functions,
@@ -77,9 +80,19 @@ def check_variable_references(
         root_call,
     )
 
-    subject_kinds = frozenset({"subjects", "reassign"})
+    # 取人位与候选槽的根调用 returns 白名单不同（spec §5.5 槽位表）：
+    # assignee/assignees/recipients/reassign 只吃 one_user/users；候选槽额外接受
+    # groups/mixed（「混合集自动拆槽」是规范行为，不是误用）。
+    subject_returns = {
+        "subjects": frozenset({"one_user", "users"}),
+        "reassign": frozenset({"one_user", "users"}),
+        # 候选槽（spec §5.5）：多接受组与混合集——「混合集自动拆槽」是规范行为
+        "candidates": frozenset({"one_user", "users", "groups", "mixed"}),
+    }
     for kind, where, expression, _node_code in iter_expression_positions(definition):
         rule = _RULE_PREFIX[kind]
+        # 词汇位点目录按 subjects 登记：候选槽同义（不归一会在候选位误报词汇不可用）
+        vocabulary_kind = lookup_kind(kind)
         try:
             idents, functions = collect_references(expression)
         except FormulaError:
@@ -91,7 +104,7 @@ def check_variable_references(
             if name in declared:
                 continue
             if name in RESERVED_IDENTIFIERS:
-                if kind in RESERVED_POSITIONS[name]:
+                if vocabulary_kind in RESERVED_POSITIONS[name]:
                     continue  # 该位点可用（task 窄位点方言 / prev_task 条件+取人位 / 全位点词）
                 error(
                     f"{rule}.{name}_unavailable",
@@ -115,7 +128,7 @@ def check_variable_references(
                 continue
             if name in engine_fns:  # 引擎注入函数（node 等）：目录对照位点与参数个数
                 entry = engine_fns[name]
-                if kind not in entry.positions:
+                if vocabulary_kind not in entry.positions:
                     error(
                         f"{rule}.function.position",
                         f"函数 {name}(...) 仅 {'/'.join(sorted(entry.positions))} 位点可用",
@@ -149,15 +162,17 @@ def check_variable_references(
                     f"调用处为 {'/'.join(str(a) for a in sorted(arities))} 个",
                     flow=where,
                 )
-        if kind in subject_kinds and signatures is not None:
+        wanted = subject_returns.get(kind)
+        if wanted is not None and signatures is not None:
             root = root_call(expression)
             if root is not None:
                 name, _arity = root
                 registered = signatures.get(name)
-                if registered is not None and registered[1] not in ("one_user", "users"):
+                if registered is not None and registered[1] not in wanted:
+                    allowed = "、".join(sorted(wanted))
                     error(
                         f"{rule}.function.returns",
                         f"函数 {name}(...) 返回 {registered[1]}（谓词/标量），"
-                        "取人位须返回 one_user/users 词汇",
+                        f"该位点须返回 {allowed} 词汇",
                         flow=where,
                     )

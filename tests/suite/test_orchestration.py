@@ -65,7 +65,9 @@ def test_any_sign_first_vote_exits_and_auto_passes_rest() -> None:
 def test_claim_family_on_candidate_task() -> None:
     """纯候选人节点在无目录引擎生成可认领任务：认领→取消→再认领→转办→办结。
 
-    注：配置 OrgDirectory 时纯候选人节点先走无参与者兜底（内核现状），认领语义用裸引擎验证。
+    注：配了目录的引擎见 tests/semantics/test_candidate_claim.py——
+    `test_candidate_task_usable_when_org_directory_configured`（候选节点可用）与
+    `test_group_candidate_claim_expands_via_directory`（组候选按目录判归属）。
     """
     engine = ProcessEngine()
     engine.repository.deploy(
@@ -74,8 +76,8 @@ def test_claim_family_on_candidate_task() -> None:
         .user_task(
             "pick",
             "候选人任务",
-            candidate_users=["u_a", "u_b"],
-            candidate_groups=["role:legal"],
+            candidate_users=["'u_a'", "'u_b'"],
+            candidate_groups=["'role:legal'"],
         )
         .end()
         .connect("start", "pick")
