@@ -156,13 +156,20 @@ class TaskRecordsMixin:
         return resolution  # 空结果：行为层报「没有可用参与者」
 
     def handled_assignees(self, session: Session, token_id: str) -> list[str]:
-        """令牌下已实际办理过的人（排除被取消的任务）。"""
+        """令牌下轮次已消耗的人（轮次消耗行口径，spec §5.1 第十九轮）。
+
+        审批类行：transfer（轮次被转手）/auto_pass（被策略跳过）也算消耗，
+        不重派；协办/咨询行不算——此前会吞掉串行会签的下一棒（无声死锁）。
+        """
         from sqlalchemy import select
 
         from flowork.persistence.orm import TaskHistoryRow
+        from flowork.tasks.vote import consumed_turn_criteria
 
-        stmt = select(TaskHistoryRow).where(TaskHistoryRow.token_id == token_id)
-        return [row.assignee for row in session.scalars(stmt) if row.outcome != "cancelled"]
+        stmt = select(TaskHistoryRow).where(
+            TaskHistoryRow.token_id == token_id, *consumed_turn_criteria()
+        )
+        return [row.assignee for row in session.scalars(stmt)]
 
     def _actor_context_of(self, actor: str) -> dict[str, Any]:
         """身份快照：完成事务内经目录端口定格操作者当时的岗位/角色/部门。

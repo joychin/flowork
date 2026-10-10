@@ -241,9 +241,12 @@ def fallback_when_empty(
 
 
 def _handlers_of(ctx: RuntimeNodeContext, activity_code: str) -> set[str]:
+    """上一站**表决过**的人（表决行口径，spec §5.1 第十九轮：协办/咨询/
+    转办/自动通过都不算——跳过＝计同意票，成员资格必须严格）。"""
     from sqlalchemy import select
 
     from flowork.persistence.orm import TaskHistoryRow
+    from flowork.tasks.vote import vote_criteria
 
     if not activity_code:
         return set()
@@ -251,21 +254,23 @@ def _handlers_of(ctx: RuntimeNodeContext, activity_code: str) -> set[str]:
         select(TaskHistoryRow).where(
             TaskHistoryRow.instance_id == ctx.instance.id,
             TaskHistoryRow.activity_code == activity_code,
-            TaskHistoryRow.outcome != "cancelled",
+            *vote_criteria(),
         )
     )
     return {row.assignee for row in rows}
 
 
 def _handled_anywhere(ctx: RuntimeNodeContext) -> set[str]:
+    """实例内**表决过**的人（表决行口径，同 _handlers_of）。"""
     from sqlalchemy import select
 
     from flowork.persistence.orm import TaskHistoryRow
+    from flowork.tasks.vote import vote_criteria
 
     rows = ctx.session.scalars(
         select(TaskHistoryRow).where(
             TaskHistoryRow.instance_id == ctx.instance.id,
-            TaskHistoryRow.outcome != "cancelled",
+            *vote_criteria(),
         )
     )
     return {row.assignee for row in rows}

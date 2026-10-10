@@ -163,6 +163,21 @@ def check_structure(
             if node.code not in reachable:
                 warning("structure.node.unreachable", "节点从 start 不可达", node=node.code)
 
+    # —— 会签出口字段错位（第十九轮走查发现）：approve_exit/disapprove_exit 写在
+    # —— 节点顶层会被 extra 袋静默收下，而行为只读 multi_instance 内同名字段——
+    # —— 出口公式零告警失效、静默回退全票。设计期拦下并指路（可见优于静默）。
+    for node in definition.nodes:
+        if node.kind != KIND_USER_TASK:
+            continue
+        for field in ("approve_exit", "disapprove_exit"):
+            if getattr(node, field, None) is not None:
+                error(
+                    "user_task.exit.misplaced",
+                    f"{field} 写在节点顶层不生效（行为只读 multi_instance 内同名字段）——"
+                    f"请放进 multi_instance",
+                    node=node.code,
+                )
+
 
 def check_branch_rules(
     definition: ProcessDefinition,

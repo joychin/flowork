@@ -1,10 +1,11 @@
 """节点事实（expression-dataface §2.2/§2.3/§3）：判断面「现查派生」的只读数据。
 
-两个判断面词汇的数据源：``prev_task``（上一站＝实例内最近一条已完成任务，
-含会签最后一票/加签/改派后的实际办理人——目标场景下与「导致本次流转的任务」
-等价）与 ``node("code")``（点名查任意节点的聚合事实：轮次/最近轮办理人与耗时/
-最近轮会签票数）。同一份底层数据（wf_task_history + wf_token）日后也服务查询面
-（REST/Console），口径天然一致。
+两个判断面词汇的数据源：``prev_task``（上一站＝实例内最近一条**表决行**，
+spec §5.1 第十九轮口径——转办取被转办人的 agree、协办/咨询/自动通过不入列，
+目标场景＝「导致本次流转的任务」）与 ``node("code")``（点名查任意节点的聚合
+事实：轮次/最近轮办理人与耗时/最近轮会签票数，最近轮人物同表决行口径）。
+同一份底层数据（wf_task_history + wf_token）日后也服务查询面（REST/Console），
+口径天然一致。
 
 查无语义（§3）：
 - ``prev_task`` 查无＝不注入（条件位经 references_identifier 预检按不满足跳过、
@@ -35,8 +36,9 @@ __all__ = [
     "with_prev_task",
 ]
 
-# 排除已取消（兄弟取消/撤回清场）——与 handled_assignees 同口径。
-_LIVE_OUTCOMES = TaskHistoryRow.outcome != "cancelled"
+# 表决行口径（spec §5.1 第十九轮）：审批类 + agree/reject——协办收口行与会签
+# 出口的 auto_pass 行落库更晚，此前按「最近 live 行」取会读错人、改路由。
+from flowork.tasks.vote import vote_criteria
 
 
 def _snapshot_of(row: TaskHistoryRow | None) -> dict[str, Any]:
@@ -59,10 +61,10 @@ def _snapshot_of(row: TaskHistoryRow | None) -> dict[str, Any]:
 
 
 def prev_task_snapshot(session: Session, instance_id: str) -> dict[str, Any] | None:
-    """上一站快照：实例内最近一条已完成任务；无已完成任务 → None（不注入）。"""
+    """上一站快照：实例内最近一条表决行；无可表决记录 → None（不注入）。"""
     stmt = (
         select(TaskHistoryRow)
-        .where(TaskHistoryRow.instance_id == instance_id, _LIVE_OUTCOMES)
+        .where(TaskHistoryRow.instance_id == instance_id, *vote_criteria())
         .order_by(TaskHistoryRow.created_at.desc(), TaskHistoryRow.id.desc())
         .limit(1)
     )
@@ -110,7 +112,7 @@ def node_facts(session: Session, instance_id: str, activity_code: str) -> dict[s
         .where(
             TaskHistoryRow.instance_id == instance_id,
             TaskHistoryRow.activity_code == activity_code,
-            _LIVE_OUTCOMES,
+            *vote_criteria(),
         )
         .order_by(TaskHistoryRow.created_at.desc(), TaskHistoryRow.id.desc())
         .limit(1)

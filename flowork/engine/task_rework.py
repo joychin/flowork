@@ -173,17 +173,19 @@ class TaskReworkMixin:
 
         本节点正向可达的下游存在**人工进展** → 拒绝撤回（提示改用驳回）——
         否则撤回等于一次没有驳回留痕的隐式整体驳回。进展判据两条：
-        ① 下游存在非取消已办（TaskHistory——branch/cc/service 不产生任务历史，
-        天然只统计人工办理）；② 下游**工作节点**（user_task/call_activity）存在
-        已完结令牌——穿透节点（branch/cc_task/start/end）的即时完结**不拦**，
-        对齐 对标产品 getChildRevokeActivityCodes 穿透 CONNECTION/CIRCULATE
-        的口径（pilot leave 实证：branch 即刻完结曾误拦）。判据保守方向：不评
-        条件，未命中分支上的人工进展同样拦截。行业零实现，flowork 首创
-        （delta-industry-benchmark §2）。
+        ① 下游存在表决行（表决行口径，spec §5.1 第十九轮——协办/咨询/自动
+        通过不算进展；branch/cc/service 不产生任务历史天然只统计人工办理）；
+        ② 下游**工作节点**（user_task/call_activity）存在已完结令牌——穿透节点
+        （branch/cc_task/start/end）的即时完结**不拦**，对齐 对标产品
+        getChildRevokeActivityCodes 穿透 CONNECTION/CIRCULATE 的口径（pilot
+        leave 实证：branch 即刻完结曾误拦）；判据②同时覆盖「节点整体完成
+        （含出口自动通过）」的进展。判据保守方向：不评条件，未命中分支上的
+        人工进展同样拦截。行业零实现，flowork 首创（delta-industry-benchmark §2）。
         """
         from sqlalchemy import select
 
         from flowork.definitions.graph import downstream_basin
+        from flowork.tasks.vote import vote_criteria
 
         kernel = self._engine.kernel_for(ctx)
         definition = kernel.definition_of(ctx.session, instance)
@@ -199,7 +201,7 @@ class TaskReworkMixin:
             select(_History).where(
                 _History.instance_id == instance.id,
                 _History.activity_code.in_(codes),
-                _History.outcome != "cancelled",
+                *vote_criteria(),
             )
         ):
             progressed.append(f"节点 {row.activity_code} 由 {row.assignee} 办理（{row.outcome}）")

@@ -350,13 +350,13 @@ git 里的 YAML/JSON 文件      ← 编辑态事实来源：人和 AI 只改这
 
 - 单人节点：assignee 调 complete（带 output，按 3.2 契约校验后写入变量）→ 令牌离开。
 - 会签节点：按 approve_exit/disapprove_exit 判定（CEL 公式，4.2）——比如 `task.approve_count * 100 >= task.item_count * 50` 且 3 人中 2 人同意即过；驳回出口同理；缺省不配＝该侧全票。
-- 驳回：outcome=reject，令牌按 reject_target 回退（未配则回上一人工节点）；被驳回的任务复活=生成**新**任务行，旧行进历史（cause_token_id 关联）✓。**复活圈定「最近一轮」【v2.3 定稿，2026-10-09 拍板】**：复活名单＝目标节点**最近一个已完结令牌**名下的办理人（按 token_no 取最大；无完结令牌才回退到该节点全部非取消历史）——多轮驳回时名单不随轮次膨胀。与主流引擎的**刻意差异**在此声明：BPMN 系引擎（Camunda/Flowable/jBPM）重入活动时按定义**重新解析**办理人（人可能换、离职者自动剔除）；flowork 复活**原办理人**——驳回就是退回给原审批人重新表态，这是国内审批语义，不是缺失。兜底：原办理人名单为空（如首节点发起人）时走正常表达式解析。**驳回落点豁免自动通过【v2.2 成文】**：驳回产生的令牌、经 manual_participants 定格的参与者**不应用** auto_pass_* 策略——否则「发起人驳回→重新提交→又被 auto_pass 跳过」原地打转；现状由解析器 manual 短路隐式实现（participants/resolver.py），此处升格为语义保证，防未来重构丢掉（对标产品 doOnRejectedActivity 同规则）。
+- 驳回：outcome=reject，令牌按 reject_target 回退（未配则回上一人工节点）；被驳回的任务复活=生成**新**任务行，旧行进历史（cause_token_id 关联）✓。**复活圈定「最近一轮」【v2.3 定稿，2026-10-09 拍板】**：复活名单＝目标节点**最近一个已完结令牌**名下的表决行办理人（按 token_no 取最大；口径见下「表决行」条款【第十九轮】——无完结令牌才回退到该节点全部表决行历史）——多轮驳回时名单不随轮次膨胀。与主流引擎的**刻意差异**在此声明：BPMN 系引擎（Camunda/Flowable/jBPM）重入活动时按定义**重新解析**办理人（人可能换、离职者自动剔除）；flowork 复活**原办理人**——驳回就是退回给原审批人重新表态，这是国内审批语义，不是缺失。兜底：原办理人名单为空（如首节点发起人）时走正常表达式解析。**驳回落点豁免自动通过【v2.2 成文】**：驳回产生的令牌、经 manual_participants 定格的参与者**不应用** auto_pass_* 策略——否则「发起人驳回→重新提交→又被 auto_pass 跳过」原地打转；现状由解析器 manual 短路隐式实现（participants/resolver.py），此处升格为语义保证，防未来重构丢掉（对标产品 doOnRejectedActivity 同规则）。
 
 **任务动作全集（每个都是 API，详见第 11 章）**：claim（从候选里认领）/ unclaim / complete / reject / transfer（转办，保持待办换人）/ assist（委派：生成 task_type=assist 的子任务， root_task_id 指回原任务，原任务保留在负责人名下；**主任务终态（complete/reject）同事务收口其协办待办，outcome=assist_cancel【v2.3 第一批】**）/ complete_assist（受托人交还）/ add_countersigner（加签）/ consult（咨询【v2.3 第三批 A8】：生成 task_type=consult 的意见任务——「先收集意见、原办理人最后拍板」的两轮形态；意见不占票；咨询期间主任务软挂起，全部交回自动解禁并发 task_consult_finished 事件；对应 AI 场景「AI 给建议、人拍板」。**行业修正**：不抄 C7 delegation 的 assignee 轮转——派生独立工作项更现代，且 C7 的门禁不是硬门禁）/ complete_consult（交回意见：outcome=agree/reject 均为意见，不进会签计数）/ withdraw（撤回本人的已办，见下）。
 
 **动作表与 available_actions【v2.3 第二批 A1】**：动作可用性由**引擎的动作表**声明——按 `(state × task_type × 认领态)` 三维判定（tasks/actions.py，形态对齐 jBPM 的 操作×状态 声明表；**不是**节点级配置——BPMN 无此位置、主流引擎不做节点级动作白名单）。`TaskInfo.available_actions` 由服务端算完下发（已认领的审批任务＝complete/reject/transfer/assist/add_countersigner/consult/unclaim；候选任务＝claim；协办任务＝complete_assist；咨询任务＝complete_consult【v2.3 第三批】）——**主流引擎均不下发此面**（C7/C8/Flowable 的任务响应逐字段核实无 permissions 字段），AI/前端拿到任务即知能做什么，属三面同构的差异点。分组借 Camunda 8 动词切分：work（complete/reject＝出结果）与 dispatch（transfer/assist/add_countersigner/claim/unclaim＝转移办理权）；**谁能做属宿主权限（M-A/插件），表只回答"这个任务当前允许哪些动作"**。
 
-**撤回（withdraw）【v2.3 第二批 A2 定稿，拍板④】**：撤回本人的已办（agree）任务＝**取消当前全部未完令牌 + 在原节点新建令牌与待办**（"取消当前+新建上游"，不改写历史——对齐全行业"完成不可变"铁律；Camunda 8 用独立权限 MODIFY_PROCESS_INSTANCE 管实例修改，flowork 将其归类为实例修改类动作，开放面授权归宿主）。**下游闸门**：本节点正向可达的下游（图遍历，不评条件）存在**人工进展**——非取消已办、或工作节点（user_task/call_activity）的已完结令牌——则**拒绝撤回并提示改用驳回**（错误携带进展明细：哪个节点、谁、什么结果）；穿透节点（branch/cc_task/start/end）的即时完结不拦（对齐 对标产品 穿透 CONNECTION/CIRCULATE 口径）。闸门生效后"取消全部未完令牌"与"只取消下游"等价（下游全未办时并行兄弟亦无已办）——不需要精细取消算法。撤回策略扩展（如"下游未读才可撤"的 UNREAD 档）后置：flowork 任务面暂无已读态。
+**撤回（withdraw）【v2.3 第二批 A2 定稿，拍板④】**：撤回本人的已办（agree）任务＝**取消当前全部未完令牌 + 在原节点新建令牌与待办**（"取消当前+新建上游"，不改写历史——对齐全行业"完成不可变"铁律；Camunda 8 用独立权限 MODIFY_PROCESS_INSTANCE 管实例修改，flowork 将其归类为实例修改类动作，开放面授权归宿主）。**下游闸门**：本节点正向可达的下游（图遍历，不评条件）存在**人工进展**——表决行（口径见下「表决行」条款【第十九轮】：协办/咨询/自动通过不算进展）、或工作节点（user_task/call_activity）的已完结令牌——则**拒绝撤回并提示改用驳回**（错误携带进展明细：哪个节点、谁、什么结果）；穿透节点（branch/cc_task/start/end）的即时完结不拦（对齐 对标产品 穿透 CONNECTION/CIRCULATE 口径）。闸门生效后"取消全部未完令牌"与"只取消下游"等价（下游全未办时并行兄弟亦无已办）——不需要精细取消算法。撤回策略扩展（如"下游未读才可撤"的 UNREAD 档）后置：flowork 任务面暂无已读态。
 
 **任务状态（对齐现状存储，不新增状态列）**：活表 state ∈ `ready | completed | cancelled`；「已认领」＝ ready 且 assignee 已固定（不设独立 claimed 态）；终态语义在历史的 outcome 里（agree/reject/transfer/auto_pass/withdrawn/assist/assist_cancel/cancelled；✓ 现状值 + v2.3 增 assist_cancel）。已被他人认领再认领 → `TaskAlreadyClaimedError`。
 
@@ -365,6 +365,8 @@ git 里的 YAML/JSON 文件      ← 编辑态事实来源：人和 AI 只改这
 - **transfer（转办）＝票随人走**：原任务归档为 transfer（不计票），新任务完成后正常计一票——即「这一票由被转办人代为行使」，审计上谁代行有记录。转办不增加也不减少应办总数。
 - **add_countersigner（加签）＝加签人各占一票**：item_count 随名单同步增加，每个加签人完成即计票——加签是「增加表决权」，不是「只增加把关人」。若业务想要「只要意见、不改票权」的形态，用 consult（咨询，已实装【v2.3 第三批】：意见任务 + 主任务软挂起）或 assist（协办，不挂起主任务），两条路天然分流，不引入按加签组归并票数的机制（对标产品 rootTaskId 组算一票的形态不采纳——行业对拍：主流引擎无票数概念，无从对齐，且归并会让 item_count 与任务行数失去对应）。
 - assist/complete_assist 不计票（委派是「看一眼/搭把手」，不改变节点完成条件）✓ 现状。
+
+**表决行（名单类查询的统一口径）【v2.3 第十九轮，2026-10-10 拍板】**：任务历史行记录的是「任务行的终结」而非「人的表态」——转办、协办、咨询、会签出口自动通过都会落行，但都不是一票。「**表决行**」＝审批类任务（task_type=approval）＋真实表态（outcome ∈ agree/reject；超时代投经 complete 落 agree，acted_by=system:timeout 留归因）。五个名单类查询位统以此口径（单一谓词 `tasks/vote.py`）：① 驳回复活名单；② 判断面 prev_task / node() 的「最近任务/最近轮人物」；③ auto_pass_participated；④ auto_pass_previous；⑤ 撤回下游进展判据①。**两处裁定**：auto_pass（机器代投）不算表决——复活不拉、参与不算，一次代投不得滚成终身代投；转办人不算「已参与」——票由被转办人代为行使（上文 transfer 条款），多问一次人优于替人投一票。串行会签下一棒另用「**轮次消耗行**」口径（审批类且已终结：transfer/auto_pass 也算消耗、不重派；协办/咨询不算——否则吞掉下一棒致无声死锁）。走查背景：此前六处消费方各自 `outcome != "cancelled"`，转办/协办/咨询行渗入名单——单人节点挂起、会签应办数膨胀、prev_task 读到协办收口行改变路由、跳过策略静默代投、串行会签无声死锁、撤回误拦（六例实测，回归 `tests/semantics/test_outcome_semantics.py`）。
 
 **超时【v2.2 定稿：deadline 列表形态，对齐 WS-HumanTask】**：任务可挂一组有序动作 `deadlines: [{after_minutes, action}]`（自进入节点起算，after_minutes 必须为正整数，同一节点上限 8 条；**自然分钟直算到期时刻**（`now + after_minutes`；【v2.3 第二批定稿】after_minutes 恒为自然分钟——历史耗时全行业一律墙钟、零引擎按人算日历，双日历口径不做，WorkCalendar 死端口已删除（见 §9）；将来若需工作日口径，按 Flowable 形态重立：节点级具名日历+引擎级注册表+发布期校验名字，见 对标明细.md A5）。动作枚举五种：
 
@@ -887,6 +889,15 @@ Zeebe inputCollection/outputCollection 契约实装（multi-instance-call-design
 3. **contrib 补 `users_in_org(string)→users`**：`subjects_in("org:…")` 直接成员——取人位按部门展开的唯一写法（此前只有 `users_with_role`；`manager_of` 只取负责人一人）。
 4. **`max_participants` 缺省 1000→None**：内核不替宿主选数值，显式配置才启用；三消费方（解析/传阅/加签）均已兼容 None（加签侧 `task_rework` 原 `>` 直比较改走 None 判断——本轮修出的实缺陷）。
 5. **测试**：`tests/semantics/test_participant_strict.py` 13 例（四收口+users_in_org 决定性判例）+ 既有宽松夹具 13 文件补显式 `multi_instance`（行为不变、声明显式化）。
+
+### 第十九轮（2026-10-10，v2.3 续，表决行统一口径——名单类查询收口）
+
+来源：转办通知问题的排查走查扩成全库审计——「谁真正办过这一票」谓词全库缺失，六个名单类消费方清一色 `outcome != "cancelled"`，转办/协办/咨询/自动通过行渗入名单（六例实测：单人节点挂起、会签应办数膨胀违背票随人走、prev_task 读到协办收口行**改变路由**、auto_pass 策略**静默代投**、串行会签**无声死锁**、撤回误拦）。两处语义裁定（用户拍板「都收紧」）：auto_pass 不算表决（一次代投不得滚成终身代投）；转办人不算已参与（票由被转办人代为行使，多问一次人优于替人投一票）。
+
+1. **§5.1 表决行条款**（本轮主条款）：表决行＝审批类任务＋agree/reject；轮次消耗行（串行会签专用）＝审批类且已终结。五+一位点统接 `flowork/tasks/vote.py` 单一谓词（`vote_criteria`/`consumed_turn_criteria`，SQL 下推）：驳回复活名单、prev_task·node() 判断面、auto_pass_participated、auto_pass_previous、撤回进展判据①、串行会签下一棒（behaviors 的 handled_assignees）。
+2. **会签票数三计数不受影响**（TokenRow 计数器，dispatch 类动作不触计数——审计确认安全面）；历史查询面（已办列表含协办行）维持展示语义不变；`wf_route_decision` 历史 snapshot 不迁移（如实记录当时计算值）。
+3. **validator 新规则 `user_task.exit.misplaced`**（走查顺带发现的不同族问题）：approve_exit/disapprove_exit 写在节点顶层会被 extra 袋静默收下，行为只读 multi_instance 内同名字段——出口公式零告警失效、静默回退全票。设计期 ERROR 指路（可见优于静默）。
+4. **测试**：`tests/semantics/test_outcome_semantics.py` 行种类×消费动作矩阵（复活/路由/跳过策略/串行下一棒/撤回闸门/validator 错位），断言钉走查探针事实；既有测试全量回归（纯 agree 路径行为不变——谓词对其无差）。
 
 ## 附录 C：类型清单（须提前定义的全集）
 

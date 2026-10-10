@@ -480,3 +480,21 @@ subjects/reassign 位 + string_literals 字面量提取）：`role:`/`org:` 字�
 `tests/semantics/test_participant_strict.py` 13 例 + 宽松夹具 13 文件补显式
 `multi_instance`（world_flows_mix 阶梯/路由世界、lifecycle、m3、m4、delta_batch1、
 numeric、edge_stress、roles、catalog/spi 签名断言）。871 测试全绿。
+
+**表决行统一口径批（2026-10-10，spec v2.3 第十九轮；转办通知排查走查扩成全库审计的落地）**：
+「谁真正办过这一票」谓词全库缺失——六个名单类消费方清一色 `outcome != "cancelled"`，
+转办/协办/咨询/自动通过行渗入名单（六例实测：单人节点挂起/会签应办数膨胀违背票随人走/
+prev_task 读到协办收口行**改变路由**/auto_pass 策略**静默代投**/串行会签**无声死锁**/撤回误拦）。
+① §5.1 表决行条款：表决行＝审批类任务+agree/reject；轮次消耗行（串行会签专用）＝审批类且
+已终结（transfer/auto_pass 算消耗不重派）。两裁定（用户拍板「都收紧」）：auto_pass 不算表决
+（一次代投不滚终身代投）；转办人不算已参与（票由被转办人代行，多问一次人优于替人投一票）。
+② `flowork/tasks/vote.py` 单一谓词（vote_criteria/consumed_turn_criteria，SQL 下推）统接六位点：
+驳回复活名单（reject_flow）、prev_task·node() 判断面（facts）、auto_pass_participated/previous
+（resolver 两收集器）、串行会签下一棒（task_records.handled_assignees——轮次消耗口径）、
+撤回进展判据①（task_rework）。③ validator 新规则 `user_task.exit.misplaced`（走查顺带发现
+的不同族问题）：approve_exit/disapprove_exit 写节点顶层被 extra 袋静默收下、行为只读
+multi_instance 内字段——出口公式零告警失效静默回退全票，设计期 ERROR 指路。
+④ 安全面确认：会签票数三计数（TokenRow）不受污染；wf_route_decision 历史 snapshot 不迁移
+（如实记录当时计算值）。**测试**：`tests/semantics/test_outcome_semantics.py` 16 例
+（行种类×消费动作矩阵+对照组防收紧过头+无声死锁钉子）+ test_validator 2 例错位字段。
+**891 测试全绿，五道门全过。**

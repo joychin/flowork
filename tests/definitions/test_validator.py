@@ -553,3 +553,52 @@ def test_start_on_message_rejects_engine_function_in_message_context(registry):
         StartMessageDecl(name="paid", correlation_key='node("voting").runs > 1'),
     ]
     assert "start_on_message.function.position" in error_rules(definition, registry)
+
+
+# —— 会签出口字段错位（第十九轮走查发现：顶层 approve_exit 被 extra 袋
+# —— 静默收下、行为只读 multi_instance 内字段——出口公式零告警失效）——
+
+
+def test_exit_formula_on_node_top_level_is_error(registry):
+    """approve_exit 写在 user_task 顶层 → ERROR 指路放进 multi_instance。"""
+    from flowork.definitions.node import MultiInstance
+
+    definition = (
+        FlowBuilder("exit1")
+        .start()
+        .user_task(
+            "a",
+            assignees=["'u1'", "'u2'"],
+            multi_instance=MultiInstance(mode="parallel"),
+            approve_exit="task.approve_count >= 1",  # 错位：落进顶层 extra 袋
+        )
+        .end()
+        .connect("start", "a")
+        .connect("a", "end")
+        .build(registry)
+    )
+    assert "user_task.exit.misplaced" in error_rules(definition, registry)
+
+
+def test_exit_formula_inside_multi_instance_passes(registry):
+    """正位写法（MultiInstance 内部）不误报。"""
+    from flowork.definitions.node import MultiInstance
+
+    definition = (
+        FlowBuilder("exit2")
+        .start()
+        .user_task(
+            "a",
+            assignees=["'u1'", "'u2'"],
+            multi_instance=MultiInstance(
+                mode="parallel",
+                approve_exit="task.approve_count >= 1",
+                disapprove_exit="task.disapprove_count >= 1",
+            ),
+        )
+        .end()
+        .connect("start", "a")
+        .connect("a", "end")
+        .build(registry)
+    )
+    assert "user_task.exit.misplaced" not in error_rules(definition, registry)

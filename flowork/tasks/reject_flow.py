@@ -18,6 +18,7 @@ from flowork.events.domain import DomainEvent
 from flowork.persistence.orm import TaskHistoryRow, TaskRow
 from flowork.runtime.lifecycle import TokenState
 from flowork.tasks.models import TaskCompleteResult
+from flowork.tasks.vote import vote_criteria
 
 if TYPE_CHECKING:
     from flowork.engine.engine import ProcessEngine
@@ -180,7 +181,8 @@ class RejectMixin:
         from sqlalchemy import select
 
         # 复活圈定「最近一轮」（spec §5.1 v2.3）：目标节点最近一个已完结令牌
-        # （token_no 最大、非 unfinished）名下的办理人——多轮驳回名单不随轮次膨胀；
+        # （token_no 最大、非 unfinished）名下的表决行办理人（第十九轮口径：
+        # 转办取被转办人、协办/咨询/自动通过不入列）——多轮驳回名单不随轮次膨胀；
         # 与主流「重入按定义重新解析」的刻意差异＝复活原办理人（国内审批语义）。
         latest_settled = (
             select(_TokenRow.id)
@@ -195,7 +197,7 @@ class RejectMixin:
         stmt = select(TaskHistoryRow).where(
             TaskHistoryRow.instance_id == instance.id,
             TaskHistoryRow.activity_code == reject_target,
-            TaskHistoryRow.outcome != "cancelled",
+            *vote_criteria(),
         )
         latest_token_id = ctx.session.scalars(latest_settled).first()
         if latest_token_id is not None:
