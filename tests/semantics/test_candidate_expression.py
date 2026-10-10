@@ -184,6 +184,7 @@ def test_candidate_expression_reads_variables() -> None:
         .connect("start", "pick")
         .connect("pick", "end")
         .build()
+        .model_copy(update={"variables": [ProcessVariable(name="pool", type="string")]})
     )
     engine.repository.deploy(flow)
     iid = engine.runtime.start_process("cand_var", start_user="u_bob", variables={"pool": "u_eng"})

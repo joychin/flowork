@@ -15,6 +15,7 @@ import pytest
 from sqlalchemy import select
 
 from flowork.definitions.builder import FlowBuilder
+from flowork.definitions.definition import ProcessVariable
 from flowork.engine.engine import ProcessEngine
 from flowork.persistence.orm import CcItemRow, JobRow, TaskRow
 
@@ -43,7 +44,11 @@ def _mixed_flow(engine: ProcessEngine) -> str:
         .connect("b", "notify")
         .connect("notify", "end")
     )
-    engine.repository.deploy(flow.build())
+    engine.repository.deploy(
+        flow.build().model_copy(
+            update={"variables": [ProcessVariable(name="amount", type="number")]}
+        )
+    )
     return "sim1"
 
 

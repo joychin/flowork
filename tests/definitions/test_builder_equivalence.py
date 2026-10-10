@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from flowork.definitions.builder import FlowBuilder
 from flowork.definitions.builtin import RouteMode
-from flowork.definitions.definition import load_definition_file
+from flowork.definitions.definition import ProcessVariable, load_definition_file
 from flowork.definitions.node import MultiInstance
 
 
@@ -50,5 +50,12 @@ def test_builder_matches_json_countersign_branch(registry, examples_dir):
         .connect("director", "end")
         .connect("notify", "end")
         .build(registry, status="published")
+        .model_copy(
+            update={
+                "variables": [
+                    ProcessVariable(name="amount", type="number", label="金额", sample=8000)
+                ]
+            }
+        )
     )
     assert built == definition

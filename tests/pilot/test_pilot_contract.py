@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from flowork.definitions.builder import FlowBuilder
 from flowork.definitions.builtin import RouteMode
+from flowork.definitions.definition import ProcessVariable
 from flowork.engine.engine import ProcessEngine
 from tests.pilot.conftest import activities_of, complete_of, reject_of
 from tests.suite.features import covers
@@ -122,6 +123,14 @@ def test_contract_version_snapshot_isolation(pilot: ProcessEngine):
         .connect("finance_review", "end")
         .connect("gm_review", "end")
         .build()
+        .model_copy(
+            update={
+                "variables": [
+                    ProcessVariable(name="amount", type="number"),
+                    ProcessVariable(name="urgent", type="boolean"),
+                ]
+            }
+        )
     )
     pilot.repository.deploy(revised)
 

@@ -3,6 +3,14 @@
   "name": "子流程调用（示例 03）",
   "version": 1,
   "status": "published",
+  "variables": [
+    {
+      "name": "amount",
+      "type": "number",
+      "label": "金额",
+      "sample": 15000
+    }
+  ],
   "nodes": [
     {
       "code": "start",

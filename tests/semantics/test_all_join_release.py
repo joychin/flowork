@@ -13,6 +13,7 @@ import pytest
 
 from flowork.definitions.builder import FlowBuilder
 from flowork.definitions.builtin import RouteMode
+from flowork.definitions.definition import ProcessVariable
 from flowork.engine.engine import ProcessEngine
 from flowork.engine.kernel import DeadLoopError
 
@@ -74,6 +75,7 @@ def test_unmatched_first_match_arm_releases_join(engine: ProcessEngine):
         .connect("low", "join")
         .connect("join", "end")
         .build()
+        .model_copy(update={"variables": [ProcessVariable(name="amount", type="number")]})
     )
     publish(engine, definition)
     instance_id = engine.runtime.start_process(
@@ -107,6 +109,7 @@ def test_all_match_partial_hit_releases_join(engine: ProcessEngine):
         .connect("arm_b", "join")
         .connect("join", "end")
         .build()
+        .model_copy(update={"variables": [ProcessVariable(name="x", type="number")]})
     )
     publish(engine, definition)
     instance_id = engine.runtime.start_process(
@@ -137,6 +140,7 @@ def test_loop_iteration_waits_for_inflight_sibling(engine: ProcessEngine):
         .flow("k", "b", condition=cond("go", "eq", True))
         .flow("k", "end", default=True)
         .build()
+        .model_copy(update={"variables": [ProcessVariable(name="go", type="boolean")]})
     )
     publish(engine, definition)
     instance_id = engine.runtime.start_process(
@@ -185,6 +189,7 @@ def test_reject_reentry_then_unmatched_arm_completes(engine: ProcessEngine):
         .connect("mgr_l", "join")
         .connect("join", "end")
         .build()
+        .model_copy(update={"variables": [ProcessVariable(name="lvl", type="number")]})
     )
     publish(engine, definition)
     instance_id = engine.runtime.start_process("aj_reject", start_user="u_f", variables={"lvl": 2})
@@ -221,6 +226,7 @@ def test_dead_loop_guard_regression_on_all_join_cycle(engine: ProcessEngine):
         .flow("k", "b", condition=cond("go", "eq", True))
         .flow("k", "end", default=True)
         .build()
+        .model_copy(update={"variables": [ProcessVariable(name="go", type="boolean")]})
     )
     publish(engine, definition)
     instance_id = engine.runtime.start_process(

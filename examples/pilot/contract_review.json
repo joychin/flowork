@@ -151,6 +151,19 @@
       "on_take": null
     }
   ],
-  "variables": [],
+  "variables": [
+    {
+      "name": "amount",
+      "type": "number",
+      "label": "合同金额",
+      "sample": 50000
+    },
+    {
+      "name": "urgent",
+      "type": "boolean",
+      "label": "加急",
+      "sample": false
+    }
+  ],
   "layout": {}
 }

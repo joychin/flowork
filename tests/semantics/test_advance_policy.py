@@ -9,6 +9,7 @@ import pytest
 
 from flowork.definitions.builder import FlowBuilder
 from flowork.definitions.builtin import RouteMode
+from flowork.definitions.definition import ProcessVariable
 from flowork.engine.engine import ProcessEngine
 
 
@@ -180,6 +181,7 @@ def test_all_match_fan_out_from_branch(engine: ProcessEngine):
         .connect("b", "end")
         .connect("fallback", "end")
         .build()
+        .model_copy(update={"variables": [ProcessVariable(name="x", type="number")]})
     )
     publish(engine, definition)
 
@@ -208,6 +210,7 @@ def test_first_match_takes_first_true_in_order(engine: ProcessEngine):
         .connect("mid", "end")
         .connect("low", "end")
         .build()
+        .model_copy(update={"variables": [ProcessVariable(name="amount", type="number")]})
     )
     publish(engine, definition)
 

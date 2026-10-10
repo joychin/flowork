@@ -126,15 +126,16 @@ def _check_call_target(
         issue(
             IssueLevel.ERROR,
             "call_activity.target_missing",
-            f"子流程定义 {target!r} 未发布（binding=deployment：部署时必须存在）",
+            f"子流程定义 {target!r} 未发布（binding=deployment：部署时必须存在——"
+            "注意 binding 不锁运行期版本，进入节点时仍解析最新 published）",
             node.code,
         )
     else:
         issue(
             IssueLevel.WARNING,
             "call_activity.target_unpublished",
-            f"子流程定义 {target!r} 尚未发布（binding=latest：运行期解析最新版；"
-            "独立部署合法，注意先发子后发父）",
+            f"子流程定义 {target!r} 尚未发布（binding=latest：运行期解析最新版、"
+            "不锁版本【第二十轮明示】；独立部署合法，注意先发子后发父）",
             node.code,
         )
 

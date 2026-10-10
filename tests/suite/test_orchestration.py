@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from flowork.definitions.builder import FlowBuilder
+from flowork.definitions.definition import ProcessVariable
 from flowork.definitions.node import MultiInstance
 from flowork.engine.engine import ProcessEngine
 from flowork.errors import TaskNotAvailableError
@@ -152,6 +153,14 @@ def test_formula_condition_routes_by_expression() -> None:
         .flow("big", "end")
         .flow("small", "end")
         .build()
+        .model_copy(
+            update={
+                "variables": [
+                    ProcessVariable(name="amount", type="number"),
+                    ProcessVariable(name="urgent", type="boolean"),
+                ]
+            }
+        )
     )
     big = engine.runtime.start_process(
         "adhoc_formula", start_user="u_s", variables={"amount": 200, "urgent": True}

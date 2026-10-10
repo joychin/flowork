@@ -252,6 +252,19 @@
       "on_take": null
     }
   ],
-  "variables": [],
+  "variables": [
+    {
+      "name": "amount",
+      "type": "number",
+      "label": "采购金额",
+      "sample": 80000
+    },
+    {
+      "name": "supplier",
+      "type": "string",
+      "label": "供应商",
+      "sample": "华铝"
+    }
+  ],
   "layout": {}
 }

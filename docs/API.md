@@ -50,7 +50,7 @@ engine.close()
 
 | 方法 | 说明 |
 |---|---|
-| `list_tasks(*, instance_id=None, assignee=None, candidate=None, state="ready")` | 待办查询；`candidate`=我可认领的待办（候选关联含具体人/组引用；组按目录展开），`assignee=""` 显式筛未认领（候选池） |
+| `list_tasks(*, instance_id=None, assignee=None, candidate=None, state="ready")` | 待办查询；`candidate`=与我相关的候选（**默认含已被他人认领的任务**——「仍在池内」须组合 `assignee=""`，spec §5.5/审计 D5 明示口径；组按目录展开） |
 | `get_task(task_id)` | 单任务 |
 | `complete(task_id, actor, *, comment, variables, idempotency_key)` | 同意提交（幂等） |
 | `reject(task_id, actor, *, comment, target=None)` | 驳回回退（显式目标 > reject_target > 来源节点） |

@@ -11,7 +11,7 @@ from datetime import datetime
 from sqlalchemy import select
 
 from flowork.definitions.builder import FlowBuilder
-from flowork.definitions.definition import dump_definition, load_definition
+from flowork.definitions.definition import ProcessVariable, dump_definition, load_definition
 from flowork.definitions.node import TaskDeadline, TimeoutPolicy, effective_deadlines
 from flowork.definitions.semantic_diff import semantic_diff
 from flowork.engine.config import EngineConfig
@@ -441,7 +441,11 @@ def test_reassign_expression_error_becomes_incident():
         .connect("start", "a")
         .connect("a", "end")
     )
-    engine.repository.deploy(flow.build())
+    engine.repository.deploy(
+        flow.build().model_copy(
+            update={"variables": [ProcessVariable(name="nosuchvar", type="number")]}
+        )
+    )
     engine.runtime.start_process("reassign_bad", start_user="u_x")
     clock.advance(15)
     engine.jobs.tick()

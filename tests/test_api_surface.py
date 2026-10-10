@@ -49,6 +49,7 @@ EXPECTED_SURFACE = frozenset(
         "OrgDirectory",
         "OrgDirectoryLike",
         "ProcessDefinition",
+        "ProcessVariable",
         "ProcessEngine",
         "RepositoryService",
         "RouteMode",

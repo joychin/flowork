@@ -9,6 +9,7 @@ from __future__ import annotations
 import pytest
 
 from flowork.definitions.builder import FlowBuilder
+from flowork.definitions.definition import ProcessVariable
 from flowork.definitions.dry_run import simulate_route
 from flowork.definitions.node import MultiInstance
 from flowork.engine.engine import ProcessEngine
@@ -136,6 +137,7 @@ def test_subprocess_mapping_carries_business_key(engine: ProcessEngine):
         .connect("start", "check")
         .connect("check", "end")
         .build()
+        .model_copy(update={"variables": [ProcessVariable(name="parent_ref", type="string")]})
     )
     engine.repository.deploy(child)
     parent = (

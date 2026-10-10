@@ -13,6 +13,7 @@ import pytest
 
 from flowork import contrib
 from flowork.definitions.builder import FlowBuilder
+from flowork.definitions.definition import ProcessVariable
 from flowork.definitions.node import MultiInstance
 from flowork.engine.config import EngineConfig
 from flowork.engine.engine import ProcessEngine
@@ -69,8 +70,16 @@ def complete_first(engine: ProcessEngine, instance_id: str, actor: str) -> None:
     engine.task.complete(task.id, actor=actor)
 
 
-def run_flow(engine: ProcessEngine, flow: FlowBuilder, variables: dict | None = None) -> str:
-    publish(engine, flow.build())
+def run_flow(
+    engine: ProcessEngine,
+    flow: FlowBuilder,
+    variables: dict | None = None,
+    declared: list[ProcessVariable] | None = None,
+) -> str:
+    definition = (
+        flow.build().model_copy(update={"variables": declared}) if declared else flow.build()
+    )
+    publish(engine, definition)
     return engine.runtime.start_process(flow._code, start_user="u_zhang", variables=variables or {})
 
 
@@ -197,7 +206,12 @@ def test_contrib_manager_of_rejects_role_subject(org_engine: ProcessEngine):
         .connect("a", "end")
     )
     with pytest.raises(EngineExecutionError):
-        run_flow(org_engine, flow, variables={"x": "role:finance"})
+        run_flow(
+            org_engine,
+            flow,
+            variables={"x": "role:finance"},
+            declared=[ProcessVariable(name="x", type="string")],
+        )
 
 
 def test_contrib_manager_of_org_subject_returns_dept_head(org_engine: ProcessEngine):
@@ -210,7 +224,12 @@ def test_contrib_manager_of_org_subject_returns_dept_head(org_engine: ProcessEng
         .connect("start", "a")
         .connect("a", "end")
     )
-    instance_id = run_flow(org_engine, flow, variables={"x": "org:d_eng"})
+    instance_id = run_flow(
+        org_engine,
+        flow,
+        variables={"x": "org:d_eng"},
+        declared=[ProcessVariable(name="x", type="string")],
+    )
     assert [t.assignee for t in org_engine.task.list_tasks(instance_id=instance_id)] == ["u_bob"]
 
 
@@ -242,7 +261,12 @@ def test_function_variable_argument(org_engine: ProcessEngine):
         .connect("start", "a")
         .connect("a", "end")
     )
-    instance_id = run_flow(org_engine, flow, variables={"applicant": "u_dave"})
+    instance_id = run_flow(
+        org_engine,
+        flow,
+        variables={"applicant": "u_dave"},
+        declared=[ProcessVariable(name="applicant", type="string")],
+    )
     assert [t.assignee for t in org_engine.task.list_tasks(instance_id=instance_id)] == ["u_bob"]
 
 
@@ -546,8 +570,13 @@ def test_cel_without_org():
     assert [t.assignee for t in engine.task.list_tasks(instance_id=instance_id)] == ["u_me"]
 
 
-def test_cel_error_without_org_suspends():
-    """无目录同样包技术故障：字面裸 id 是未声明变量 → 挂起 + 故障单。"""
+def test_bare_id_without_quotes_is_design_time_error():
+    """字面裸 id（未引号）＝未声明变量——设计期即拦（v2.3 第二十轮 D6-b 收紧）。
+
+    此前空声明豁免把它推迟到运行期挂起；现在图纸零声明同样做引用检查，
+    发布即 InvalidDefinition（语义前移：写错位置的人在画图时就能看到）。"""
+    from flowork.definitions.validator import InvalidDefinition
+
     engine = ProcessEngine()
     flow = (
         FlowBuilder("x2")
@@ -557,6 +586,5 @@ def test_cel_error_without_org_suspends():
         .connect("start", "a")
         .connect("a", "end")
     )
-    publish(engine, flow.build())
-    with pytest.raises(EngineExecutionError, match="取人公式求值失败"):
-        engine.runtime.start_process("x2", start_user="u_me")
+    with pytest.raises(InvalidDefinition, match="u_bob"):
+        publish(engine, flow.build())

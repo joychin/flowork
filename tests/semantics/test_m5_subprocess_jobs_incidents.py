@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 import pytest
 
 from flowork.definitions.builder import FlowBuilder
+from flowork.definitions.definition import ProcessVariable
 from flowork.definitions.node import TimeoutPolicy
 from flowork.engine.config import EngineConfig
 from flowork.engine.engine import ProcessEngine
@@ -64,6 +65,7 @@ def _publish_parent_and_child(engine: ProcessEngine) -> None:
         .connect("apply", "sub")
         .connect("sub", "end")
         .build()
+        .model_copy(update={"variables": [ProcessVariable(name="amount", type="number")]})
     )
     publish(engine, parent)
 
@@ -243,6 +245,7 @@ def test_job_strategy_error_suspends_with_incident(engine: ProcessEngine):
         .connect("t", "route")
         .flow("route", "end", condition="ghost == 1")
         .build()
+        .model_copy(update={"variables": [ProcessVariable(name="ghost", type="number")]})
     )
     publish(eng, flow)
     _instance_id = eng.runtime.start_process("dl", start_user="u_s")
@@ -316,6 +319,7 @@ def test_mappings_cel_expressions(engine: ProcessEngine):
         .connect("start", "sub")
         .connect("sub", "end")
         .build()
+        .model_copy(update={"variables": [ProcessVariable(name="amount", type="number")]})
     )
     publish(engine, parent)
     from flowork.persistence.orm import ProcessInstanceRow
@@ -372,6 +376,7 @@ def test_output_mapping_missing_bare_ident_is_none(engine: ProcessEngine):
         .connect("start", "sub")
         .connect("sub", "end")
         .build()
+        .model_copy(update={"variables": [ProcessVariable(name="amount", type="number")]})
     )
     publish(engine, parent)
     from flowork.persistence.orm import ProcessInstanceRow
@@ -417,6 +422,7 @@ def test_input_mapping_expression_error_suspends():
         .connect("start", "sub")
         .connect("sub", "end")
         .build()
+        .model_copy(update={"variables": [ProcessVariable(name="nosuchvar", type="number")]})
     )
     publish(engine, parent)
     with pytest.raises(EngineExecutionError, match="子流程输入映射求值失败"):

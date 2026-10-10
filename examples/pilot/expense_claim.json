@@ -212,6 +212,13 @@
       "on_take": null
     }
   ],
-  "variables": [],
+  "variables": [
+    {
+      "name": "amount",
+      "type": "number",
+      "label": "报销金额",
+      "sample": 3000
+    }
+  ],
   "layout": {}
 }

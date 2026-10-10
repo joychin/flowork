@@ -15,6 +15,7 @@ from flowork.api import (
     IssueLevel,
     MultiInstance,
     ProcessEngine,
+    ProcessVariable,
     RouteMode,
     TaskInfo,
     create_registry,
@@ -216,15 +217,12 @@ def demo_full() -> None:
     manager = take("u_manager")
     engine.task.complete(manager.id, actor="u_manager")
     console.print("[bold]2. 分支[/bold] 金额>10000 → 条件分支进入总监会签")
-
     alice = take("u_alice")
     engine.task.complete(alice.id, actor="u_alice", comment="同意")
     console.print("[bold]3. 会签[/bold] u_alice 同意（1/2）")
-
     bob = take("u_bob")
     engine.task.reject(bob.id, actor="u_bob", comment="材料需补充")
     console.print("[bold]4. 驳回[/bold] u_bob 否决 → 回退经理，u_manager 重新待办")
-
     manager2 = take("u_manager")
     engine.task.complete(manager2.id, actor="u_manager", comment="已补充材料")
     console.print("[bold]5. 重提[/bold] 经理重新提交 → 再入总监会签")
@@ -282,6 +280,7 @@ def _publish_full_demo_flow(engine: ProcessEngine) -> None:
         .connect("director", "notify")
         .connect("notify", "end")
         .build()
+        .model_copy(update={"variables": [ProcessVariable(name="amount", type="number")]})
     )
     engine.repository.deploy(definition)
 

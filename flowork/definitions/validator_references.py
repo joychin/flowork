@@ -45,10 +45,12 @@ def check_variable_references(
     *,
     expression_functions: ExpressionFunctions | None = None,
 ) -> None:
-    """变量引用与函数调用（声明了流程变量时启用，全位点单轨 CEL）。
+    """变量引用与函数调用（全位点单轨 CEL；空声明不再豁免【v2.3 第二十轮，审计 D6-b】）。
 
     - 保留字声明（expr.catalog：initiator/now/task）→ ERROR（求值上下文冲突）；
-    - 公式引用未声明变量 → ERROR（静态检查，K8s CRD 体验）；
+    - 公式引用未声明变量 → ERROR（静态检查，K8s CRD 体验）——图纸零声明时
+      同样检查：引用非保留标识符即 unknown ERROR（此前的「空声明整体跳过」
+      让无 variables 段的图纸把引用错误全部推迟到运行期）；
       保留词按目录位点放行——``task.*`` 仅超时改派/会签出口位（快照注入位，
       spec C.4），其余位点引用即错；initiator/now 全位点；
     - 公式调用未注册函数：有注册表 → ERROR（含参数个数）；无注册表 → WARNING；
@@ -64,8 +66,6 @@ def check_variable_references(
                 + "，由引擎注入），不可声明为流程变量",
                 node=variable.name,
             )
-    if not declared:
-        return  # 未启用变量声明（spec §3.2「声明」不约束）：不做引用检查
     signatures: dict[str, tuple[int, str]] | None = None
     if expression_functions is not None:
         signatures = {

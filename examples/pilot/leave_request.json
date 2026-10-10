@@ -175,6 +175,13 @@
       "on_take": null
     }
   ],
-  "variables": [],
+  "variables": [
+    {
+      "name": "days",
+      "type": "number",
+      "label": "请假天数",
+      "sample": 2
+    }
+  ],
   "layout": {}
 }

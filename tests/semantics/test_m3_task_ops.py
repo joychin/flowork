@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from flowork.definitions.builder import FlowBuilder
+from flowork.definitions.definition import ProcessVariable
 from flowork.definitions.node import MultiInstance
 from flowork.engine.engine import ProcessEngine
 from flowork.errors import InstanceNotFoundError, TaskNotAvailableError
@@ -361,6 +362,11 @@ def test_cc_recipients_formula_error_is_technical_fault():
         .connect("notify", "end")
     )
     engine = ProcessEngine()
-    publish(engine, flow.build())
+    publish(
+        engine,
+        flow.build().model_copy(
+            update={"variables": [ProcessVariable(name="nosuchvar", type="number")]}
+        ),
+    )
     with pytest.raises(EngineExecutionError, match="传阅接收人公式求值失败"):
         engine.runtime.start_process("cc_bad", start_user="u_s")

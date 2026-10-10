@@ -129,7 +129,7 @@
 | end | 终点，令牌到这里消失；全消失则实例完成 | 无 |
 | user_task | 人工任务：等人操作（定义详见第 5.1 章） | assignee/assignees/candidate_users/candidate_groups（取人，支持表达式）；multi_instance（会签，见下）；reject_target（驳回到哪个节点）；auto_pass_originator/previous/participated（命中者自动通过）；no_participant_policy（找不到人：raise 报错/to_admins 转管理员）；deadlines（超时动作列表，见 5.1；【v2.2】现状单策略 timeout 为其退化形态，validate 兼容读取） |
 | service_task | 系统任务：程序自动执行（详见 5.2） | action（在 HandlerRegistry 注册的动作名，引擎内形态）；params（参数字典）；【v2】mode: handler\|worker（worker＝外部程序领取执行，此时 job_type 声明任务类型，见 5.2） |
-| call_activity | 子流程：调起另一个流程定义当一个节点用 | process_code；binding【v2.3 第十一批】（latest 缺省=运行期解析最新版，目标未发布 deploy 仅 WARNING；deployment=部署时必须已发布，ERROR——Zeebe bindingType 同义）；**multi_instance【v2.3 第十三批 A9】**（subjects 取人表达式＝每人一子实例，parent_index 记迭代序；input_mappings 按子求值注入 `subject`；completion 公式注入 child_total/completed/failed 只做提前收工；output collect＝index 对齐聚合 null 占位，空集合＝立即完成）｜is_synchronous（同步等它跑完/异步不管）；input_mappings/output_mappings（变量进出映射） |
+| call_activity | 子流程：调起另一个流程定义当一个节点用 | process_code；binding【v2.3 第十一批】（latest 缺省=运行期解析最新版，目标未发布 deploy 仅 WARNING；deployment=部署时必须已发布，ERROR——Zeebe bindingType 同义；**两值都不锁运行期版本【第二十轮明示，审计 D6-a】**：进入节点时恒解析最新 published，父流程长跑期间子定义发新 major 会静默切版——长跑锁定场景需宿主自管版本引用）；**multi_instance【v2.3 第十三批 A9】**（subjects 取人表达式＝每人一子实例，parent_index 记迭代序；input_mappings 按子求值注入 `subject`；completion 公式注入 child_total/completed/failed 只做提前收工；output collect＝index 对齐聚合 null 占位，空集合＝立即完成）｜is_synchronous（同步等它跑完/异步不管）；input_mappings/output_mappings（变量进出映射） |
 | cc_task | 传阅：给人看一眼，不卡流程 | recipients（接收人列表，支持表达式）；advance_policy 恒 any |
 | branch | 条件分支锚点 | route_mode：first_match（命中一条即走）/all_match（命中的都走） |
 | wait | 等待节点：停下来等一条消息/一段时间/两者竞速，先到者决定走向（见 7.2） | message（{name, correlation_key?}，进入时求值快照）；output_mappings（载荷→变量映射，缺省全量合并）；timeout（{after_minutes}，纯延时即等待时长本身）。结果词汇 wait.* 仅出边条件 |
@@ -938,7 +938,7 @@ Subject：人字段＝**裸 id**（`u_zhang` / `bot1`，引擎不解析前缀）
 |---|---|
 | input.* | 按 input JSON Schema |
 | payload.* | 消息上下文（仅 start_on_message 位，7.1）：消息载荷，形状消息侧才知（静态不查引用） |
-| vars.* | 运行时（静态检查按声明：已声明图中引用未声明变量＝ERROR〈位点〉.variable.unknown——对齐 §4.3 与实现【2026-10-10 审计对齐，此前的「降级为警告」为残留旧文本】；图纸未声明任何变量时跳过引用检查——该边界明文化，收紧与否见审计 D6） |
+| vars.* | 运行时（静态检查按声明：已声明图中引用未声明变量＝ERROR〈位点〉.variable.unknown——对齐 §4.3 与实现【2026-10-10 审计对齐，此前的「降级为警告」为残留旧文本】；图纸未声明任何变量时**同样检查**——引用非保留标识符即 ERROR（「空声明豁免」已删除【v2.3 第二十轮，审计 D6-b 收紧】：无 variables 段的图纸不再把引用错误推迟到运行期） |
 | task.* | **位点相关快照**（静态检查：非可用位引用 task.* 即 ERROR task_unavailable）——超时改派位 ✓：{id, assignee, outcome:null, created_at, deadline_at}（fire 时注入，活任务无 outcome）；会签出口位 ✓：{item_count, approve_count, disapprove_count}（每次办理后注入）；条件求值/输出映射位注入为后续项（开放问题 C5） |
 | initiator | subject |
 | instance | 实例全局事实 {id, started_at, business_key}（全位点注入；started_at 为 datetime 与 now 同口径，可直接做时长运算；dry-run/公式试算面注入占位形状；2026-10-09 落地） |

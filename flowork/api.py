@@ -16,6 +16,7 @@ from flowork.definitions.builtin import RouteMode
 from flowork.definitions.definition import (
     InvalidDefinitionData,
     ProcessDefinition,
+    ProcessVariable,
     load_definition,
     load_definition_file,
 )
@@ -123,6 +124,7 @@ __all__ = [
     "OrgDirectoryLike",
     "ProcessDefinition",
     "ProcessEngine",
+    "ProcessVariable",
     "RepositoryService",
     "RouteMode",
     "RuntimeService",

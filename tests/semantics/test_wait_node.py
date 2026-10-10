@@ -11,7 +11,7 @@ import pytest
 from sqlalchemy import select
 
 from flowork.definitions.builder import FlowBuilder
-from flowork.definitions.definition import ProcessDefinition
+from flowork.definitions.definition import ProcessDefinition, ProcessVariable
 from flowork.engine.engine import ProcessEngine
 from flowork.errors import FloworkError
 from flowork.persistence.orm import (
@@ -161,6 +161,7 @@ def test_wait_loop_resubscribes():
         .flow("w", "end", default=True)
         .connect("again", "w")
         .build()
+        .model_copy(update={"variables": [ProcessVariable(name="amount", type="number")]})
     )
     instance_id = _deploy_and_start(engine, definition)
 
@@ -179,8 +180,15 @@ def test_wait_loop_resubscribes():
 
 
 def test_wait_correlation_runtime_error_is_fault():
+    """correlation 引用已声明但运行期缺值的变量 → 激活即求值失败（技术故障）。
+
+    payload.* 在 wait correlation 位是设计期 ERROR（见 test_wait_validator），
+    运行期故障位改用「声明了 x 但发起没传」构造——设计过检、激活即挂。"""
     engine = ProcessEngine()
-    engine.repository.deploy(_wait_flow(message={"name": "m1", "correlation_key": "payload.x"}))
+    definition = _wait_flow(message={"name": "m1", "correlation_key": "x"}).model_copy(
+        update={"variables": [ProcessVariable(name="x", type="string")]}
+    )
+    engine.repository.deploy(definition)
     with pytest.raises(FloworkError):
         engine.runtime.start_process("wf", start_user="u_start")  # 激活即求值失败
 

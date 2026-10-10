@@ -21,6 +21,7 @@ from flowork.api import (
     NodeBehavior,
     NodeRegistry,
     ProcessDefinition,
+    ProcessVariable,
     create_registry,
     evaluate_condition,
     validate_definition,
@@ -81,7 +82,7 @@ def build_definition(registry: NodeRegistry | None = None) -> ProcessDefinition:
             confidence_threshold=0.8,
         )
         .branch("route", name="按置信度分流")
-        .user_task("human_review", name="人工复核（升级）", assignee="u_specialist")
+        .user_task("human_review", name="人工复核（升级）", assignee="'u_specialist'")
         .end("done", name="完成")
         .connect("start", "review")
         .connect("review", "route")
@@ -89,6 +90,7 @@ def build_definition(registry: NodeRegistry | None = None) -> ProcessDefinition:
         .flow("route", "human_review", default=True)
         .connect("human_review", "done")
         .build(registry)
+        .model_copy(update={"variables": [ProcessVariable(name="ai_confidence", type="number")]})
     )
 
 

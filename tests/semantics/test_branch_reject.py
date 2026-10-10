@@ -8,6 +8,7 @@ import pytest
 
 from flowork.definitions.builder import FlowBuilder
 from flowork.definitions.builtin import RouteMode
+from flowork.definitions.definition import ProcessVariable
 from flowork.definitions.node import MultiInstance
 from flowork.engine.engine import ProcessEngine
 from flowork.engine.kernel import DeadLoopError, RouteError
@@ -83,6 +84,7 @@ def test_first_match_condition_branch(engine: ProcessEngine):
         .connect("high", "end")
         .connect("low", "end")
         .build()
+        .model_copy(update={"variables": [ProcessVariable(name="amount", type="number")]})
     )
     publish(engine, definition)
 
@@ -110,6 +112,7 @@ def test_first_match_no_match_no_default_raises(engine: ProcessEngine):
         .connect("a", "end")
         .connect("b", "end")
         .build()
+        .model_copy(update={"variables": [ProcessVariable(name="x", type="number")]})
     )
     publish(engine, definition)
     with pytest.raises(RouteError):
@@ -180,6 +183,7 @@ def test_all_match_race_cancels_sibling_branch(engine: ProcessEngine):
         .connect("slow", "final")
         .connect("final", "end")
         .build()
+        .model_copy(update={"variables": [ProcessVariable(name="x", type="number")]})
     )
     publish(engine, definition)
     instance_id = engine.runtime.start_process("inc", start_user="u_user", variables={"x": 1})
@@ -240,6 +244,14 @@ def test_formula_via_branch(engine: ProcessEngine):
         .connect("big", "end")
         .connect("small", "end")
         .build()
+        .model_copy(
+            update={
+                "variables": [
+                    ProcessVariable(name="amount", type="number"),
+                    ProcessVariable(name="urgent", type="boolean"),
+                ]
+            }
+        )
     )
     publish(engine, definition)
     variables = {"amount": 9000, "urgent": True}
@@ -263,6 +275,7 @@ def test_condition_error_wrapped(engine: ProcessEngine):
         .flow("route", "a", default=True)
         .connect("a", "end")
         .build()
+        .model_copy(update={"variables": [ProcessVariable(name="ghost", type="number")]})
     )
     publish(engine, definition)
     with pytest.raises(EngineExecutionError, match="公式求值失败"):
@@ -435,6 +448,7 @@ def test_dead_loop_guard(engine: ProcessEngine):
         .flow("route", "again", condition=cond("go", "eq", True))
         .flow("route", "end", default=True)
         .build()
+        .model_copy(update={"variables": [ProcessVariable(name="go", type="boolean")]})
     )
     publish(
         engine,
