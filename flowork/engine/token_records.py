@@ -15,6 +15,7 @@ from flowork.runtime.lifecycle import TokenState
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
 
+    from flowork.definitions.definition import ProcessDefinition
     from flowork.engine.config import EngineConfig
     from flowork.engine.kernel import Kernel
     from flowork.persistence.orm import ProcessInstanceRow, TaskRow, TokenRow
@@ -131,6 +132,25 @@ class TokenRecordsMixin:
         token.state = TokenState.CANCELLED.value
         token.finished_at = self.config.now()
         session.flush()
+
+    def cancel_racing_arms(
+        self,
+        session: Session,
+        instance: ProcessInstanceRow,
+        definition: ProcessDefinition,
+        code: str,
+    ) -> None:
+        """任一到达即开始后取消竞速臂（判据＝``graph.racing_basin``，语义详彼处）。
+
+        v2.3 第二十轮：不限一跳（长臂漏取消会让完结节点被迟到到达二次激活
+        重跑）、也不越别的汇合域；直接前驱恒计入（与旧语义一致）。
+        """
+        from flowork.definitions.graph import racing_basin
+
+        racing = racing_basin(definition, code) - {code}
+        for token in self.tokens(session, instance.id, states=(TokenState.UNFINISHED.value,)):
+            if token.activity_code in racing:
+                self.cancel_token(session, token)
 
     def _notify_cancel(self, session: Session, token: TokenRow) -> None:
         """行为取消钩子（registry 中介，无行为/节点缺失时静默跳过）。"""

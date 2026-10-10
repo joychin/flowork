@@ -271,21 +271,12 @@ class Kernel(TaskRecordsMixin, TokenRecordsMixin):
                 )
                 if busy:
                     return  # 吸收重复到达（节点已在办）
-                self._cancel_sibling_branches(session, instance, sources)
+                self.cancel_racing_arms(session, instance, definition, node.code)
         self.activate(session, instance, node, source_activity_code=flow.source)
 
     def _advance_policy_of(self, node: FlowNode) -> str:
         """节点开始条件（Spec 声明；cc_task 在其 Spec 上覆写恒 any）。缺省 any。"""
         return getattr(node, "advance_policy", None) or "any"
-
-    def _cancel_sibling_branches(
-        self, session: Session, instance: ProcessInstanceRow, sources: list[str]
-    ) -> None:
-        """任一到达即开始后，取消仍未完成的兄弟分支（避免僵尸分支与迟到到达）。"""
-        source_set = set(sources)
-        for token in self.tokens(session, instance.id, states=(TokenState.UNFINISHED.value,)):
-            if token.activity_code in source_set:
-                self.cancel_token(session, token)
 
     def _node(self, definition: ProcessDefinition, code: str) -> FlowNode | None:
         return definition.node(code)

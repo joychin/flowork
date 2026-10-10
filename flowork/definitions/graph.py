@@ -18,6 +18,7 @@ __all__ = [
     "can_reach_end",
     "downstream_basin",
     "forward_reachable",
+    "racing_basin",
     "upstream_basin",
 ]
 
@@ -31,6 +32,31 @@ def upstream_basin(definition: ProcessDefinition, node_code: str) -> frozenset[s
             if flow.source not in seen:
                 seen.add(flow.source)
                 frontier.append(flow.source)
+    return frozenset(seen)
+
+
+def racing_basin(definition: ProcessDefinition, node_code: str) -> frozenset[str]:
+    """any 竞速臂判定（spec §2.3，v2.3 第二十轮）：能到达 ``node_code`` 的节点集合
+    （含自身）——**直接前驱恒计入**；更深的祖先沿图扩展，但**途经其他多入边节点
+    即止**（不越过别的汇合域）。
+
+    与 upstream_basin 的差别：不做全域反向 BFS——穿过多入边节点的路径不算，
+    那些分支属于**它自己的**汇合域（例：环回世界里 b 的令牌要经 k 才能到 a，
+    b 不是 a 的竞速臂而是 k 的等待臂，不能在 a 的竞速收尾里被误杀）；而直接
+    前驱是经典竞速兄弟（旧语义即取消），无论它自身是否多入边。纯结构判定，
+    不评条件、不读令牌。
+    """
+    joins = {node.code for node in definition.nodes if len(definition.incoming(node.code)) > 1}
+    joins.discard(node_code)
+    seen = {node_code}
+    frontier = [node_code]
+    while frontier:
+        for flow in definition.incoming(frontier.pop()):
+            if flow.source in seen:
+                continue
+            seen.add(flow.source)
+            if flow.source not in joins:
+                frontier.append(flow.source)  # 途经其他汇合点即止（其上游属另一汇合域）
     return frozenset(seen)
 
 
