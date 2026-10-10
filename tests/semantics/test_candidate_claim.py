@@ -226,3 +226,38 @@ def test_group_reference_stays_live_after_join(tmp_path: Path) -> None:
 
     assert [t.id for t in engine.task.list_tasks(candidate="u_late")] == [task.id]
     assert engine.task.claim(task.id, "u_late").assignee == "u_late"
+
+
+# —— unclaim 守卫（内核 code-review 2026-10 P0-4）——
+
+
+def test_unclaim_rejected_for_directly_assigned_task() -> None:
+    """直派任务不可取消认领：无候选池可回，置空后 claim/complete 双拒——
+    修复前任务陷入「无人能办、无故障单」的永久卡死。"""
+    engine = _org_engine()
+    engine.repository.deploy(_candidate_flow(assignee="'u_bob'"))
+    iid = _start(engine)
+    task = engine.task.list_tasks(instance_id=iid)[0]
+    assert task.assignee == "u_bob"
+
+    with pytest.raises(TaskNotAvailableError, match="直接指派"):
+        engine.task.unclaim(task.id, "u_bob")
+    # 任务未被破坏：仍可正常办结
+    engine.task.complete(task.id, actor="u_bob")
+    assert engine.runtime.get_instance(iid).state == "completed"
+
+
+def test_unclaim_returns_candidate_task_to_pool() -> None:
+    """候选任务的取消认领语义保持：回池（assignee 置空、候选关联保留），可再认领。"""
+    engine = _org_engine()
+    engine.repository.deploy(_candidate_flow(candidate_users=["'u_bob'"]))
+    iid = _start(engine)
+    task = engine.task.list_tasks(instance_id=iid)[0]
+    claimed = engine.task.claim(task.id, "u_bob")
+
+    released = engine.task.unclaim(claimed.id, "u_bob")
+    assert released.assignee == ""
+    again = engine.task.claim(claimed.id, "u_bob")  # 候选关联保留——回池后仍可认领
+    assert again.assignee == "u_bob"
+    engine.task.complete(again.id, actor="u_bob")
+    assert engine.runtime.get_instance(iid).state == "completed"

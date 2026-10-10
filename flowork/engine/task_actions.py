@@ -62,9 +62,16 @@ class TaskOpsMixin:
         return result
 
     def _unclaim(self, ctx: CommandContext, task_id: str, user: str) -> TaskInfo:
+        from flowork.tasks.candidates import candidate_links
+
         task = ctx.session.get(TaskRow, task_id)
         if task is None or task.state != "ready" or task.assignee != user:
             raise TaskNotAvailableError(f"任务不可取消认领：{task_id}")
+        self._assert_operable(ctx, task)
+        if not candidate_links(ctx.session, task_id):
+            # 直派任务没有候选池可回（code-review 2026-10 P0-4）：置空后 claim 需
+            # 命中候选、complete 需先认领——任务将永久无人能办且不出故障单
+            raise TaskNotAvailableError(f"任务 {task_id} 为直接指派（无候选池），不可取消认领")
         ctx.touch(self._instance(ctx, task.instance_id))
         task.assignee = ""
         ctx.session.flush()
