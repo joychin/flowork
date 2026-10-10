@@ -144,42 +144,46 @@ def _check_subject_literals(
     subject_exists: SubjectExists,
     issue: Any,
 ) -> None:
-    """取人位字面量逐个问目录（L4）：False=WARNING/strict ERROR；None=静默跳过。"""
-    positions: list[tuple[str, str]] = []
+    """取人位字面量逐个问目录（L4）：False=WARNING/strict ERROR；None=静默跳过。
+
+    **组引用不进本检查**（2026-10-09 B 批）：候选槽与指派/传阅位都可能写
+    ``role:`` / ``org:`` 主体，而 ``subject_exists`` 问的是「这是目录里的人吗」
+    ——组引用大概率回 False 而误报「在目录中不存在」。显式前缀（role:/org:）
+    与 candidate_groups 字段里的字面量（按字段默认是组名，``is_member`` 裸名
+    当角色）都跳过——只查「会被当成人来解释」的字面量。
+    """
+    positions: list[tuple[str, str, bool]] = []  # (where, expression, 按组解释)
+
+    def add(where: str, expression: str, *, group: bool = False) -> None:
+        positions.append((where, expression, group))
+
     for node in definition.nodes:
         if node.kind == _KIND_USER_TASK:
             assignee = getattr(node, "assignee", None)
             if assignee:
-                positions.append((f"{node.code}.assignee", assignee))
-            positions.extend(
-                (f"{node.code}.assignees[{i}]", e)
-                for i, e in enumerate(getattr(node, "assignees", None) or [])
-            )
-            positions.extend(
-                (f"{node.code}.candidate_users[{i}]", e)
-                for i, e in enumerate(getattr(node, "candidate_users", None) or [])
-            )
-            positions.extend(
-                (f"{node.code}.deadlines[{j}].reassign_to", d.reassign_to)
-                for j, d in enumerate(getattr(node, "deadlines", None) or [])
-                if d.reassign_to
-            )
-            positions.extend(
-                (f"{node.code}.deadlines[{j}].escalate_to", d.escalate_to)
-                for j, d in enumerate(getattr(node, "deadlines", None) or [])
-                if d.escalate_to
-            )
+                add(f"{node.code}.assignee", assignee)
+            for i, e in enumerate(getattr(node, "assignees", None) or []):
+                add(f"{node.code}.assignees[{i}]", e)
+            for i, e in enumerate(getattr(node, "candidate_users", None) or []):
+                add(f"{node.code}.candidate_users[{i}]", e)
+            for i, e in enumerate(getattr(node, "candidate_groups", None) or []):
+                add(f"{node.code}.candidate_groups[{i}]", e, group=True)
+            for j, d in enumerate(getattr(node, "deadlines", None) or []):
+                if d.reassign_to:
+                    add(f"{node.code}.deadlines[{j}].reassign_to", d.reassign_to)
+                if d.escalate_to:
+                    add(f"{node.code}.deadlines[{j}].escalate_to", d.escalate_to)
         elif node.kind == KIND_CC_TASK:
-            positions.extend(
-                (f"{node.code}.recipients[{i}]", e)
-                for i, e in enumerate(getattr(node, "recipients", None) or [])
-            )
+            for i, e in enumerate(getattr(node, "recipients", None) or []):
+                add(f"{node.code}.recipients[{i}]", e)
     seen: set[tuple[str, str]] = set()
-    for where, expression in positions:
+    for where, expression, group in positions:
         for literal in string_literals(expression):
             if (where, literal) in seen:
                 continue
             seen.add((where, literal))
+            if group or literal.startswith(("role:", "org:")):
+                continue  # 组主体：归属由 is_member 判，不问「是不是人」
             verdict = subject_exists(literal)
             if verdict is False:
                 issue(

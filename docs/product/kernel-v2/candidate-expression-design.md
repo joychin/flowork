@@ -2,10 +2,10 @@
 
 | | |
 |---|---|
-| 状态 | **待实施**（设计已定；方向=按规格全量对齐、零兼容，用户 2026-10-09 拍板；旧数据迁移不考虑） |
+| 状态 | **已实施（2026-10-10，e586fb2 合提交 + 后续收口）**——运行时求值/位点收录/returns 白名单/L4 组跳过/测试迁移全落地；实施与本文三处偏差见文末「实施修订」 |
 | 依据 | [spec.md §2.2/§5.4/§5.5/§16](./spec.md)（三处相互印证）+ [deploy-validation-design.md](./deploy-validation-design.md)（L4 取人位清单已含 candidate_users，先行按表达式对待） |
 | 排期 | 依赖时钟统一批落地（占用 `participants/resolver.py` 与 `tasks/behaviors.py`） |
-| 前置 | **A 批（候选制三缺口）已由并行会话落地于工作区**（未提交）：`tasks/candidates.py` 新模块（`person_key` 前缀互认 / `candidate_hit` 两式判定 / `candidate_task_ids` 查询维度）、`resolve_participants` 候选槽声明即不走兜底、`_claim` 接 `require_candidate`、`list_tasks(candidate=…)`。本批在其上把「候选关联的内容」从裸字符串换成**求值结果** |
+| 前置 | **A 批（候选制三缺口）已由并行会话落地**：`tasks/candidates.py` 新模块（`person_key` 前缀互认 / `candidate_hit` 两式判定 / `candidate_task_ids` 查询维度）、`resolve_participants` 三段判定、`_claim` 接 `require_candidate`、`list_tasks(candidate=…)`。本批在其上把「候选关联的内容」从裸字符串换成**求值结果** |
 
 ## 命题：五个层对同一字段的理解不一致
 
@@ -243,8 +243,22 @@ A 批已落地 `tasks/candidates.py`：`candidate_hit` 两式判定（① `perso
 
 ## 已知同源问题（A 批已修，留存登记）
 
-- 配目录后候选制不可用（兜底顺序）——A 批已修（`candidates_declared` 分支）。
+- 配目录后候选制不可用（兜底顺序）——A 批已修（三段判定）。
 - 组认领不展开（`is_member` 未接线）——A 批已修（`tasks/candidates.py::candidate_hit`）。
 - 候选任务无查询维度——A 批已修（`list_tasks(candidate=…)`）。
 - `candidate_users` 在部署校验里先于运行时被按表达式对待——本批修正后各层一致。
 - 候选组字段在 L4 清单里缺失——本批补（④）。
+
+## 实施修订（三处与正文的偏差，2026-10-10 收口）
+
+1. **发起即失败不落实例**（验收第 8 条的表述修正）：候选节点是**首节点**时求值错，
+   整笔回滚——实例行不落库，「挂起+故障单」不可见（与指派位同款既有行为）。
+   「挂起+故障单」在候选节点位于**后续站**时兑现（测试用两段式流程钉住）。
+   这不是本批引入的缺口，是指派/候选共有的命令边界语义。
+2. **`validator_conditions.py` 的位点遍历本地副本**：实施时一度保留（拆出
+   `validator_positions.py` 后未删本地 `iter_expression_positions`），导致候选位
+   **语法检查被本地旧清单漏掉**（裸 `role:legal` 不报错）——收口批删除本地副本、
+   改为导入唯一清单。教训已入 ①：两份位点清单必然漂移，去重即修复。
+3. **验收第 10 条补一个门槛事实**：未声明变量的引用检查（含 returns 白名单）不启用
+   ——这是既有门槛（`check_variable_references` 零声明即返回），候选位与之同款，
+   测试需显式声明一个变量才测得到白名单。

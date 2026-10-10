@@ -7,23 +7,30 @@ assignees/recipients）、超时改派（reassign_to）、子流程映射值；�
 ExpressionFunctions 注册表签名。未声明变量 ERROR（K8s CRD 体验）、未注册函数
 有注册表 ERROR / 无注册表 WARNING（诚实分级，照 org_configured 先例）；
 取人/改派位根调用另做 returns 类型对位（谓词 bool 误用即拦）。
-变量引用细查拆至 validator_references.py（规则组三）。
+变量引用细查拆至 validator_references.py（规则组三）；位点遍历（含候选槽
+candidates kind，2026-10-09 B 批）拆至 validator_positions.py——本文件经导入使用，
+不做第二份清单（两份必然漂移：候选位语法检查就会漏）。
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator
-from typing import TYPE_CHECKING, Any
+from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 from flowork.definitions.builtin import (
     KIND_BRANCH,
-    KIND_CALL_ACTIVITY,
     KIND_CC_TASK,
     KIND_USER_TASK,
-    KIND_WAIT,
 )
 from flowork.definitions.flow import MAX_FORMULA_LENGTH
-from flowork.definitions.validator_deadlines import deadline_positions
+from flowork.definitions.validator_positions import (
+    RULE_PREFIX as _RULE_PREFIX,
+)
+from flowork.definitions.validator_positions import (
+    iter_expression_positions,
+    lookup_kind,
+    mi_config,
+)
 
 if TYPE_CHECKING:
     from flowork.definitions.definition import ProcessDefinition
@@ -34,104 +41,10 @@ __all__ = [
     "check_node_semantics",
     "check_start_on_message",
     "iter_expression_positions",
+    "lookup_kind",
 ]
 
 IssueFn = Callable[..., None]
-
-
-def _mi_config(node: Any) -> Any:
-    """multi_instance 归一（builder extra 袋 dict → CallInstanceConfig；仅 call_activity）。"""
-    from flowork.definitions.call_instance import CallInstanceConfig
-
-    mi = getattr(node, "multi_instance", None) if node.kind == "call_activity" else None
-    return None if mi is None else CallInstanceConfig(**mi) if isinstance(mi, dict) else mi
-
-
-# 位点 kind → 规则名前缀（连线位沿用既有 condition.* 规则名，节点位用 expression.*，
-# 等待节点关联键用 wait.correlation.*）
-_RULE_PREFIX = {
-    "condition": "condition",
-    "subjects": "expression",
-    "reassign": "expression",
-    "exit": "expression",
-    "mapping_input": "expression",
-    "mapping_output": "expression",
-    "wait_correlation": "wait.correlation",
-    "completion": "call_mi.completion",  # A9：MI 完成公式（三计数注入，catalog@completion）
-}
-
-
-def iter_expression_positions(definition: ProcessDefinition) -> Iterator[tuple[str, str, str, str]]:
-    """遍历全部表达式位：yield (kind, where, expression, node)。
-
-    kind ∈ condition（连线条件）/ subjects（取人：assignee·assignees·recipients）/
-    reassign（超时改派）/ exit（会签出口 approve_exit·disapprove_exit）/
-    mapping_input·mapping_output（子流程映射值，后者在子上下文求值——父定义
-    静态不可知其变量，跳过未声明变量检查）。task.* 在 reassign 与 exit 位可用。
-    """
-    for flow in definition.flows:
-        if flow.condition:
-            yield "condition", flow.flow_code(), flow.condition, flow.source
-    for node in definition.nodes:
-        if node.kind == KIND_USER_TASK:
-            assignee = getattr(node, "assignee", None)
-            if assignee:
-                yield "subjects", f"{node.code}.assignee", assignee, node.code
-            for index, expression in enumerate(getattr(node, "assignees", None) or []):
-                yield "subjects", f"{node.code}.assignees[{index}]", expression, node.code
-            mi = getattr(node, "multi_instance", None)
-            if mi is not None:
-                if mi.approve_exit:
-                    yield (
-                        "exit",
-                        f"{node.code}.multi_instance.approve_exit",
-                        mi.approve_exit,
-                        node.code,
-                    )
-                if mi.disapprove_exit:
-                    yield (
-                        "exit",
-                        f"{node.code}.multi_instance.disapprove_exit",
-                        mi.disapprove_exit,
-                        node.code,
-                    )
-        if node.kind == KIND_CC_TASK:
-            for index, expression in enumerate(getattr(node, "recipients", None) or []):
-                yield "subjects", f"{node.code}.recipients[{index}]", expression, node.code
-        for where, expression in deadline_positions(node):
-            yield "reassign", where, expression, node.code
-        if node.kind == KIND_CALL_ACTIVITY:
-            mi = _mi_config(node)
-            if mi is not None and mi.completion != "all":  # A9 完成公式位
-                where = f"{node.code}.multi_instance.completion"
-                yield "completion", where, mi.completion, node.code
-            for target, expression in (getattr(node, "input_mappings", None) or {}).items():
-                yield "mapping_input", f"{node.code}.input_mappings.{target}", expression, node.code
-            for target, expression in (getattr(node, "output_mappings", None) or {}).items():
-                yield (
-                    "mapping_output",
-                    f"{node.code}.output_mappings.{target}",
-                    expression,
-                    node.code,
-                )
-        if node.kind == KIND_WAIT:
-            from flowork.definitions.wait_node import wait_fields
-
-            message, _timeout = wait_fields(node)
-            if message is not None and message.correlation_key:
-                yield (
-                    "wait_correlation",
-                    f"{node.code}.message.correlation_key",
-                    message.correlation_key,
-                    node.code,
-                )
-            for target, expression in (getattr(node, "output_mappings", None) or {}).items():
-                yield (
-                    "mapping_output",
-                    f"{node.code}.output_mappings.{target}",
-                    expression,
-                    node.code,
-                )
 
 
 def check_node_semantics(
@@ -162,7 +75,7 @@ def check_node_semantics(
                 )
         if node.kind == KIND_CC_TASK and not getattr(node, "recipients", None):
             warning("cc_task.no_recipients", "传阅节点未配置接收人", node=node.code)
-        mi = _mi_config(node)
+        mi = mi_config(node)
         if mi is not None:
             if not mi.subjects:
                 error("call_mi.subjects_empty", "多实例子流程未配置 subjects", node=node.code)

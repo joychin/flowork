@@ -437,3 +437,16 @@ string_literals（CEL 化后裸前缀失配）；测试字面量迁移（m3/m4/d
 **测试**：tests/semantics/test_candidate_claim.py 14 例（配目录可用/组展开/前缀互认/
 无目录提示/查询维度/入组活性）+ suite test_candidates.py + CLI 2 例；docs/API.md 与
 integration.md 的 list_tasks/task claimable 行随 escalate 批先行入库。860 测试全绿。
+
+**B 批收口（2026-10-10，e586fb2 补漏——设计稿 candidate-expression-design.md 全项落地）**：
+① validator_conditions 删本地 `iter_expression_positions` 副本改导入 validator_positions
+（唯一清单）——合提交时本地旧清单漏掉候选位**语法检查**（裸 role:legal 不报错），两份
+位点清单必然漂移，去重即修复；② L4 补 candidate_groups 进取人位清单且**组引用跳过**
+存在性检查（role:/org: 前缀与候选组字段字面量都是组语义，问「是不是人」必误报）——
+设计稿 ④ 兑现；③ 新增 tests/semantics/test_candidate_expression.py 14 例（函数候选定格/
+组引用保留/混合集同池/变量参与/空结果兜底 raise+to_admins/求值错=挂起+故障单（两段式
+流程——首节点发起即失败整笔回滚不落实例，既有命令边界语义）/规模护栏/裸名语法错/
+词汇位点归一（prev_task·node() 可用、task.* 不可用）/returns 白名单两翼/L4 组跳过）；
+④ 配套：catalog docstring 补 candidates 位点、设计稿状态改「已实施」+三处实施修订、
+设计器标签改「候选用户(公式)」、字段 description 下发写法占位提示。875 测试全绿，
+五道门全过。

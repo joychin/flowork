@@ -7,9 +7,11 @@
 目录即版本承诺（expression-dataface §5）：加字段=小版本；改语义/删条目=
 破坏性变更（R2 级，major+1）。本模块纯数据、零依赖（expr 叶子模块防环）。
 
-位点词汇（与 ``validator.iter_expression_positions`` 的 kind 一致）：
+位点词汇（与 ``validator_positions.iter_expression_positions`` 的 kind 一致）：
 condition（连线条件）/ subjects（取人 assignee·assignees·recipients）/
-reassign（超时改派）/ exit（会签出口）/ mapping_input·mapping_output（子流程映射，
+candidates（候选槽 candidate_users·candidate_groups，2026-10-09 B 批——目录按
+subjects 登记、查询前经 lookup_kind 归一，两槽共享取人词汇）/
+reassign（超时改派/升级）/ exit（会签出口）/ mapping_input·mapping_output（子流程映射，
 后者亦承载等待节点 output 映射——同款子上下文语义）/
 wait_correlation（等待节点关联键，实例上下文求值）。
 """
