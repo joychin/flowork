@@ -460,3 +460,35 @@ def test_route_audit_snapshots_wait_result():
         "message_name": None,
         "message_id": None,
     }
+
+
+# —— 广播唤醒（signal）走完整命中管线（内核 code-review 2026-10 P0-1）————
+
+
+def test_signal_wakes_wait_node_and_advances():
+    """signal 是三路收口的第三路：广播唤醒推进等待令牌，而非仅置订阅 matched
+    留死令牌（修复前 signal 后令牌 unfinished、无后续任务，实例永久卡死）。"""
+    engine = ProcessEngine()
+    instance_id = _deploy_and_start(engine, _wait_flow(message={"name": "m1"}))
+    assert engine.messages.signal("m1") == 1
+    tasks = engine.task.list_tasks(instance_id=instance_id)
+    assert [t.activity_code for t in tasks] == ["after"]  # 令牌已推进到下一节点
+    assert _instance_of(engine, instance_id).state == "running"
+    # 订阅定格 matched，且 wait.message_id 为 null（signal 唤醒不带数据）
+    with engine.session_factory() as session:
+        row = session.scalars(select(MessageSubscriptionRow)).first()
+        assert row is not None and row.state == "matched" and row.message_id is None
+    assert engine.messages.signal("m1") == 0  # 无 open 订阅
+
+
+def test_signal_skips_paused_instance_subscription():
+    """暂停=全动作拦截：paused 实例的订阅不被 signal 消费（保持 open），
+    恢复后仍可唤醒——修复前 signal 吃掉暂停实例的订阅且不推进。"""
+    engine = ProcessEngine()
+    instance_id = _deploy_and_start(engine, _wait_flow(message={"name": "m1"}))
+    engine.runtime.pause_process(instance_id, actor="u_ops")
+    assert engine.messages.signal("m1") == 0
+    assert len(_open_subscriptions(engine, instance_id)) == 1  # 未被消费
+    engine.runtime.resume_process(instance_id, actor="u_ops")
+    assert engine.messages.signal("m1") == 1
+    assert [t.activity_code for t in engine.task.list_tasks(instance_id=instance_id)] == ["after"]

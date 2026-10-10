@@ -19,7 +19,6 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select
 
-from flowork.events.domain import DomainEvent
 from flowork.persistence.orm import MessageBufferRow, MessageSubscriptionRow, ProcessInstanceRow
 
 if TYPE_CHECKING:
@@ -215,7 +214,13 @@ def emit_message_event(
 
 
 def broadcast_signal(engine: ProcessEngine, name: str) -> int:
-    """广播唤醒：matched 所有在等该名字的 open 订阅，不带数据（spec §7）。"""
+    """广播唤醒：matched 所有在等该名字的 open 订阅，不带数据（spec §7）。
+
+    每条订阅走 hit_subscription 完整管线（内核 code-review 2026-10 P0-1）：
+    等待节点经 finish_wait 推进（spec §7.2 三路收口的第三路，signal 唤醒
+    wait.message_id 恒 null）；宿主纯订阅仅关联定格；暂停实例的订阅跳过
+    （全动作拦截，保持 open 由恢复反查补消费）。
+    """
 
     def _command(ctx: CommandContext) -> int:
         purge_expired(ctx.session)
@@ -225,14 +230,10 @@ def broadcast_signal(engine: ProcessEngine, name: str) -> int:
                 MessageSubscriptionRow.state == "open",
             )
         ).all()
-        kernel = engine.kernel_for(ctx)
+        matched = 0
         for row in rows:
-            row.state = "matched"
-            kernel.record_event(
-                DomainEvent.MESSAGE_CORRELATED,
-                correlated_payload(row, {}, None),
-                row.instance_id,
-            )
-        return len(rows)
+            if hit_subscription(ctx, engine, row, {}, message_id=None):
+                matched += 1
+        return matched
 
     return engine.execute(_command)
