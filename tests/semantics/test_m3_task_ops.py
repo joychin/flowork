@@ -370,3 +370,28 @@ def test_cc_recipients_formula_error_is_technical_fault():
     )
     with pytest.raises(EngineExecutionError, match="传阅接收人公式求值失败"):
         engine.runtime.start_process("cc_bad", start_user="u_s")
+
+
+def test_add_countersigner_duplicate_rejected_wholesale(engine: ProcessEngine):
+    """回归（code-review 2026-10 P1-1）：对已在会签名单的人加签＝整笔拒绝。
+    修复前重复成员被克隆成第二张任务——一人两票，出口提前达成、其余成员
+    被 auto_pass 从未参与（违背「加签人各占一票」）。"""
+    instance_id = start(engine)
+    complete_of(engine, instance_id, "u_a")
+    claimable = engine.task.list_tasks(instance_id=instance_id)[0]
+    engine.task.claim(claimable.id, "u_c1")
+    engine.task.complete(claimable.id, actor="u_c1")
+    p1 = engine.task.list_tasks(instance_id=instance_id, assignee="u_p1")[0]
+
+    with pytest.raises(TaskNotAvailableError, match="已在会签名单"):
+        engine.task.add_countersigner(p1.id, users=["u_extra", "u_p2"], actor="u_p1")
+    # 整笔回滚：请求里的新人 u_extra 也没被加入
+    assert sorted(
+        t.assignee for t in engine.task.list_tasks(instance_id=instance_id)
+    ) == ["u_p1", "u_p2"]
+
+    # 新人加签不受影响
+    engine.task.add_countersigner(p1.id, users=["u_extra"], actor="u_p1")
+    assert "u_extra" in [
+        t.assignee for t in engine.task.list_tasks(instance_id=instance_id)
+    ]

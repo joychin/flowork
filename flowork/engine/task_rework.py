@@ -119,6 +119,28 @@ class TaskReworkMixin:
             task.instance_id,
         )
         root = task.root_task_id or task.id
+        # 重复加签守卫（code-review 2026-10 P1-1）：同令牌已有 ready 任务的人
+        # 再被加签＝一人两票（item_count 不随重复增加），出口提前达成、其余
+        # 成员被 auto_pass 从未参与。整笔回拒不部分生效（对齐 max_participants
+        # 「拒绝而非截断」口径）；user: 前缀写法与裸 id 视同一人。
+        from sqlalchemy import select
+
+        from flowork.persistence.orm import TaskRow as _TaskRow
+        from flowork.tasks.candidates import person_key
+
+        active = {
+            person_key(assignee)
+            for assignee in ctx.session.scalars(
+                select(_TaskRow.assignee).where(
+                    _TaskRow.token_id == task.token_id, _TaskRow.state == "ready"
+                )
+            )
+        }
+        duplicates = sorted({user for user in users if person_key(user) in active})
+        if duplicates:
+            raise TaskNotAvailableError(
+                f"加签人已在会签名单（同令牌在办）：{'、'.join(duplicates)}"
+            )
         created = [self._clone_task(ctx, task, assignee=user, root=root) for user in users]
         return [self._task_info(t) for t in created]
 
