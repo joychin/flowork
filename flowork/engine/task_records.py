@@ -171,6 +171,37 @@ class TaskRecordsMixin:
         )
         return [row.assignee for row in session.scalars(stmt)]
 
+    def advance_after_task(
+        self, session: Session, instance: ProcessInstanceRow, token: TokenRow
+    ) -> None:
+        """任务提交后的统一推进入口（自 kernel.py 迁入，第二十轮）。"""
+        from typing import cast
+
+        from flowork.definitions.builtin import KIND_USER_TASK
+        from flowork.engine.kernel import EngineExecutionError, Kernel
+        from flowork.runtime.lifecycle import TokenState
+
+        kernel = cast("Kernel", self)
+        node = kernel.definition_of(session, instance).node(token.activity_code)
+        if node is None:
+            raise EngineExecutionError(f"令牌节点不存在：{token.activity_code}")
+        kernel._maybe_complete(session, instance, node, token)
+        # 出口不可达兜底（审计 D4，spec §4.1 第二十轮）：user_task 全部待办办结
+        # 而令牌未完（两侧出口公式均未达成）＝技术故障——挂起+故障单，拒绝静默
+        # 卡死。限定 user_task：call_activity 等子实例、wait 等消息，名下本无
+        # 待办；串行下一位已在 on_task_completed（先行于本守卫）派发，不误报。
+        if (
+            node.kind == KIND_USER_TASK
+            and token.state == TokenState.UNFINISHED.value
+            and not kernel.tasks(session, instance.id, token_id=token.id)
+        ):
+            raise EngineExecutionError(
+                f"会签出口不可达：节点 {node.code} 全部待办已办结"
+                f"（item_count={token.item_count}, approve={token.approve_count},"
+                f" disapprove={token.disapprove_count}）而两侧出口公式均未达成"
+                "——按技术故障挂起（spec §4.1 第二十轮）；处置：管理员手术或终态"
+            )
+
     def _actor_context_of(self, actor: str) -> dict[str, Any]:
         """身份快照：完成事务内经目录端口定格操作者当时的岗位/角色/部门。
 

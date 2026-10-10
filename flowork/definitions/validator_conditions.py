@@ -94,7 +94,8 @@ def check_condition_legality(
     error: IssueFn,
     warning: IssueFn,
 ) -> None:
-    """表达式合法性（全位点）：空公式、长度上限、编译与护栏、分支臂缺条件。"""
+    """表达式合法性（全位点）：空公式、长度上限、编译与护栏、分支臂缺条件、
+    出口公式的裸数字门槛提示（审计 D4，第二十轮）。"""
     from flowork.expr.cel import FormulaError, collect_references
 
     nodes = {n.code: n for n in definition.nodes}
@@ -113,6 +114,15 @@ def check_condition_legality(
                 collect_references(expression)
             except FormulaError as exc:
                 error(f"{rule}.formula.invalid", f"公式不可用：{exc}", flow=where)
+        if kind == "exit" and _bare_threshold(expression):
+            warning(
+                "exit.bare_threshold",
+                f"出口公式 {where} 用裸数字门槛与 task.<计数> 比较——实际解析人数"
+                "不足时会静默挂起（运行期已兜底为故障单）；建议改相对式："
+                "task.approve_count >= task.item_count（全票）或 "
+                "task.approve_count * 100 >= task.item_count * N（比例）",
+                flow=where,
+            )
     for flow in definition.flows:
         if not flow.is_default and not flow.condition and definition.outgoing(flow.source):
             source_node = nodes.get(flow.source)
@@ -123,6 +133,57 @@ def check_condition_legality(
                     "分支节点出边未挂条件（仅默认边允许无条件）",
                     flow=flow.flow_code(),
                 )
+
+
+def _bare_threshold(formula: str) -> bool:
+    """出口公式是否含「task.<计数> 与整数字面量的次序比较」（lark AST 判定）。"""
+    from typing import Any
+
+    from flowork.expr.cel import FormulaError, _parse
+
+    try:
+        tree = _parse(formula)
+    except FormulaError:
+        return False  # 语法错另有 formula.invalid 报告
+
+    def tokens(node: Any) -> list[str]:
+        if getattr(node, "data", None) is None:
+            return [str(node)]
+        return [t for child in node.children for t in tokens(child)]
+
+    def is_task_counter(node: Any) -> bool:
+        toks = tokens(node)
+        return (
+            len(toks) == 2
+            and toks[0] == "task"
+            and toks[1]
+            in (
+                "approve_count",
+                "disapprove_count",
+                "item_count",
+            )
+        )
+
+    def is_int(node: Any) -> bool:
+        toks = tokens(node)
+        return len(toks) == 1 and toks[0].isdigit()
+
+    def visit(node: Any) -> bool:
+        data = getattr(node, "data", None)
+        if data is None:
+            return False
+        # cel-python 树形：relation(2 子) = [relation_g*/l* 左操作数包装, 右操作数]
+        if str(data) == "relation" and len(node.children) == 2:
+            left, right = node.children
+            ordered = str(getattr(left, "data", "")).startswith(("relation_g", "relation_l"))
+            if ordered and (
+                (is_task_counter(left) and is_int(right))
+                or (is_int(left) and is_task_counter(right))
+            ):
+                return True
+        return any(visit(child) for child in node.children)
+
+    return visit(tree)
 
 
 def check_start_on_message(

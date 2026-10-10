@@ -12,8 +12,10 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, TypeVar
 
+from sqlalchemy.orm.exc import ObjectDeletedError
+
 from flowork.engine.kernel import EngineExecutionError
-from flowork.errors import FloworkError
+from flowork.errors import FloworkError, TaskNotAvailableError
 from flowork.persistence.orm import EventOutboxRow
 
 if TYPE_CHECKING:
@@ -186,6 +188,12 @@ def _run_once(engine: ProcessEngine, command: Callable[[CommandContext], T]) -> 
     except EngineExecutionError as error:
         _record_incidents(engine, ctx, error)  # 回滚后以独立事务记录 Incident
         raise
+    except ObjectDeletedError as error:
+        # 并发删行归一（v2.3 第二十轮，tests/edge submit vs timer 实证残留窗）：
+        # 对手在本命令 claim-flush 之后提交了同一任务行的删除——claim 咽喉的
+        # expire 复验看不到这个时刻。任务行被并发删除＝已被处理，归一领域错误
+        # （重试只会再次失败：行已不存在）。
+        raise TaskNotAvailableError(f"任务已被并发处理：{error}") from error
     finally:
         session.close()
 

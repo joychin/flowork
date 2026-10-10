@@ -289,11 +289,5 @@ class Kernel(TaskRecordsMixin, TokenRecordsMixin):
     def _node(self, definition: ProcessDefinition, code: str) -> FlowNode | None:
         return definition.node(code)
 
-    def advance_after_task(
-        self, session: Session, instance: ProcessInstanceRow, token: TokenRow
-    ) -> None:
-        """任务提交后的统一推进入口。"""
-        node = self.definition_of(session, instance).node(token.activity_code)
-        if node is None:
-            raise EngineExecutionError(f"令牌节点不存在：{token.activity_code}")
-        self._maybe_complete(session, instance, node, token)
+    # advance_after_task（任务提交后的统一推进，含出口不可达兜底）住
+    # TaskRecordsMixin——任务推进域（v2.3 第二十轮迁出，kernel 守 300 行红线）。
