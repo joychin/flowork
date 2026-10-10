@@ -905,6 +905,19 @@ Zeebe inputCollection/outputCollection 契约实装（multi-instance-call-design
 3. **validator 新规则 `user_task.exit.misplaced`**（走查顺带发现的不同族问题）：approve_exit/disapprove_exit 写在节点顶层会被 extra 袋静默收下，行为只读 multi_instance 内同名字段——出口公式零告警失效、静默回退全票。设计期 ERROR 指路（可见优于静默）。
 4. **测试**：`tests/semantics/test_outcome_semantics.py` 行种类×消费动作矩阵（复活/路由/跳过策略/串行下一棒/撤回闸门/validator 错位），断言钉走查探针事实；既有测试全量回归（纯 agree 路径行为不变——谓词对其无差）。
 
+### 第二十轮（2026-10-10，v2.3 续，初学者问答审计 D1–D6 拍板落地）
+
+来源：初学者问答审计（docs_research/语义问答审计-2026-10.md，31 问四分类：17 安心/9 缺条款/5 未定义/3 矛盾）——用户认可全部审计建议后一次落地四笔提交（78dbdf9→ab97289）。
+
+1. **D1 迟到到达吸收（§2.3）**：any 竞速收尾从「直接前驱集合」扩为 `graph.racing_basin`（直接前驱恒计入；途经其他多入边节点即止）——两跳以上长臂躲过旧取消名单会让**已完结节点被迟到到达二次激活重跑**（重复审批/重复副作用）。全量回归逼出两轮判定修正（纯结构可达误杀环回等待臂、剪掉直接前驱丢旧收尾语义）。
+2. **D2 暂停拦截面（§7）**：完成跃迁拒 paused（finish_instance 与 move_token 到 end 同拒——终态只从运行态走）；update_variables 拒 paused（冻结快照，修数据＝resume→改→再 pause）；管理员手术（activate_node/cancel_node/move_token 到中间节点）**明文允许**且不改变暂停态；cancel/terminate 不拦（砍树对暂停子照常）。
+3. **D4 出口不可达兜底（§4.1）**：user_task 全部待办办结而两侧出口均未达成 → 挂起+故障单（绝对门槛遇人数不足、缺省全票下混合票不再静默卡死）；配套 WARNING `exit.bare_threshold`（裸数字门槛提示改相对式）。**D3 条款化**：加签基名单＝加签时刻现时求值（非快照），漂移为明文语义。
+4. **D6-b 引用检查收紧（C.4）**：删除「图纸零声明整体跳过」豁免——引用非保留标识符即 ERROR；盲区实证＝ai_review_demo 裸 assignee 藏在豁免后。**D6-a**：binding 两值都不锁运行期版本（部署校验文案+§2.5 明示）。**D5**：list_tasks 的 candidate 默认含已认领（组合 assignee="" 才是池内口径，docs/API.md）。**附带**：ProcessVariable 补入 api 公开面；竞态残留窗修复（对手在 claim-flush 后提交删行 → ObjectDeletedError 命令边界归一 TaskNotAvailableError，tests/edge 全量套件时红实证）。
+5. **乙类九条顺带条款化（本附录下方「第二十轮随批条款」）**：first_match 边序、驳回侧撤销标记、驳回归零范围、重提任务可见性、复活关联、子流程驳回边界、委托时点、move_token 两坑、候选计票。
+6. **测试**：+17 例（late_arrival 3/pause_admin_surface 5/exit_unreachable 6/m4 裸 id 语义升级/wait 夹具改写），905 全绿；存量修补＝examples 七模板与 13 测试文件补变量声明（纯增量）。
+
+**第二十轮随批条款（乙类 B1–B9，审计已定行为补成文）**：① first_match 并列命中＝flows 数组声明序取第一条真边（重部署按新序；§2.4）。② 驳回侧剩余待办撤销＝outcome auto_pass＋文案「节点已否决」＋cause_token_id（不复用 approve 侧 on_exit；§5.1）。③ 驳回归零＝取消**全实例**未完令牌（不限兄弟臂、不评条件），已完臂成果保留、复活后汇合靠 join_gate 不重跑（§5.1）。④ 驳回到发起人：重提任务只带固定提示不带驳回 comment；实例变量不清（显式携带才合并）（§5.1）。⑤ 复活新任务 created_at/deadline 全部重算，活任务行不带 cause_token_id（关联查历史侧）；会签计数按 token 隔离从零起步（§5.1）。⑥ 子流程内驳回性以子实例为界（传父节点码＝断言失败），不终止子实例、父 call 持续等待（§5.3）。⑦ 委托只在取人解析时刻判窗替换，窗口结束已派待办不归还、无回扫（§5.4）。⑧ move_token 直调 activate 绕过 all 放行门（现状保持）；挂起实例上 move 后实例仍 suspended 不自动恢复（§2.3/§11）。⑨ 候选制一张共享待办 item_count=1，谁认领谁办理计一票（§5.5）。
+
 ## 附录 C：类型清单（须提前定义的全集）
 
 原则：**跨边界的类型提前定，业务语义类型不进内核**（Money/TicketPriority 之类由插件用 JSON Schema format 扩展表达）。五条边界：图纸↔引擎、表达式↔变量、函数↔校验器、API/事件↔外部、数据库↔代码。

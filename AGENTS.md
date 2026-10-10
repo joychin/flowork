@@ -498,3 +498,31 @@ multi_instance 内字段——出口公式零告警失效静默回退全票，�
 （如实记录当时计算值）。**测试**：`tests/semantics/test_outcome_semantics.py` 16 例
 （行种类×消费动作矩阵+对照组防收紧过头+无声死锁钉子）+ test_validator 2 例错位字段。
 **891 测试全绿，五道门全过。**
+
+**初学者问答审计+第二十轮修订批（2026-10-10，D1–D6 拍板落地；四笔提交 78dbdf9→ab97289+收口）**：
+审计方法＝31 个基础语义问题只从代码作答（四路并行探查+五处人工复核），四分类：
+17 安心/9 缺条款/5 未定义（D1–D5）/3 矛盾（C1/C3 已修 90e1954）；审计表在
+docs_research/语义问答审计-2026-10.md（详版供排版）。修订四笔：
+① D1 迟到到达吸收——any 竞速收尾扩为 graph.racing_basin（直接前驱恒计入、
+途经其他多入边节点即止）；旧「直接前驱集合」对两跳长臂漏取消，完结节点被
+迟到到达二次激活重跑。全量回归逼出两轮判定修正（结构可达误杀环回等待臂/
+剪直接前驱丢旧收尾语义）；tests/semantics/test_late_arrival.py 3 例。
+② D2 暂停拦截面——finish/move-to-end 拒 paused（终态只从运行态走）、
+update_variables 拒 paused（冻结快照；修数据＝resume→改→再 pause）、管理手术
+明文允许不改暂停态；cancel/terminate 不拦；test_pause_admin_surface.py 5×矩阵。
+③ D4 出口不可达兜底——advance_after_task 尾部守卫（迁 TaskRecordsMixin）：
+全部待办办结而两侧出口未达成→挂起+故障单（绝对门槛/混合票不再静默卡死）；
+WARNING exit.bare_threshold（lark AST 判裸数字门槛，树形 relation(2子)=
+[左包装,右操作数]）；D3 加签现时名单条款化+钉子。**顺带修竞态残留窗**：
+对手在 claim-flush 后提交删行→ObjectDeletedError 命令边界归一
+（ops._run_once）；根目录 designer.db* 残留（带 WAL）会让全量套件竞态测试
+时红——同样代码移走即绿（环境干扰非代码问题）。
+④ D6-b 收紧——validator_references 删空声明豁免（零声明图纸引用非保留
+标识符即 ERROR）；盲区实证＝ai_review_demo 裸 assignee 藏豁免后；examples
+七模板+13 测试文件补声明（纯增量）；m4 裸 id 夹具升级为设计期 InvalidDefinition；
+wait correlation 的 payload.* 维持设计期 ERROR（审计期误判已回退）。D6-a
+binding 不锁版本消歧（文案+§2.5）；D5 candidate 默认含已认领（API.md）；
+ProcessVariable 补入 api 公开面（快照同步）。
+spec：§2.3 竞速臂判定/§7 暂停拦截范围/§4.1 出口不可达/§5.1 加签现时名单/
+§2.5 binding/C.4 空声明口径+附录第二十轮（含乙类 B1–B9 九条随批条款化）。
+**905 测试全绿（+14 净增），五道门全过。**
