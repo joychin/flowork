@@ -210,3 +210,23 @@ def test_engine_core_has_no_kind_branches():
             if pattern.search(line) and "test" not in path.name:
                 offenders.append(f"{path.name}:{line_no}: {line.strip()}")
     assert offenders == [], f"引擎核心出现 kind 分支：\n{chr(10).join(offenders)}"
+
+
+def test_cancel_process_rejected_on_terminal_instance(engine: ProcessEngine):
+    """回归（code-review 2026-10 P1-2）：终态实例拒绝取消——修复前对 completed
+    实例 cancel 仍发出 process_cancelled 事件（状态与事件背离，outbox 消费方
+    误判）；对齐 terminate_process 的终态守卫。"""
+    from flowork.errors import InstanceNotFoundError
+    from flowork.events.domain import DomainEvent
+
+    instance_id = engine.runtime.start_process("simple_approval", start_user="u_zhang")
+    for assignee in ("u_manager", "u_finance"):  # 两站串行审批
+        task = engine.task.list_tasks(instance_id=instance_id)[0]
+        engine.task.complete(task.id, actor=assignee)
+    assert engine.runtime.get_instance(instance_id).state == "completed"
+
+    with pytest.raises(InstanceNotFoundError, match="已终态"):
+        engine.runtime.cancel_process(instance_id, actor="u_admin")
+    assert engine.runtime.get_instance(instance_id).state == "completed"
+    names = [e.event_name for e in engine.history.events(instance_id)]
+    assert names.count(DomainEvent.PROCESS_CANCELLED.value) == 0, "不得发假取消事件"

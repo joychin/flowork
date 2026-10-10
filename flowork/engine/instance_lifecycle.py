@@ -128,6 +128,13 @@ class InstanceLifecycleMixin:
 
         def _command(ctx: CommandContext) -> Any:
             instance = _load(ctx, instance_id)
+            if instance.state in ("completed", "cancelled", "terminated"):
+                # 终态守卫（code-review 2026-10 P1-2）：对齐 terminate_process——
+                # complete_instance 对终态静默跳过，但本命令的取消事件无条件发，
+                # 曾对 completed 实例发出假 process_cancelled（状态与事件背离）
+                raise InstanceNotFoundError(
+                    f"实例 {instance_id} 已终态（{instance.state}），不可取消"
+                )
             ctx.touch(instance)
             kernel = self._engine.kernel_for(ctx)
             from flowork.engine.terminate_cascade import cascade_terminate
