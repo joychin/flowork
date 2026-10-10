@@ -153,8 +153,15 @@ def simulate_route(
         if node.kind == "wait":
             # 等待节点：出边条件引用 wait.*，模拟面按「假设」求值。
             # 缺省 auto＝消息到达 / 超时两种结果各推一支（竞速语义＝先到者决定走向，
-            # 预演把两面都画出来）；显式假设只推一面。
+            # 预演把两面都画出来）；显式假设只推一面。无条件出边恒通行（与运行时
+            # 路由同语义——code-review 2026-10 P0-7：此前 wait 分支漏收无条件边、
+            # blocked 判定写反成死代码，两类合法形态静默给出残缺路径）。
             mode = (assumptions or {}).get(code, "auto")
+            if mode not in ("auto", "matched", "elapsed"):
+                result.warnings.append(
+                    f"等待节点 {code} 的假设值 {mode!r} 非法（auto/matched/elapsed），按 auto 预演"
+                )
+                mode = "auto"
             modes = (
                 [("matched", "假设消息到达"), ("elapsed", "假设超时")]
                 if mode == "auto"
@@ -165,12 +172,13 @@ def simulate_route(
                 for flow in conditional:
                     if _eval(flow, {"wait": shape}):
                         chosen.append((flow, f"{label}：{_edge_text(flow)}"))
+            chosen += [(f, "无条件出边") for f in unconditional]
             if not chosen and default is not None:
                 default_reason = (
                     "两种假设下条件都不满足，走默认边" if mode == "auto" else "条件不满足，走默认边"
                 )
                 chosen = [(default, default_reason)]
-            if not chosen and not outgoing:
+            if not chosen and outgoing:
                 result.blocked.append(
                     f"等待节点 {code} 的出边条件在两种假设下都不满足且无默认边，流程在此无法路由"
                 )

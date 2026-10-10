@@ -98,3 +98,70 @@ def test_wait_dry_run_default_edge_when_neither_matches():
     result = simulate_route(definition, {})
     assert result.ok, result.blocked
     assert [s.node for s in result.steps if s.via_source == "wait_pay"] == ["late"]
+
+
+# —— wait 分支修偏（内核 code-review 2026-10 P0-7）——
+
+
+def test_wait_dry_run_traverses_unconditional_outgoing():
+    """等待节点的无条件出边恒通行（运行时同语义）。修复前 unconditional 在
+    wait 分支从未被引用——start→wait→end（无条件边）预演停在 wait，end 不可
+    达且无任何 blocked/warning，静默残缺。"""
+    spec = {
+        **SPEC,
+        "nodes": [
+            {"code": "start", "kind": "start", "name": "开始"},
+            {
+                "code": "w",
+                "kind": "wait",
+                "name": "等",
+                "message": {"name": "m1", "correlation_key": "order_no"},
+            },
+            {"code": "end", "kind": "end", "name": "结束"},
+        ],
+        "flows": [
+            {"source": "start", "target": "w"},
+            {"source": "w", "target": "end"},
+        ],
+    }
+    config = EngineConfig(db_file=":memory:")
+    definition = load_definition(spec, config.node_registry)
+    result = simulate_route(definition, {"order_no": "SO-1"})
+    assert result.ok, result.blocked
+    assert [s.node for s in result.steps] == ["start", "w", "end"]
+
+
+def test_wait_dry_run_blocked_when_conditions_never_match_and_no_default():
+    """条件双不中且无默认边 → blocked 如实上报。修复前 blocked 判定写反
+    （`not chosen and not outgoing` 恒假死代码）——预演静默停在 wait。"""
+    spec = {
+        **SPEC,
+        "nodes": [
+            {"code": "start", "kind": "start", "name": "开始"},
+            {
+                "code": "w",
+                "kind": "wait",
+                "name": "等",
+                "message": {"name": "m1", "correlation_key": "order_no"},
+            },
+            {"code": "end", "kind": "end", "name": "结束"},
+        ],
+        "flows": [
+            {"source": "start", "target": "w"},
+            {"source": "w", "target": "end", "condition": 'wait.result == "bogus"'},
+        ],
+    }
+    config = EngineConfig(db_file=":memory:")
+    definition = load_definition(spec, config.node_registry)
+    result = simulate_route(definition, {"order_no": "SO-1"})
+    assert result.blocked, "双不中且无默认边必须上报 blocked"
+    assert "w" in result.blocked[0]
+
+
+def test_wait_dry_run_invalid_assumption_warns_and_falls_back_to_auto():
+    """假设值非法 → 告警并按 auto 两面预演。修复前任意值被当 elapsed 处理。"""
+    result = _run(assumptions={"wait_pay": "bogus"})
+    assert result.ok
+    assert any("非法" in w for w in result.warnings)
+    reached = [s.node for s in result.steps]
+    assert "ok" in reached and "late" in reached  # 两面都预演
