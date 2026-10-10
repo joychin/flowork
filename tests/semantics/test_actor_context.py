@@ -86,16 +86,3 @@ def test_oversized_snapshot_rejected():
     # 完成被拒：任务仍在活表，历史无行
     assert engine.task.list_tasks(instance_id=instance_id, assignee="u_zhang")
     assert engine.history.task_history(instance_id) == []
-
-
-def test_ai_agent_action_snapshots_the_human():
-    """AI 代办（as_agent）照常定格**人**的上下文，代理事实由既有列另行记录。"""
-    org = OrgDirectory.from_dict({"users": {"u_zhang": {"department": "d_eng"}}, "departments": {}})
-    engine = ProcessEngine(EngineConfig(org=org))
-    engine.repository.deploy(_flow("snap_agent"))
-    instance_id = engine.runtime.start_process("snap_agent", start_user="u_ceo")
-    task = engine.task.list_tasks(instance_id=instance_id, assignee="u_zhang")[0]
-    engine.task.complete(task.id, actor="u_zhang", as_agent=True)
-    history = _history_of(engine, instance_id, "a")
-    assert history.actor_context == {"department": "d_eng", "roles": []}
-    assert history.acted_as_agent is True

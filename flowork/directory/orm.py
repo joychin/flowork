@@ -1,7 +1,7 @@
 """目录持久化表：挂在引擎共享元数据上（create_schema 一并建表）。
 
-v1 竖切仅两张表（部门/用户）；角色与授权表（role/role_assignment/agent）随 M-A 全量补充，
-见 docs/product/engine-v1/01-身份与组织模型.md §3。
+部门/用户/角色/授权/委托。Agent 身份表已删（2026-10-10 第十七轮：引擎对 AI
+无治理职能——主体一律裸 id，身份与凭证归宿主目录）。
 """
 
 from __future__ import annotations
@@ -63,36 +63,6 @@ class RoleAssignmentRow(Base):
     role_code: Mapped[str] = mapped_column(String(64))
     org_unit_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
-
-
-class AgentRow(Base):
-    """Agent 一等身份：负责人（问责链 root）/所属部门/可选代表某人/状态机。
-
-    status: trial → active ⇄ suspended（见 agents.py 状态机）。
-    """
-
-    __tablename__ = "org_agent"
-
-    agent_id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    name: Mapped[str] = mapped_column(String(200), default="")
-    owner_user_id: Mapped[str] = mapped_column(String(64))
-    org_unit_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    on_behalf_of_user: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    status: Mapped[str] = mapped_column(String(16), default="trial")
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
-
-
-class AgentCredentialRow(Base):
-    """Agent 凭证：仅存 scrypt 哈希；吊销/停用即时失效（verify 读当前状态）。"""
-
-    __tablename__ = "org_agent_credential"
-
-    id: Mapped[str] = mapped_column(String(16), primary_key=True)
-    agent_id: Mapped[str] = mapped_column(String(64))
-    secret_hash: Mapped[str] = mapped_column(String(128))
-    salt: Mapped[str] = mapped_column(String(32))
-    issued_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
-    revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class DelegationRow(Base):

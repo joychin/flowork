@@ -72,11 +72,6 @@ ROLE_ASSIGNMENTS: list[tuple[str, str, str | None]] = [
     *ROLE_ASSIGNMENTS_BLUEPRINT,
 ]
 
-# —— Agent：(id, 名称, 问责 owner, 部门, 代言用户) ——
-AGENTS: list[tuple[str, str, str, str, str]] = [
-    ("ag_expense_bot", "报销助手", "u_cash", "fin_gl", "u_chief_acc"),
-]
-
 FINANCE_APPROVERS = ["u_chief_acc", "u_cash"]
 DELEGATION = ("u_lead_fe", "u_lead_be")  # 赵敏休假 → 王工代办
 ADMINS = ["u_ceo"]
@@ -93,14 +88,6 @@ def build_directory_store(db_path: Path) -> DirectoryStore:
         store.create_role(code, name=name, default_scope_org_unit=scope)
     for user_id, role, scope in ROLE_ASSIGNMENTS:
         store.assign_role(user_id, role, org_unit_code=scope)
-    for agent_id, name, owner, dept, on_behalf in AGENTS:
-        store.register_agent(
-            agent_id,
-            name=name,
-            owner_user_id=owner,
-            org_unit_code=dept,
-            on_behalf_of_user=on_behalf,
-        )
     return store
 
 

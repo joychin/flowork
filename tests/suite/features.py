@@ -136,14 +136,11 @@ FEATURES: dict[str, tuple[str, ...]] = {
         "org.delete_protection",
         "org.scoped_role_resolution",
         "org.role_assign",
-        "org.agent_lifecycle",
-        "org.agent_credential",
         "org.is_member_groups",
         "org.snapshot",
         "org.manager_reroute",
         # —— 混用世界族与端口口径（2026-10-09 第十四轮）——
         "org.manager_of_parity",
-        "org.manager_of_agent_owner",
     ),
     "message": (
         "message.buffered_first",

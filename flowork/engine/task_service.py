@@ -95,7 +95,6 @@ class TaskService(
         comment: str = "",
         variables: dict[str, Any] | None = None,
         idempotency_key: str | None = None,
-        as_agent: bool = False,
     ) -> TaskCompleteResult:
         """同意并提交任务。
 
@@ -105,12 +104,9 @@ class TaskService(
             comment: 审批意见。
             variables: 本次提交的变量（合并进实例变量）。
             idempotency_key: 幂等键：重复提交同键返回首次结果，无副作用。
-            as_agent: 是否由 AI agent 代办（审计区分）。
         """
         result: TaskCompleteResult = self._engine.execute(
-            lambda ctx: self._complete(
-                ctx, task_id, actor, comment, variables, idempotency_key, as_agent
-            )
+            lambda ctx: self._complete(ctx, task_id, actor, comment, variables, idempotency_key)
         )
         return result
 
@@ -122,10 +118,9 @@ class TaskService(
         *,
         comment: str = "",
         variables: dict[str, Any] | None = None,
-        as_agent: bool = False,
     ) -> TaskCompleteResult:
         """同事务办理入口（供调度器等复合命令复用；不经 execute_command）。"""
-        return self._complete(ctx, task_id, actor, comment, variables, None, as_agent)
+        return self._complete(ctx, task_id, actor, comment, variables, None)
 
     # —— 内部 ——
 
@@ -137,7 +132,6 @@ class TaskService(
         comment: str,
         variables: dict[str, Any] | None,
         idempotency_key: str | None,
-        as_agent: bool,
     ) -> TaskCompleteResult:
         task = ctx.session.get(TaskRow, task_id)
         if task is None or task.state != "ready":
@@ -156,7 +150,6 @@ class TaskService(
         # 变量留痕归因：本命令内的变量变化（任务 output + 后续钩子写）记 task_output
         ctx.write_source = "task_output"
         ctx.write_actor = actor
-        ctx.write_as_agent = as_agent
         if instance.state == "suspended":
             raise TaskNotAvailableError("实例已挂起（Incident 待修复），不可办理")
         if instance.state == "paused":
@@ -191,7 +184,6 @@ class TaskService(
             outcome="agree",
             comment=comment,
             actor=actor,
-            as_agent=as_agent,
             idempotency_key=idempotency_key,
         )
         self._cancel_assist_tasks(ctx, task)  # 协办随主任务终态同事务收口（spec §5.1）

@@ -287,7 +287,6 @@ def _history(row: TaskHistoryRow) -> TaskHistoryInfo:
         outcome=row.outcome,
         comment=row.comment,
         acted_by=row.acted_by,
-        acted_as_agent=row.acted_as_agent,
         cause_token_id=row.cause_token_id,
         actor_context=dict(row.actor_context or {}),
     )

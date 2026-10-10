@@ -1,7 +1,7 @@
 # flowork API 参考（v0.2 · kernel-v2 P0/P1 后）
 
 > 入口：`ProcessEngine(config?)` → 四服务 `engine.repository / runtime / task / history` + `engine.jobs / engine.messages / engine.worker_jobs`。
-> 所有写操作带 `actor` 归因；AI 代办传 `as_agent=True`（审计区分）。
+> 所有写操作带 `actor` 归因（acted_by 落历史/流水，人/AI 一律裸 id——引擎不区分主体类型）。
 > **公开面纪律**：宿主/插件只准 `from flowork.api import …`（符号快照冻结）；内部深路径随时可变，不构成兼容承诺。
 
 ## 装配
@@ -42,7 +42,7 @@ engine.close()
 | `list_incidents(instance_id=None)` | Incident 列表（open/resolved） |
 | `resolve_incident(incident_id, action="resume"\|"cancel"\|"retry"\|"skip"\|"fail", actor="admin")` | 修复挂起实例（五动作：恢复/取消/重派 dead-letter Job/跳过节点推进/判失败） |
 | `move_token(token_id, target_activity, actor="admin") -> str` | 管理员令牌直移 |
-| `update_variables(instance_id, updates, *, actor, as_agent=False, reason="") -> dict` | 外部受控改值（PATCH 合并；白名单=声明∪input schema∪既有键、保留键拒、类型对位、≤256KB、终态拒；发 variables_updated） |
+| `update_variables(instance_id, updates, *, actor, reason="") -> dict` | 外部受控改值（PATCH 合并；白名单=声明∪input schema∪既有键、保留键拒、类型对位、≤256KB、终态拒；发 variables_updated） |
 | `variables_of(instance_id) -> dict` | 变量值全集（只读，含运行期键） |
 | `variable_history(instance_id, *, name=None, limit=50, offset=0)` | 变量血缘（改前/改后+写方归因，倒序；引擎与外部全写方留痕） |
 
@@ -52,8 +52,8 @@ engine.close()
 |---|---|
 | `list_tasks(*, instance_id=None, assignee=None, candidate=None, state="ready")` | 待办查询；`candidate`=我可认领的待办（候选关联含具体人/组引用；组按目录展开），`assignee=""` 显式筛未认领（候选池） |
 | `get_task(task_id)` | 单任务 |
-| `complete(task_id, actor, *, comment, variables, idempotency_key, as_agent)` | 同意提交（幂等） |
-| `reject(task_id, actor, *, comment, target=None, as_agent)` | 驳回回退（显式目标 > reject_target > 来源节点） |
+| `complete(task_id, actor, *, comment, variables, idempotency_key)` | 同意提交（幂等） |
+| `reject(task_id, actor, *, comment, target=None)` | 驳回回退（显式目标 > reject_target > 来源节点） |
 | `claim(task_id, user)` / `unclaim(task_id, user)` | 候选任务认领/取消认领 |
 | `transfer(task_id, to_user, actor, comment="")` | 转办 |
 | `assist(task_id, users, actor)` / `complete_assist(task_id, actor)` | 协办（不推进流程） |

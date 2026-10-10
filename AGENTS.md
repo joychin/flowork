@@ -450,3 +450,15 @@ integration.md 的 list_tasks/task claimable 行随 escalate 批先行入库。8
 ④ 配套：catalog docstring 补 candidates 位点、设计稿状态改「已实施」+三处实施修订、
 设计器标签改「候选用户(公式)」、字段 description 下发写法占位提示。875 测试全绿，
 五道门全过。
+
+**Agent 域整体移除（2026-10-10，spec v2.3 第十六+十七轮，提交 322b47c+后续）**：
+用户裁定「引擎对 agent 没有任何审核与治理的职能」——AI 与人行为同构，引擎不该也
+无法区分主体类型。第十六轮先删 `agent:` 前缀写法（主体统一裸 id）；第十七轮连根移除：
+① 目录 Agent 域全量（org_agent/org_agent_credential 两表、注册/状态机/凭证/owner、
+manager_of 的 agent→owner 特例——manager_of 回纯人语义）；② 引擎归因链（complete/
+reject/update_variables 的 as_agent 参数、两表 acted_as_agent 列、CLI --as-agent、
+variables_updated 事件字段）；③ 迁移 0004 删表删列（downgrade 不提供）；④ 测试净删
+17 例。**保留**：AI 仍是合法主体（裸 id 可作 assignee/候选人，领办与人同路）；user:
+前缀互认保留。**归因口径**：只有 acted_by 字符串——「这步是不是 AI 办的」不再是引擎
+可回答的问题，归宿主身份系统。engine-v1 01/02 的 Agent 身份与 agent_credential 设计
+随批废止（权限模型 L1 收为 user_token/api_key 两类）。858 测试全绿。

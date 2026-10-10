@@ -186,7 +186,6 @@ class TaskRecordsMixin:
         outcome: str,
         comment: str = "",
         actor: str = "system",
-        as_agent: bool = False,
         idempotency_key: str | None = None,
         cause_token_id: str | None = None,
     ) -> None:
@@ -214,7 +213,6 @@ class TaskRecordsMixin:
                 comment=comment,
                 context_payload=task.context_payload,
                 acted_by=actor,
-                acted_as_agent=as_agent,
                 idempotency_key=idempotency_key,
                 cause_token_id=cause_token_id,
                 cost_seconds=cost,

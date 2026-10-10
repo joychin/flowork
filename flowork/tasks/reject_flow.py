@@ -57,10 +57,9 @@ class RejectMixin:
         *,
         comment: str = "",
         target: str | None = None,
-        as_agent: bool = False,
     ) -> TaskCompleteResult:
         """同事务驳回入口（供调度器等复合命令复用）。"""
-        return self._reject(ctx, task_id, actor, comment, target, None, as_agent)
+        return self._reject(ctx, task_id, actor, comment, target, None)
 
     def reject(
         self,
@@ -70,11 +69,10 @@ class RejectMixin:
         comment: str = "",
         target: str | None = None,
         variables: dict[str, Any] | None = None,
-        as_agent: bool = False,
     ) -> TaskCompleteResult:
         """驳回任务：结束当前节点（否决出口）并回退到目标节点。"""
         return self._engine.execute(
-            lambda ctx: self._reject(ctx, task_id, actor, comment, target, variables, as_agent)
+            lambda ctx: self._reject(ctx, task_id, actor, comment, target, variables)
         )
 
     def _reject(
@@ -85,7 +83,6 @@ class RejectMixin:
         comment: str,
         target: str | None,
         variables: dict[str, Any] | None,
-        as_agent: bool,
     ) -> TaskCompleteResult:
         from flowork.definitions.builtin import UserTaskSpec
         from flowork.engine.kernel import RejectTargetMissing
@@ -102,7 +99,6 @@ class RejectMixin:
         # 变量留痕归因：驳回携带的 variables 与驳回复活路径写变量记 task_reject
         ctx.write_source = "task_reject"
         ctx.write_actor = actor
-        ctx.write_as_agent = as_agent
         if instance.state == "suspended":
             raise TaskNotAvailableError("实例已挂起（Incident 待修复），不可驳回")
         if instance.state == "paused":
@@ -121,9 +117,7 @@ class RejectMixin:
         token = ctx.session.get(_TokenRow, task.token_id)
         assert token is not None
         token.disapprove_count += 1
-        kernel.archive_task(
-            ctx.session, task, outcome="reject", comment=comment, actor=actor, as_agent=as_agent
-        )
+        kernel.archive_task(ctx.session, task, outcome="reject", comment=comment, actor=actor)
         self._cancel_assist_tasks(ctx, task)  # 协办随主任务终态同事务收口（spec §5.1）
         kernel.record_event(
             DomainEvent.TASK_REJECTED,

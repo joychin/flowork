@@ -36,7 +36,6 @@ class VariableChangeInfo:
     new_value: Any
     source: str
     acted_by: str | None
-    acted_as_agent: bool
     created_at: str
 
 
@@ -89,7 +88,6 @@ class VariableActionsMixin:
         updates: dict[str, Any],
         *,
         actor: str,
-        as_agent: bool = False,
         reason: str = "",
     ) -> dict[str, Any]:
         """外部受控改值（PATCH 合并写，不提供删键）。返回更新后的变量全集。
@@ -110,7 +108,6 @@ class VariableActionsMixin:
             ctx.touch(instance)
             ctx.write_source = "external_update"
             ctx.write_actor = actor
-            ctx.write_as_agent = as_agent
             ctx.write_reason = reason or None
             instance.variables.update(updates)
             return dict(instance.variables)
@@ -151,7 +148,6 @@ class VariableActionsMixin:
                     new_value=row.new_value,
                     source=row.source,
                     acted_by=row.acted_by,
-                    acted_as_agent=row.acted_as_agent,
                     created_at=str(row.created_at),
                 )
                 for row in rows

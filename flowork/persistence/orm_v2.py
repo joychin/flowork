@@ -108,7 +108,6 @@ class VariableHistoryRow(Base):
     new_value: Mapped[Any] = mapped_column(JSON, nullable=True)
     source: Mapped[str] = mapped_column(String(32), default="engine")
     acted_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    acted_as_agent: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
 

@@ -221,12 +221,8 @@ class DeadlineStrategiesMixin:
         """对在办任务执行策略（任务不存在由调用方跳过）。"""
         task = self._engine.task
         if strategy == "auto_approve":
-            task.complete_in_ctx(
-                ctx, task_id, actor="system:timeout", comment="超时自动通过", as_agent=True
-            )
+            task.complete_in_ctx(ctx, task_id, actor="system:timeout", comment="超时自动通过")
         elif strategy == "auto_reject":
-            task.reject_in_ctx(
-                ctx, task_id, actor="system:timeout", comment="超时自动驳回", as_agent=True
-            )
+            task.reject_in_ctx(ctx, task_id, actor="system:timeout", comment="超时自动驳回")
         else:  # pragma: no cover - 配置兜底
             raise ValueError(f"未知超时策略：{strategy}")

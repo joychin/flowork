@@ -45,7 +45,6 @@ class CommandContext:
     variable_before: dict[str, dict[str, Any]] = field(default_factory=dict)
     write_source: str = "engine"
     write_actor: str | None = None
-    write_as_agent: bool = False
     write_reason: str | None = None
     # v2.3 A10：模拟实例的事件静默（record_event 直通丢弃——不投 outbox，
     # 杜绝订阅方对试跑做出真实反应；route_decision 行不受影响=报告数据源）
@@ -124,7 +123,6 @@ def _sync_variable_history(ctx: CommandContext) -> None:
                     new_value=new,
                     source=ctx.write_source,
                     acted_by=ctx.write_actor,
-                    acted_as_agent=ctx.write_as_agent,
                 )
             )
             changes.append({"name": name, "old": old, "new": new})
@@ -134,7 +132,6 @@ def _sync_variable_history(ctx: CommandContext) -> None:
                     DomainEvent.VARIABLES_UPDATED,
                     {
                         "actor": ctx.write_actor,
-                        "as_agent": ctx.write_as_agent,
                         "reason": ctx.write_reason,
                         "changes": changes,
                     },

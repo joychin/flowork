@@ -1,4 +1,4 @@
-"""能力域①组织架构：目录 CRUD/守卫、范围化角色解析、Agent 身份、引擎接缝。"""
+"""能力域①组织架构：目录 CRUD/守卫、范围化角色解析、引擎接缝。"""
 
 from __future__ import annotations
 
@@ -113,50 +113,9 @@ def test_manager_of_parity_between_materializations(
     assert org_store.manager_of("org:rd_be") == "u_lead_be" == static_org.manager_of("org:rd_be")
     assert org_store.manager_of("org:nope") is None
     assert org_store.manager_of("u_nobody") is None
-    assert org_store.manager_of("agent:u_dev_wu") is None  # 旧前缀写法：零兼容
+    # agent: 写法零兼容删除（第十六轮）+ AI 域整体移除（第十七轮）：主体查无
+    assert org_store.manager_of("agent:u_dev_wu") is None
     assert static_org.manager_of("agent:u_dev_wu") is None
-
-
-@covers("org.manager_of_agent_owner")
-def test_manager_of_resolves_agent_to_owner(org_store: DirectoryStore) -> None:
-    """AI 代理的 id → 负责人（单跳）：问责链 root，不再返回 None。
-
-    单跳不递归——「owner → 所属部门主管 → 上级」是宿主策略，由宿主词汇组合。
-    `agent:` 写法零兼容删除（2026-10-10 第十六轮）：旧写法查无返回 None，
-    不剥离、不静默认。
-    """
-    assert org_store.manager_of("ag_expense_bot") == "u_cash"  # owner（裸 id）
-    assert org_store.manager_of("agent:ag_expense_bot") is None  # 旧前缀写法已删
-    assert org_store.manager_of("ghost_bot") is None  # 查无 agent
-
-
-# —— Agent 一等身份 ——
-
-
-@covers("org.agent_lifecycle")
-def test_agent_status_transitions(org_store: DirectoryStore) -> None:
-    assert org_store.agent_info("ag_expense_bot").status == "trial"
-    org_store.activate_agent("ag_expense_bot")
-    assert org_store.agent_info("ag_expense_bot").status == "active"
-    org_store.suspend_agent("ag_expense_bot")
-    assert org_store.agent_info("ag_expense_bot").status == "suspended"
-    org_store.resume_agent("ag_expense_bot")
-    assert org_store.agent_info("ag_expense_bot").status == "active"
-    assert org_store.agent_owner("ag_expense_bot") == "u_cash"  # 问责链
-
-
-@covers("org.agent_credential")
-def test_agent_credential_issue_verify_revoke(org_store: DirectoryStore) -> None:
-    org_store.suspend_agent("ag_expense_bot")
-    with pytest.raises(DirectoryError, match="不可签发"):
-        org_store.issue_credential("ag_expense_bot")
-    org_store.resume_agent("ag_expense_bot")
-
-    token = org_store.issue_credential("ag_expense_bot")
-    assert org_store.verify_credential(token) == "ag_expense_bot"
-    assert org_store.verify_credential("fwac-invalid-secret") is None  # 不泄露原因
-    org_store.revoke_credential(token)
-    assert org_store.verify_credential(token) is None
 
 
 # —— 引擎接缝：目录事实驱动真实流程 ——

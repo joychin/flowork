@@ -42,10 +42,10 @@ v2 扩展面（`flowork/persistence/orm_v2.py`）：
 | wf_route_decision | 路由决策审计（逐条件边 result、selected、求值快照） |
 
 目录表（M-A，`flowork/directory/orm.py`）：org_unit / org_user / org_role /
-org_role_assignment / org_agent / org_agent_credential / org_delegation（审批委托，
-窗口式单跳替换）/ org_directory_audit（目录写审计，追加只写：action/entity/
-detail/acted_by）。目录读面带进程内缓存（写操作全清失效）；admins＝org_role
-的 admin 档持有人（to_admins 兜底名单同源）。
+org_role_assignment / org_delegation（审批委托，窗口式单跳替换）/ org_directory_audit
+（目录写审计，追加只写：action/entity/detail/acted_by；Agent 身份两表已于 2026-10-10
+第十七轮移除——引擎对 AI 无治理职能，主体一律裸 id）。目录读面带进程内缓存（写操作
+全清失效）；admins＝org_role 的 admin 档持有人（to_admins 兜底名单同源）。
 
 ## 库迁移（Alembic）
 
@@ -139,9 +139,10 @@ FLOWORK_TEST_PG_URL=postgresql+psycopg://... uv run pytest -m needs_postgres   #
 - **HTTP 服务**：`flowork/contrib/web`（插件位）已上线设计器面（定义草稿/校验/发布/试算，前缀 `/api`）；
   实例/任务/搜索 REST 面随 kernel-v2 §12（`/v2`）落地，四服务方法即路由一一映射。
 - **消息推送**：订阅 `wf_event_outbox`（CloudEvents 信封，按 id 幂等；
-  `flowork.events.consumer.IdempotentSink` 为参考实现；`EngineConfig.notifier` 端口保留给宿主定制）。
+  `flowork.events.consumer.IdempotentSink` 为参考实现；事件即内核原生通知面，无独立 notifier 端口）。
 - **AI（MCP）**：MCP 工具面随 M7 落地（18 个工具，清单见 kernel-v2 spec §13）；
-  当期已落实：全 typed、双语 docstring、幂等键、行动提示式返回、actor 区分人/agent。
+  当期已落实：全 typed、双语 docstring、幂等键、行动提示式返回；AI 与人共用同一
+  待办/办理面（引擎不区分主体类型，2026-10-10 第十七轮）。
 - **UI 设计器**：`designer/`（React Flow）已可用——Spec 唯一事实源、schema 驱动表单、
   校验闭环；任务页/Console 随产品 v1 M-C。
 - **组织系统**：替换 `EngineConfig.org`（实现 `OrgDirectory` 同形接口或适配现有库；

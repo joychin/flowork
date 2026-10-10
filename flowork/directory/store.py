@@ -16,7 +16,6 @@ from sqlalchemy import select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from flowork.directory.agents import AgentDirectoryMixin
 from flowork.directory.audit import record_audit
 from flowork.directory.common import DirectoryError, _validate_code
 from flowork.directory.delegation import DelegationDirectoryMixin
@@ -45,7 +44,7 @@ class UserInfo:
     status: str
 
 
-class DirectoryStore(ReadDirectoryMixin, AgentDirectoryMixin, DelegationDirectoryMixin):
+class DirectoryStore(ReadDirectoryMixin, DelegationDirectoryMixin):
     """DB 版组织目录：写操作短事务（审计+缓存失效），读操作满足 OrgDirectoryLike。
 
     RoleDirectoryMixin 经 ReadDirectoryMixin 继承（读面包裹入缓存）。

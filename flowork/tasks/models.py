@@ -37,7 +37,6 @@ class TaskHistoryInfo(TaskInfo):
     outcome: str = ""
     comment: str = ""
     acted_by: str = ""
-    acted_as_agent: bool = False
     cause_token_id: str | None = None
     actor_context: dict[str, Any] = {}  # v2.1 身份快照（spec §5.6）
 

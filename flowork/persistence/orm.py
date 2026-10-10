@@ -169,7 +169,6 @@ class TaskHistoryRow(Base):
     context_payload: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     cause_token_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     acted_by: Mapped[str] = mapped_column(String(64))
-    acted_as_agent: Mapped[bool] = mapped_column(Boolean, default=False)
     idempotency_key: Mapped[str | None] = mapped_column(String(100), nullable=True)
     cost_seconds: Mapped[float] = mapped_column(Float, default=0.0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)

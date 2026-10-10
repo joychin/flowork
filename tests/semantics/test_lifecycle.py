@@ -106,12 +106,12 @@ def test_double_complete_without_key_raises(engine: ProcessEngine):
 
 
 def test_actor_attribution(engine: ProcessEngine):
-    """actor 归因：人与 agent 在历史中可区分。"""
+    """actor 归因：办理人字符串（人/AI 一律裸 id）原样落历史。"""
     instance_id = engine.runtime.start_process("simple_approval", start_user="u_zhang")
     task = engine.task.list_tasks(instance_id=instance_id)[0]
-    engine.task.complete(task.id, actor="bot-001", as_agent=True, comment="AI 预审通过")
+    engine.task.complete(task.id, actor="bot-001", comment="AI 预审通过")
     history = engine.history.task_history(instance_id)[0]
-    assert history.acted_by == "bot-001" and history.acted_as_agent is True
+    assert history.acted_by == "bot-001"
 
 
 def test_variables_merge_on_complete(engine: ProcessEngine):

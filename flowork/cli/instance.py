@@ -52,15 +52,12 @@ def vars_set(
     db: str = DbOption,
     actor: str = typer.Option(..., "--as", help="操作者（归因必填，写留痕与事件）"),
     reason: str = typer.Option("", "--reason", help="改值原因（入 variables_updated 事件）"),
-    as_agent: bool = typer.Option(False, "--as-agent", help="以 agent 身份归因"),
 ) -> None:
     """外部受控改值（PATCH 合并；白名单/类型/终态三门槛，越线拒收）。"""
     updates = _parse_assignments(assignments)
     engine = ProcessEngine(EngineConfig(db_file=db))
     try:
-        result = engine.runtime.update_variables(
-            instance_id, updates, actor=actor, as_agent=as_agent, reason=reason
-        )
+        result = engine.runtime.update_variables(instance_id, updates, actor=actor, reason=reason)
         console.print(f"[green]✓[/green] 已更新：{', '.join(sorted(updates))}（操作者 {actor}）")
         console.print_json(json.dumps(result, ensure_ascii=False, default=str))
     except FloworkError as exc:

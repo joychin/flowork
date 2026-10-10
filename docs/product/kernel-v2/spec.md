@@ -263,7 +263,7 @@ node_registry.register("http_request", HttpRequestSpec, HttpRequestBehavior,
 | wf_process_instance 流程实例 | id；definition_code；definition_version【v2→major+revision】；**definition_snapshot**（发起时图纸全文抄本，不可变——快照原则的实现）；business_key（业务单号，仅查询用）；state（running；【v2】扩 paused/terminated）；start_user；variables（JSON）；parent_id/parent_token_id（作为子流程时的父指针）；deadline_at【v2.2】（实例时限到期时刻，图纸顶层 deadline 按自然分钟折算后物化——WorkCalendar 已删，见 §9）；simulated【v2.3 第十二批 A10】（模拟实例标记：试跑不建任务/传阅/Job、事件不投 outbox、查询面默认隔离）；version（乐观锁）；started_at/finished_at/updated_at | 一次流程运转的全部持久状态 |
 | wf_token 令牌 | id；instance_id；token_no（实例内自增）；activity_code（当前在哪个节点）；source_activity_code（从哪来）；state（unfinished/finished）；item_count/approve_count/disapprove_count（会签 应办/同意/驳回计数）；approval_exit（会签出口判定结果）；reject_flag（驳回产生的令牌）；manual_participants（人工调整的参与人）；created_at/finished_at | 「走到哪了」的记号；会签计数在此不在任务上 |
 | wf_task 人工任务（活表） | id；instance_id；token_id；activity_code；name；assignee；task_type（approval/assist）；state（ready/completed/cancelled）；context_payload（审批卡片数据，AI 预审共用）；root_task_id（加签/委派链，指回原任务）；【v2】priority/due_at；created_at | 还没办完的人工任务 |
-| wf_task_history 已办（只插入不改） | 同上 + task_id；outcome（agree/reject/transfer/auto_pass/withdrawn/assist/assist_cancel【v2.3：协办交还与随主任务收口】/cancelled/simulated 预留）；comment；acted_by；**acted_as_agent**（是否 AI 代理代办）；**idempotency_key**（完成幂等）；**actor_context**（身份快照 JSON 袋，完成事务内定格，见 5.6）【v2.1】；cause_token_id（驳回复活的关联）；cost_seconds（耗时）；created_at | 审计的唯一真相，append-only |
+| wf_task_history 已办（只插入不改） | 同上 + task_id；outcome（agree/reject/transfer/auto_pass/withdrawn/assist/assist_cancel【v2.3：协办交还与随主任务收口】/cancelled/simulated 预留）；comment；acted_by；**idempotency_key**（完成幂等）；**actor_context**（身份快照 JSON 袋，完成事务内定格，见 5.6）【v2.1】；cause_token_id（驳回复活的关联）；cost_seconds（耗时）；created_at | 审计的唯一真相，append-only |
 | wf_job 系统任务 | id；job_type（timer/async）；state（scheduled/…/dead-letter 分级）；run_at；retry_count/max_retries（默认 3）；instance_id；payload；result_payload；last_error；【v2】worker_id/lease_until/next_retry_at | 定时与异步执行；重试与死信状态机在此 |
 | wf_incident 故障单 | id；instance_id；message；error_class；state（open/resolved）；resolution（resume/cancel，【v2】扩 retry/skip/fail）；created_at/resolved_at | 系统自己搞不定的错误 |
 | wf_event_outbox 事件流水 | id（UUID）；event_name；instance_id；payload；occurred_at | 与业务变更同事务写入 |
@@ -382,7 +382,7 @@ git 里的 YAML/JSON 文件      ← 编辑态事实来源：人和 AI 只改这
 - 形态依据：WS-HumanTask 1.0（OASIS，jBPM 完整实现）即「多 deadline 各挂 escalation（notification / reassignment）」；对标产品 的 timeoutWarning1..5 是其劣化实现（预警水位写死五个字段）。Camunda 7/Flowable 无内建人工任务升级（要边界定时器＋监听器自搭），flowork 直接取标准形态。
 - 实例级时限是**另一个字段**（图纸顶层 `deadline`，第 7 章），不混在任务 deadlines 里。
 
-**AI 的位置**：assignee 可以是 AI 代理的 id（写法与用户 id 相同，裸 id，如 `bot1`【v2.3 第十六轮：`agent:` 写法删除】）；人也可以让 AI 代点（历史行 acted_as_agent=true 记账 ✓）。谁有权限点，属权限插件（M9），内核只记事实。
+**AI 的位置**：assignee 可以是任何主体（人/AI/外部系统），一律裸 id 字符串——引擎不区分、不记录主体类型（是不是 AI 归宿主身份系统）。AI 领待办/办理/驳回与人同一条路；引擎与目录不提供任何 AI 专属设施（身份表/凭证/状态机/问责链均不设）【v2.3 第十七轮：Agent 域整体移除】。谁有权限点，属权限插件（M9），内核只记事实。
 
 ### 5.2 系统任务（service_task）
 
@@ -419,7 +419,7 @@ git 里的 YAML/JSON 文件      ← 编辑态事实来源：人和 AI 只改这
 
 因此混写（同一人在不同字段一半带前缀一半不带）在互认路径上看着正常、在不互认路径上静默错过（如发起人自动通过失效）。**推荐一律裸 id**；要全库归一需在引擎各比较点统一走 `person_key`，属独立批次。
 
-（此前 §5.4 曾要求人字段也带 `user:` 前缀，但引擎多数路径从不解析它——两个目录实现当时一个认一个不认，是一句引擎不兑现的承诺。前缀的实际价值在组引用：它是类型标签。人是不是 agent 走 `acted_as_agent` 标志与宿主目录，不走字符串装饰。）
+（此前 §5.4 曾要求人字段也带 `user:` 前缀，但引擎多数路径从不解析它——两个目录实现当时一个认一个不认，是一句引擎不兑现的承诺。前缀的实际价值在组引用：它是类型标签。人是不是 AI 由宿主目录决定，不走字符串装饰，引擎也不记录该事实【第十七轮：acted_as_agent 标志已随 Agent 域移除】。）
 
 内核**不存**用户表、不校验人是否存在（对齐 C7 IdentityService 惯例）；表达式里的取人由宿主注册的函数完成（5.5），引擎需要的「人↔组」关系判断走 OrgDirectory 端口（第 9 章）。
 
@@ -457,7 +457,7 @@ register("finance_path", fn, params=[],           returns="groups")
 register("approvers_of", fn, params=["one_user"], returns="mixed")
 ```
 
-**`flowork.contrib` 便利包**（可选，一行挂上，纯基于 OrgDirectory 端口实现）：`manager_of(one_user)→one_user`（返回其上级；吃 `org:` 返回部门负责人——数据由宿主目录自定；吃 `role:` 设计期报错；**agent 主体 → owner**）、`users_with_role(string)→users`、`has_role(one_user, string)→bool`。部门类词汇（org_of、dept_leader 等）的数据源无端口支撑，不进 contrib，由宿主注册。
+**`flowork.contrib` 便利包**（可选，一行挂上，纯基于 OrgDirectory 端口实现）：`manager_of(one_user)→one_user`（返回其上级；吃 `org:` 返回部门负责人——数据由宿主目录自定；吃 `role:` 设计期报错）、`users_with_role(string)→users`、`has_role(one_user, string)→bool`。部门类词汇（org_of、dept_leader 等）的数据源无端口支撑，不进 contrib，由宿主注册。
 
 | 使用位置 | 接受的返回 | 引擎行为 |
 |---|---|---|
@@ -492,7 +492,7 @@ register("approvers_of", fn, params=["one_user"], returns="mixed")
 - 任务完成的**事务内**（complete/reject/transfer/auto_pass 等所有动作），引擎调 `OrgDirectory.snapshot(subject)`，把返回 dict **原样**存进 `wf_task_history.actor_context`（JSON 袋，上限 4KB，超限拒收）；内核不解析、不校验、不理解内容。
 - 默认实现返回 `{}`（裸跑/单测不受影响）；想要完整审计的宿主自行实现，存什么、存多细是宿主的审计策略（如 `{"dept", "title", "roles"}`）。
 - 必须在完成事务内定格：事后补录存在时间窗口，组织一变补出来的就是错的；history 本来就 append-only，写入即不可篡改。
-- AI 代办（acted_as_agent=true）照常定格**人**的上下文，代理事实由既有列另行记录。
+- 归因只有一条：`acted_by` 记实际操作者字符串（人/AI 一律裸 id，引擎不区分）。
 
 **可选加强（记下不做）**：身份快照解决「他是谁」，审计有时还要「**为什么是他**」——assignee＝`manager_of(张三)` 定格成李四，一年后上级已换成王五。同款机制可在节点解析参与人时把解析依据（当时的上下级关系）一并定格，成本略高，待真实需求出现再做。
 
@@ -632,7 +632,7 @@ class EventSink(Protocol):               # ✗ 事件外发（默认=outbox 轮�
 | 组 | 方法 | 现状 |
 |---|---|---|
 | 定义 | `deploy / validate / dry_run / semantic_diff / verdict(预演) / get_definition / list_definitions / retire / purge / definition_drift` | ✓ 全部（P0-4/P1-6；get_definition 参数为 code/major/revision） |
-| 实例 | `start_process(code, variables, start_user, business_key?, major?, revision?, idempotency_key?, reuse?)`；`pause / resume / terminate / get_instance`；`update_variables(instance_id, updates, *, actor, as_agent?, reason?)` / `variables_of(instance_id)` / `variable_history(instance_id, *, name?, limit, offset?)`【变量 I/O 批，2026-10-08】；**`simulate`【v2.3 第十二批 A10】（整图试跑→SimulationReport：条件边真求值、service_task 恒 stub、wait 冻结为卡点、事件不投 outbox、报告复用路由审计）** | ✓ 全部（幂等三策略 P0-5；pause/resume/terminate P1-3；分页为 offset 式非游标） |
+| 实例 | `start_process(code, variables, start_user, business_key?, major?, revision?, idempotency_key?, reuse?)`；`pause / resume / terminate / get_instance`；`update_variables(instance_id, updates, *, actor, reason?)` / `variables_of(instance_id)` / `variable_history(instance_id, *, name?, limit, offset?)`【变量 I/O 批，2026-10-08】；**`simulate`【v2.3 第十二批 A10】（整图试跑→SimulationReport：条件边真求值、service_task 恒 stub、wait 冻结为卡点、事件不投 outbox、报告复用路由审计）** | ✓ 全部（幂等三策略 P0-5；pause/resume/terminate P1-3；分页为 offset 式非游标） |
 | 任务 | `get_task / list_tasks / claim / unclaim / complete / reject / transfer / assist / complete_assist / add_countersigner / list_cc_tasks / mark_cc_read`；`anticipate(task_id, outcome) → {node_exit, instance_complete}` | ✓ 全部（anticipate 只读预判，P1） |
 | 系统 | `signal / publish_message`【v2】；`activate_jobs / complete_job / fail_job`【v2】；`list_incidents / resolve_incident / move_token` | ✓ 全部（消息 P1-1；worker 租约 P1-2；resolve 五动作 P1-4） |
 
@@ -670,7 +670,7 @@ class EventSink(Protocol):               # ✗ 事件外发（默认=outbox 轮�
 | wf_message_buffer（新表） | name, correlation_key, message_id（唯一）, payload, expires_at, received_at |
 | wf_message_subscription（新表） | instance_id, node_id, name, correlation_key, state(open/matched) |
 | wf_variable_index（新表） | instance_id, name, value_text, value_num |
-| wf_variable_history（新表，变量 I/O 批 2026-10-08） | instance_id, name, old_value, new_value, source, acted_by, acted_as_agent, created_at；追加只写，全写方覆盖（任务提交/钩子/外部命令），命令尾 diff 产生，值相等跳过 |
+| wf_variable_history（新表，变量 I/O 批 2026-10-08） | instance_id, name, old_value, new_value, source, acted_by, created_at；追加只写，全写方覆盖（任务提交/钩子/外部命令），命令尾 diff 产生，值相等跳过 |
 
 迁移走 Alembic 基线（与多副本欠账合并排期）。
 
@@ -870,6 +870,14 @@ Zeebe inputCollection/outputCollection 契约实装（multi-instance-call-design
 2. **零兼容**：`agent:{id}` 写法（含存量图纸）不再被解析——`manager_of("agent:x")` 人表、agent 表都查无返回 None；escalate 位这样写会在 fire 时出故障单（可见错误，不静默）。
 3. **保留**：Agent 一等身份（目录 AgentRow/凭证/状态机/owner 问责）与「AI 可作 assignee」能力原样；`user:` 前缀互认保留（§5.4）。
 
+### 第十七轮（2026-10-10，v2.3 续，Agent 域整体移除——引擎对 AI 无治理职能）
+
+来源：用户裁定「对 agent 本身没有任何审核与治理的职能」（2026-10-10，承第十六轮的进一步收缩；推翻第十六轮第 3 条「保留 Agent 一等身份」）。判断依据：AI 与人在行为上无法区分（同一待办通道、同一办理 API），引擎不该也无法区分主体类型；AI 的身份、凭证、问责、治理一律归宿主身份系统。
+
+1. **删除范围**：① 目录 Agent 域全量——org_agent/org_agent_credential 两表、注册/状态机（trial-active-suspended）/凭证签发吊销校验/owner 查询、manager_of 的「找不到人按 agent 找 owner」特例（manager_of 回到纯人语义：人→部门主管、`org:`→部门负责人、查无 None）；② 引擎归因链——complete/reject/update_variables 的 as_agent 参数、wf_task_history 与 wf_variable_history 的 acted_as_agent 布尔列、CLI --as-agent、variables_updated 事件的 as_agent 字段、TaskHistoryInfo/VariableChangeInfo 字段、CommandContext.write_as_agent；③ 迁移 0004 删表删列（幂等，downgrade 不提供）；④ 测试净删 17 例（agent 生命周期/凭证/owner 升级/AI 快照定格），覆盖矩阵 org.agent_* 条目同步。
+2. **保留**：「AI 可作 assignee」能力不变——AI 是普通主体（裸 id 字符串），领待办/办理/驳回/候选认领与人同一条路。超时自动办的 actor=system:timeout 语义不变（原 as_agent=True 实为「系统代办」的混用，随删一并澄清）。`user:` 前缀互认保留（§5.4）。
+3. **归因口径**：历史与变量流水的归因＝acted_by 字符串（谁就是谁）；「这一步是不是 AI 办的」不再是引擎可回答的问题——宿主如需人机区分，自管主体命名空间或外挂审计映射。engine-v1 01/02 的 Agent 身份与 agent_credential 设计随批废止（权限模型 L1 收为 user_token/api_key 两类，AI 经宿主凭证以普通 principal 接入）。
+
 ## 附录 C：类型清单（须提前定义的全集）
 
 原则：**跨边界的类型提前定，业务语义类型不进内核**（Money/TicketPriority 之类由插件用 JSON Schema format 扩展表达）。五条边界：图纸↔引擎、表达式↔变量、函数↔校验器、API/事件↔外部、数据库↔代码。
@@ -911,7 +919,7 @@ Subject：人字段＝**裸 id**（`u_zhang` / `bot1`，引擎不解析前缀）
 | prev_task | 上一站已完成任务快照 {assignee, outcome, comment, finished_at, used_time}（条件+取人位；查无不注入，F2；used_time 为自然时长口径——暂停剔除待定） |
 | node("code") | 引擎注入函数 → 平铺 {assignee, outcome, comment, finished_at, used_time, runs, skipped, item_count, approve_count, disapprove_count}（runs=已结束轮数；票数取最近轮令牌三计数；查无＝固定形状：人物 null 计数 0，F2） |
 
-contrib 签名（便利包，可选，纯基于 OrgDirectory 端口实现）：`manager_of(one_user)→one_user`（返回其上级；吃 `org:` 返回部门负责人；吃 `role:` 设计期报错；**agent 主体 → owner**）、`users_with_role(string)→users`、`has_role(one_user, string)→bool`。部门类词汇（org_of 等）数据源无端口支撑，由宿主注册。自定义函数注册必须带全签名（参数＋返回，词汇表见 5.5）；内核注册表出厂为空。词汇目录（标识符＋函数，含中文 label 与位点）权威在 `expr/catalog.py`。
+contrib 签名（便利包，可选，纯基于 OrgDirectory 端口实现）：`manager_of(one_user)→one_user`（返回其上级；吃 `org:` 返回部门负责人；吃 `role:` 设计期报错）、`users_with_role(string)→users`、`has_role(one_user, string)→bool`。部门类词汇（org_of 等）数据源无端口支撑，由宿主注册。自定义函数注册必须带全签名（参数＋返回，词汇表见 5.5）；内核注册表出厂为空。词汇目录（标识符＋函数，含中文 label 与位点）权威在 `expr/catalog.py`。
 
 ### C.5 词法与单位规则【v2 定义】
 
