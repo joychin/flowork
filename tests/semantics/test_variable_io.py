@@ -124,11 +124,15 @@ def test_reject_oversized_updates(engine: ProcessEngine):
 # —— 状态门槛与幂等 ————————————————————————————————————————
 
 
-def test_terminal_state_rejected_paused_allowed(engine: ProcessEngine):
+def test_terminal_rejected_and_paused_frozen(engine: ProcessEngine):
+    """终态拒写（既有）；暂停＝冻结快照同样拒写（v2.3 第二十轮·审计 D2）——
+    修数据路径＝resume → 改 → 再 pause。"""
     instance_id = start(engine)
     engine.runtime.pause_process(instance_id, actor="u_s")
-    engine.runtime.update_variables(instance_id, {"amount": 200}, actor="u_api")  # 暂停可改
+    with pytest.raises(InstanceNotFoundError, match="冻结快照"):
+        engine.runtime.update_variables(instance_id, {"amount": 200}, actor="u_api")
     engine.runtime.resume_process(instance_id, actor="u_s")
+    engine.runtime.update_variables(instance_id, {"amount": 200}, actor="u_api")  # 恢复后可改
 
     task = engine.task.list_tasks(instance_id=instance_id)[0]
     engine.task.complete(task.id, actor="u_a")  # 流程走完 → 终态

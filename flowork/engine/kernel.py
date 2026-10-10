@@ -115,6 +115,14 @@ class Kernel(TaskRecordsMixin, TokenRecordsMixin):
     def complete_instance(
         self, session: Session, instance: ProcessInstanceRow, end_status: str
     ) -> None:
+        if instance.state == "paused" and end_status == "completed":
+            # 暂停不可直接「完成」（审计 D2：终态跃迁只从运行态走——清档请 resume
+            # 或改用 cancel；cancel/terminate 不拦，级联砍树对暂停子照常结算）
+            from flowork.errors import TaskNotAvailableError
+
+            raise TaskNotAvailableError(
+                "实例已暂停，不可直接完成——先 resume 或改用 cancel（spec §7 第二十轮）"
+            )
         if instance.state in ("running", "suspended", "paused"):
             instance.state = end_status
             instance.finished_at = self.config.now()

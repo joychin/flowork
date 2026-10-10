@@ -557,6 +557,8 @@ CRUD：新增与更新＝同一操作 `deploy`——**纯数据写入（INSERT �
 
 **终止/取消＝砍树（子树级联）【v2.3 第十五轮】**：`terminate` / `cancel` 与实例时限的 cancel/terminate 策略都是**整树动作**——父实例进入终态时，未结算子实例（含暂停/挂起中的）递归同置终态，待办撤销落历史（outcome=cancelled）；已结算子不动。顺序契约：先把树内全部未完令牌撤光、再逐实例落终态（子先父后）——`resume_parent_if_waiting` 只在父令牌仍 unfinished 时推进，先撤令牌保证子终态不误唤醒中间层。事件：父终态事件携带 `cascaded_instances` 清单，每个级联子发同款终态事件并带 `cascade_from` 溯源。多实例提前收工（§8.3 completion 命中终止剩余 running 子）**不走此语义**——那是完成侧的「提前下班」，paused/suspended 子属管理员域不动；管理员砍树不豁免暂停子（对齐 Camunda/Zeebe 子树终止，行业标配）。
 
+**暂停的拦截范围【v2.3 第二十轮，初学者问答审计 D2】**：暂停＝冻结。拦截清单——任务动作面（办理/驳回/认领/转办等）、消息消费与定时器触发（冻结期间不推进）、外部变量写（`update_variables` 拒，冻结快照取证语义；修数据路径＝resume → 改 → 再 pause）、完成跃迁（`finish_instance` 与 `move_token` 到 end 均拒——终态只从运行态走，清档请 resume 或改用 cancel）。**管理员手术明文允许**：activate_node / cancel_node / move_token（到中间节点）在暂停实例上照常可用且不改变暂停态（处置冻结实例的运维通道）；cancel/terminate 不拦（砍树对暂停子照常结算）。
+
 ### 7.1 start_on_message：消息启动实例【v2 新增，2026-10-09 定稿】
 
 定义顶层声明 `start_on_message: [{name, correlation_key?, input_mappings?, start_user?, business_key?}]`（列表可多条，常见一条）——**启动订阅＝定义派生**：published 定义即生效、retire 即失效，不落订阅表（部署动作天然增删订阅，零表结构变更）。

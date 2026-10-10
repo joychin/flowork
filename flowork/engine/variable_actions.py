@@ -104,6 +104,13 @@ class VariableActionsMixin:
                 raise InstanceNotFoundError(
                     f"实例已终态（{instance.state}），不可外部更新变量：{instance_id}"
                 )
+            if instance.state == "paused":
+                # 暂停＝冻结快照（审计 D2，spec §7 第二十轮）：取证期间不可写；
+                # 修数据路径＝resume → 改 → 再 pause
+                raise InstanceNotFoundError(
+                    f"实例已暂停（冻结快照），不可外部更新变量：{instance_id}"
+                    "——先 resume 再改，改完可再 pause"
+                )
             _validate_external_updates(instance, updates)
             ctx.touch(instance)
             ctx.write_source = "external_update"
