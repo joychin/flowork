@@ -151,6 +151,7 @@ class RejectMixin:
             start_user=instance.start_user,
             functions=expression_functions_of(self._engine.config),
             instance=instance_facts(instance),
+            now=self._engine.config.now(),  # 第十五轮时钟统一：与办理侧出口同一时钟
         )
         if not exit_hit:
             from flowork.engine.context import RuntimeNodeContext

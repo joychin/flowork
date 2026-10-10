@@ -404,7 +404,8 @@ builder extra 袋 dict 归一 _mi_config。测试 11 例；范围内 766 全绿�
 消息 correlation 两处）不传 now（expression_context 缺省墙钟）+ worker Job 三处（create run_at/
 领活租约/失败退避）直用 utc_now：FakeClock 下被测对象与测试时钟不同源（route_audit 挂账
 「审计时刻与任务时刻不一致」同根）。修复＝evaluation_variables/resolve_subjects/exit_reached
-增 now 参数、十三调用点显式穿针 config.now（缺省墙钟保留给无引擎装配面：dry-run/web 试算）；
+增 now 参数、十四调用点显式穿针 config.now（含 Review 补漏的驳回侧 disapprove_exit；
+缺省墙钟保留给无引擎装配面：dry-run/web 试算）；
 test_clock_unification.py 八位点「假钟阈值」判例（实施前 8/8 红）。② 终止/取消＝砍树——
 terminate/cancel/实例时限 cancel/terminate 三入口共用 terminate_cascade：整树撤未完令牌→
 未结算子实例（含暂停/挂起中）子先父后落终态（顺序契约：先撤光令牌再 complete，子终态不误

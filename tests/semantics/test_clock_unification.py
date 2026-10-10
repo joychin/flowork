@@ -126,6 +126,43 @@ def test_assignee_expression_follows_engine_clock():
 # —— 会签出口位 ——
 
 
+def test_reject_side_exit_follows_engine_clock():
+    """驳回复活路径的 disapprove_exit 也走引擎时钟（Review 补漏：reject_flow 侧。
+
+    判别锚点＝首票否决后节点是否仍停留：假钟未过阈值时不出否决出口，
+    剩余待办仍在本节点；若读墙钟（早已过阈值）首票即出口离开本节点。
+    """
+    engine, clock = build_engine()
+    engine.repository.deploy(
+        FlowBuilder("clk_reject")
+        .start()
+        .user_task(
+            "sign",
+            assignees=["'u1'", "'u2'", "'u3'"],
+            multi_instance=MultiInstance(
+                mode="parallel",
+                disapprove_exit=(
+                    f"now > timestamp('{GATE}') || task.disapprove_count >= task.item_count"
+                ),
+            ),
+        )
+        .end()
+        .connect("start", "sign")
+        .connect("sign", "end")
+        .build()
+    )
+    iid = engine.runtime.start_process("clk_reject", start_user="u_s")
+    task = _open(engine, iid)[0]
+    engine.task.reject(task.id, actor=task.assignee, comment="不同意")
+    remaining = _open(engine, iid)
+    assert [t.activity_code for t in remaining] == ["sign", "sign"]  # 未出否决出口
+
+    clock.advance_minutes(120)
+    task2 = _open(engine, iid)[0]
+    engine.task.reject(task2.id, actor=task2.assignee, comment="超时窗口内否决")
+    assert all(t.activity_code != "sign" for t in _open(engine, iid))  # 时间条件命中即出口
+
+
 def test_countersign_exit_follows_engine_clock():
     engine, clock = build_engine()
     engine.repository.deploy(

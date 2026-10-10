@@ -859,7 +859,7 @@ Zeebe inputCollection/outputCollection 契约实装（multi-instance-call-design
 
 来源：收口盘点两处已核实语义缺口（与 escalate 批同日并行会话撞号——本批提交信息中写作「第十四轮」，登记序以 spec 为准：escalate 批先入，本批为第十五轮；提交 541369c/de8bb03）。
 
-1. **时钟统一**：全表达式位 `now` 与 worker Job 租约/退避恒取 `EngineConfig.now`。盘点发现 8 个装配位点（路由条件 evaluation_variables、取人 resolve_subjects、会签出口 exit_reached、超时改派 fire 位、子流程映射、MI completion、消息 correlation 写入/启动匹配）装配上下文时未传 `now`（`expression_context` 缺省墙钟），worker Job 三处（create run_at/领活租约/失败退避）直用 `utc_now`——FakeClock 下被测对象与测试时钟不同源（route_audit 挂账「审计时刻与任务时刻不一致」同根，一并收口）。修复形态：三函数增 `now` 参数、十三调用点显式穿针（不是缺省改时钟——引擎位点必须显式传，缺省墙钟保留给无引擎装配面并写入文档）；`tests/semantics/test_clock_unification.py` 每位点一个「假钟阈值」判例（实施前 8/8 红、实施后全绿——判别力依赖阈值定在假钟未来/墙钟过去的区间）。
+1. **时钟统一**：全表达式位 `now` 与 worker Job 租约/退避恒取 `EngineConfig.now`。盘点发现 8 个装配位点（路由条件 evaluation_variables、取人 resolve_subjects、会签出口 exit_reached、超时改派 fire 位、子流程映射、MI completion、消息 correlation 写入/启动匹配）装配上下文时未传 `now`（`expression_context` 缺省墙钟），worker Job 三处（create run_at/领活租约/失败退避）直用 `utc_now`——FakeClock 下被测对象与测试时钟不同源（route_audit 挂账「审计时刻与任务时刻不一致」同根，一并收口）。修复形态：三函数增 `now` 参数、十四调用点显式穿针（含 Review 补漏的驳回复活路径 reject_flow 侧 disapprove_exit——办理侧与驳回侧同一节点出口同一时钟；不是缺省改时钟——引擎位点必须显式传，缺省墙钟保留给无引擎装配面并写入文档）；`tests/semantics/test_clock_unification.py` 每位点一个「假钟阈值」判例（实施前 8/8 红、实施后全绿——判别力依赖阈值定在假钟未来/墙钟过去的区间）。
 2. **终止/取消＝砍树**（§7 新段）：terminate/cancel/实例时限 cancel/terminate 三入口共用 `terminate_cascade`——未结算子实例（含暂停/挂起中的）递归同置终态、待办撤销留痕、父事件带 `cascaded_instances` 清单/子事件带 `cascade_from`。翻转 `tests/suite/test_construct_subprocess` 曾钉住的「孤儿运行」开放问题钉子；`test_terminate_cascade.py` 六走查（整树/孙层/暂停子/已结算不动/时限策略/无子空清单）。
 
 ## 附录 C：类型清单（须提前定义的全集）
