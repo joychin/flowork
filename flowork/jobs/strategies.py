@@ -64,8 +64,10 @@ class DeadlineStrategiesMixin:
                 self._execute_handover(ctx, job, task, strategy)
             else:
                 self._execute_strategy(ctx, strategy, task_id)
-        except TaskNotAvailableError:
-            job.result_payload = {**(job.result_payload or {}), "skipped": "task already finished"}
+        except TaskNotAvailableError as exc:
+            # 如实记因（code-review 2026-10 P0-5）：此前一律写「task already
+            # finished」——实例挂起、候选未认领、咨询软挂起等不可办场景被误标
+            job.result_payload = {**(job.result_payload or {}), "skipped": str(exc)}
 
     def _apply_wait_timeout(self, ctx: CommandContext, job: JobRow, kernel: Any) -> None:
         """等待节点到时（spec §7.2）：订阅置 elapsed 留痕 → timer_fired → 推进。

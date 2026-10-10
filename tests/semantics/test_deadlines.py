@@ -458,3 +458,109 @@ def test_reassign_expression_error_becomes_incident():
     session.close()
     assert job is not None and "超时reassign公式求值失败" in (job.last_error or "")
     assert engine.runtime.list_incidents(), "改派公式错必须落故障单（首败即记）"
+
+def test_suspended_instance_deadline_frozen_not_swallowed():
+    """回归（code-review 2026-10 P0-5）：挂起实例的时限 Job 不被 tick 认领。
+
+    并行臂故障挂起（b 臂办结触发 service_task 炸 → Incident + suspended，
+    命令回滚）时，另一臂任务的 auto_approve 冻结；故障解决（实例恢复运行）
+    后到点仍触发。修复前：挂起期照常认领，complete 被实例态拦下后被误标
+    「task already finished」结案——时限永久消失且文案误导排障。
+    """
+    import pytest
+
+    from flowork.definitions.builtin import RouteMode
+    from flowork.errors import FloworkError
+    from flowork.persistence.orm import JobRow
+
+    engine, clock = build_engine()
+    deploy(
+        engine,
+        FlowBuilder("susp_deadline")
+        .start()
+        .branch("route", route_mode=RouteMode.ALL_MATCH)
+        .user_task(
+            "a",
+            assignee="'u_a'",
+            deadlines=[TaskDeadline(after_minutes=30, action="auto_approve")],
+        )
+        .user_task("b", assignee="'u_b'")
+        .service_task("boom", "会炸的步骤", action="explode", params={})
+        .end(advance_policy="all")
+        .connect("start", "route")
+        .connect("route", "a")
+        .connect("route", "b")
+        .connect("b", "boom")
+        .connect("a", "end")
+        .connect("boom", "end")
+        .build(),
+    )
+
+    def explode(ctx, params):
+        raise RuntimeError("外部接口炸了")
+
+    engine.register_handler("explode", explode)
+
+    instance_id = engine.runtime.start_process("susp_deadline", start_user="u_s")
+    tasks = {t.activity_code: t for t in engine.task.list_tasks(instance_id=instance_id)}
+    assert set(tasks) == {"a", "b"}
+
+    with pytest.raises(FloworkError):
+        engine.task.complete(tasks["b"].id, actor="u_b")  # 触发 boom → 挂起
+    assert engine.runtime.get_instance(instance_id).state == "suspended"
+    task_a = engine.task.list_tasks(instance_id=instance_id, assignee="u_a")[0]
+    assert task_a.state == "ready"
+
+    clock.advance(30)
+    assert engine.jobs.tick() == 0, "挂起期 timer 冻结：不认领、不消费"
+    assert engine.task.list_tasks(instance_id=instance_id, assignee="u_a"), "任务未被自动通过"
+    with engine.session_factory() as session:
+        job = session.scalars(select(JobRow).where(JobRow.instance_id == instance_id)).first()
+        assert job is not None and job.state == "scheduled", "时限 Job 未被 skip 结案"
+
+    incidents = engine.runtime.list_incidents(instance_id=instance_id)
+    # resume 只恢复运行态（skip 是管理员手术会视未完令牌为完成，不合本场景）
+    engine.runtime.resolve_incident(incidents[0]["id"], action="resume", actor="ops")
+    assert engine.runtime.get_instance(instance_id).state == "running"
+
+    assert engine.jobs.tick() == 1, "恢复后到点仍触发（冻结是推迟不是吞掉）"
+    history = engine.history.task_history(instance_id)
+    assert any(
+        h.activity_code == "a" and h.outcome == "agree" and h.acted_by == "system:timeout"
+        for h in history
+    ), [(h.activity_code, h.outcome, h.acted_by) for h in history]
+
+
+def test_strategy_skip_records_actual_reason():
+    """回归（code-review 2026-10 P0-5）：策略 skip 结案如实记录原因。
+
+    候选任务未认领时 auto_approve 被动作守卫拒（「需先 claim」）——修复前
+    该真实原因被硬编码文案「task already finished」覆盖，排障误导。
+    """
+    from flowork.persistence.orm import JobRow
+
+    engine, clock = build_engine()
+    deploy(
+        engine,
+        FlowBuilder("honest_skip")
+        .start()
+        .user_task(
+            "a",
+            candidate_users=["'u_a'"],
+            deadlines=[TaskDeadline(after_minutes=10, action="auto_approve")],
+        )
+        .end()
+        .connect("start", "a")
+        .connect("a", "end")
+        .build(),
+    )
+    instance_id = engine.runtime.start_process("honest_skip", start_user="u_s")
+    assert engine.task.list_tasks(instance_id=instance_id)[0].assignee == ""  # 未认领
+    clock.advance(10)
+    engine.jobs.tick()
+    with engine.session_factory() as session:
+        job = session.scalars(select(JobRow).where(JobRow.instance_id == instance_id)).first()
+        assert job is not None
+        # 真实原因（未认领）入账，而非硬编码「task already finished」
+        assert "未认领" in str(job.result_payload), job.result_payload
+        assert job.result_payload["skipped"] != "task already finished"

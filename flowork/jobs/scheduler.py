@@ -53,14 +53,19 @@ class JobScheduler(DeadlineStrategiesMixin):
         moment = now or self._engine.config.now()
 
         def _collect(ctx: CommandContext) -> list[str]:
-            paused_ids = select(ProcessInstanceRow.id).where(ProcessInstanceRow.state == "paused")
+            # 暂停与挂起期 timer 冻结（spec §7；code-review 2026-10 P0-5：挂起
+            # 实例的时限曾被照常认领、被「skip」结案永久吞掉——冻结至故障解决，
+            # 恢复后到点仍触发）
+            frozen_ids = select(ProcessInstanceRow.id).where(
+                ProcessInstanceRow.state.in_(("paused", "suspended"))
+            )
             stmt = (
                 select(JobRow.id)
                 .where(
                     JobRow.state == "scheduled",
                     JobRow.run_at <= moment,
                     JobRow.job_kind != "worker",  # worker 类由外部领取-汇报面执行（§5.2）
-                    JobRow.instance_id.not_in(paused_ids),  # 暂停期 timer 冻结（spec §7）
+                    JobRow.instance_id.not_in(frozen_ids),
                 )
                 .order_by(JobRow.run_at)
             )
