@@ -81,6 +81,19 @@ class InstanceLifecycleMixin:
 
             retro_poll_instance(ctx, self._engine, instance)
 
+            # 暂停期间到达的子实例完结补推进（code-review 2026-10 P0-2）：
+            # resume_parent_if_waiting 在父 paused 时直接 return、不留补偿——
+            # 恢复后数据驱动补一轮：逐未完令牌问行为 try_complete（kind 无关，
+            # 等待中的 CallActivity 子实例已全部结算即放行；user_task/wait 等
+            # 行为自判 no-op）。
+            from flowork.runtime.lifecycle import TokenState
+
+            kernel = self._engine.kernel_for(ctx)
+            for token in kernel.tokens(
+                ctx.session, instance_id, states=(TokenState.UNFINISHED.value,)
+            ):
+                kernel.advance_after_task(ctx.session, instance, token)
+
         self._engine.execute(_command)
 
     def terminate_process(self, instance_id: str, actor: str, reason: str = "") -> None:

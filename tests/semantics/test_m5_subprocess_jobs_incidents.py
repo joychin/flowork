@@ -427,3 +427,28 @@ def test_input_mapping_expression_error_suspends():
     publish(engine, parent)
     with pytest.raises(EngineExecutionError, match="子流程输入映射求值失败"):
         engine.runtime.start_process("parent_bad", start_user="u_maker", variables={})
+
+
+def test_resume_advances_parent_when_child_finished_during_pause(engine: ProcessEngine):
+    """回归（code-review 2026-10 P0-2）：父暂停期间子实例办结，恢复后父
+    CallActivity 令牌补推进。修复前 resume_parent_if_waiting 对 paused 父直接
+    return 且不留补偿——父恢复后令牌永久 unfinished、无任务无 Job（死锁），
+    只能管理员手术。"""
+    _publish_parent_and_child(engine)
+    parent_id = engine.runtime.start_process(
+        "parent_flow", start_user="u_maker", variables={"amount": 999}
+    )
+    apply_task = engine.task.list_tasks(instance_id=parent_id)[0]
+    engine.task.complete(apply_task.id, actor="u_maker")
+    child = next(i for i in engine.history.instances() if i.parent_id == parent_id)
+
+    engine.runtime.pause_process(parent_id, actor="u_ops")
+    # 父暂停期间子实例办结：唤醒尝试落空（父非 running），到达不留补偿
+    sub_task = engine.task.list_tasks(instance_id=child.id)[0]
+    engine.task.complete(sub_task.id, actor="u_compliance", variables={"verdict": "pass"})
+    assert engine.runtime.get_instance(child.id).state == "completed"
+
+    engine.runtime.resume_process(parent_id, actor="u_ops")
+    assert engine.runtime.get_instance(parent_id).state == "completed", (
+        "恢复后补推进：子已结算 → 父令牌放行直达终态"
+    )
