@@ -4,8 +4,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from flowork.definitions.builtin import (
     CallActivitySpec,
     CcTaskSpec,
@@ -16,12 +14,10 @@ from flowork.definitions.builtin import (
     WaitSpec,
 )
 from flowork.engine.context import RuntimeNodeContext
-from flowork.engine.kernel import EngineExecutionError, NoParticipantError
-from flowork.expr.context import expression_functions_of
+from flowork.engine.kernel import EngineExecutionError
 from flowork.runtime.behavior import NodeBehavior, NodeContext
 from flowork.runtime.registry import NodeRegistry
-from flowork.tasks.countersign import exit_reached
-from flowork.tasks.deadlines import schedule_deadline_jobs
+from flowork.tasks.user_task import UserTaskBehavior
 from flowork.tasks.wait import WaitBehavior
 
 __all__ = [
@@ -83,159 +79,6 @@ class EndBehavior(NodeBehavior):
     def on_enter(self, ctx: NodeContext) -> None:
         assert isinstance(ctx, RuntimeNodeContext)
         ctx.complete_instance("completed")
-
-
-class UserTaskBehavior(NodeBehavior):
-    """人工审批节点：进入时解析参与者并生成待办；完成判定走会签计数。"""
-
-    def on_enter(self, ctx: NodeContext) -> None:
-        assert isinstance(ctx, RuntimeNodeContext)
-        spec = self.spec
-        assert isinstance(spec, UserTaskSpec)
-        assert ctx.token is not None
-        if ctx.instance.simulated:  # v2.3 A10：模拟不建任务（try_complete 模拟分支放行）
-            return
-        from flowork.participants.resolver import ParticipantResolution
-
-        resolution: ParticipantResolution = ctx.kernel.resolve_participants(ctx, spec)
-        if resolution.candidates:
-            self._create_claimable_task(ctx, resolution.candidates)
-            return
-        if not resolution.todo and not resolution.skipped:
-            raise NoParticipantError(
-                f"审批节点 {spec.code}（{spec.name or spec.code}）没有可用参与者"
-            )
-        all_participants = resolution.todo + resolution.skipped
-        ctx.token.item_count = len(all_participants)
-        ctx.token.approve_count = len(resolution.skipped)  # 自动通过计入同意
-        ctx.token_updated()
-        for user in resolution.skipped:
-            task = ctx.create_task(assignee=user)
-            ctx.kernel.archive_task(
-                ctx.session,
-                task,
-                outcome="auto_pass",
-                comment="参与者策略命中，自动通过",
-                actor="system",
-            )
-        sequential = spec.multi_instance is not None and spec.multi_instance.mode == "sequential"
-        targets = [resolution.todo[0]] if sequential and resolution.todo else resolution.todo
-        created = [ctx.create_task(assignee=assignee) for assignee in targets]
-        for task in created:
-            schedule_deadline_jobs(ctx, spec, task.id)
-        # 全员自动通过时立即完成节点
-        if not resolution.todo:
-            self._finish_now(ctx)
-
-    def _create_claimable_task(self, ctx: RuntimeNodeContext, candidates: list[str]) -> None:
-        """有候选（已求值）：生成可认领任务（assignee 置空 + 候选关联）。
-
-        候选关联＝求值后的人 ∪ 组引用，**引用保留不展开**（spec §5.5：候选制下
-        组引用保留、认领时再展开——明天入组的人能认领明天的待办）；命中判定见
-        `tasks.candidates.candidate_hit`。求值在 ``resolve_participants``
-        （候选槽与取人位同一 CEL 求值面，2026-10-09 B 批）。
-        """
-        import uuid
-
-        from flowork.persistence.orm import IdentityLinkRow
-
-        assert ctx.token is not None
-        spec = self.spec
-        assert isinstance(spec, UserTaskSpec)
-        ctx.token.item_count = 1
-        ctx.token_updated()
-        task = ctx.create_task(assignee="")
-        schedule_deadline_jobs(ctx, spec, task.id)  # 超时策略同样适用于认领场景
-        for candidate in candidates:
-            ctx.session.add(
-                IdentityLinkRow(
-                    id=uuid.uuid4().hex,
-                    task_id=task.id,
-                    user_id=candidate,
-                    link_type="candidate",
-                )
-            )
-        ctx.session.flush()
-
-    def on_exit(self, ctx: NodeContext) -> None:
-        """会签出口达成：本令牌剩余待办撤销（记录为 auto_pass）。"""
-        assert isinstance(ctx, RuntimeNodeContext)
-        assert ctx.token is not None
-        remaining = ctx.kernel.tasks(ctx.session, ctx.instance.id, token_id=ctx.token.id)
-        for task in remaining:
-            ctx.kernel.archive_task(
-                ctx.session,
-                task,
-                outcome="auto_pass",
-                comment="会签出口已达成，自动通过",
-                actor="system",
-            )
-
-    def on_task_completed(self, ctx: NodeContext, task_id: str, outcome: str) -> None:
-        """串行会签：当前出口未达成时为下一位参与者生成待办。"""
-        assert isinstance(ctx, RuntimeNodeContext)
-        spec = self.spec
-        assert isinstance(spec, UserTaskSpec)
-        if spec.multi_instance is None or spec.multi_instance.mode != "sequential":
-            return
-        assert ctx.token is not None
-        from flowork.participants.resolver import ParticipantResolution
-
-        resolution: ParticipantResolution = ctx.kernel.resolve_participants(ctx, spec)
-        participants = resolution.todo + resolution.skipped
-        already = set(ctx.kernel.handled_assignees(ctx.session, ctx.token.id))
-        remaining = [p for p in participants if p not in already]
-        if remaining and not self._exit_reached(ctx):
-            ctx.create_task(assignee=remaining[0])
-
-    def _finish_now(self, ctx: RuntimeNodeContext) -> None:
-        """全员自动通过：节点立即完成（复用引擎完成路径）。"""
-        assert ctx.token is not None
-        ctx.kernel.finish_token(ctx.session, ctx.token, approval_exit="agree")
-        ctx.kernel.record_event("node_exited", {"activity_code": ctx.node.code}, ctx.instance.id)
-        node = ctx.kernel.definition_of(ctx.session, ctx.instance).node(ctx.node.code)
-        assert node is not None
-        ctx.kernel.route(ctx.session, ctx.instance, node, ctx.token)
-
-    def _exit_reached(self, ctx: RuntimeNodeContext) -> bool:
-        assert ctx.token is not None
-        return self.try_complete(ctx)
-
-    def try_complete(self, ctx: NodeContext) -> bool:
-        assert isinstance(ctx, RuntimeNodeContext)
-        spec = self.spec
-        assert isinstance(spec, UserTaskSpec)
-        token = ctx.token
-        assert token is not None
-        if ctx.instance.simulated:  # v2.3 A10：模拟即完成（不走 auto_pass 票数语义）
-            token.approval_exit = "simulated"
-            return True
-        mi = spec.multi_instance
-        from flowork.tasks.facts import instance_facts
-
-        counts: dict[str, Any] = {
-            "item_count": token.item_count,
-            "approve_count": token.approve_count,
-            "disapprove_count": token.disapprove_count,
-            "variables": ctx.variables,
-            "start_user": ctx.instance.start_user,
-            "functions": expression_functions_of(
-                ctx.kernel.engine.config if ctx.kernel.engine else None
-            ),
-            "instance": instance_facts(ctx.instance),
-            "now": ctx.kernel.config.now(),
-        }
-        if exit_reached(mi.approve_exit if mi else None, side="approve", **counts):
-            token.approval_exit = "agree"
-            return True
-        if (
-            mi is not None
-            and mi.disapprove_exit
-            and exit_reached(mi.disapprove_exit, side="disapprove", **counts)
-        ):
-            token.approval_exit = "reject"
-            return True
-        return False
 
 
 class ServiceTaskBehavior(NodeBehavior):

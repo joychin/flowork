@@ -142,6 +142,15 @@ class TaskReworkMixin:
                 f"加签人已在会签名单（同令牌在办）：{'、'.join(duplicates)}"
             )
         created = [self._clone_task(ctx, task, assignee=user, root=root) for user in users]
+        # 加签人同样进 SLA（code-review 2026-10 P2-9）：克隆任务此前零 timer 零
+        # due_at——加签人不办则会签节点无限期悬挂。新票人按并行会签同款独立满档。
+        if isinstance(node, UserTaskSpec):
+            from flowork.engine.context import RuntimeNodeContext
+            from flowork.tasks.deadlines import schedule_deadline_jobs
+
+            node_ctx = RuntimeNodeContext(kernel, ctx.session, instance, node, None)
+            for new_task in created:
+                schedule_deadline_jobs(node_ctx, node, new_task.id)
         return [self._task_info(t) for t in created]
 
     def withdraw(self, task_id: str, actor: str, comment: str = "") -> TaskInfo:

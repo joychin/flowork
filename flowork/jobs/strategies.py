@@ -59,14 +59,34 @@ class DeadlineStrategiesMixin:
         if task is None or task.state != "ready":
             job.result_payload = {**(job.result_payload or {}), "skipped": "task already finished"}
             return
+        if task.assignee == "":
+            # 候选任务未认领的超时兜底（code-review 2026-10 P1-4）：图纸配置的
+            # 节点级 SLA 不因候选池积压而空洞——system:timeout 代认领后走统一
+            # 执行路径（候选守卫约束的是人；系统代管 claim→act 全程归因可查）。
+            # 修复前一次性 Job 被静默 skip 消费，auto_approve/reassign 等四策略
+            # 对未认领任务全部失效。
+            task.assignee = "system:timeout"
+            ctx.session.flush()
         try:
             if strategy in ("reassign", "escalate"):
                 self._execute_handover(ctx, job, task, strategy)
             else:
                 self._execute_strategy(ctx, strategy, task_id)
         except TaskNotAvailableError as exc:
+            instance = ctx.session.get(ProcessInstanceRow, job.instance_id)
+            if instance is not None and instance.state in ("paused", "suspended"):
+                # collect→claim 竞态窗插队的冻结（P1-12）：不消费，解冻后触发
+                job.state = "scheduled"
+                job.result_payload = {**(job.result_payload or {}), "deferred": instance.state}
+                return
+            if self._consult_blocked(ctx, task):
+                # 咨询软挂起期（P2-12）：主任务动作被拦但「时钟照走」＝推迟——
+                # 意见交回后策略如期触发（修复前 Job 被消费，咨询后零时限）
+                job.state = "scheduled"
+                job.result_payload = {**(job.result_payload or {}), "deferred": "consult_open"}
+                return
             # 如实记因（code-review 2026-10 P0-5）：此前一律写「task already
-            # finished」——实例挂起、候选未认领、咨询软挂起等不可办场景被误标
+            # finished」——不可办场景被误标
             job.result_payload = {**(job.result_payload or {}), "skipped": str(exc)}
 
     def _apply_wait_timeout(self, ctx: CommandContext, job: JobRow, kernel: Any) -> None:
@@ -89,6 +109,12 @@ class DeadlineStrategiesMixin:
         instance = ctx.session.get(ProcessInstanceRow, job.instance_id)
         if instance is None or instance.state in ("completed", "cancelled", "terminated"):
             job.result_payload = {**(job.result_payload or {}), "skipped": "instance finished"}
+            return
+        if instance.state in ("paused", "suspended"):
+            # 冻结期（P1-12 collect→claim 竞态窗）：不消费，解冻后触发——
+            # 与 collect 过滤「冻结是推迟不是吞掉」同语义
+            job.state = "scheduled"
+            job.result_payload = {**(job.result_payload or {}), "deferred": instance.state}
             return
         ctx.touch(instance)
         kernel.record_event(
@@ -119,6 +145,11 @@ class DeadlineStrategiesMixin:
         if instance is None or instance.state in ("completed", "cancelled", "terminated"):
             job.result_payload = {**(job.result_payload or {}), "skipped": "instance finished"}
             return  # 实例已完成则静默不触发
+        if instance.state in ("paused", "suspended"):
+            # 冻结期（P1-12）：不消费，解冻后触发（resume 会顺延 run_at）
+            job.state = "scheduled"
+            job.result_payload = {**(job.result_payload or {}), "deferred": instance.state}
+            return
         ctx.touch(instance)
         kernel.record_event(
             DomainEvent.INSTANCE_DEADLINE_REACHED,
@@ -228,3 +259,22 @@ class DeadlineStrategiesMixin:
             task.reject_in_ctx(ctx, task_id, actor="system:timeout", comment="超时自动驳回")
         else:  # pragma: no cover - 配置兜底
             raise ValueError(f"未知超时策略：{strategy}")
+
+    @staticmethod
+    def _consult_blocked(ctx: CommandContext, task: TaskRow) -> bool:
+        """主任务是否处于咨询软挂起（与 task_consult.assert_no_open_consults 同查询——
+        守卫与策略判定共用同源，防漂移）。"""
+        from sqlalchemy import select
+
+        root = task.root_task_id or task.id
+        return (
+            ctx.session.scalars(
+                select(TaskRow.id).where(
+                    TaskRow.instance_id == task.instance_id,
+                    TaskRow.root_task_id == root,
+                    TaskRow.task_type == "consult",
+                    TaskRow.state == "ready",
+                )
+            ).first()
+            is not None
+        )

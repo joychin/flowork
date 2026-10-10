@@ -532,11 +532,12 @@ def test_suspended_instance_deadline_frozen_not_swallowed():
     ), [(h.activity_code, h.outcome, h.acted_by) for h in history]
 
 
-def test_strategy_skip_records_actual_reason():
-    """回归（code-review 2026-10 P0-5）：策略 skip 结案如实记录原因。
+def test_unclaimed_candidate_auto_approve_fires_via_system_claim():
+    """回归（code-review 2026-10 P1-4）：候选任务未认领时超时策略代认领执行。
 
-    候选任务未认领时 auto_approve 被动作守卫拒（「需先 claim」）——修复前
-    该真实原因被硬编码文案「task already finished」覆盖，排障误导。
+    图纸配置的节点级 SLA 不因候选池积压而空洞——到期无人认领时
+    system:timeout 代认领后走统一执行路径。修复前四策略对未认领任务
+    全部被静默 skip 消费（一次性 Job 结案，SLA 永久失效）。
     """
     from flowork.persistence.orm import JobRow
 
@@ -559,9 +560,208 @@ def test_strategy_skip_records_actual_reason():
     assert engine.task.list_tasks(instance_id=instance_id)[0].assignee == ""  # 未认领
     clock.advance(10)
     engine.jobs.tick()
+    history = engine.history.task_history(instance_id)
+    assert any(
+        h.activity_code == "a" and h.outcome == "agree" and h.acted_by == "system:timeout"
+        for h in history
+    ), [(h.activity_code, h.outcome, h.acted_by) for h in history]
+    assert engine.runtime.get_instance(instance_id).state == "completed"
     with engine.session_factory() as session:
         job = session.scalars(select(JobRow).where(JobRow.instance_id == instance_id)).first()
-        assert job is not None
-        # 真实原因（未认领）入账，而非硬编码「task already finished」
-        assert "未认领" in str(job.result_payload), job.result_payload
-        assert job.result_payload["skipped"] != "task already finished"
+        assert job is not None and job.state == "done"
+
+
+# —— deadline 生命周期矩阵（code-review 2026-10 第二批：任务行生命周期 × deadline Job）——
+
+
+def _serial_mi_engine():
+    """串行会签三人 u_p1/u_p2/u_p3 + auto_approve@30（节点级 SLA）。"""
+    from flowork.definitions.node import MultiInstance
+
+    engine, clock = build_engine()
+    deploy(
+        engine,
+        FlowBuilder("serial_mi")
+        .start()
+        .user_task(
+            "c",
+            assignees=["'u_p1'", "'u_p2'", "'u_p3'"],
+            multi_instance=MultiInstance(mode="sequential"),
+            deadlines=[TaskDeadline(after_minutes=30, action="auto_approve")],
+        )
+        .end()
+        .connect("start", "c")
+        .connect("c", "end")
+        .build(),
+    )
+    return engine, clock
+
+
+def _scheduled_jobs(engine, instance_id):
+    from flowork.persistence.orm import JobRow
+
+    with engine.session_factory() as session:
+        return [
+            (j.payload.get("task_id"), j.state)
+            for j in session.scalars(
+                select(JobRow).where(
+                    JobRow.instance_id == instance_id, JobRow.job_type == "timer"
+                )
+            ).all()
+        ]
+
+
+def test_serial_countersign_next_runner_carries_deadline():
+    """回归（code-review 2026-10 P1-3）：串行会签换棒继承剩余档。
+
+    档位属于节点等待而非任务行（与转办 carry 先例同源）——第 1 棒先办结
+    不丢 SLA。修复前旧 Job 绑定已归档任务、到期按 skip 结案，后续全员
+    无限时窗（完成侧与驳回侧共用 on_task_completed，同修）。"""
+    engine, clock = _serial_mi_engine()
+    instance_id = engine.runtime.start_process("serial_mi", start_user="u_s")
+    t1 = engine.task.list_tasks(instance_id=instance_id, assignee="u_p1")[0]
+    clock.advance(10)  # 第 1 棒用了 10 分钟
+    engine.task.complete(t1.id, actor="u_p1")
+
+    t2 = engine.task.list_tasks(instance_id=instance_id, assignee="u_p2")[0]
+    jobs = _scheduled_jobs(engine, instance_id)
+    assert (t2.id, "scheduled") in jobs, "新棒继承未触发档"
+    assert all(j[1] != "scheduled" or j[0] != t1.id for j in jobs), "旧棒 Job 已 carry 走"
+    assert t2.due_at is not None
+
+    clock.advance(20)  # 节点级 30 分钟到点（第 1 棒吃掉 10 分钟）
+    engine.jobs.tick()
+    history = engine.history.task_history(instance_id)
+    assert any(
+        h.activity_code == "c" and h.assignee == "u_p2" and h.acted_by == "system:timeout"
+        for h in history
+    ), [(h.assignee, h.outcome, h.acted_by) for h in history]
+
+
+def test_added_countersigner_gets_deadline():
+    """回归（code-review 2026-10 P2-9）：加签克隆任务排 deadline——
+    加签人不办不再无限期悬挂（新票人按并行同款独立满档）。"""
+    from flowork.definitions.node import MultiInstance
+
+    engine, clock = build_engine()
+    deploy(
+        engine,
+        FlowBuilder("cs_add")
+        .start()
+        .user_task(
+            "c",
+            assignees=["'u_p1'", "'u_p2'"],
+            multi_instance=MultiInstance(mode="parallel"),
+            deadlines=[TaskDeadline(after_minutes=10, action="auto_approve")],
+        )
+        .end()
+        .connect("start", "c")
+        .connect("c", "end")
+        .build(),
+    )
+    instance_id = engine.runtime.start_process("cs_add", start_user="u_s")
+    p1 = engine.task.list_tasks(instance_id=instance_id, assignee="u_p1")[0]
+    clock.advance(2)
+    engine.task.add_countersigner(p1.id, users=["u_new"], actor="u_p1")
+    new_task = engine.task.list_tasks(instance_id=instance_id, assignee="u_new")[0]
+    assert new_task.due_at is not None, "加签任务物化 due_at"
+    assert (new_task.id, "scheduled") in _scheduled_jobs(engine, instance_id)
+
+    clock.advance(10)  # 加签后满档到点
+    engine.jobs.tick()
+    history = engine.history.task_history(instance_id)
+    assert any(h.assignee == "u_new" and h.acted_by == "system:timeout" for h in history), [
+        (h.assignee, h.outcome, h.acted_by) for h in history
+    ]
+
+
+def test_deadline_defers_while_consult_open_then_fires():
+    """回归（code-review 2026-10 P2-12）：咨询软挂起期 deadline 推迟不消费。
+
+    「时钟照走」语义＝意见交回后策略如期触发；修复前 Job 被消费、咨询后零时限。
+    """
+    from flowork.persistence.orm import JobRow
+
+    engine, clock = build_engine()
+    deploy(
+        engine,
+        FlowBuilder("consult_dl")
+        .start()
+        .user_task(
+            "a",
+            assignee="'u_a'",
+            deadlines=[TaskDeadline(after_minutes=10, action="auto_approve")],
+        )
+        .end()
+        .connect("start", "a")
+        .connect("a", "end")
+        .build(),
+    )
+    instance_id = engine.runtime.start_process("consult_dl", start_user="u_s")
+    task = engine.task.list_tasks(instance_id=instance_id)[0]
+    opinions = engine.task.consult(task.id, users=["u_law"], actor="u_a")
+
+    clock.advance(10)
+    engine.jobs.tick()  # 咨询中：策略不可执行 → 推迟不消费
+    with engine.session_factory() as session:
+        job = session.scalars(select(JobRow).where(JobRow.instance_id == instance_id)).first()
+        assert job is not None and job.state == "scheduled"
+        assert job.result_payload.get("deferred") == "consult_open"
+    assert engine.runtime.get_instance(instance_id).state == "running"
+
+    engine.task.complete_consult(opinions[0].id, actor="u_law", opinion="agree")
+    engine.jobs.tick()  # 意见交回：策略如期触发
+    history = engine.history.task_history(instance_id)
+    assert any(
+        h.activity_code == "a" and h.outcome == "agree" and h.acted_by == "system:timeout"
+        for h in history
+    )
+    assert engine.runtime.get_instance(instance_id).state == "completed"
+
+
+def test_deadline_strategy_defers_on_frozen_instance_race_window():
+    """回归（code-review 2026-10 P1-12）：策略执行面复验实例态——collect→claim
+    竞态窗插队的 paused/suspended 推迟不消费（直接驱动 _apply_strategy 复现窗口）。"""
+    from flowork.definitions.node import MultiInstance
+    from flowork.persistence.orm import JobRow
+
+    engine, clock = build_engine()
+    deploy(
+        engine,
+        FlowBuilder("frozen_dl")
+        .start()
+        .user_task(
+            "c",
+            assignees=["'u_p1'"],
+            multi_instance=MultiInstance(mode="parallel"),
+            deadlines=[TaskDeadline(after_minutes=10, action="auto_approve")],
+        )
+        .end()
+        .connect("start", "c")
+        .connect("c", "end")
+        .build(),
+    )
+    instance_id = engine.runtime.start_process("frozen_dl", start_user="u_s")
+    task = engine.task.list_tasks(instance_id=instance_id)[0]
+    clock.advance(10)
+    engine.runtime.pause_process(instance_id, actor="u_ops")
+
+    with engine.session_factory() as s:
+        job_id = s.scalars(select(JobRow.id).where(JobRow.instance_id == instance_id)).first()
+
+    def _fire(ctx):  # 绕过 collect 直接驱动策略执行面（复现 TOCTOU 窗口落点）
+        job = ctx.session.get(JobRow, job_id)
+        engine.jobs._apply_strategy(ctx, job)
+
+    engine.execute(_fire)
+    with engine.session_factory() as session:
+        job = session.get(JobRow, job_id)
+        assert job.state == "scheduled", "冻结期竞态窗：推迟不消费"
+        assert job.result_payload.get("deferred") == "paused"
+    assert engine.task.list_tasks(instance_id=instance_id, assignee="u_p1"), "任务未被代投"
+
+    engine.runtime.resume_process(instance_id, actor="u_ops")
+    engine.jobs.tick()
+    history = engine.history.task_history(instance_id)
+    assert any(h.assignee == "u_p1" and h.acted_by == "system:timeout" for h in history)
+    _ = task

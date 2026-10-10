@@ -100,6 +100,11 @@ class JobScheduler(DeadlineStrategiesMixin):
             except Exception as exc:
                 self._mark_failure(ctx, job, exc, moment)
             else:
+                if job.state == "scheduled":
+                    # 策略显式回置 scheduled＝冻结期/咨询期推迟不消费
+                    # （code-review 2026-10 P1-12/P2-12）：保持 scheduled，
+                    # 由解冻/咨询交回后的 tick 触发，不记 finished_at
+                    return True
                 job.state = "done"
                 job.result_payload = {
                     **(job.result_payload or {}),

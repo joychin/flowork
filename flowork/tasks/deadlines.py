@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from flowork.engine.context import RuntimeNodeContext
     from flowork.persistence.orm import TaskRow
 
-__all__ = ["carry_deadline_jobs", "schedule_deadline_jobs"]
+__all__ = ["carry_deadline_jobs", "carry_deadline_jobs_of", "schedule_deadline_jobs"]
 
 
 def carry_deadline_jobs(session: Any, old: TaskRow, new: TaskRow) -> None:
@@ -27,6 +27,17 @@ def carry_deadline_jobs(session: Any, old: TaskRow, new: TaskRow) -> None:
     档位属于节点等待而非任务行——否则改派克隆体丢失剩余档
     （如 reassign@10 之后的 auto_approve@15 永不触发，SLA 出现缺口）。
     """
+    _carry(session, old.id, old.instance_id, new)
+
+
+def carry_deadline_jobs_of(
+    session: Any, old_task_id: str, instance_id: str, new: TaskRow
+) -> None:
+    """换棒形态的 carry（code-review 2026-10 P1-3）：旧任务已归档删除，按 id 寻 Job。"""
+    _carry(session, old_task_id, instance_id, new)
+
+
+def _carry(session: Any, old_task_id: str, instance_id: str, new: TaskRow) -> None:
     from sqlalchemy import select
 
     from flowork.persistence.orm import JobRow
@@ -35,12 +46,13 @@ def carry_deadline_jobs(session: Any, old: TaskRow, new: TaskRow) -> None:
         select(JobRow).where(
             JobRow.job_type == "timer",
             JobRow.state == "scheduled",
-            JobRow.instance_id == old.instance_id,
+            JobRow.instance_id == instance_id,
         )
     )
     carried = False
+    earliest: Any = None
     for job in jobs:
-        if job.payload.get("task_id") != old.id:
+        if job.payload.get("task_id") != old_task_id:
             continue
         payload = dict(job.payload)
         payload["task_id"] = new.id
@@ -57,8 +69,12 @@ def carry_deadline_jobs(session: Any, old: TaskRow, new: TaskRow) -> None:
         job.state = "done"
         job.result_payload = {**(job.result_payload or {}), "carried_to": new.id}
         carried = True
+        if earliest is None or job.run_at < earliest:
+            earliest = job.run_at
     if carried:
-        new.due_at = old.due_at
+        # due_at 取剩余档最早时刻（首条已触发时旧 due_at 是过去时刻，
+        # 「最早未触发档」才是当前应办时刻——due_before 过滤与排序的语义位）
+        new.due_at = earliest
 
 
 def schedule_deadline_jobs(ctx: RuntimeNodeContext, spec: UserTaskSpec, task_id: str) -> None:
