@@ -143,12 +143,20 @@ class TaskReworkMixin:
         ctx.touch(instance)
         kernel = self._engine.kernel_for(ctx)
         self._assert_downstream_idle(ctx, instance, history.activity_code)
-        # 取消该办理之后产生的全部未完令牌（闸门已保证下游未办：取消全部
-        # 未完与只取消下游等价——并行兄弟此刻亦无已办，见 spec §5.1 拍板④）
-        for token in kernel.tokens(ctx.session, instance.id, states=(TokenState.UNFINISHED.value,)):
-            kernel.cancel_token(ctx.session, token)
-        # 原节点重建：新令牌 + 原办理人待办
+        kernel = self._engine.kernel_for(ctx)
+        # 只取消下游盆内的未完令牌（code-review 2026-10 P0-3）：此前的「取消全部
+        # 未完」在含并行分叉的图上会把仍在办理的兄弟分支一并砍掉——兄弟令牌不在
+        # 本节点下游、闸门不拦，其审批人待办被静默作废；拍板④「取消全部与只取消
+        # 下游等价」只在无并行分叉时成立，不能当不变量。串行图全部未完令牌本就
+        # 在盆内，行为不变。
+        from flowork.definitions.graph import downstream_basin
+
         definition = kernel.definition_of(ctx.session, instance)
+        downstream = downstream_basin(definition, history.activity_code) - {history.activity_code}
+        for token in kernel.tokens(ctx.session, instance.id, states=(TokenState.UNFINISHED.value,)):
+            if token.activity_code in downstream:
+                kernel.cancel_token(ctx.session, token)
+        # 原节点重建：新令牌 + 原办理人待办
         node = definition.node(history.activity_code)
         assert node is not None
         token = kernel.activate(

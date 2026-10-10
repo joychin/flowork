@@ -193,3 +193,56 @@ def test_work_calendar_removed_from_public_surface():
     import flowork.api
 
     assert not hasattr(flowork.api, "WorkCalendar")
+
+
+def test_withdraw_preserves_pending_parallel_sibling(engine: ProcessEngine):
+    """回归（code-review 2026-10 P0-3）：撤回只取消下游——仍在办理的并行兄弟
+    分支不被波及。修复前「取消全部未完令牌」把兄弟令牌与待办一并取消（落
+    cancelled），兄弟审批权被静默作废、join 提前放行。"""
+    from sqlalchemy import select
+
+    from flowork.persistence.orm import TokenRow
+
+    flow = (
+        FlowBuilder("b2_par")
+        .start()
+        .user_task("a", assignee="'u_a'")
+        .user_task("p", assignee="'u_p'")
+        .user_task("join", assignee="'u_j'", advance_policy="all")
+        .end()
+        .connect("start", "a")
+        .connect("start", "p")
+        .connect("a", "join")
+        .connect("p", "join")
+        .connect("join", "end")
+    )
+    engine.repository.deploy(flow.build())
+    instance_id = engine.runtime.start_process("b2_par", start_user="u_s")
+    task_a = engine.task.list_tasks(instance_id=instance_id, assignee="u_a")[0]
+    engine.task.complete(task_a.id, actor="u_a")
+
+    revived = engine.task.withdraw(task_a.id, actor="u_a")
+    assert (revived.activity_code, revived.assignee) == ("a", "u_a")
+    # 兄弟分支原样在办（未被撤回波及）
+    sibling = engine.task.list_tasks(instance_id=instance_id, assignee="u_p")
+    assert [(t.activity_code, t.state) for t in sibling] == [("p", "ready")]
+
+    # 重办 a 后 join 仍等兄弟：u_j 不提前激活
+    engine.task.complete(revived.id, actor="u_a")
+    assert engine.task.list_tasks(instance_id=instance_id, assignee="u_j") == []
+    with engine.session_factory() as session:
+        p_token = next(
+            t
+            for t in session.scalars(
+                select(TokenRow).where(
+                    TokenRow.instance_id == instance_id, TokenRow.activity_code == "p"
+                )
+            )
+        )
+        assert p_token.state == "unfinished"
+
+    # 兄弟办结后 join 才放行
+    _complete_of(engine, instance_id, "u_p")
+    assert [
+        t.activity_code for t in engine.task.list_tasks(instance_id=instance_id, assignee="u_j")
+    ] == ["join"]
