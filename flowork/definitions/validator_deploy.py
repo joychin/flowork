@@ -177,6 +177,15 @@ def _check_subject_literals(
         elif node.kind == KIND_CC_TASK:
             for i, e in enumerate(getattr(node, "recipients", None) or []):
                 add(f"{node.code}.recipients[{i}]", e)
+        elif node.kind == KIND_CALL_ACTIVITY:
+            # MI subjects 同为取人位（code-review 2026-10 P0-6；组引用字面量
+            # 由下方共享守卫跳过——问「是不是人」对组语义必误报）
+            from flowork.definitions.validator_positions import mi_config
+
+            mi = mi_config(node)
+            if mi is not None:
+                for i, e in enumerate(mi.subjects or []):
+                    add(f"{node.code}.multi_instance.subjects[{i}]", e)
     seen: set[tuple[str, str]] = set()
     for where, expression, group in positions:
         for literal in string_literals(expression):

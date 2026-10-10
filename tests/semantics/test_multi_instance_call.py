@@ -277,3 +277,69 @@ def test_simulation_recurses_mi_children():
     assert report.final_state == "completed"
     children = _children_of(engine, report.instance_id)
     assert len(children) == 3 and all(c.simulated for c in children)
+
+
+# —— MI subjects 位点校验（内核 code-review 2026-10 P0-6）——
+
+
+def test_mi_subjects_group_literal_rejected_at_design_time():
+    """subjects 是取人位：role:/org: 组引用字面量＝设计期 ERROR（第十八轮规则
+    对 MI 位生效）。修复前位点清单漏 MI subjects——会扇出一个 subject 为
+    「role:finance」的子实例而非按成员展开，零告警。"""
+    engine = ProcessEngine()
+    _deploy_child(engine)
+    with pytest.raises(InvalidDefinition, match="group_in_subjects"):
+        engine.repository.deploy(
+            FlowBuilder("bad_mi_group")
+            .start()
+            .call_activity(
+                "sub",
+                process_code="mi_child",
+                multi_instance={"subjects": ["'role:finance'"]},
+            )
+            .end()
+            .connect("start", "sub")
+            .connect("sub", "end")
+            .build()
+        )
+
+
+def test_mi_subjects_syntax_error_surfaced():
+    """subjects 进全位点检查：语法错（formula.invalid）设计期即拦，不再留到
+    运行期才挂起+故障单（未注册函数依赖注册表配置，默认 WARNING，不在此列）。"""
+    engine = ProcessEngine()
+    _deploy_child(engine)
+    with pytest.raises(InvalidDefinition, match="formula.invalid"):
+        engine.repository.deploy(
+            FlowBuilder("bad_mi_syntax")
+            .start()
+            .call_activity(
+                "sub",
+                process_code="mi_child",
+                multi_instance={"subjects": ["this is not ;; valid"]},
+            )
+            .end()
+            .connect("start", "sub")
+            .connect("sub", "end")
+            .build()
+        )
+
+
+def test_mi_subjects_undeclared_variable_rejected():
+    """subjects 引用未声明流程变量＝设计期 ERROR（D6-b 口径对 MI 位生效）。"""
+    engine = ProcessEngine()
+    _deploy_child(engine)
+    with pytest.raises(InvalidDefinition, match="unknown"):
+        engine.repository.deploy(
+            FlowBuilder("bad_mi_var")
+            .start()
+            .call_activity(
+                "sub",
+                process_code="mi_child",
+                multi_instance={"subjects": ["owners"]},  # 未声明
+            )
+            .end()
+            .connect("start", "sub")
+            .connect("sub", "end")
+            .build()
+        )

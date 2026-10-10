@@ -118,6 +118,17 @@ def iter_expression_positions(definition: ProcessDefinition) -> Iterator[tuple[s
             yield "reassign", where, expression, node.code
         if node.kind == KIND_CALL_ACTIVITY:
             mi = mi_config(node)
+            if mi is not None:
+                # MI subjects＝取人位（A9：每人一子实例，经 resolve_subjects 求值
+                # ——code-review 2026-10 P0-6：缺席曾令语法错/未声明变量/组引用
+                # 字面量零告警直通运行期）
+                for index, expression in enumerate(mi.subjects or []):
+                    yield (
+                        "subjects",
+                        f"{node.code}.multi_instance.subjects[{index}]",
+                        expression,
+                        node.code,
+                    )
             if mi is not None and mi.completion != "all":  # A9 完成公式位
                 where = f"{node.code}.multi_instance.completion"
                 yield "completion", where, mi.completion, node.code
