@@ -74,6 +74,14 @@ triggered_rules 明细实测呈现）；实例审计视图（顶栏「实例」�
 模拟隔离勾选 → 详情概要+令牌链+三面板）。发布编排移入对话框本地（不触 store 并行
 在途改动）。
 
+DoD 走查（examples 定义 + 真实实例）✅：①**驳回实例**——simple_approval 上
+`task.reject`（「金额信息不全，退回补充」），详情时间线完整呈现否决 1/reject 办理行
+带意见/task_rejected 事件/复活令牌（start 重报，unfinished）；②**超时改派实例**——
+approval_timeout 定义 manager 挂 `deadlines: reassign→'u_boss'`，经真实 tick 管线
+触发，时间线呈现 transfer 办理行（超时reassign）/task_transferred 事件
+（actor=system:timeout）/新任务 u_boss，令牌计数 0/1 对齐「票随人走」；两实例的
+路由决策与变量历史面板均正常渲染（含空路由记录时的空态）。
+
 - **B1** 试运行升级：路由预演保留为轻量 Tab，新增「完整模拟」面板（主场景=当前草稿）——终态结论、
   节点时间线、stub 清单、卡点、路由轨迹（逐边公式与结果）。
 - **B2** 发布确认呈现版本判定（消费 A3：major/revision、triggered_rules 明细、identical_to 时呈现「无变化」）。
