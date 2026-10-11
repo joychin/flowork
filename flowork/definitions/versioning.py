@@ -89,7 +89,9 @@ def _rule_input_contract(base: ProcessDefinition, target: ProcessDefinition) -> 
         base_schema.get("additionalProperties") is not False
         and target_schema.get("additionalProperties") is False
     ):
-        violations.append("关闭多余字段容忍：additionalProperties → false（携带附加字段的既有请求被拒）")
+        violations.append(
+            "关闭多余字段容忍：additionalProperties → false（携带附加字段的既有请求被拒）"
+        )
     base_props = base_schema.get("properties") or {}
     target_props = target_schema.get("properties") or {}
     for name in sorted(base_props.keys() & target_props.keys()):

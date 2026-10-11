@@ -272,7 +272,6 @@ def test_condition_error_wrapped(engine: ProcessEngine):
         .end()
         .connect("start", "route")
         .flow("route", "a", condition=cond("ghost", "eq", 1))
-        .flow("route", "a", default=True)
         .connect("a", "end")
         .build()
         .model_copy(update={"variables": [ProcessVariable(name="ghost", type="number")]})
