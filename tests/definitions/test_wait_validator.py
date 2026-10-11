@@ -162,5 +162,7 @@ def test_wait_self_loop_rejected(registry):
         .connect("w", "w")
         .build()
     )
-    issues = {i.rule for i in validate_definition(definition, registry) if i.level == IssueLevel.ERROR}
+    issues = {
+        i.rule for i in validate_definition(definition, registry) if i.level == IssueLevel.ERROR
+    }
     assert "wait.self_loop" in issues

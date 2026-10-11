@@ -23,6 +23,18 @@ __all__ = ["IncidentMixin"]
 
 
 class IncidentMixin:
+    # —— 跨 Mixin 依赖（RuntimeService 组合时由 InstanceLifecycleMixin 提供，
+    # MRO 前位遮蔽本桩；P2-5 命令内变体）——
+    def _cancel_in_ctx(
+        self, ctx: CommandContext, instance_id: str, *, actor: str, reason: str
+    ) -> None:
+        raise NotImplementedError
+
+    def _terminate_in_ctx(
+        self, ctx: CommandContext, instance_id: str, *, actor: str, reason: str
+    ) -> None:
+        raise NotImplementedError
+
     """RuntimeService 的故障处置面。"""
 
     _engine: ProcessEngine
@@ -119,7 +131,9 @@ class IncidentMixin:
                     ctx.touch(instance)
                     instance.state = "running"
             elif action == "cancel":
-                self._cancel_in_ctx(ctx, incident.instance_id, actor=actor, reason="incident:cancel")
+                self._cancel_in_ctx(
+                    ctx, incident.instance_id, actor=actor, reason="incident:cancel"
+                )
             elif action == "retry":
                 moment = self._engine.config.now()
                 for job in ctx.session.scalars(
