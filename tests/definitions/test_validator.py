@@ -678,3 +678,22 @@ def test_mi_with_candidates_rejected(registry):
         .build()
     )
     assert "user_task.mi_with_candidates" in error_rules(definition, registry)
+
+
+def test_parallel_duplicate_edge_rejected(registry):
+    """回归（拍板 5 方案 A）：同一对节点多条连线＝设计期 ERROR——改版对比
+    与破坏性判定对该形态半盲（diff/R4 按 source→target 建键只见一条）。
+    修复前合法但不可审。"""
+    definition = (
+        FlowBuilder("dup_edge")
+        .start()
+        .user_task("a", assignee="'u_a'")
+        .user_task("b", assignee="'u_b'")
+        .end()
+        .connect("start", "a")
+        .connect("a", "b")
+        .connect("a", "b")  # 平行重边
+        .connect("b", "end")
+        .build()
+    )
+    assert "structure.flow.duplicate" in error_rules(definition, registry)

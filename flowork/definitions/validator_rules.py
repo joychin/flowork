@@ -168,6 +168,23 @@ def check_structure(
         if node.kind == KIND_END and definition.outgoing(node.code):
             error("structure.end.outgoing", "end 节点不允许有出边", node=node.code)
 
+    # —— 平行重边（拍板 5 方案 A）：同一对节点多条连线＝改版对比与破坏性
+    # —— 判定的半盲形态（diff/R4 按 source→target 建键只见一条）——设计期
+    # —— 禁止；多条件到同一目标用多条不同 source 或改条件表达式。
+    edge_pairs: dict[tuple[str, str], str] = {}
+    for flow in definition.flows:
+        pair = (flow.source, flow.target)
+        if pair in edge_pairs:
+            error(
+                "structure.flow.duplicate",
+                f"节点 {flow.source} → {flow.target} 存在平行重边（与 "
+                f"{edge_pairs[pair]} 重复）：改版对比与破坏性判定对该形态半盲，"
+                "请合并为一条（多条件用 && / || 表达）",
+                flow=flow.flow_code(),
+            )
+        else:
+            edge_pairs[pair] = flow.flow_code()
+
     # —— 连线端点存在性 ——
     for flow in definition.flows:
         for end, role in ((flow.source, "source"), (flow.target, "target")):
