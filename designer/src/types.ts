@@ -157,6 +157,96 @@ export type DiffResult = {
   changes: DiffChange[]
 }
 
+/** /api/definitions/{code}/publish 返回：版本判定全貌(批 A3;破坏性明细在 triggered_rules) */
+export type PublishResult = {
+  code: string
+  version: number
+  revision: number
+  breaking: boolean
+  triggered_rules: { rule: string; detail: string }[]
+  identical_to: [number, number] | null
+  status: string
+}
+
+/** /api/definitions/{code}/simulate 返回:整图模拟报告(引擎 SimulationReport) */
+export type SimulationReport = {
+  instance_id: string
+  definition_code: string
+  final_state: string
+  visited: string[]
+  stubbed: string[]
+  stalled_at: string | null
+  route_decisions: { node: string; selected: string[] }[]
+}
+
+/** /api/instances 返回:实例概要 */
+export type InstanceInfo = {
+  id: string
+  definition_code: string
+  definition_major: number
+  definition_revision: number
+  business_key: string | null
+  state: string
+  start_user: string
+  started_at: string | null
+  finished_at: string | null
+  parent_id: string | null
+  simulated: boolean
+}
+
+/** /api/instances/{id} 返回:实例 + 令牌 + 当前变量 */
+export type InstanceDetail = {
+  instance: InstanceInfo
+  tokens: TokenInfo[]
+  variables: Record<string, unknown>
+}
+
+export type TokenInfo = {
+  id: string
+  token_no: number
+  activity_code: string
+  source_activity_code: string | null
+  state: string
+  item_count: number
+  approve_count: number
+  disapprove_count: number
+  reject_flag: boolean
+  approval_exit: string | null
+  created_at: string | null
+  finished_at: string | null
+}
+
+/** /api/instances/{id}/timeline 返回:令牌+已办+事件按时间合并 */
+export type TimelineEntry = {
+  time: string
+  kind: string
+  title: string
+  detail: string
+}
+
+/** /api/instances/{id}/route-decisions 返回:路由决策审计(逐边公式结果+快照) */
+export type RouteDecision = {
+  id: string
+  instance_id: string
+  token_id: string | null
+  source_activity: string
+  mode: string
+  edges: { flow: string; formula: string | null; result: string }[]
+  selected: string[]
+  snapshot: Record<string, unknown>
+  created_at: string | null
+}
+
+/** /api/instances/{id}/variable-history 返回:变量血缘 */
+export type VariableChange = {
+  name: string
+  old_value: unknown
+  new_value: unknown
+  source: string
+  acted_by: string | null
+  created_at: string
+}
+
 export const edgeId = (source: string, target: string) => `${source}->${target}`
 
 export const parseEdgeId = (id: string) => {

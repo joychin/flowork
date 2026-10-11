@@ -4,10 +4,17 @@ import type {
   DefinitionSummary,
   DiffResult,
   DryRunResult,
+  InstanceDetail,
+  InstanceInfo,
   NodeKindMeta,
   ProcessVariable,
+  PublishResult,
+  RouteDecision,
+  SimulationReport,
   Spec,
+  TimelineEntry,
   ValidateIssue,
+  VariableChange,
 } from './types'
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
@@ -41,10 +48,7 @@ export const api = {
     }),
 
   publish: (code: string) =>
-    request<{ code: string; version: number; status: string }>(
-      `/api/definitions/${code}/publish`,
-      { method: 'POST' },
-    ),
+    request<PublishResult>(`/api/definitions/${code}/publish`, { method: 'POST' }),
 
   validate: (spec: Spec, deploy = false) =>
     request<{ ok: boolean; issues: ValidateIssue[] }>(
@@ -75,6 +79,32 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(spec),
     }),
+
+  // —— 审计数据面(设计器插件计划批 A/批 B 消费) ——
+
+  /** 整图模拟(主场景=当前草稿,含未保存编辑;引擎真跑但零副作用) */
+  simulate: (code: string, spec: Spec, variables: Record<string, unknown>) =>
+    request<SimulationReport>(`/api/definitions/${code}/simulate`, {
+      method: 'POST',
+      body: JSON.stringify({ spec, variables }),
+    }),
+
+  instances: (params: { state?: string; definition_code?: string; include_simulated?: boolean }) => {
+    const qs = new URLSearchParams()
+    if (params.state) qs.set('state', params.state)
+    if (params.definition_code) qs.set('definition_code', params.definition_code)
+    if (params.include_simulated) qs.set('include_simulated', 'true')
+    const query = qs.toString()
+    return request<InstanceInfo[]>(`/api/instances${query ? `?${query}` : ''}`)
+  },
+
+  instanceDetail: (id: string) => request<InstanceDetail>(`/api/instances/${id}`),
+
+  timeline: (id: string) => request<TimelineEntry[]>(`/api/instances/${id}/timeline`),
+
+  routeDecisions: (id: string) => request<RouteDecision[]>(`/api/instances/${id}/route-decisions`),
+
+  variableHistory: (id: string) => request<VariableChange[]>(`/api/instances/${id}/variable-history`),
 }
 
 /** 流程变量 → dry-run / 公式试算用的样例值表（sample 优先，否则按类型给安全默认） */

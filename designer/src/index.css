@@ -664,3 +664,56 @@ input, select, textarea { font-family: inherit; }
 .chip:hover { border-color: #2f6bff; color: #2f6bff; background: #f0f4ff; }
 .chip.reserved { border-style: dashed; }
 .chip.fn { font-family: ui-monospace, monospace; }
+
+/* —— 试运行双 Tab(路由预演 / 完整模拟) —— */
+.dialog-tabs { display: flex; gap: 4px; margin: 6px 0; border-bottom: 1px solid var(--line); }
+.tab-btn {
+  border: 0; background: none; padding: 6px 10px; cursor: pointer;
+  font-size: 12.5px; color: #64748b; border-bottom: 2px solid transparent; margin-bottom: -1px;
+}
+.tab-btn.active { color: #2f6bff; font-weight: 600; border-bottom-color: #2f6bff; }
+.sim-section-title { font-size: 11px; font-weight: 600; color: #7a8699; margin: 10px 0 4px; }
+.sim-stub {
+  margin-left: 6px; font-size: 10px; padding: 0 6px; border-radius: 8px;
+  background: #fef3c7; color: #92400e; border: 1px solid #fcd34d;
+}
+.sim-routes { margin: 0; padding-left: 18px; font-size: 12.5px; display: flex; flex-direction: column; gap: 3px; }
+.sim-selected { color: #166534; }
+.dryrun-verdict.warn { background: #fef3c7; color: #92400e; }
+
+/* —— 实例审计视图(批 B3) —— */
+.inst-filters { display: flex; align-items: center; gap: 12px; margin: 6px 0 10px; }
+.inst-filters select { font-size: 12.5px; padding: 4px 6px; }
+.inst-sim-toggle { display: flex; align-items: center; gap: 5px; font-size: 12px; color: #64748b; cursor: pointer; }
+.inst-list { display: flex; flex-direction: column; gap: 6px; max-height: 340px; overflow: auto; }
+.inst-row {
+  display: flex; align-items: center; gap: 8px; text-align: left;
+  border: 1px solid var(--line); border-radius: 8px; background: #fff;
+  padding: 7px 10px; cursor: pointer; font-size: 12.5px; color: var(--ink);
+}
+.inst-row:hover { border-color: #2f6bff; background: #f0f4ff; }
+.inst-state { border: 0; cursor: default; }
+.chip.inst-state.running { background: #dbeafe; color: #1e40af; }
+.chip.inst-state.completed { background: #dcfce7; color: #166534; }
+.chip.inst-state.failed { background: #fee2e2; color: #991b1b; }
+.chip.inst-state.paused, .chip.inst-state.suspended { background: #fef3c7; color: #92400e; }
+.chip.inst-state.terminated, .chip.inst-state.cancelled { background: #e5e7eb; color: #374151; }
+.inst-id { font-family: ui-monospace, monospace; font-weight: 600; }
+.inst-meta { color: #64748b; font-size: 11.5px; }
+.inst-back { position: absolute; left: 10px; top: 12px; }
+.inst-kv { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: #64748b; margin: 4px 0 8px; }
+.inst-tokens { display: flex; flex-wrap: wrap; gap: 5px; margin: 6px 0; }
+.token-chip { cursor: default; font-family: ui-monospace, monospace; }
+.token-chip.unfinished { border-color: #2f6bff; color: #2f6bff; }
+.inst-timeline { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 5px; max-height: 300px; overflow: auto; }
+.tl-entry { display: flex; gap: 8px; font-size: 12px; align-items: baseline; }
+.tl-time { color: #94a3b8; font-family: ui-monospace, monospace; font-size: 11px; white-space: nowrap; }
+.tl-kind {
+  font-size: 10px; padding: 0 5px; border-radius: 8px; white-space: nowrap;
+  background: #eef2ff; color: #4338ca; border: 1px solid #c7d2fe;
+}
+.tl-task .tl-kind { background: #dcfce7; color: #166534; border-color: #bbf7d0; }
+.tl-event .tl-kind { background: #f1f5f9; color: #475569; border-color: #e2e8f0; }
+.tl-body { display: flex; flex-direction: column; gap: 1px; }
+.tl-detail { color: #64748b; font-size: 11px; }
+.tl-edge { color: #475569; font-family: ui-monospace, monospace; font-size: 11px; }

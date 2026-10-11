@@ -1,6 +1,8 @@
 /** 顶栏:返回 / 定义信息 / 生命周期状态 / 保存状态 / 校验与发布动作 */
 
+import { useState } from 'react'
 import { useStore } from '../store'
+import { InstancesDialog } from './InstancesDialog'
 
 export function Topbar() {
   const defInfo = useStore((s) => s.defInfo)
@@ -18,6 +20,8 @@ export function Topbar() {
   const openDryRun = useStore((s) => s.openDryRun)
   const past = useStore((s) => s.past.length)
   const future = useStore((s) => s.future.length)
+  // 审计实例视图(批 B3):本地开合,不入全局状态
+  const [instancesOpen, setInstancesOpen] = useState(false)
 
   if (!defInfo || !spec) return null
   const errorCount = issues.filter((i) => i.level === 'error').length
@@ -40,7 +44,8 @@ export function Topbar() {
       <button className="icon-btn" onClick={undo} disabled={!past} title="撤销 (Ctrl+Z)">↺</button>
       <button className="icon-btn" onClick={redo} disabled={!future} title="重做 (Ctrl+Shift+Z)">↻</button>
       <button className="icon-btn" onClick={relayout} title="按分层重新排布全部节点">⌗</button>
-      <button className="btn" onClick={openDryRun} title="按流程变量样例值预演路由,画布高亮路径">▶ 试运行</button>
+      <button className="btn" onClick={openDryRun} title="路由预演 + 完整模拟(草稿可跑,证据先于发布)">▶ 试运行</button>
+      <button className="btn" onClick={() => setInstancesOpen(true)} title="实例审计:走到哪、条件为什么这么选">⚖ 实例</button>
       <button
         className={`btn ${dirty ? 'btn-primary' : ''}`}
         onClick={() => void saveNow()}
@@ -61,6 +66,7 @@ export function Topbar() {
       <button className="btn btn-primary" onClick={() => setPublishOpen(true)}>
         {defInfo.publishedVersion != null ? `发布 v${defInfo.publishedVersion + 1}` : '发布 v1'}
       </button>
+      {instancesOpen && <InstancesDialog code={defInfo.code} onClose={() => setInstancesOpen(false)} />}
     </header>
   )
 }
