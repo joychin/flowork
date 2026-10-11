@@ -526,3 +526,20 @@ ProcessVariable 补入 api 公开面（快照同步）。
 spec：§2.3 竞速臂判定/§7 暂停拦截范围/§4.1 出口不可达/§5.1 加签现时名单/
 §2.5 binding/C.4 空声明口径+附录第二十轮（含乙类 B1–B9 九条随批条款化）。
 **905 测试全绿（+14 净增），五道门全过。**
+
+**设计器插件计划+审计数据面批 A（2026-10-11，计划=docs/product/designer-plugin-plan.md）**：
+设计器定位拍板＝**开发人员的查看与审计插件**（npm 可嵌入、宿主默认只读、编辑留开发模式；
+产品分工=设计器审计面×任务页办理面；范围变更记边界 backlog）。四批主线 A 审计数据面→
+B 审计呈现→C 插件化→D 支撑面；review 修订五处（模拟限发布版=顺序矛盾→拍板翻转、A3 大半
+已存在、300 行、readonly 取数洞、A2 对齐 HistoryService 方法表+命名抄 spec §12）。
+批 A 落地：① 内核草稿直通——RuntimeService.simulate 增 spec 入参（不查库不落定义表、
+版本列草稿占位 (0,0)、隔离语义全沿用；start_process 公开面**不**开放 spec——真实实例
+仍只能来自已发布定义），**证据先于发布**（用户拍板「只对已发布流程模拟没意义」）；
+② web 新模块 contrib/web/audit_routes.py（preview_routes 先例，app.py 231 行守红线）
+九端点：simulate（body 带 spec 缺省取已保存草稿/模拟前强制设计期校验 ERROR 拦 422/
+?major=&revision= 发布版对照）/instances 列表（默认隔离模拟实例——写明防误报 bug）·
+详情（实例+令牌+变量）·timeline（trace_instance）·route-decisions·variable-history·
+tasks（paged_tasks）/versions 列表+按版本取发布 spec（spec §12 同义，C2 readonly 数据
+前提）；③ publish 响应补 triggered_rules（破坏性明细——breaking 只是布尔）+identical_to
+（幂等去重）；④ designer_drafts 增 published_versions（新→旧）。测试 +14（内核 5+web 9）。
+**966 测试全绿，五道门全过。**

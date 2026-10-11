@@ -55,12 +55,21 @@ npm run dev        # http://localhost:5173,/api 代理到 8901
 | GET  | `/api/definitions` | 定义汇总(草稿/已发布版本号) |
 | GET  | `/api/definitions/{code}` | 定义详情(含最新草稿 Spec) |
 | PUT  | `/api/definitions/{code}` | 保存草稿(就地更新或新建草稿版本) |
-| POST | `/api/definitions/{code}/publish` | 发布(校验失败 → 422 + issues) |
+| POST | `/api/definitions/{code}/publish` | 发布(校验失败 → 422 + issues;响应含版本判定全貌 triggered_rules/identical_to) |
 | POST | `/api/validate` | 设计时校验(不落库;`?deploy=true` 追加部署期校验预演) |
 | POST | `/api/dry-run` | 路由预演(样例变量走一遍图;等待节点支持假设:消息到达/超时/两面都试) |
 | POST | `/api/formula/preview` | CEL 公式试算(样例值) |
 | GET  | `/api/catalog` | 表达式词汇目录(保留词/函数,含位点;条件编辑器点选数据源) |
 | POST | `/api/definitions/{code}/diff` | 语义 diff(草稿 vs 最新发布) |
+| POST | `/api/definitions/{code}/simulate` | **整图模拟**(草稿主场景:body 可带 spec,缺省取已保存草稿;模拟前强制校验;`?major=&revision=` 模拟已发布版本;模拟实例隔离于实例列表) |
+| GET  | `/api/instances` | 实例列表(`?state=&definition_code=&include_simulated=`;默认隔离模拟实例) |
+| GET  | `/api/instances/{id}` | 实例详情(实例 + 令牌状态 + 当前变量) |
+| GET  | `/api/instances/{id}/timeline` | 流转轨迹(令牌+已办+事件按时间合并) |
+| GET  | `/api/instances/{id}/route-decisions` | 路由决策审计(逐边公式结果 + 求值快照) |
+| GET  | `/api/instances/{id}/variable-history` | 变量血缘(`?name=&limit=&offset=`) |
+| GET  | `/api/instances/{id}/tasks` | 实例已办任务(`?offset=&limit=` 分页) |
+| GET  | `/api/definitions/{code}/versions` | 已发布版本列表(新→旧) |
+| GET  | `/api/definitions/{code}/versions/{major}` | 按版本取已发布 spec(`?revision=`;只读模式的数据前提) |
 
 ## 目录
 
@@ -85,5 +94,4 @@ designer/
 │       ├── PublishDialog.tsx       # 发布确认(错误拦截/警告提示)
 │       ├── DryRunDialog.tsx        # 路由预演(样例变量编辑 + 结果)
 │       ├── ConnectMenu.tsx         # 拖线到空白处的快捷新建菜单
-│       └── DevErrorBoundary.tsx    # 开发期错误边界
-```
+│       └── DevErrorBoundary.tsx    # 开发期错误边界```
