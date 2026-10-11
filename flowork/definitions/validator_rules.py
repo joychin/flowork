@@ -42,6 +42,26 @@ def check_variables_and_org(
     org_configured: bool | None = None,
 ) -> None:
     """变量声明检查 + 参与者槽位语义 + 组主体与目录配置的关系（spec §9）。"""
+
+    # —— 槽位组合互斥（code-review 2026-10 P2-13）：候选命中走单任务认领制，
+    # —— multi_instance（并行/串行会签语义）被静默忽略（item_count=1）——图纸
+    # —— 声明的会签形态全部丢失且零告警。设计期拦下并指路两条正路。
+    for node in definition.nodes:
+        if node.kind != KIND_USER_TASK:
+            continue
+        mi = getattr(node, "multi_instance", None)
+        has_candidates = bool(
+            getattr(node, "candidate_users", None) or getattr(node, "candidate_groups", None)
+        )
+        if mi is not None and has_candidates:
+            error(
+                "user_task.mi_with_candidates",
+                f"节点 {node.code} 同时声明 multi_instance 与候选池（candidate_users/"
+                "candidate_groups）：候选命中走单任务认领制，multi_instance 会被忽略——"
+                "多人会签请改用 assignees 表达式，候选认领请移除 multi_instance",
+                node=node.code,
+            )
+
     for variable in definition.variables:
         if variable.searchable and variable.type not in ("string", "number", "boolean"):
             error(
@@ -281,6 +301,18 @@ def check_wait_nodes(definition: ProcessDefinition, error: IssueFn) -> None:
                 error("wait.message.name_empty", "等待消息声明缺 name", node=node.code)
             if not definition.outgoing(node.code):
                 error("wait.exit.required", "等待节点必须有出边", node=node.code)
+            if any(f.target == node.code for f in definition.outgoing(node.code)):
+                # 自环（code-review 2026-10 P2-10 便宜解）：等待收尾（finish_wait）
+                # 绕过推进死循环守卫——到时/消息命中即无限重入，每轮都落审计与
+                # 事件且无故障单。设计期禁止（合法的循环等待请拆多节点并保证
+                # 环上有业务退出条件）。
+                error(
+                    "wait.self_loop",
+                    f"等待节点 {node.code} 的出边指回自身：等待收尾不受推进死循环"
+                    "守卫覆盖，到时/消息命中即无限重入——请拆分节点并保证环上有"
+                    "业务退出条件（计数变量等）",
+                    node=node.code,
+                )
         if node.kind == KIND_USER_TASK:
             reject_target = getattr(node, "reject_target", None)
             target_node = nodes.get(reject_target) if reject_target else None

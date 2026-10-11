@@ -146,3 +146,21 @@ def test_wait_output_mapping_skips_variable_check(registry):
         .model_copy(update={"variables": [ProcessVariable(name="amount", type="number")]})
     )
     assert "expression.variable.unknown" not in error_rules(definition, registry)
+
+
+def test_wait_self_loop_rejected(registry):
+    """回归（code-review 2026-10 P2-10 便宜解）：等待节点出边指回自身＝
+    设计期 ERROR——等待收尾绕过推进死循环守卫，到时/命中即无限重入。"""
+    from flowork.definitions.builder import FlowBuilder
+
+    definition = (
+        FlowBuilder("wait_loop")
+        .start()
+        .wait("w", timeout={"after_minutes": 5})
+        .end()
+        .connect("start", "w")
+        .connect("w", "w")
+        .build()
+    )
+    issues = {i.rule for i in validate_definition(definition, registry) if i.level == IssueLevel.ERROR}
+    assert "wait.self_loop" in issues

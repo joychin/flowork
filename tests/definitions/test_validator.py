@@ -657,3 +657,24 @@ def test_dict_extra_bag_does_not_crash_validator(registry):
         .build()
     )
     assert error_rules(definition, registry) == set()
+
+
+def test_mi_with_candidates_rejected(registry):
+    """回归（code-review 2026-10 P2-13）：multi_instance 与候选池互斥——
+    候选命中走单任务认领制，MI 语义被静默忽略（item_count=1、串并行全丢），
+    设计期 ERROR 指路两条正路。"""
+    definition = (
+        FlowBuilder("mi_candidates")
+        .start()
+        .user_task(
+            "a",
+            assignees=["'u_a'", "'u_b'"],
+            multi_instance={"mode": "parallel"},
+            candidate_users=["'u_c'"],
+        )
+        .end()
+        .connect("start", "a")
+        .connect("a", "end")
+        .build()
+    )
+    assert "user_task.mi_with_candidates" in error_rules(definition, registry)
