@@ -285,9 +285,7 @@ def test_withdraw_on_countersign_retracts_vote_and_reuses_token(engine: ProcessE
     engine.task.withdraw(a_history.task_id, actor="u_a")
 
     with engine.session_factory() as session:
-        tokens = session.scalars(
-            select(TokenRow).where(TokenRow.instance_id == instance_id)
-        ).all()
+        tokens = session.scalars(select(TokenRow).where(TokenRow.instance_id == instance_id)).all()
         n_tokens = [t for t in tokens if t.activity_code == "n"]
         assert len(n_tokens) == 1, "同令牌重建：不建第二令牌"
         assert n_tokens[0].approve_count == 0, "撤回的票回退"
@@ -305,8 +303,9 @@ def test_withdraw_on_countersign_retracts_vote_and_reuses_token(engine: ProcessE
 def test_withdraw_on_sequential_countersign_rejected(engine: ProcessEngine):
     """拍板 3 边界：串行会签的已办不支持撤回（轮次已交棒，撤票与轮次语义
     纠缠）——指路驳回。"""
-    from flowork.definitions.node import MultiInstance
     from sqlalchemy import select
+
+    from flowork.definitions.node import MultiInstance
 
     flow = (
         FlowBuilder("wd_seq")

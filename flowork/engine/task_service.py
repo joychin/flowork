@@ -12,6 +12,7 @@ from flowork.engine.task_admin import TaskAdminMixin
 from flowork.engine.task_assist import TaskAssistMixin
 from flowork.engine.task_cc import TaskCcMixin
 from flowork.engine.task_consult import TaskConsultMixin
+from flowork.engine.task_countersign_add import TaskCountersignAddMixin
 from flowork.engine.task_rework import TaskReworkMixin
 from flowork.errors import TaskNotAvailableError
 from flowork.events.domain import DomainEvent
@@ -29,6 +30,7 @@ __all__ = ["TaskCompleteResult", "TaskService"]
 class TaskService(
     TaskOpsMixin,
     TaskAssistMixin,
+    TaskCountersignAddMixin,
     TaskReworkMixin,
     TaskAdminMixin,
     TaskCcMixin,
