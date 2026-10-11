@@ -492,3 +492,29 @@ def test_signal_skips_paused_instance_subscription():
     engine.runtime.resume_process(instance_id, actor="u_ops")
     assert engine.messages.signal("m1") == 1
     assert [t.activity_code for t in engine.task.list_tasks(instance_id=instance_id)] == ["after"]
+
+
+def test_wait_correlation_node_facts_available():
+    """回归（code-review 2026-10 P1-8）：correlation 位 node() 判断面可用
+    （catalog 位点承诺）。修复前目录放行、求值面未装配——令牌到达等待节点
+    时 FormulaError 挂起（发布零告警的「放行-必炸」）。"""
+    engine = ProcessEngine()
+    definition = (
+        FlowBuilder("wf_corr_node")
+        .start()
+        .user_task("u1", assignee="'u_w'")
+        .wait("w", message={"name": "m1", "correlation_key": 'node("u1").assignee'})
+        .user_task("after", assignee="'u_x'")
+        .end()
+        .connect("start", "u1")
+        .connect("u1", "w")
+        .connect("w", "after")
+        .connect("after", "end")
+        .build()
+    )
+    engine.repository.deploy(definition)
+    instance_id = engine.runtime.start_process("wf_corr_node", start_user="u_start")
+    u1 = engine.task.list_tasks(instance_id=instance_id, assignee="u_w")[0]
+    engine.task.complete(u1.id, actor="u_w")  # 令牌到 w，correlation 求值
+    assert engine.messages.publish_message("m1", "u_w") is True, "按 node() 取到的关联键命中"
+    assert [t.activity_code for t in engine.task.list_tasks(instance_id=instance_id)] == ["after"]

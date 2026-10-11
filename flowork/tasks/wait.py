@@ -225,6 +225,10 @@ def finish_wait(
 
 def _functions_of(ctx: RuntimeNodeContext) -> Any:
     from flowork.expr.context import expression_functions_of
+    from flowork.tasks.facts import attach_node
 
     engine = getattr(ctx.kernel, "engine", None)
-    return expression_functions_of(engine.config if engine else None)
+    functions = expression_functions_of(engine.config if engine else None)
+    # node() 判断面在 correlation 位可用（catalog 位点承诺）——装配对齐
+    # （code-review 2026-10 P1-8：目录放行、求值面未装配，fire 时必挂起）
+    return attach_node(functions, ctx.session, ctx.instance.id)

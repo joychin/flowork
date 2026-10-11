@@ -143,8 +143,15 @@ def _completion_hit(
     from flowork.tasks.facts import instance_facts
 
     config = ctx.kernel.engine.config if ctx.kernel.engine else None
+    # 父实例变量并入（code-review 2026-10 P1-8）：validator 按声明集放行
+    # completion 位引用业务变量——装配面对齐，计数键冲突时计数优先
     counts = expression_context(
-        {"child_total": total, "child_completed": done, "child_failed": failed},
+        {
+            **dict(ctx.instance.variables or {}),
+            "child_total": total,
+            "child_completed": done,
+            "child_failed": failed,
+        },
         start_user=ctx.instance.start_user if ctx.instance else None,
         instance=instance_facts(ctx.instance) if ctx.instance else None,
         now=ctx.kernel.config.now(),

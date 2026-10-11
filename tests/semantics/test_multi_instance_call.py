@@ -343,3 +343,58 @@ def test_mi_subjects_undeclared_variable_rejected():
             .connect("sub", "end")
             .build()
         )
+
+
+# —— 装配对齐（code-review 2026-10 P1-8）——
+
+
+def test_mi_completion_can_reference_parent_variable():
+    """completion 位引用父声明变量＝可用（validator 按声明集放行，装配面
+    对齐注入父实例变量，计数键冲突时计数优先）。修复前发布通过、首个子
+    完成时 FormulaError 挂起（「放行-必炸」）。"""
+    from flowork.definitions.definition import ProcessVariable
+
+    engine = ProcessEngine()
+    _deploy_child(engine)
+    from flowork.definitions.builder import FlowBuilder
+
+    engine.repository.deploy(
+        FlowBuilder("compvar2")
+        .start()
+        .call_activity(
+            "sub",
+            process_code="mi_child",
+            multi_instance={
+                "subjects": ["'u_a'", "'u_b'", "'u_c'"],
+                "completion": "child_completed >= min_k",
+            },
+        )
+        .end()
+        .connect("start", "sub")
+        .connect("sub", "end")
+        .build()
+        .model_copy(update={"variables": [ProcessVariable(name="min_k", type="number")]})
+    )
+    instance_id = engine.runtime.start_process("compvar2", start_user="u_s", variables={"min_k": 2})
+    _complete_n(engine, 2)
+    assert engine.runtime.get_instance(instance_id).state == "completed"
+
+
+def test_mapping_output_reserved_word_position_still_checked():
+    """mapping_output 豁免只作用于业务变量：保留词位点检查照常——task.* 仅
+    reassign/exit 位可用，在输出映射位引用＝设计期 ERROR。修复前豁免连保留词
+    一并跳过（静态零告警、运行期子上下文不注入 task 而挂起）。"""
+    from flowork.definitions.validator import InvalidDefinition
+
+    engine = ProcessEngine()
+    _deploy_child(engine)
+    with pytest.raises(InvalidDefinition, match=r"task_unavailable"):
+        engine.repository.deploy(
+            FlowBuilder("bad_mapping_out")
+            .start()
+            .call_activity("sub", process_code="mi_child", output_mappings={"x": "task.id"})
+            .end()
+            .connect("start", "sub")
+            .connect("sub", "end")
+            .build()
+        )

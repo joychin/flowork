@@ -98,7 +98,10 @@ def check_variable_references(
         except FormulaError:
             continue  # 语法问题已由 formula.invalid 报告
         if kind == "mapping_output":
-            idents = set()  # 子上下文变量父定义不可知：跳过未声明变量检查
+            # 子上下文业务变量父定义不可知：仅豁免未声明变量检查。
+            # 保留标识符是引擎注入契约、静态可知——位点检查照常
+            # （code-review 2026-10 P1-8：此前连保留词位点检查一并跳过）
+            idents = {name for name in idents if name in RESERVED_IDENTIFIERS}
         unknown: set[str] = set()
         for name in idents:
             if name in declared:
