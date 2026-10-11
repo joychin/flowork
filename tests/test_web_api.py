@@ -376,3 +376,40 @@ def test_formula_preview_value_semantics_and_initiator_placeholder(client):
         json={"formula": "initiator == 'u_initiator'", "variables": {}},
     ).json()
     assert r3["ok"] and r3["result"] is True  # 占位 initiator 可引用
+
+
+# —— 批 C4：草稿布局分离（设计器插件计划） ——
+
+
+def test_draft_layout_separated_from_content(client: TestClient, spec02: dict) -> None:
+    """layout 与语义内容分离存储：content 不含坐标；响应合回；发布仍携带（既有行为）。"""
+    spec = {**spec02, "layout": {"a": {"x": 10, "y": 20}}}
+    assert client.put("/api/definitions/demo", json=spec).status_code == 200
+    engine = client.app.state.engine
+    draft = engine.repository.designer_draft("demo")
+    assert "layout" not in draft["spec"]
+    assert draft["layout"] == {"a": {"x": 10, "y": 20}}
+    # 设计器读回:响应侧合回 spec.layout(前端期望的形状)
+    detail = client.get("/api/definitions/demo").json()
+    assert detail["spec"]["layout"] == {"a": {"x": 10, "y": 20}}
+    # 发布:发布内容仍携带画布坐标(外部行为不变,分离只发生在草稿存储层)
+    assert client.post("/api/definitions/demo/publish").status_code == 200
+    assert engine.repository.get_definition_json("demo")["layout"] == {"a": {"x": 10, "y": 20}}
+
+
+def test_draft_layout_legacy_row_lazy_migration(client: TestClient, spec02: dict) -> None:
+    """旧格式行(layout 混在 content、layout 列 NULL)读取时惰性提取。"""
+    engine = client.app.state.engine
+    client.put("/api/definitions/demo", json=spec02)
+    from flowork.persistence.orm import DesignerDraftRow
+
+    with engine.session_factory() as session:
+        row = session.get(DesignerDraftRow, "demo")
+        assert row is not None
+        legacy = {**json.loads(row.content), "layout": {"a": {"x": 1, "y": 2}}}
+        row.content = json.dumps(legacy, ensure_ascii=False)
+        row.layout = None
+        session.commit()
+    draft = engine.repository.designer_draft("demo")
+    assert draft["layout"] == {"a": {"x": 1, "y": 2}}
+    assert "layout" not in draft["spec"]

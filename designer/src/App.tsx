@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react'
 import { useStore } from './store'
+import { designerConfig } from './config'
 import { DefinitionList } from './components/DefinitionList'
 import { Topbar } from './components/Topbar'
 import { Palette } from './components/Palette'
@@ -20,9 +21,11 @@ function Designer() {
   const deleteSelection = useStore((s) => s.deleteSelection)
   const undo = useStore((s) => s.undo)
   const redo = useStore((s) => s.redo)
+  const readonly = designerConfig.readonly()
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (readonly) return // 只读审计:编辑类快捷键全部不响应
       const tag = (e.target as HTMLElement | null)?.tagName
       const typing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
@@ -58,15 +61,15 @@ function Designer() {
       window.removeEventListener('keydown', onKey)
       window.removeEventListener('beforeunload', onBeforeUnload)
     }
-  }, [deleteSelection, undo, redo])
+  }, [deleteSelection, undo, redo, readonly])
 
   return (
     <div className="designer">
       <Topbar />
       <div className="designer-main">
-        <Palette />
+        {!readonly && <Palette />}
         <Canvas />
-        <RightPanel />
+        {!readonly && <RightPanel />}
       </div>
       <PublishDialog />
       <DryRunDialog />
@@ -77,7 +80,12 @@ function Designer() {
 export default function App() {
   const spec = useStore((s) => s.spec)
   const bootstrap = useStore((s) => s.bootstrap)
-  useEffect(() => { void bootstrap() }, [bootstrap])
+  useEffect(() => {
+    void bootstrap()
+    // 深链:配置了 definitionCode 时挂载后直接打开该定义(审计插件常用入口)
+    const code = designerConfig.definitionCode()
+    if (code) void useStore.getState().openDefinition(code)
+  }, [bootstrap])
   return (
     <>
       {spec ? <Designer /> : <DefinitionList />}

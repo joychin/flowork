@@ -1,7 +1,8 @@
-/** 顶栏:返回 / 定义信息 / 生命周期状态 / 保存状态 / 校验与发布动作 */
+/** 顶栏:返回 / 定义信息 / 生命周期状态 / 保存状态 / 校验与发布动作(只读模式裁剪) */
 
 import { useState } from 'react'
 import { useStore } from '../store'
+import { designerConfig } from '../config'
 import { InstancesDialog } from './InstancesDialog'
 
 export function Topbar() {
@@ -22,6 +23,8 @@ export function Topbar() {
   const future = useStore((s) => s.future.length)
   // 审计实例视图(批 B3):本地开合,不入全局状态
   const [instancesOpen, setInstancesOpen] = useState(false)
+  // 只读(宿主嵌入):审计面——保存/撤销/重排/校验/发布全部隐藏
+  const readonly = designerConfig.readonly()
 
   if (!defInfo || !spec) return null
   const errorCount = issues.filter((i) => i.level === 'error').length
@@ -41,31 +44,39 @@ export function Topbar() {
         {defInfo.publishedVersion != null && <span className="chip chip-pub">v{defInfo.publishedVersion} 已发布</span>}
       </div>
       <div className="spacer" />
-      <button className="icon-btn" onClick={undo} disabled={!past} title="撤销 (Ctrl+Z)">↺</button>
-      <button className="icon-btn" onClick={redo} disabled={!future} title="重做 (Ctrl+Shift+Z)">↻</button>
-      <button className="icon-btn" onClick={relayout} title="按分层重新排布全部节点">⌗</button>
+      {!readonly && (
+        <>
+          <button className="icon-btn" onClick={undo} disabled={!past} title="撤销 (Ctrl+Z)">↺</button>
+          <button className="icon-btn" onClick={redo} disabled={!future} title="重做 (Ctrl+Shift+Z)">↻</button>
+          <button className="icon-btn" onClick={relayout} title="按分层重新排布全部节点">⌗</button>
+        </>
+      )}
       <button className="btn" onClick={openDryRun} title="路由预演 + 完整模拟(草稿可跑,证据先于发布)">▶ 试运行</button>
       <button className="btn" onClick={() => setInstancesOpen(true)} title="实例审计:走到哪、条件为什么这么选">⚖ 实例</button>
-      <button
-        className={`btn ${dirty ? 'btn-primary' : ''}`}
-        onClick={() => void saveNow()}
-        disabled={!dirty || saveState === 'saving'}
-        title="保存草稿 (Ctrl+S / Cmd+S)"
-      >
-        {saveState === 'saving' ? '保存中…' : dirty ? '● 保存' : '已保存'}
-      </button>
-      <span className={`save-state ${saveState}`}>
-        {saveState === 'saving' && '保存中…'}
-        {saveState === 'saved' && '✓ 已保存'}
-        {saveState === 'error' && '✕ 保存失败'}
-        {saveState === 'idle' && ''}
-      </span>
-      <button className={`btn ${errorCount ? 'btn-danger' : ''}`} onClick={() => { setRightTab('issues'); void useStore.getState().validateNow() }} title="运行设计时校验">
-        校验{errorCount ? ` · ${errorCount}错` : ''}{!errorCount && warnCount ? ` · ${warnCount}警` : ''}
-      </button>
-      <button className="btn btn-primary" onClick={() => setPublishOpen(true)}>
-        {defInfo.publishedVersion != null ? `发布 v${defInfo.publishedVersion + 1}` : '发布 v1'}
-      </button>
+      {!readonly && (
+        <>
+          <button
+            className={`btn ${dirty ? 'btn-primary' : ''}`}
+            onClick={() => void saveNow()}
+            disabled={!dirty || saveState === 'saving'}
+            title="保存草稿 (Ctrl+S / Cmd+S)"
+          >
+            {saveState === 'saving' ? '保存中…' : dirty ? '● 保存' : '已保存'}
+          </button>
+          <span className={`save-state ${saveState}`}>
+            {saveState === 'saving' && '保存中…'}
+            {saveState === 'saved' && '✓ 已保存'}
+            {saveState === 'error' && '✕ 保存失败'}
+            {saveState === 'idle' && ''}
+          </span>
+          <button className={`btn ${errorCount ? 'btn-danger' : ''}`} onClick={() => { setRightTab('issues'); void useStore.getState().validateNow() }} title="运行设计时校验">
+            校验{errorCount ? ` · ${errorCount}错` : ''}{!errorCount && warnCount ? ` · ${warnCount}警` : ''}
+          </button>
+          <button className="btn btn-primary" onClick={() => setPublishOpen(true)}>
+            {defInfo.publishedVersion != null ? `发布 v${defInfo.publishedVersion + 1}` : '发布 v1'}
+          </button>
+        </>
+      )}
       {instancesOpen && <InstancesDialog code={defInfo.code} onClose={() => setInstancesOpen(false)} />}
     </header>
   )

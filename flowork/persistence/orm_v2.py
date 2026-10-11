@@ -18,7 +18,9 @@ class DesignerDraftRow(Base):
     """设计器工作副本（v2 §6.2：编辑态在设计器本地——不进引擎定义生命周期表）。
 
     seq＝每 code 单调递增的保存序号（设计器显示的 draft_version）；open＝是否
-    待发布（发布即消费，seq 保留以延续编号）。
+    待发布（发布即消费，seq 保留以延续编号）。layout＝画布坐标（设计器插件计划
+    批 C4：与语义内容分离存储——content 不再混入展示坐标；旧行惰性迁移，见
+    designer_drafts.designer_draft）。
     """
 
     __tablename__ = "wf_designer_draft"
@@ -28,6 +30,7 @@ class DesignerDraftRow(Base):
     content: Mapped[str] = mapped_column(Text)
     seq: Mapped[int] = mapped_column(Integer, default=1)
     open: Mapped[bool] = mapped_column(Boolean, default=True)
+    layout: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
 

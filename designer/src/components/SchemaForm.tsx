@@ -6,6 +6,7 @@
 
 import { useState } from 'react'
 import type { FormGroup, JSONSchema } from '../types'
+import { useSuggestions, type Suggestion } from '../options'
 import { ObjectArrayField } from './ObjectArrayField'
 
 /** 字段中文名(引擎 schema title 为英文时兜底) */
@@ -242,6 +243,8 @@ type FieldProps = {
 
 function SchemaField({ path, name, schema, defs, labels, required, error, value, onChange }: FieldProps) {
   const { schema: target, nullable } = resolve(schema, defs)
+  // 下拉辅助(批 D):handler 名录/目录建议,未命中建议的字段恒空列表
+  const suggestions = useSuggestions(name)
   if (!target) return null
   const label = fieldLabel(path, name, target, labels)
   const desc = target.description
@@ -323,7 +326,12 @@ function SchemaField({ path, name, schema, defs, labels, required, error, value,
     }
     const stringItems = Array.isArray(value) ? (value as unknown[]).map(String) : []
     return wrap(
-      <TagInput values={stringItems} onChange={onChange} placeholder={desc ?? '输入后回车添加,点击标签删除'} />,
+      <TagInput
+        values={stringItems}
+        onChange={onChange}
+        placeholder={desc ?? '输入后回车添加,点击标签删除'}
+        suggestions={suggestions}
+      />,
       !required && <span className="opt">可选</span>,
     )
   }
@@ -363,15 +371,26 @@ function SchemaField({ path, name, schema, defs, labels, required, error, value,
     )
   }
 
-  // 可空字符串:输入 + 清空
+  // 可空字符串:输入 + 清空;命中建议字段时挂 datalist(下拉辅助,批 D)
   if (target.type === 'string') {
+    const listId = suggestions.length ? `sugg-${path.replace(/[^a-zA-Z0-9]/g, '_')}` : undefined
     return wrap(
-      <input
-        type="text"
-        value={value == null ? '' : String(value)}
-        placeholder={desc ?? (nullable ? '留空表示不设置' : '')}
-        onChange={(e) => onChange(e.target.value === '' ? null : e.target.value)}
-      />,
+      <>
+        <input
+          type="text"
+          value={value == null ? '' : String(value)}
+          placeholder={desc ?? (nullable ? '留空表示不设置' : '')}
+          list={listId}
+          onChange={(e) => onChange(e.target.value === '' ? null : e.target.value)}
+        />
+        {listId && (
+          <datalist id={listId}>
+            {suggestions.map((s) => (
+              <option key={s.value} value={s.value}>{s.label}</option>
+            ))}
+          </datalist>
+        )}
+      </>,
       !required && <span className="opt">可选</span>,
     )
   }
@@ -387,8 +406,19 @@ function defaultsOf(schema: JSONSchema): Record<string, unknown> {
   return out
 }
 
-function TagInput({ values, onChange, placeholder }: { values: string[]; onChange: (v: string[]) => void; placeholder?: string }) {
+function TagInput({
+  values,
+  onChange,
+  placeholder,
+  suggestions = [],
+}: {
+  values: string[]
+  onChange: (v: string[]) => void
+  placeholder?: string
+  suggestions?: Suggestion[]
+}) {
   const [draft, setDraft] = useState('')
+  const listId = suggestions.length ? 'sugg-taginput' : undefined
   const add = () => {
     const v = draft.trim()
     if (!v || values.includes(v)) return setDraft('')
@@ -405,6 +435,7 @@ function TagInput({ values, onChange, placeholder }: { values: string[]; onChang
       <input
         value={draft}
         placeholder={placeholder}
+        list={listId}
         onChange={(e) => setDraft(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === 'Enter') { e.preventDefault(); add() }
@@ -412,6 +443,13 @@ function TagInput({ values, onChange, placeholder }: { values: string[]; onChang
         }}
         onBlur={add}
       />
+      {listId && (
+        <datalist id={listId}>
+          {suggestions.map((s) => (
+            <option key={s.value} value={s.value}>{s.label}</option>
+          ))}
+        </datalist>
+      )}
     </div>
   )
 }

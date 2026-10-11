@@ -3,6 +3,7 @@ import type {
   DefinitionDetail,
   DefinitionSummary,
   DiffResult,
+  DirectorySummary,
   DryRunResult,
   InstanceDetail,
   InstanceInfo,
@@ -16,9 +17,10 @@ import type {
   ValidateIssue,
   VariableChange,
 } from './types'
+import { designerConfig } from './config'
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
-  const resp = await fetch(url, {
+  const resp = await fetch(`${designerConfig.apiBase()}${url}`, {
     headers: { 'Content-Type': 'application/json' },
     ...init,
   })
@@ -105,6 +107,13 @@ export const api = {
   routeDecisions: (id: string) => request<RouteDecision[]>(`/api/instances/${id}/route-decisions`),
 
   variableHistory: (id: string) => request<VariableChange[]>(`/api/instances/${id}/variable-history`),
+
+  // —— 元数据下发(批 D:下拉辅助数据源) ——
+
+  handlers: () => request<{ handlers: string[] }>('/api/handlers'),
+
+  directorySummary: () =>
+    request<DirectorySummary>('/api/directory/summary'),
 }
 
 /** 流程变量 → dry-run / 公式试算用的样例值表（sample 优先，否则按类型给安全默认） */

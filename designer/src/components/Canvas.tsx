@@ -38,6 +38,7 @@ import {
   toFlowElements,
 } from "../adapter";
 import { findEdgeNear } from "../edgeInsert";
+import { designerConfig } from "../config";
 import { useStore } from "../store";
 import { ConnectMenu } from "./ConnectMenu";
 import { ContextMenu } from "./ContextMenu";
@@ -507,11 +508,13 @@ function CanvasInner() {
           setPendingConnect(null);
         }}
         onNodeContextMenu={(event, node) => {
+          if (designerConfig.readonly()) return; // 只读审计:右键菜单是编辑面
           event.preventDefault();
           select({ type: "node", id: node.id });
           useStore.getState().openContextMenu({ x: event.clientX, y: event.clientY, kind: 'node', id: node.id });
         }}
         onEdgeContextMenu={(event, edge) => {
+          if (designerConfig.readonly()) return;
           event.preventDefault();
           select({ type: "edge", id: edge.id });
           useStore.getState().openContextMenu({ x: event.clientX, y: event.clientY, kind: 'edge', id: edge.id });
@@ -519,6 +522,10 @@ function CanvasInner() {
         onPaneContextMenu={(event) => event.preventDefault()}
         onMoveStart={() => useStore.getState().closeContextMenu()}
         isValidConnection={isValidConnection}
+        // 只读(宿主嵌入):节点不可拖、不可连线、不可选中——画布退化为可缩放视图
+        nodesDraggable={!designerConfig.readonly()}
+        nodesConnectable={!designerConfig.readonly()}
+        elementsSelectable={!designerConfig.readonly()}
         onlyRenderVisibleElements
         // 拖节点到视口边缘时不自动平移画布 —— 画布跟着鼠标跑是"失控/卡"手感的来源
         // (需要平移时滚轮/空格拖/触摸板即可;连线拖到边缘的自动平移保留)

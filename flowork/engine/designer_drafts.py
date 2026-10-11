@@ -31,12 +31,18 @@ class DesignerDraftSupportMixin:
         raise NotImplementedError
 
     def update_draft(self, definition: ProcessDefinition) -> int:
-        """保存设计器工作副本：就地覆盖，seq 单调递增。返回草稿序号。"""
+        """保存设计器工作副本：就地覆盖，seq 单调递增。返回草稿序号。
+
+        批 C4 布局分离：画布坐标（layout）拆到独立列，content 只存语义 JSON
+        ——定义导出/Git 镜像不再被展示坐标污染。
+        """
         from flowork.definitions.definition import dump_definition
         from flowork.persistence.orm import DesignerDraftRow as _Draft
 
         def _command(ctx: CommandContext) -> Any:
-            content = json.dumps(dump_definition(definition), ensure_ascii=False)
+            dumped = dump_definition(definition)
+            layout = dumped.pop("layout", {}) or {}
+            content = json.dumps(dumped, ensure_ascii=False)
             draft = ctx.session.get(_Draft, definition.code)
             if draft is None:
                 ctx.session.add(
@@ -44,6 +50,7 @@ class DesignerDraftSupportMixin:
                         code=definition.code,
                         name=definition.name,
                         content=content,
+                        layout=layout,
                         seq=1,
                         open=True,
                     )
@@ -53,6 +60,7 @@ class DesignerDraftSupportMixin:
             # 覆盖保存不膨胀序号；发布消费后再存才递增（衔接旧 draft 语义）
             draft.content = content
             draft.name = definition.name
+            draft.layout = layout
             draft.seq = draft.seq + 1 if not draft.open else draft.seq
             draft.open = True
             ctx.session.flush()
@@ -62,18 +70,26 @@ class DesignerDraftSupportMixin:
         return result
 
     def designer_draft(self, code: str) -> dict[str, Any] | None:
-        """取待发布（open）的工作副本：{code, name, seq, spec}；无则 None。"""
+        """取待发布（open）的工作副本：{code, name, seq, spec, layout}；无则 None。
+
+        spec 不含 layout（批 C4 分离存储）；旧行（layout 列为 NULL）从 content
+        惰性提取，首次保存后落新格式。
+        """
         from flowork.persistence.orm import DesignerDraftRow as _Draft
 
         def _command(ctx: CommandContext) -> Any:
             draft = ctx.session.get(_Draft, code)
             if draft is None or not draft.open:
                 return None
+            content = json.loads(draft.content)
+            # 旧行惰性迁移：layout 还混在 content 里;新行直接取独立列
+            layout = (content.pop("layout", {}) or {}) if draft.layout is None else draft.layout
             return {
                 "code": draft.code,
                 "name": draft.name,
                 "seq": draft.seq,
-                "spec": json.loads(draft.content),
+                "spec": content,
+                "layout": layout,
             }
 
         result: dict[str, Any] | None = self._engine.execute(_command)
@@ -83,7 +99,7 @@ class DesignerDraftSupportMixin:
         """发布后消费工作副本（seq 保留以延续编号）。"""
         from flowork.persistence.orm import DesignerDraftRow as _Draft
 
-        def _command(ctx: CommandContext) -> Any:
+        def _command(ctx: CommandContext) -> None:
             draft = ctx.session.get(_Draft, code)
             if draft is not None:
                 draft.open = False
@@ -91,7 +107,11 @@ class DesignerDraftSupportMixin:
         self._engine.execute(_command)
 
     def deploy_draft(self, code: str, *, published_by: str = "designer") -> VersionVerdict:
-        """发布设计器工作副本（无待发布草稿时报定义不存在）。"""
+        """发布设计器工作副本（无待发布草稿时报定义不存在）。
+
+        布局合回：发布内容仍携带画布坐标（既有行为不变）；分离只发生在草稿
+        存储层——语义内容与展示坐标不再混存。
+        """
         from flowork.definitions.definition import load_definition
         from flowork.errors import DefinitionNotPublishedError
 
@@ -99,6 +119,9 @@ class DesignerDraftSupportMixin:
         if draft is None:
             raise DefinitionNotPublishedError(f"定义 {code} 无待发布草稿")
         definition = load_definition(draft["spec"], self._engine.config.node_registry)
+        layout = draft.get("layout") or {}
+        if layout:
+            definition = definition.model_copy(update={"layout": layout})
         verdict: VersionVerdict = self.deploy(definition, published_by=published_by)
         self.consume_draft(code)
         return verdict

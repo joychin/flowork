@@ -13,8 +13,10 @@ React + TypeScript + React Flow 实现的 flowork 流程设计器 UI。
 └──────────────┘                   └───────────────────┘            └────────────┘
 ```
 
-- **Spec 唯一事实源**:画布、属性表单、Spec JSON Tab 全部读写同一份定义;`layout` 仅为展示坐标,semantic diff 应忽略。
-- **schema 驱动表单**:属性面板由各 `*Spec` 的 pydantic JSON Schema(`/api/node-kinds`)递归生成;引擎新增字段/节点类型,前端零代码跟进。
+- **Spec 唯一事实源**:画布、属性表单、Spec JSON Tab 全部读写同一份定义;布局坐标与
+  语义内容分离存储(草稿表独立 layout 列,发布内容仍携带画布坐标)
+- **schema 驱动表单**:属性面板由各 `*Spec` 的 pydantic JSON Schema(`/api/node-kinds`)递归生成;引擎新增字段/节点类型,前端零代码跟进。取人与动作字段
+  挂 datalist 建议(handler 名录/目录用户与组引用,`/api/handlers` + `/api/directory/summary`)。
 - **registry 驱动调色板**:节点类型元数据(name/icon/category/palette)来自 `NodeRegistry.register(..., ui={...})`。
 - **校验闭环**:编辑后防抖调用 `POST /api/validate`(引擎侧 `repository.validate`),错误定位到节点/连线,ERROR 级问题阻塞发布。
 - **生命周期**:草稿(可变)→ 发布(不可变,`assert_valid` 强制校验);运行中实例绑版本,编辑已发布定义自动产生新草稿版本。
@@ -70,6 +72,28 @@ npm run dev        # http://localhost:5173,/api 代理到 8901
 | GET  | `/api/instances/{id}/tasks` | 实例已办任务(`?offset=&limit=` 分页) |
 | GET  | `/api/definitions/{code}/versions` | 已发布版本列表(新→旧) |
 | GET  | `/api/definitions/{code}/versions/{major}` | 按版本取已发布 spec(`?revision=`;只读模式的数据前提) |
+| GET  | `/api/handlers` | 已注册 handler 名录(服务任务动作下拉数据源) |
+| GET  | `/api/directory/summary` | 组织目录只读摘要(`FLOWORK_ORG=org.yaml` 装配;未配置降级) |
+
+## 插件化(`@flowork/designer`)
+
+设计器可构建为可嵌入包(`npm run build:lib` → `dist-lib/`):ESM 单文件 + CSS,
+宿主三行代码嵌入只读审计视图——
+
+```html
+<link rel="stylesheet" href="/designer-lib/flowork-designer.css">
+<div id="audit" style="height:100vh"></div>
+<script type="module">
+  import { mountFloworkDesigner } from '/designer-lib/flowork-designer.es.js'
+  mountFloworkDesigner('#audit', { apiBase: '', mode: 'readonly', definitionCode: 'leave' })
+</script>
+```
+
+- 配置面:`apiBase`(API 前缀,同域留空) / `mode: 'edit' | 'readonly'`(缺省 readonly:
+  画布不可编辑、调色板/属性面板/保存/发布隐藏,保留试运行与实例审计) /
+  `definitionCode`(深链直开)。
+- 单进程 demo:dist-lib 存在时引擎自动托管,`/designer-demo?code=xxx` 即嵌入示例页。
+- 契约纪律:插件消费的 `/api` 面由 `tests/test_web_api_surface.py` 冻结(增删=显式动作)。
 
 ## 目录
 

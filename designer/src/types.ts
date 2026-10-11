@@ -247,6 +247,14 @@ export type VariableChange = {
   created_at: string
 }
 
+/** /api/directory/summary 返回:组织目录只读摘要(批 D1;未配置=无目录降级) */
+export type DirectorySummary = {
+  configured: boolean
+  users: { id: string; department: string | null; roles: string[]; manager: string | null }[]
+  departments: { code: string; name: string; parent: string | null }[]
+  roles: string[]
+}
+
 export const edgeId = (source: string, target: string) => `${source}->${target}`
 
 export const parseEdgeId = (id: string) => {

@@ -13,7 +13,7 @@ from typing import Any
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 
 from flowork.api import (
     DefinitionError,
@@ -28,9 +28,11 @@ from flowork.api import (
 )
 from flowork.contrib.web._helpers import issues_payload, parse_spec
 from flowork.contrib.web.audit_routes import register_audit_routes
+from flowork.contrib.web.meta_routes import register_meta_routes
 from flowork.contrib.web.preview_routes import register_preview_routes
 
-__all__ = ["app", "create_app"]
+# "app" 为惰性属性(模块 __getattr__ 按需创建,import 无副作用),不在 __all__
+__all__ = ["create_app"]
 
 # 属性面板不渲染的基础字段：code 由设计器生成、kind 固定、
 # hooks/properties 属于高级用法（Spec JSON Tab 直接编辑）
@@ -51,7 +53,13 @@ def create_app(db_file: str | Path | None = None, *, seed: bool = True) -> FastA
     import os
 
     db_path = db_file or os.environ.get("FLOWORK_DB", "designer.db")
-    engine = ProcessEngine(EngineConfig(db_file=db_path))
+    config_kwargs: dict[str, Any] = {"db_file": db_path}
+    org_path = os.environ.get("FLOWORK_ORG")
+    if org_path:  # 批 D1：目录只读下发面(FLOWORK_ORG=组织 yaml,同 org_directory 约定)
+        from flowork.api import StaticOrgDirectory
+
+        config_kwargs["org"] = StaticOrgDirectory.from_yaml(org_path)
+    engine = ProcessEngine(EngineConfig(**config_kwargs))
     app = FastAPI(title="flowork designer API", version="0.1.0")
     app.state.engine = engine
     jobs_enabled = os.environ.get("FLOWORK_JOBS", "on").lower() not in ("off", "0", "false")
@@ -63,6 +71,30 @@ def create_app(db_file: str | Path | None = None, *, seed: bool = True) -> FastA
         allow_headers=["*"],
     )
 
+    # 插件库托管（批 C1 单进程 demo 模式）：designer/dist-lib 存在时挂载——
+    # 先 `npm run build:lib`，再起服务即得 /designer-demo 只读嵌入示例页
+    lib_dir = Path(__file__).resolve().parent.parent.parent.parent / "designer" / "dist-lib"
+    if lib_dir.is_dir():
+        from fastapi.staticfiles import StaticFiles
+
+        app.mount("/designer-lib", StaticFiles(directory=lib_dir), name="designer-lib")
+
+        @app.get("/designer-demo", response_class=HTMLResponse)
+        def designer_demo(code: str | None = None) -> str:
+            """三行代码嵌入的只读审计示例（?code=xxx 深链到指定定义）。"""
+            deep = f", definitionCode: '{code}'" if code else ""
+            return (
+                '<!doctype html><html lang="zh"><head><meta charset="utf-8">'
+                "<title>flowork 设计器插件嵌入示例</title>"
+                '<link rel="stylesheet" href="/designer-lib/flowork-designer.css">'
+                "<style>body{margin:0}#audit{height:100vh}</style></head><body>"
+                '<div id="audit"></div>'
+                '<script type="module">'
+                "import { mountFloworkDesigner } from '/designer-lib/flowork-designer.es.js';"
+                f"mountFloworkDesigner('#audit', {{ apiBase: '', mode: 'readonly'{deep} }});"
+                "</script></body></html>"
+            )
+
     @app.exception_handler(FloworkError)
     async def _flowork_error(_request: Any, exc: FloworkError) -> JSONResponse:
         return JSONResponse(status_code=422, content={"detail": str(exc)})
@@ -71,6 +103,8 @@ def create_app(db_file: str | Path | None = None, *, seed: bool = True) -> FastA
     register_preview_routes(app, engine)
     # 审计数据面（模拟 / 实例只读 / 版本）在 audit_routes（设计器插件计划批 A）
     register_audit_routes(app, engine)
+    # 元数据下发面（handler 名录 / 目录摘要）在 meta_routes（设计器插件计划批 D）
+    register_meta_routes(app, engine)
 
     @app.get("/api/health")
     def health() -> dict[str, str]:
@@ -105,12 +139,14 @@ def create_app(db_file: str | Path | None = None, *, seed: bool = True) -> FastA
         if latest["status"] == "draft":
             draft = engine.repository.designer_draft(code)
             assert draft is not None
+            # 批 C4 布局分离：草稿存储层 layout 独立成列,响应时合回设计器期望的形状
+            spec = {**draft["spec"], "layout": draft.get("layout") or {}}
             return {
                 "code": code,
                 "name": latest["name"],
                 "draft_version": latest["version"],
                 "published_version": published_version,
-                "spec": draft["spec"],
+                "spec": spec,
             }
         # 无草稿：返回已发布内容作为新草稿的基底
         spec = engine.repository.get_definition_json(code)
@@ -228,4 +264,14 @@ def _seed_examples(engine: ProcessEngine) -> None:
             engine.repository.deploy(definition, published_by="seed")
 
 
-app = create_app()
+def __getattr__(name: str) -> Any:
+    """``uvicorn flowork.contrib.web.app:app`` 的惰性默认应用。
+
+    import 本模块不再有建引擎/触库的副作用（旧库缺新列时不再炸 import）；
+    首次取 ``app`` 属性才按 FLOWORK_DB（缺省 designer.db）创建。
+    """
+    if name == "app":
+        application = create_app()
+        globals()["app"] = application
+        return application
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

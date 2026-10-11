@@ -1,6 +1,6 @@
 # 设计器插件化与审计面计划（designer-plugin-plan）
 
-> 状态：**批 A 已落地（2026-10-11，966 测试全绿）；批 B/C/D 待启动**。
+> 状态：**批 A/B/C/D 全部落地（2026-10-11，971 测试全绿）**；D3 公式中文投影按计划留作可选未做。
 > 制定 2026-10-11，同日 review 修订（含「草稿模拟」拍板）。
 > 定位拍板来自会话讨论：设计器 = 交付开发人员的查看与审计插件。
 > 定位属范围变更，已记《本期建设边界》backlog 附录。
@@ -66,7 +66,13 @@ tests/test_web_audit_api.py）。
 - 纪律：批 A 端点拆独立路由模块（preview_routes.py 先例，守 app.py ≤300 行）；一律经 `flowork.api`
   （投影纪律测试已守）；web API 测试先行。
 
-### 批 B · 审计呈现（前端）
+### 批 B · 审计呈现（前端）✅ 已落地（浏览器走查全过）
+
+落地实录：试运行双 Tab（路由预演保留 + 完整模拟——终态/时间线/桩/卡点/路由轨迹，
+主场景=当前草稿含未保存编辑）；发布确认呈现判定全貌（幂等去重 identical_to 与
+triggered_rules 明细实测呈现）；实例审计视图（顶栏「实例」入口 → 列表按状态过滤+
+模拟隔离勾选 → 详情概要+令牌链+三面板）。发布编排移入对话框本地（不触 store 并行
+在途改动）。
 
 - **B1** 试运行升级：路由预演保留为轻量 Tab，新增「完整模拟」面板（主场景=当前草稿）——终态结论、
   节点时间线、stub 清单、卡点、路由轨迹（逐边公式与结果）。
@@ -76,7 +82,17 @@ tests/test_web_audit_api.py）。
 - DoD：用 examples 定义跑真实实例后完整走查一遍（含一次驳回、一次超时改派）；
   **断言「模拟实例不出现在实例列表」**（钉住隔离语义）。
 
-### 批 C · 插件化改造
+### 批 C · 插件化改造 ✅ 已落地
+
+落地实录：C3=`tests/test_web_api_surface.py` 契约冻结快照（只冻 /api 面；增删=显式动作，
+D 批扩展时同步）；C4=迁移 0005（草稿表独立 layout 列）+ 读写拆合（content 只存语义、
+旧行惰性迁移、发布合回既有行为）+ 顺带修 import 副作用（web 默认应用改模块级
+__getattr__ 惰性创建——旧库缺列不再炸 import）；C2=`src/config.ts` 配置面
+（apiBase/mode/definitionCode）+ 只读模式（顶栏编辑动作/调色板/属性面板隐藏、画布
+不可拖不可连、快捷键守卫）；C1=`vite.lib.config.ts`（ESM 单文件+CSS，React CJS 包裹层
+process.env.NODE_ENV 显式 define——浏览器裸 process ReferenceError 踩坑）+
+`src/embed.tsx` 挂载入口 + 引擎可选托管（dist-lib 存在即挂 /designer-lib，示例页
+/designer-demo）。浏览器验证：只读嵌入页深链直开、编辑面全隐藏。
 
 - **C1** 构建：Vite library mode 出 npm 包（名待定，如 `@flowork/designer`）；引擎 contrib/web 可选托管
   构建产物（单进程零配置 demo 模式）。
@@ -87,7 +103,14 @@ tests/test_web_audit_api.py）。
 - **C4** 卫生：草稿 JSON 中布局坐标与语义内容分离存储（定义导出/Git 镜像的前提；旧草稿惰性迁移）。
 - DoD：任意外部 React 应用按文档三行代码嵌入只读审计视图。
 
-### 批 D · 支撑面
+### 批 D · 支撑面 ✅ 已落地（D3 未做，见下）
+
+落地实录：D2=`GET /api/handlers`（注册表 names 排序下发）；D1=`GET /api/directory/summary`
+（duck-typing 探测静态目录 users/departments/roles，未配置降级 configured=false；
+`FLOWORK_ORG=org.yaml` 装配）+ 前端 `src/options.ts` 建议缓存（用户建议带 CEL 引号
+`'u_zhang'` 且 label 附部门/角色翻译；candidate_groups 建议 `role:`/`org:` 合法组引用）
++ SchemaForm 取人/动作字段 datalist（单值输入与标签输入两形态）。**D3 公式中文投影
+未做**（计划既定的可选降级项，受众为开发人员非必需——待需要时另批）。
 
 - **D1** 目录只读下发：`GET /api/directory/summary`（组织/角色/用户摘要）；前端做取人引用翻译
   （如 role 引用 → 部门/角色名）与下拉辅助。

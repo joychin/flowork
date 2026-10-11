@@ -543,3 +543,25 @@ tasks（paged_tasks）/versions 列表+按版本取发布 spec（spec §12 同�
 前提）；③ publish 响应补 triggered_rules（破坏性明细——breaking 只是布尔）+identical_to
 （幂等去重）；④ designer_drafts 增 published_versions（新→旧）。测试 +14（内核 5+web 9）。
 **966 测试全绿，五道门全过。**
+
+**设计器插件批 B/C/D 落地（2026-10-11 同日续，审计呈现+插件化+支撑面收官）**：
+**批 B 审计呈现**：试运行双 Tab（路由预演保留+完整模拟——引擎真跑草稿，终态/时间线/
+桩清单/卡点/路由轨迹，主场景=当前草稿含未保存编辑）；发布确认呈现判定全貌
+（triggered_rules 明细+identical_to 幂等去重提示实测）；实例审计视图（顶栏「实例」→
+列表按状态过滤+模拟隔离勾选 → 详情概要+令牌链+三面板时间线/路由决策/变量历史）；
+发布编排移入对话框本地（useStore.setState 直改，不触 store 并行在途改动）。
+**批 C 插件化**：C3=`tests/test_web_api_surface.py` 契约冻结快照（只冻 /api 面——
+/designer-demo 宿主便利面不入契约）；C4=迁移 0005 草稿表独立 layout 列+读写拆合
+（content 只存语义/旧行惰性迁移/发布合回既有行为）+**顺带修 import 副作用**（web 默认
+应用改模块 `__getattr__` 惰性创建——app.py 底部裸 `app = create_app()` 在旧库缺新列时
+炸 collect 的教训：模块级建引擎=import 时触库）；C2=`src/config.ts` 配置面
+（apiBase/mode/definitionCode）+只读模式（编辑动作/调色板/属性面板隐藏、画布
+不可拖连、快捷键守卫）；C1=vite lib 构建（**React CJS 包裹层 process.env.NODE_ENV
+必须显式 define——lib 模式不隐式替换，浏览器裸 process ReferenceError**）+embed.tsx
+挂载入口+引擎可选托管（dist-lib 存在即挂 /designer-lib+示例页 /designer-demo）。
+**批 D 支撑面**：`GET /api/handlers`+`GET /api/directory/summary`（duck-typing 探测
+静态目录，未配置降级；`FLOWORK_ORG=org.yaml` 装配）+前端 options 建议缓存
+（用户建议带 CEL 引号+部门/角色翻译；candidate_groups 建议 role:/org: 合法组引用）
++SchemaForm 取人/动作字段 datalist。**D3 公式中文投影未做**（计划既定可选降级项）。
+**971 测试全绿，五道门全过**；批 B/只读嵌入页浏览器实测（模拟/实例/发布判定/
+readonly demo 四场景）。

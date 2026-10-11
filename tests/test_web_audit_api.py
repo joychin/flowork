@@ -182,3 +182,29 @@ def test_versions_surface(client: TestClient, spec02: dict) -> None:
     assert spec["code"] == "demo"
     assert client.get("/api/definitions/demo/versions/99").status_code == 404
     assert client.get("/api/definitions/absent/versions").status_code == 404
+
+
+# —— 批 D：元数据下发面(handler 名录 / 目录摘要) ——
+
+
+def test_handlers_surface(client: TestClient) -> None:
+    """handler 名录:注册表 names 的排序下发;未注册为空列表(不是错误)。"""
+    engine = client.app.state.engine
+    engine.handlers.register("notify_boss", lambda: None)
+    resp = client.get("/api/handlers")
+    assert resp.status_code == 200
+    assert resp.json()["handlers"] == ["notify_boss"]
+
+
+def test_directory_summary(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """目录摘要:FLOWORK_ORG 装配静态目录时下发用户/部门/角色;未配置时降级。"""
+    with TestClient(create_app(db_file=tmp_path / "meta.db", seed=False)) as bare:
+        assert bare.get("/api/directory/summary").json()["configured"] is False
+
+    monkeypatch.setenv("FLOWORK_ORG", str(EXAMPLES / "org.yaml"))
+    with TestClient(create_app(db_file=tmp_path / "meta.db", seed=False)) as configured:
+        body = configured.get("/api/directory/summary").json()
+    assert body["configured"] is True
+    assert any(u["id"] == "u_zhang" for u in body["users"])
+    assert any(d["code"] == "d_eng" for d in body["departments"])
+    assert "developer" in body["roles"]
