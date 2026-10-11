@@ -102,54 +102,62 @@ class InstanceLifecycleMixin:
         第十四轮：级联未结算子实例（含暂停/挂起中的）同置 terminated
         （terminate_cascade——孤儿待办收口，对齐 Camunda/Zeebe 子树终止）。
         """
+        self._engine.execute(
+            lambda ctx: self._terminate_in_ctx(ctx, instance_id, actor=actor, reason=reason)
+        )
 
-        def _command(ctx: CommandContext) -> Any:
-            instance = _load(ctx, instance_id)
-            if instance.state in ("completed", "cancelled", "terminated"):
-                raise InstanceNotFoundError(f"实例 {instance_id} 已终态（{instance.state}）")
-            ctx.touch(instance)
-            kernel = self._engine.kernel_for(ctx)
-            from flowork.engine.terminate_cascade import cascade_terminate
+    def _terminate_in_ctx(
+        self, ctx: CommandContext, instance_id: str, *, actor: str, reason: str
+    ) -> None:
+        """终止的命令体内联体（code-review 2026-10 P2-5）：供 resolve_incident
+        在同一事务内调用——嵌套 engine.execute 曾把 incident 已 resolved 与实例
+        终态拆进两笔事务，中间崩溃＝实例还跑、单子永闭。"""
+        instance = _load(ctx, instance_id)
+        if instance.state in ("completed", "cancelled", "terminated"):
+            raise InstanceNotFoundError(f"实例 {instance_id} 已终态（{instance.state}）")
+        ctx.touch(instance)
+        kernel = self._engine.kernel_for(ctx)
+        from flowork.engine.terminate_cascade import cascade_terminate
 
-            cascaded = cascade_terminate(
-                self._engine, ctx, instance, end_status="terminated", actor=actor, reason=reason
-            )
-            kernel.complete_instance(ctx.session, instance, "terminated")
-            kernel.record_event(
-                DomainEvent.PROCESS_TERMINATED,
-                {"actor": actor, "reason": reason, "cascaded_instances": cascaded},
-                instance_id,
-            )
-
-        self._engine.execute(_command)
+        cascaded = cascade_terminate(
+            self._engine, ctx, instance, end_status="terminated", actor=actor, reason=reason
+        )
+        kernel.complete_instance(ctx.session, instance, "terminated")
+        kernel.record_event(
+            DomainEvent.PROCESS_TERMINATED,
+            {"actor": actor, "reason": reason, "cascaded_instances": cascaded},
+            instance_id,
+        )
 
     def cancel_process(self, instance_id: str, actor: str, reason: str = "") -> None:
         """取消实例：整树撤销未完令牌与待办（子实例级联 cancelled，第十四轮）。"""
+        self._engine.execute(
+            lambda ctx: self._cancel_in_ctx(ctx, instance_id, actor=actor, reason=reason)
+        )
 
-        def _command(ctx: CommandContext) -> Any:
-            instance = _load(ctx, instance_id)
-            if instance.state in ("completed", "cancelled", "terminated"):
-                # 终态守卫（code-review 2026-10 P1-2）：对齐 terminate_process——
-                # complete_instance 对终态静默跳过，但本命令的取消事件无条件发，
-                # 曾对 completed 实例发出假 process_cancelled（状态与事件背离）
-                raise InstanceNotFoundError(
-                    f"实例 {instance_id} 已终态（{instance.state}），不可取消"
-                )
-            ctx.touch(instance)
-            kernel = self._engine.kernel_for(ctx)
-            from flowork.engine.terminate_cascade import cascade_terminate
+    def _cancel_in_ctx(
+        self, ctx: CommandContext, instance_id: str, *, actor: str, reason: str
+    ) -> None:
+        """取消的命令体内联体（同 _terminate_in_ctx，P2-5）。"""
+        instance = _load(ctx, instance_id)
+        if instance.state in ("completed", "cancelled", "terminated"):
+            # 终态守卫（code-review 2026-10 P1-2）：对齐 terminate_process——
+            # complete_instance 对终态静默跳过，但本命令的取消事件无条件发，
+            # 曾对 completed 实例发出假 process_cancelled（状态与事件背离）
+            raise InstanceNotFoundError(f"实例 {instance_id} 已终态（{instance.state}），不可取消")
+        ctx.touch(instance)
+        kernel = self._engine.kernel_for(ctx)
+        from flowork.engine.terminate_cascade import cascade_terminate
 
-            cascaded = cascade_terminate(
-                self._engine, ctx, instance, end_status="cancelled", actor=actor, reason=reason
-            )
-            kernel.complete_instance(ctx.session, instance, "cancelled")
-            kernel.record_event(
-                DomainEvent.PROCESS_CANCELLED,
-                {"actor": actor, "reason": reason, "cascaded_instances": cascaded},
-                instance_id,
-            )
-
-        self._engine.execute(_command)
+        cascaded = cascade_terminate(
+            self._engine, ctx, instance, end_status="cancelled", actor=actor, reason=reason
+        )
+        kernel.complete_instance(ctx.session, instance, "cancelled")
+        kernel.record_event(
+            DomainEvent.PROCESS_CANCELLED,
+            {"actor": actor, "reason": reason, "cascaded_instances": cascaded},
+            instance_id,
+        )
 
 
 def _load(ctx: CommandContext, instance_id: str) -> ProcessInstanceRow:

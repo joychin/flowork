@@ -119,7 +119,7 @@ class IncidentMixin:
                     ctx.touch(instance)
                     instance.state = "running"
             elif action == "cancel":
-                self.cancel_process(incident.instance_id, actor=actor, reason="incident:cancel")
+                self._cancel_in_ctx(ctx, incident.instance_id, actor=actor, reason="incident:cancel")
             elif action == "retry":
                 moment = self._engine.config.now()
                 for job in ctx.session.scalars(
@@ -140,7 +140,9 @@ class IncidentMixin:
             elif action == "skip":
                 self._skip_failed_nodes(ctx, incident.instance_id, actor)
             elif action == "fail":
-                self.terminate_process(incident.instance_id, actor=actor, reason="incident:fail")
+                self._terminate_in_ctx(
+                    ctx, incident.instance_id, actor=actor, reason="incident:fail"
+                )
             else:
                 raise ValueError(f"未知修复动作：{action}（支持 resume/cancel/retry/skip/fail）")
             incident.state = "resolved"
