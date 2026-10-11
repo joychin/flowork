@@ -69,17 +69,27 @@ BreakingRule = Callable[["ProcessDefinition", "ProcessDefinition"], list[str]]
 
 
 def _rule_input_contract(base: ProcessDefinition, target: ProcessDefinition) -> list[str]:
-    """R1：input 契约破坏＝required 扩大或既有字段类型变化（含收窄、enum 缩小）。"""
+    """R1：input 契约破坏＝required 扩大、既有字段类型变化（含收窄、enum 缩小）、
+    契约从无到有、关闭多余字段容忍（拍板 4 方案 A：两类收紧同属「新实例行为
+    断变」——与 required 扩大同构，强制 major）。"""
     base_schema = base.input or {}
     target_schema = target.input or {}
-    if not base_schema:
-        return []
     violations: list[str] = []
+    if not base_schema and target_schema.get("properties"):
+        # 从无到有：基线什么都收，新版开始拒收不合契约的载荷——发起方行为断变
+        violations.append("新增输入契约：基线无契约（任意载荷放行），新版开始校验拒收")
+    if not base_schema:
+        return violations
     base_required = set(base_schema.get("required") or [])
     target_required = set(target_schema.get("required") or [])
     added = sorted(target_required - base_required)
     if added:
         violations.append(f"required 扩大：{added}")
+    if (
+        base_schema.get("additionalProperties") is not False
+        and target_schema.get("additionalProperties") is False
+    ):
+        violations.append("关闭多余字段容忍：additionalProperties → false（携带附加字段的既有请求被拒）")
     base_props = base_schema.get("properties") or {}
     target_props = target_schema.get("properties") or {}
     for name in sorted(base_props.keys() & target_props.keys()):

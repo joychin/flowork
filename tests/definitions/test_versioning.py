@@ -248,3 +248,33 @@ def test_verdict_preview_does_not_persist():
 
 
 _ = TriggeredRule  # 导入占位（契约可见性）
+
+
+def test_contract_tightening_is_breaking():
+    """回归（拍板 4 方案 A）：契约收紧纳入 R1 破坏性——从无到有、关闭多余
+    字段容忍，两类「新实例行为断变」强制 major（与 required 扩大同构）。
+    修复前均判 revision（平滑升级），按老习惯发请求的发起方被静默打破。"""
+    # 从无到有：基线无契约 → 新版整套严格契约
+    no_contract = _linear("tighten1")
+    with_contract = _linear("tighten1")
+    with_contract.input = {
+        "type": "object",
+        "properties": {"amount": {"type": "number"}},
+        "required": ["amount"],
+    }
+    verdict = compute_verdict(no_contract, with_contract, _hash(with_contract))
+    assert verdict.breaking is True, [r.detail for r in verdict.triggered_rules]
+    assert any(r.rule == "R1_input_contract" for r in verdict.triggered_rules)
+
+    # 关闭多余字段容忍：additionalProperties → false
+    loose = _linear("tighten2")
+    loose.input = {"type": "object", "properties": {"amount": {"type": "number"}}}
+    strict = _linear("tighten2")
+    strict.input = {
+        "type": "object",
+        "properties": {"amount": {"type": "number"}},
+        "additionalProperties": False,
+    }
+    verdict2 = compute_verdict(loose, strict, _hash(strict))
+    assert verdict2.breaking is True, [r.detail for r in verdict2.triggered_rules]
+    assert any(r.rule == "R1_input_contract" for r in verdict2.triggered_rules)
