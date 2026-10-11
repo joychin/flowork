@@ -97,7 +97,13 @@ class TaskAdminMixin:
         self._engine.execute(_command)
 
     def remove_instance(self, instance_id: str, actor: str) -> None:
-        """删除实例及其全部运行时数据（含身份关联/Job/Incident，不可恢复）。"""
+        """删除实例及其全部运行时数据（含身份关联/Job/Incident，不可恢复）。
+
+        有未结算子实例时拒绝（code-review 2026-10 P1-13）：先 terminate 级联
+        （或等子实例终态）再删——直接删父会留下继续运行的孤儿子实例，父子
+        关系断裂不可恢复。v2 四表（变量索引/变量历史/路由审计/消息订阅）
+        与实例同删——此前残留成永久孤儿行（wait 订阅行令 waiting 反查失真）。
+        """
 
         def _command(ctx: CommandContext) -> None:
             from sqlalchemy import delete, select
@@ -108,12 +114,41 @@ class TaskAdminMixin:
                 IdentityLinkRow,
                 IncidentRow,
                 JobRow,
+                MessageSubscriptionRow,
                 ProcessInstanceRow,
                 TaskHistoryRow,
                 TaskRow,
                 TokenRow,
             )
+            from flowork.persistence.orm_v2 import RouteDecisionRow, VariableHistoryRow, VariableIndexRow
 
+            instance = ctx.session.get(ProcessInstanceRow, instance_id)
+            if instance is None:
+                raise InstanceNotFoundError(f"实例不存在：{instance_id}")
+            # 整树收集（BFS）： unsettled 检查覆盖全深度——已结算直接子下仍可能
+            # 挂着运行中的孙实例；删除时已结算子树整树同删（父子关系不悬空）
+            descendants: list[ProcessInstanceRow] = []
+            frontier = [instance_id]
+            while frontier:
+                rows = list(
+                    ctx.session.scalars(
+                        select(ProcessInstanceRow).where(
+                            ProcessInstanceRow.parent_id.in_(frontier)
+                        )
+                    )
+                )
+                descendants.extend(rows)
+                frontier = [row.id for row in rows]
+            unsettled = [
+                row.id
+                for row in descendants
+                if row.state in ("running", "paused", "suspended")
+            ]
+            if unsettled:
+                raise InstanceNotFoundError(
+                    f"实例 {instance_id} 存在未结算子实例（{len(unsettled)} 个）——"
+                    "先 terminate 级联或等子实例终态，再删除"
+                )
             # 身份关联经 task_id 挂靠，先于任务删除
             ctx.session.execute(
                 delete(IdentityLinkRow).where(
@@ -122,15 +157,24 @@ class TaskAdminMixin:
                     )
                 )
             )
-            for row_type in (TaskRow, TaskHistoryRow, TokenRow, CcItemRow, JobRow):
+            for row_type in (
+                TaskRow,
+                TaskHistoryRow,
+                TokenRow,
+                CcItemRow,
+                JobRow,
+                VariableIndexRow,
+                VariableHistoryRow,
+                RouteDecisionRow,
+                MessageSubscriptionRow,
+            ):
                 ctx.session.execute(delete(row_type).where(row_type.instance_id == instance_id))
             ctx.session.execute(
                 delete(EventOutboxRow).where(EventOutboxRow.instance_id == instance_id)
             )
             ctx.session.execute(delete(IncidentRow).where(IncidentRow.instance_id == instance_id))
-            instance = ctx.session.get(ProcessInstanceRow, instance_id)
-            if instance is None:
-                raise InstanceNotFoundError(f"实例不存在：{instance_id}")
+            for row in descendants:  # 已结算子树整树同删
+                ctx.session.delete(row)
             ctx.session.delete(instance)
 
         self._engine.execute(_command)

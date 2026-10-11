@@ -464,3 +464,54 @@ def test_assist_and_consult_respect_max_participants():
     p1b = bounded2.task.list_tasks(instance_id=instance_id2, assignee="u_m")[0]
     with pytest.raises(TaskNotAvailableError, match="超过上限"):
         bounded2.task.consult(p1b.id, users=["u_y1", "u_y2"], actor="u_m")
+
+
+def test_remove_instance_sweeps_v2_tables_and_refuses_unsettled_children(engine: ProcessEngine):
+    """回归（code-review 2026-10 P1-13）：remove_instance 同删 v2 四表
+    （变量索引/变量历史/路由审计/消息订阅——此前残留永久孤儿行）；
+    有未结算子实例时拒绝（先 terminate 级联），不再留下继续运行的孤儿。"""
+    from sqlalchemy import select
+
+    from flowork.errors import InstanceNotFoundError
+    from flowork.persistence.orm import ProcessInstanceRow
+    from flowork.persistence.orm_v2 import RouteDecisionRow, VariableHistoryRow
+
+    child = (
+        FlowBuilder("p13_child")
+        .start()
+        .user_task("work", assignee="'u_w'")
+        .end()
+        .connect("start", "work")
+        .connect("work", "end")
+        .build()
+    )
+    publish(engine, child)
+    parent = (
+        FlowBuilder("p13_parent")
+        .start()
+        .call_activity("sub", process_code="p13_child")
+        .end()
+        .connect("start", "sub")
+        .connect("sub", "end")
+        .build()
+    )
+    publish(engine, parent)
+    instance_id = engine.runtime.start_process("p13_parent", start_user="u_s")
+
+    with pytest.raises(InstanceNotFoundError, match="未结算子实例"):
+        engine.task.remove_instance(instance_id, actor="u_admin")
+
+    engine.runtime.terminate_process(instance_id, actor="u_admin")  # 级联终止后可删
+    engine.task.remove_instance(instance_id, actor="u_admin")
+    with pytest.raises(InstanceNotFoundError):
+        engine.runtime.get_instance(instance_id)  # 已删除
+    with engine.session_factory() as session:
+        for row_type in (RouteDecisionRow, VariableHistoryRow):
+            leftovers = session.scalars(
+                select(row_type).where(row_type.instance_id == instance_id)
+            ).all()
+            assert leftovers == [], f"{row_type.__name__} 残留"
+        orphans = session.scalars(
+            select(ProcessInstanceRow).where(ProcessInstanceRow.parent_id == instance_id)
+        ).all()
+        assert orphans == [], "子实例行残留"

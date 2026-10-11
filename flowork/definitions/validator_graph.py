@@ -25,7 +25,7 @@ if TYPE_CHECKING:
     from flowork.definitions.definition import ProcessDefinition
     from flowork.definitions.validator_conditions import IssueFn
 
-__all__ = ["check_graph_lints"]
+__all__ = ["check_graph_lints"]  # 递归推进的栈溢出风险阈值（粗代理，见 graph.flow.large）
 
 
 def check_graph_lints(definition: ProcessDefinition, warning: IssueFn) -> None:
@@ -54,6 +54,21 @@ def check_graph_lints(definition: ProcessDefinition, warning: IssueFn) -> None:
                         node=node.code,
                         flow=flow.flow_code(),
                     )
+
+    if len(definition.nodes) > _LARGE_FLOW_NODES:
+        # 推进为递归实现（code-review 2026-10 P1-6）：约 7 帧/节点，深直通链
+        # 超 Python 栈限会 RecursionError 且不经故障单。节点数是粗代理（分支
+        # 图无碍）——WARNING 提示拆子流程；推进迭代化为结构性改造，随内核
+        # 重排刀处理。
+        warning(
+            "graph.flow.large",
+            f"节点数 {len(definition.nodes)} 超过 {_LARGE_FLOW_NODES}：深直通链可能触发"
+            "推进递归栈溢出（RecursionError）——建议拆分子流程",
+            node=definition.nodes[0].code,
+        )
+
+
+_LARGE_FLOW_NODES = 120
 
 
 def _is_all_join(definition: ProcessDefinition, node_code: str) -> bool:

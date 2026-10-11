@@ -158,3 +158,30 @@ def test_graph_rules_are_warning_only(registry, builder_code):
     assert all(
         i.level == IssueLevel.WARNING for i in issues if i.rule.startswith(("graph.", "join."))
     )
+
+
+def test_large_flow_warns_about_recursion_risk(registry):
+    """回归（code-review 2026-10 P1-6 缓解）：节点数超阈值的深直通链给
+    WARNING（推进为递归实现，超 Python 栈限 RecursionError 且不经故障单）。
+    节点数是粗代理——分支图同规模无碍，只提示拆子流程。"""
+    from flowork.definitions.builder import FlowBuilder
+
+    builder = FlowBuilder("huge").start()
+    codes = ["n001"]
+    for i in range(2, 132):
+        codes.append(f"n{i:03d}")
+    for code in codes:
+        builder = builder.user_task(code, assignee="'u_w'")
+    builder = builder.end()
+    builder = builder.connect("start", "n001")
+    for prev, nxt in zip(codes, codes[1:]):
+        builder = builder.connect(prev, nxt)
+    builder = builder.connect(codes[-1], "end")
+    definition = builder.build()
+
+    warnings = [
+        issue.rule
+        for issue in validate_definition(definition, registry)
+        if issue.level == IssueLevel.WARNING
+    ]
+    assert "graph.flow.large" in warnings
