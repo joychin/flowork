@@ -11,6 +11,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 from sqlalchemy import select
 
@@ -168,3 +170,132 @@ def test_real_start_unaffected_by_simulation_paths(engine: ProcessEngine):
     tasks = engine.task.list_tasks(instance_id=instance_id)
     assert [t.activity_code for t in tasks] == ["a"]
     assert engine.history.events(instance_id) != []
+
+
+# —— 草稿直通（设计器插件计划 A1）：证据先于发布 ——
+
+
+def _draft_spec_dict(engine: ProcessEngine, code: str) -> dict[str, Any]:
+    """构造未部署的草稿 spec dict（模拟的直通入参形态与设计器一致）。"""
+    from flowork.definitions.definition import dump_definition
+
+    flow = (
+        FlowBuilder(code)
+        .start()
+        .user_task("a", assignee="'u_a'")
+        .branch("route", route_mode="first_match")
+        .service_task("svc", action="NEVER_REGISTERED")
+        .user_task("b", assignee="'u_b'")
+        .cc_task("notify", recipients=["'u_a'"])
+        .end()
+        .connect("start", "a")
+        .connect("a", "route")
+        .flow("route", "svc", condition="amount > 100")
+        .flow("route", "notify", default=True)
+        .connect("svc", "b")
+        .connect("b", "notify")
+        .connect("notify", "end")
+    )
+    built = flow.build().model_copy(
+        update={"variables": [ProcessVariable(name="amount", type="number")]}
+    )
+    return dump_definition(built)
+
+
+def test_simulation_draft_spec_never_deploys(engine: ProcessEngine):
+    """草稿模拟不落定义表：报告产出但 code 仍查无已发布定义。"""
+    spec = _draft_spec_dict(engine, "simdraft")
+    report = engine.runtime.simulate("simdraft", spec=spec, variables={"amount": 500})
+
+    assert report.final_state == "completed"
+    assert report.definition_code == "simdraft"
+    assert report.visited == ["start", "a", "route", "svc", "b", "notify", "end"]
+    assert report.stubbed == ["svc"]
+    from flowork.errors import DefinitionNotPublishedError
+
+    with pytest.raises(DefinitionNotPublishedError):
+        engine.repository.get_definition("simdraft")
+
+
+def test_simulation_draft_spec_isolation_semantics(engine: ProcessEngine):
+    """草稿模拟沿用全部隔离语义：实例列表默认不可见、版本列草稿占位、零事件。"""
+    spec = _draft_spec_dict(engine, "simdraft")
+    report = engine.runtime.simulate("simdraft", spec=spec, variables={"amount": 1})
+
+    assert all(i.id != report.instance_id for i in engine.history.instances())
+    visible = engine.history.instances(include_simulated=True)
+    row = next(i for i in visible if i.id == report.instance_id)
+    assert (row.definition_major, row.definition_revision) == (0, 0)  # 草稿占位
+    assert row.simulated is True
+    assert engine.history.events(report.instance_id) == []
+
+
+def test_simulation_draft_spec_wins_over_published(engine: ProcessEngine):
+    """spec 与已发布版本并存时按 spec 内容走：改条件阈值即改路由，不碰发布版。"""
+    engine.repository.deploy(
+        FlowBuilder("simboth")
+        .start()
+        .user_task("a", assignee="'u_a'")
+        .branch("route", route_mode="first_match")
+        .user_task("high", assignee="'u_h'")
+        .user_task("low", assignee="'u_l'")
+        .end()
+        .connect("start", "a")
+        .connect("a", "route")
+        .flow("route", "high", condition="amount > 100")
+        .flow("route", "low", default=True)
+        .connect("high", "end")
+        .connect("low", "end")
+        .build()
+        .model_copy(update={"variables": [ProcessVariable(name="amount", type="number")]})
+    )
+    # 草稿把阈值改到 10：amount=50 发布版走 low、草稿走 high
+    from flowork.definitions.definition import dump_definition
+
+    draft = dump_definition(
+        FlowBuilder("simboth")
+        .start()
+        .user_task("a", assignee="'u_a'")
+        .branch("route", route_mode="first_match")
+        .user_task("high", assignee="'u_h'")
+        .user_task("low", assignee="'u_l'")
+        .end()
+        .connect("start", "a")
+        .connect("a", "route")
+        .flow("route", "high", condition="amount > 10")
+        .flow("route", "low", default=True)
+        .connect("high", "end")
+        .connect("low", "end")
+        .build()
+        .model_copy(update={"variables": [ProcessVariable(name="amount", type="number")]})
+    )
+    report = engine.runtime.simulate("simboth", spec=draft, variables={"amount": 50})
+    assert "high" in report.visited
+    # 发布版未受影响：按已发布定义模拟仍走 low
+    published_report = engine.runtime.simulate("simboth", variables={"amount": 50})
+    assert "low" in published_report.visited
+
+
+def test_simulation_draft_spec_enforces_input_contract(engine: ProcessEngine):
+    """草稿模拟同受 input 契约把关（start 边界）：缺必填键报错不入库。"""
+    from flowork.definitions.contract import InputContractError
+
+    spec = _draft_spec_dict(engine, "simcontract")
+    spec["input"] = {
+        "type": "object",
+        "properties": {"amount": {"type": "number"}},
+        "required": ["amount"],
+    }
+    with pytest.raises(InputContractError):
+        engine.runtime.simulate("simcontract", spec=spec, variables={})
+    # 报错整笔回滚：不留半截实例
+    assert all(
+        i.definition_code != "simcontract" for i in engine.history.instances(include_simulated=True)
+    )
+
+
+def test_simulation_draft_spec_rejects_junk(engine: ProcessEngine):
+    from flowork.definitions.definition import InvalidDefinitionData
+
+    with pytest.raises(InvalidDefinitionData):
+        engine.runtime.simulate("simjunk", spec={"nodes": "not-a-list"})

@@ -27,6 +27,7 @@ from flowork.api import (
     semantic_diff,
 )
 from flowork.contrib.web._helpers import issues_payload, parse_spec
+from flowork.contrib.web.audit_routes import register_audit_routes
 from flowork.contrib.web.preview_routes import register_preview_routes
 
 __all__ = ["app", "create_app"]
@@ -68,6 +69,8 @@ def create_app(db_file: str | Path | None = None, *, seed: bool = True) -> FastA
 
     # 预演/试算/词汇目录(dry-run / formula/preview / catalog)在 preview_routes
     register_preview_routes(app, engine)
+    # 审计数据面（模拟 / 实例只读 / 版本）在 audit_routes（设计器插件计划批 A）
+    register_audit_routes(app, engine)
 
     @app.get("/api/health")
     def health() -> dict[str, str]:
@@ -145,11 +148,16 @@ def create_app(db_file: str | Path | None = None, *, seed: bool = True) -> FastA
             ) from exc
         except FloworkError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+        payload = verdict.as_event_payload()
         return {
             "code": code,
             "version": verdict.next_major,
             "revision": verdict.next_revision,
             "breaking": verdict.breaking,
+            # 版本判定全貌（批 A3）：破坏性明细在 triggered_rules（breaking 只是布尔）；
+            # identical_to 非 None ＝ 内容与该已发布版本相同（幂等去重，未落库）
+            "triggered_rules": payload["triggered_rules"],
+            "identical_to": payload["identical_to"],
             "status": "published",
         }
 

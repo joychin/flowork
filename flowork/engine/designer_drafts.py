@@ -127,6 +127,35 @@ class DesignerDraftSupportMixin:
         result: dict[str, Any] | None = self._engine.execute(_command)
         return result
 
+    def published_versions(self, code: str) -> list[dict[str, Any]]:
+        """某 code 的已发布版本列表（新→旧；设计器插件计划 A4 版本面数据源）。"""
+        from sqlalchemy import select
+
+        from flowork.persistence.orm import ProcessDefinitionRow as _Row
+
+        def _command(ctx: CommandContext) -> Any:
+            rows = ctx.session.scalars(
+                select(_Row)
+                .where(_Row.code == code, _Row.status == "published")
+                .order_by(_Row.major.desc(), _Row.revision.desc())
+            )
+            return [
+                {
+                    "major": row.major,
+                    "revision": row.revision,
+                    "name": row.name,
+                    "breaking": row.breaking,
+                    "published_at": (row.published_at or row.created_at).isoformat(
+                        timespec="seconds"
+                    ),
+                    "published_by": row.published_by,
+                }
+                for row in rows
+            ]
+
+        result: list[dict[str, Any]] = self._engine.execute(_command)
+        return result
+
     def list_summaries(self) -> list[dict[str, Any]]:
         """按 code 汇总定义列表（待发布草稿序号 / 最高已发布 major / 更新时间）。"""
         from sqlalchemy import select

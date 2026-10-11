@@ -140,6 +140,7 @@ class RuntimeService(InstanceLifecycleMixin, IncidentMixin, VariableActionsMixin
         reuse: Literal["reject", "return_existing", "allow_duplicate"],
         start_message: dict[str, str] | None = None,
         simulated: bool = False,
+        spec: dict[str, Any] | None = None,
     ) -> str:
         import json
 
@@ -154,8 +155,16 @@ class RuntimeService(InstanceLifecycleMixin, IncidentMixin, VariableActionsMixin
                     )
                 return existing
 
-        snapshot = self._engine.repository.get_definition_json(code, major, revision)
-        definition = self._engine.repository.get_definition(code, major, revision)
+        if spec is not None:
+            # 草稿直通（设计器插件计划 A1）：不落定义表，版本列记草稿占位 (0, 0)——
+            # 仅供 simulate 消费（真实实例仍只能来自已发布定义，start_process 不开放 spec）
+            from flowork.definitions.definition import load_definition
+
+            snapshot = {**spec, "code": code, "major": 0, "revision": 0}
+            definition = load_definition(snapshot, self._engine.config.node_registry)
+        else:
+            snapshot = self._engine.repository.get_definition_json(code, major, revision)
+            definition = self._engine.repository.get_definition(code, major, revision)
         # input 契约边界①：发起时按 schema 拒收（spec §3.2，报错不入库）
         from flowork.definitions.contract import validate_input_contract
 
@@ -235,22 +244,51 @@ class RuntimeService(InstanceLifecycleMixin, IncidentMixin, VariableActionsMixin
         start_user: str = "simulator",
         major: int | None = None,
         revision: int | None = None,
+        spec: dict[str, Any] | None = None,
     ) -> Any:
         """整图试跑（v2.3 A10）：模拟启动并自动推到卡点/终态，返回 SimulationReport。
 
         条件边按初始变量**真求值**；service_task 恒 stub、wait 冻结为卡点、
         事件不投 outbox——报告复用路由审计（wf_route_decision）+ 令牌时间线。
+
+        ``spec``（设计器插件计划 A1 草稿直通）：传入定义 JSON 则**不查库**，按
+        草稿内容模拟——证据先于发布（AI 改完草稿 → 人模拟 → 拍板发布）。
+        实例行版本列记草稿占位 (0, 0)，隔离语义与发布版模拟完全一致；
+        major/revision 与 spec 互斥（spec 优先）。
         """
         from flowork.engine.simulation import build_report
 
-        instance_id = self.start_process(
-            code,
-            start_user=start_user,
-            variables=variables,
-            major=major,
-            revision=revision,
-            simulated=True,
-        )
+        if spec is not None:
+            spec_user = start_user
+            spec_vars = variables
+
+            def _command(ctx: CommandContext) -> str:
+                return self._start(
+                    ctx,
+                    code,
+                    spec_user,
+                    spec_vars,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    "reject",
+                    simulated=True,
+                    spec=spec,
+                )
+
+            instance_id = self._engine.execute(_command)
+        else:
+            instance_id = self.start_process(
+                code,
+                start_user=start_user,
+                variables=variables,
+                major=major,
+                revision=revision,
+                simulated=True,
+            )
         return build_report(self._engine, instance_id)
 
     def get_instance(self, instance_id: str) -> InstanceInfo:
