@@ -118,20 +118,36 @@ class RoleDirectoryMixin:
                 .where(RoleAssignmentRow.role_code == role)
                 .order_by(RoleAssignmentRow.id)
             ).all()
+            active = self._active_users_of(session, [row.user_id for row in assignments])
 
             def effective(row: RoleAssignmentRow) -> str | None:
                 return row.org_unit_code if row.org_unit_code is not None else default_scope
 
             if within is None:
-                return list(dict.fromkeys(row.user_id for row in assignments))
+                ordered = list(dict.fromkeys(row.user_id for row in assignments))
+                return [u for u in ordered if u in active]
             chain = self._ancestor_chain(session, within)
             for level in chain:
                 hits = [row.user_id for row in assignments if effective(row) == level]
+                hits = [u for u in hits if u in active]
                 if hits:
                     return list(dict.fromkeys(hits))
-            return list(dict.fromkeys(row.user_id for row in assignments if effective(row) is None))
+            fallback = [row.user_id for row in assignments if effective(row) is None]
+            return list(dict.fromkeys(u for u in fallback if u in active))
 
     # —— 内部 ——
+
+    def _active_users_of(self, session: Session, user_ids: list[str]) -> set[str]:
+        """名单里的在册且未停用用户（code-review 2026-10 P2-22）：与 org: 侧
+        同口径——此前 role: 组解析不看状态，停用员工经角色候选仍可认领。"""
+        if not user_ids:
+            return set()
+        rows = session.scalars(
+            select(OrgUserRow.user_id).where(
+                OrgUserRow.user_id.in_(user_ids), OrgUserRow.status == "active"
+            )
+        ).all()
+        return set(rows)
 
     def _ancestor_chain(self, session: Session, department: str) -> list[str]:
         chain: list[str] = []

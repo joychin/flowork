@@ -140,3 +140,13 @@ class TestRoleEndToEnd:
 
         south = engine.runtime.start_process("role_vertical", start_user="u_li")
         assert len(engine.task.list_tasks(instance_id=south, assignee="u_global_fin")) == 1
+
+
+def test_users_with_role_excludes_suspended(store):
+    """回归（code-review 2026-10 P2-22）：role: 组解析过滤停用用户——与 org:
+    侧同口径。修复前停用员工经角色候选仍可被解析（两路口径不一致）。"""
+    store.assign_role("u_zhang", "finance")
+    store.set_user_status("u_zhang", "suspended", acted_by="u_admin")
+    assert store.users_with_role("finance") == [], "停用用户不进角色组"
+    store.set_user_status("u_zhang", "active", acted_by="u_admin")
+    assert store.users_with_role("finance") == ["u_zhang"], "复效后恢复"
