@@ -520,7 +520,6 @@ def test_wait_correlation_node_facts_available():
     assert [t.activity_code for t in engine.task.list_tasks(instance_id=instance_id)] == ["after"]
 
 
-
 def test_suspended_instance_subscription_not_consumed():
     """回归（拍板 1 方案 A）：挂起实例的订阅与暂停同拦——publish 不消费、
     消息落缓冲；故障恢复（incident resolve resume）后补消费推进。
