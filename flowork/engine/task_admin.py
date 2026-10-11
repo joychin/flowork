@@ -120,7 +120,11 @@ class TaskAdminMixin:
                 TaskRow,
                 TokenRow,
             )
-            from flowork.persistence.orm_v2 import RouteDecisionRow, VariableHistoryRow, VariableIndexRow
+            from flowork.persistence.orm_v2 import (
+                RouteDecisionRow,
+                VariableHistoryRow,
+                VariableIndexRow,
+            )
 
             instance = ctx.session.get(ProcessInstanceRow, instance_id)
             if instance is None:
@@ -132,22 +136,18 @@ class TaskAdminMixin:
             while frontier:
                 rows = list(
                     ctx.session.scalars(
-                        select(ProcessInstanceRow).where(
-                            ProcessInstanceRow.parent_id.in_(frontier)
-                        )
+                        select(ProcessInstanceRow).where(ProcessInstanceRow.parent_id.in_(frontier))
                     )
                 )
                 descendants.extend(rows)
                 frontier = [row.id for row in rows]
             unsettled = [
-                row.id
-                for row in descendants
-                if row.state in ("running", "paused", "suspended")
+                row.id for row in descendants if row.state in ("running", "paused", "suspended")
             ]
             if unsettled:
                 raise InstanceNotFoundError(
-                    f"实例 {instance_id} 存在未结算子实例（{len(unsettled)} 个）——"
-                    "先 terminate 级联或等子实例终态，再删除"
+                    f"实例 {instance_id} 存在未结算子实例（{len(unsettled)} 个）"
+                    "——先 terminate 级联或等子实例终态，再删除"
                 )
             # 身份关联经 task_id 挂靠，先于任务删除
             ctx.session.execute(

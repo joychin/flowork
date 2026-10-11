@@ -30,9 +30,7 @@ def carry_deadline_jobs(session: Any, old: TaskRow, new: TaskRow) -> None:
     _carry(session, old.id, old.instance_id, new)
 
 
-def carry_deadline_jobs_of(
-    session: Any, old_task_id: str, instance_id: str, new: TaskRow
-) -> None:
+def carry_deadline_jobs_of(session: Any, old_task_id: str, instance_id: str, new: TaskRow) -> None:
     """换棒形态的 carry（code-review 2026-10 P1-3）：旧任务已归档删除，按 id 寻 Job。"""
     _carry(session, old_task_id, instance_id, new)
 

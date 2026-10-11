@@ -400,8 +400,7 @@ def test_delegation_window_follows_engine_clock():
             "departments": {"d_eng": {"head": "u_bob"}},
             # 假钟 2026-01-01 前后一天有效——墙钟 2026-10 下必然过界
             "delegations": [
-                {"from": "u_bob", "to": "u_dave",
-                 "since": "2025-12-31", "until": "2026-01-02"}
+                {"from": "u_bob", "to": "u_dave", "since": "2025-12-31", "until": "2026-01-02"}
             ],
             "admins": ["u_admin"],
         }
@@ -444,10 +443,7 @@ def test_message_ttl_follows_engine_clock():
     with engine.session_factory() as session:
         from sqlalchemy import select
 
-        buffered = [
-            b.message_id
-            for b in session.scalars(select(MessageBufferRow)).all()
-        ]
+        buffered = [b.message_id for b in session.scalars(select(MessageBufferRow)).all()]
     assert "x1" not in buffered, "过 TTL 的缓冲按引擎时钟清理"
     assert "x2" in buffered
     _ = iid

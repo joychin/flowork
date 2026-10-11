@@ -604,9 +604,7 @@ def _scheduled_jobs(engine, instance_id):
         return [
             (j.payload.get("task_id"), j.state)
             for j in session.scalars(
-                select(JobRow).where(
-                    JobRow.instance_id == instance_id, JobRow.job_type == "timer"
-                )
+                select(JobRow).where(JobRow.instance_id == instance_id, JobRow.job_type == "timer")
             ).all()
         ]
 
