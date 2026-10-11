@@ -91,6 +91,23 @@ def check_variables_and_org(
                 node=node_code,
             )
 
+    # —— 候选组必须显式前缀（拍板 6 方案 A，code-review 2026-10）：判定侧
+    # —— 裸名只按人解释，组槽位写裸组名会静默失效（无人能认领）——设计期拦下。
+    from flowork.definitions.validator_deploy import string_literals as _sl
+
+    for node in definition.nodes:
+        groups = list(getattr(node, "candidate_groups", None) or [])
+        references = [lit for expr in groups for lit in _sl(expr)]
+        bare = [g for g in references if not g.startswith(("role:", "org:"))]
+        if bare:
+            error(
+                "candidate_groups.bare_reference",
+                f"candidate_groups 的组引用必须带 role:/org: 前缀：{bare}"
+                "（裸名只按人解释——「角色就是角色，人名就是人名」；"
+                "函数返回的组引用同样须自带前缀）",
+                node=node.code,
+            )
+
     if org_configured is False:
         for node in definition.nodes:
             groups = list(getattr(node, "candidate_groups", None) or [])

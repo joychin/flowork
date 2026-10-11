@@ -21,6 +21,7 @@ from flowork.api import (
     StaticOrgDirectory,
     TaskNotAvailableError,
 )
+from flowork.definitions.validator import InvalidDefinition
 
 ORG = {
     "users": {
@@ -125,13 +126,13 @@ def test_org_group_candidate_claim_by_department_member() -> None:
     assert engine.task.claim(task.id, "u_bob").assignee == "u_bob"
 
 
-def test_bare_group_name_treated_as_role() -> None:
-    """裸名视同 role（split_group 约定）：candidate_groups=["'finance'"] 同样展开。"""
+def test_bare_group_name_no_longer_expands_as_role() -> None:
+    """拍板 6 方案 A（「角色就是角色，人名就是人名」）：candidate_groups 写裸名
+    在设计期即被拦（candidate_groups.bare_reference）——旧「裸名视同 role」
+    约定废止，组引用必须显式前缀。"""
     engine = _org_engine()
-    engine.repository.deploy(_candidate_flow(candidate_groups=["'finance'"]))
-    iid = _start(engine, start_user="u_bob")
-    task = engine.task.list_tasks(instance_id=iid)[0]
-    assert engine.task.claim(task.id, "u_alice").assignee == "u_alice"
+    with pytest.raises(InvalidDefinition, match=r"bare_reference"):
+        engine.repository.deploy(_candidate_flow(candidate_groups=["'finance'"]))
 
 
 def test_person_candidate_prefix_interchangeable() -> None:
@@ -261,3 +262,29 @@ def test_unclaim_returns_candidate_task_to_pool() -> None:
     assert again.assignee == "u_bob"
     engine.task.complete(again.id, actor="u_bob")
     assert engine.runtime.get_instance(iid).state == "completed"
+
+
+def test_colliding_role_name_no_longer_expands_claim_pool() -> None:
+    """回归（拍板 6 方案 A 核心场景）：人名单裸名撞角色名——认领面不再静默
+    扩大。目录里存在与用户同名的角色（wangwei，成员 xiaoli）：修复前
+    candidate_users=["'wangwei'"] 会把 xiaoli 也放进认领池（裸名溢出为角色
+    名）；现在裸名只按人解释，只有 wangwei 本人可认领。"""
+    org = {
+        "users": {
+            "u_wangwei": {"roles": []},
+            "u_xiaoli": {"roles": ["wangwei"]},  # 角色 wangwei 的成员
+            "u_admin": {},
+        },
+        "departments": {},
+        "delegations": [],
+        "admins": ["u_admin"],
+    }
+    engine = ProcessEngine(EngineConfig(org=StaticOrgDirectory.from_dict(org)))
+    engine.repository.deploy(_candidate_flow(candidate_users=["'u_wangwei'"]))
+    iid = _start(engine)
+    task = engine.task.list_tasks(instance_id=iid)[0]
+    assert engine.task.list_tasks(candidate="u_xiaoli") == [], "撞名角色成员不在认领池"
+    with pytest.raises(TaskNotAvailableError):
+        engine.task.claim(task.id, "u_xiaoli")
+    claimed = engine.task.claim(task.id, "u_wangwei")
+    assert claimed.assignee == "u_wangwei"

@@ -164,10 +164,19 @@ def test_mixed_results_stored_in_one_pool() -> None:
     engine.task.claim(task.id, "u_fin1")  # 组员经目录归属
 
 
-def test_exact_match_wins_over_group_interpretation() -> None:
-    """候选组字段里写了人名：字符串精确匹配先命中（字段默认让位于真值）。"""
+def test_person_name_in_groups_slot_rejected() -> None:
+    """拍板 6 方案 A（「角色就是角色，人名就是人名」）：组槽位写人名＝设计期
+    ERROR——槽位定解释，不再有「精确匹配兜底」的宽容解释；人名请写
+    candidate_users。旧测试钉的「字段默认让位于真值」语义随拍板废止。"""
+    import pytest
+
+    from flowork.definitions.validator import InvalidDefinition
+
     engine = _engine()
-    engine.repository.deploy(_candidate_flow(candidate_groups=["'u_bob'"]))
+    with pytest.raises(InvalidDefinition, match=r"bare_reference"):
+        engine.repository.deploy(_candidate_flow(candidate_groups=["'u_bob'"]))
+    # 正路：人名写人槽位，照常精确命中
+    engine.repository.deploy(_candidate_flow(candidate_users=["'u_bob'"]))
     iid = engine.runtime.start_process("cand_expr", start_user="u_bob")
     task = engine.task.list_tasks(instance_id=iid)[0]
     assert engine.task.claim(task.id, "u_bob").assignee == "u_bob"

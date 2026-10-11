@@ -36,6 +36,9 @@
    - 带 `user:` 前缀，或无前缀且字段是 candidate_users → **候选用户**（定格：写关联表）；
    - 带 `role:` / `org:` 前缀，或字段是 candidate_groups 的无前缀值 → **候选组**（保留引用）。
    - 规则一句话：**字段定默认，前缀定覆盖**（裸名当角色/组是仓库既有惯例，见 `split_group`）。
+     **【2026-10-11 拍板 6 方案 A 废止】**「角色就是角色，人名就是人名」：裸名只按人解释，
+     组一律显式 `role:`/`org:` 前缀（判定侧 candidates.candidate_hit + 设计期 candidate_groups.bare_reference；
+     旧「精确匹配兜底」与「裸名视同 role」随拍板废止）。
 3. **组引用保留不展开**（spec §5.5）：关联表存带前缀的组引用字符串，认领时问目录归属
    ——A 批已把 `is_member` 接入认领判定（`tasks/candidates.py::candidate_hit` 第二式），
    本批只保证"算出组引用并正确落槽"。
