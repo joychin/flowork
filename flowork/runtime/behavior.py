@@ -53,6 +53,9 @@ class NodeContext:
 
 
 class NodeBehavior:
+    # 「名下有待办域」行为契约（D4 出口兜卫依据；code-review 2026-10 P1-7
+    # kind 行为化——引擎核心不再出现节点 kind 分支）
+    owns_pending_tasks = False
     """节点行为基类：钩子全部有默认空实现，按需覆写。
 
     刻意不使用 ABC/abstractmethod——部分扩展只想覆写个别钩子，

@@ -197,13 +197,17 @@ def test_optimistic_lock_retry(engine: ProcessEngine, monkeypatch: pytest.Monkey
 
 
 def test_engine_core_has_no_kind_branches():
-    """硬不变量：引擎核心包不得出现节点 kind 字面量分支。"""
+    """硬不变量：引擎核心包不得出现节点 kind 分支——字符串字面量与 KIND_* 常量
+    双形态都拦（code-review 2026-10 P1-7：常量形态曾绕过扫描；清单补 wait）。"""
     import re
     from pathlib import Path
 
     engine_dir = Path(__file__).parent.parent.parent / "flowork" / "engine"
-    kinds = "start|end|user_task|service_task|call_activity|cc_task|branch"
-    pattern = re.compile(r'(==\s*"|!=\s*")(' + kinds + ')"')
+    kinds = "start|end|user_task|service_task|call_activity|cc_task|branch|wait"
+    pattern = re.compile(
+        r'(==\s*"|!=\s*")(' + kinds + ')"'  # 字面量形态
+        r"|(==|!=)\s*KIND_[A-Z_]+"  # 常量形态
+    )
     offenders = []
     for path in engine_dir.glob("*.py"):
         for line_no, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):

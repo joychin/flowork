@@ -22,6 +22,8 @@ __all__ = ["UserTaskBehavior"]
 class UserTaskBehavior(NodeBehavior):
     """人工审批节点：进入时解析参与者并生成待办；完成判定走会签计数。"""
 
+    owns_pending_tasks = True  # 名下有待办域（D4 出口不可达兜卫适用）
+
     def on_enter(self, ctx: NodeContext) -> None:
         assert isinstance(ctx, RuntimeNodeContext)
         spec = self.spec

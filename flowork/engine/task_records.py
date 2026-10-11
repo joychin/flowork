@@ -179,7 +179,6 @@ class TaskRecordsMixin:
         """任务提交后的统一推进入口（自 kernel.py 迁入，第二十轮）。"""
         from typing import cast
 
-        from flowork.definitions.builtin import KIND_USER_TASK
         from flowork.engine.kernel import EngineExecutionError, Kernel
         from flowork.runtime.lifecycle import TokenState
 
@@ -188,12 +187,15 @@ class TaskRecordsMixin:
         if node is None:
             raise EngineExecutionError(f"令牌节点不存在：{token.activity_code}")
         kernel._maybe_complete(session, instance, node, token)
-        # 出口不可达兜底（审计 D4，spec §4.1 第二十轮）：user_task 全部待办办结
-        # 而令牌未完（两侧出口公式均未达成）＝技术故障——挂起+故障单，拒绝静默
-        # 卡死。限定 user_task：call_activity 等子实例、wait 等消息，名下本无
-        # 待办；串行下一位已在 on_task_completed（先行于本守卫）派发，不误报。
+        # 出口不可达兜底（审计 D4，spec §4.1 第二十轮）：全部待办办结而令牌
+        # 未完（两侧出口公式均未达成）＝技术故障——挂起+故障单，拒绝静默卡死。
+        # kind 知识住行为（code-review 2026-10 P1-7：KIND_USER_TASK 分支违反
+        # 硬约束 2）——owns_pending_tasks 声明「名下有待办域」：call_activity
+        # 等子实例、wait 等消息名下本无待办；串行下一位已在 on_task_completed
+        # （先行于本守卫）派发，不误报。
+        behavior_cls = kernel.registry.behavior_cls(node.kind)
         if (
-            node.kind == KIND_USER_TASK
+            getattr(behavior_cls, "owns_pending_tasks", False)
             and token.state == TokenState.UNFINISHED.value
             and not kernel.tasks(session, instance.id, token_id=token.id)
         ):
