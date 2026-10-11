@@ -122,7 +122,7 @@ def semantic_diff(base: ProcessDefinition, target: ProcessDefinition) -> list[di
         base_var, target_var = base_vars[name], target_vars[name]
         base_dump = base_var.model_dump()
         target_dump = target_var.model_dump()
-        watched = ("type", "label", "sample")
+        watched = ("type", "label", "sample", "searchable")  # P2-16：searchable 翻转＝R2
         fields = sorted(k for k in watched if base_dump.get(k) != target_dump.get(k))
         if fields:
             detail = f"修改流程变量 {name}：{', '.join(fields)}"

@@ -11,7 +11,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, SerializeAsAny
+from pydantic import BaseModel, ConfigDict, Field, SerializeAsAny, ValidationError
 
 from flowork.definitions.flow import SequenceFlow
 from flowork.definitions.node import FlowNode
@@ -185,7 +185,11 @@ def load_definition(data: dict[str, Any] | str, registry: NodeRegistry) -> Proce
     if not isinstance(raw_nodes, list):
         raise InvalidDefinitionData("nodes 必须是数组")
     resolved_nodes = [_resolve_node(raw, registry) for raw in raw_nodes]
-    return ProcessDefinition.model_validate({**data, "nodes": resolved_nodes})
+    try:
+        return ProcessDefinition.model_validate({**data, "nodes": resolved_nodes})
+    except ValidationError as exc:
+        # 非法顶层键/形状错此前裸抛 pydantic 异常——web 层变 500 非 422（P2-18）
+        raise InvalidDefinitionData(f"定义结构不合法：{exc}") from exc
 
 
 def load_definition_file(path: str | Path, registry: NodeRegistry) -> ProcessDefinition:

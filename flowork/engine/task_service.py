@@ -9,6 +9,7 @@ from flowork.engine.context import RuntimeNodeContext
 from flowork.engine.ops import CommandContext
 from flowork.engine.task_actions import TaskOpsMixin
 from flowork.engine.task_admin import TaskAdminMixin
+from flowork.engine.task_assist import TaskAssistMixin
 from flowork.engine.task_cc import TaskCcMixin
 from flowork.engine.task_consult import TaskConsultMixin
 from flowork.engine.task_rework import TaskReworkMixin
@@ -27,6 +28,7 @@ __all__ = ["TaskCompleteResult", "TaskService"]
 
 class TaskService(
     TaskOpsMixin,
+    TaskAssistMixin,
     TaskReworkMixin,
     TaskAdminMixin,
     TaskCcMixin,

@@ -90,7 +90,9 @@ def check_variable_references(
     # groups/mixed（「混合集自动拆槽」是规范行为，不是误用）。
     subject_returns = {
         "subjects": frozenset({"one_user", "users"}),
-        "reassign": frozenset({"one_user", "users"}),
+        # reassign/escalate fire 时要求单个非空人（jobs/strategies._execute_handover）——
+        # 设计期放行 users 曾必炸（P2-14 收窄）
+        "reassign": frozenset({"one_user"}),
         # 候选槽（spec §5.5）：多接受组与混合集——「混合集自动拆槽」是规范行为
         "candidates": frozenset({"one_user", "users", "groups", "mixed"}),
     }

@@ -22,7 +22,6 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import delete, select
 
-from flowork.clock import utc_now
 from flowork.engine.ops import CommandContext
 from flowork.events.domain import DomainEvent
 from flowork.persistence.orm import MessageBufferRow, MessageSubscriptionRow

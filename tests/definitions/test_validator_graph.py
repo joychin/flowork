@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+import itertools
+
 import pytest
 
 from flowork.definitions.builder import FlowBuilder
@@ -174,7 +176,7 @@ def test_large_flow_warns_about_recursion_risk(registry):
         builder = builder.user_task(code, assignee="'u_w'")
     builder = builder.end()
     builder = builder.connect("start", "n001")
-    for prev, nxt in zip(codes, codes[1:]):
+    for prev, nxt in itertools.pairwise(codes):
         builder = builder.connect(prev, nxt)
     builder = builder.connect(codes[-1], "end")
     definition = builder.build()

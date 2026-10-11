@@ -79,7 +79,8 @@ def test_fail_reports_retry_then_dead_letter(engine: ProcessEngine):
         row = session.get(JobRow, job_id)
         assert row is not None and row.retry_count == 1 and row.worker_id is None
 
-    # 重试再领再败，次数耗尽 → dead-letter + 故障单
+    # 重试再领再败，次数耗尽 → dead-letter + 故障单（先等退避到期）
+    _elapse_backoff(engine, job_id)
     engine.worker_jobs.activate_jobs(["http_call"], worker_id="w-1")
     assert (
         engine.worker_jobs.fail_job(job_id, worker_id="w-1", error="仍超时", retries=0)
@@ -94,6 +95,15 @@ def test_fail_reports_retry_then_dead_letter(engine: ProcessEngine):
             ).first()
             is not None
         )
+
+
+def _elapse_backoff(engine: ProcessEngine, job_id: str) -> None:
+    """退避到期（P2-4 起 worker 面退避生效——重试激活须等 run_at 到点）。"""
+    with engine.session_factory() as session:
+        row = session.get(JobRow, job_id)
+        assert row is not None
+        row.run_at = utc_now() - timedelta(seconds=1)
+        session.commit()
 
 
 def test_lease_expiry_allows_reclaim_by_other_worker(engine: ProcessEngine):
@@ -131,6 +141,7 @@ def test_resolve_incident_retry_requeues_worker_dead_letter(engine: ProcessEngin
     job_id = _job(engine, instance_id)
     engine.worker_jobs.activate_jobs(["http_call"], worker_id="w-1")
     engine.worker_jobs.fail_job(job_id, worker_id="w-1", error="第一次失败", retries=1)
+    _elapse_backoff(engine, job_id)
     engine.worker_jobs.activate_jobs(["http_call"], worker_id="w-1")
     outcome = engine.worker_jobs.fail_job(  # 重试耗尽 → dead_letter + incident
         job_id, worker_id="w-1", error="彻底失败", retries=0

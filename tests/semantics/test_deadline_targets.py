@@ -195,3 +195,17 @@ def test_escalate_usable_without_any_directory() -> None:
     clock.advance(15)
     bare.jobs.tick()
     assert [t.assignee for t in bare.task.list_tasks(instance_id=iid)] == ["u_lead"]
+
+
+def test_reassign_target_rejects_users_list(engine: ProcessEngine) -> None:
+    """回归（code-review 2026-10 P2-14）：reassign/escalate 目标位 returns
+    收窄 one_user——fire 时要求单个非空人，设计期放行 users 曾必炸。
+    （组前缀字面量由 group_in_subjects 先拦，此处用函数形态 users。）"""
+    issues = validate_definition(
+        _one_deadline("reassign_users", "reassign", reassign_to="users_with_role('finance')"),
+        engine.config.node_registry,
+        expression_functions=engine.config.expression_functions,
+    )
+    assert any(i.rule.endswith("returns") for i in issues if i.level == IssueLevel.ERROR), [
+        (i.rule, i.message) for i in issues
+    ]

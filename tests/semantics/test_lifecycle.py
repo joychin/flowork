@@ -234,3 +234,16 @@ def test_cancel_process_rejected_on_terminal_instance(engine: ProcessEngine):
     assert engine.runtime.get_instance(instance_id).state == "completed"
     names = [e.event_name for e in engine.history.events(instance_id)]
     assert names.count(DomainEvent.PROCESS_CANCELLED.value) == 0, "不得发假取消事件"
+
+
+def test_terminated_instance_no_fake_cancelled_event(engine: ProcessEngine):
+    """回归（code-review 2026-10 P2-1）：complete_instance 只发 completed——
+    终止路径的事件由调用方独占（带 actor/reason）。修复前 terminate 级联
+    每实例双发（假 process_cancelled + process_terminated）。"""
+    from flowork.events.domain import DomainEvent
+
+    instance_id = engine.runtime.start_process("simple_approval", start_user="u_zhang")
+    engine.runtime.terminate_process(instance_id, actor="u_admin", reason="作废")
+    names = [e.event_name for e in engine.history.events(instance_id)]
+    assert names.count(DomainEvent.PROCESS_TERMINATED.value) == 1
+    assert names.count(DomainEvent.PROCESS_CANCELLED.value) == 0, "不得发假取消事件"

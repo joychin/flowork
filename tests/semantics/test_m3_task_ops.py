@@ -515,3 +515,20 @@ def test_remove_instance_sweeps_v2_tables_and_refuses_unsettled_children(engine:
             select(ProcessInstanceRow).where(ProcessInstanceRow.parent_id == instance_id)
         ).all()
         assert orphans == [], "子实例行残留"
+
+
+def test_transfer_keeps_priority(engine: ProcessEngine):
+    """回归（code-review 2026-10 P2-8）：转办克隆携带 priority——修复前回落
+    默认 50（新 TaskRow 不复制）。"""
+
+    from flowork.persistence.orm import TaskRow
+
+    instance_id = start(engine)
+    task = engine.task.list_tasks(instance_id=instance_id, assignee="u_a")[0]
+    with engine.session_factory() as session:
+        row = session.get(TaskRow, task.id)
+        assert row is not None
+        row.priority = 80
+        session.commit()
+    moved = engine.task.transfer(task.id, "u_backup", actor="u_a")
+    assert moved.priority == 80, "转办后优先级保持"

@@ -1,7 +1,8 @@
-"""任务操作集核心（M3）：认领 / 转办 / 协办 + 共享助手。
+"""任务操作集核心（M3）：认领 / 转办 + 共享助手。
 
 以 Mixin 形式并入 TaskService（保持四服务 API：engine.task.*）。
-传阅/加签撤回/管理员操作拆至 task_cc.py / task_rework.py / task_admin.py（入口不变）。
+传阅/协办/加签撤回/管理员操作拆至 task_cc.py / task_assist.py / task_rework.py /
+task_admin.py（入口不变；TaskService 组合顺序见 engine/service 组装处）。
 """
 
 from __future__ import annotations
@@ -100,98 +101,6 @@ class TaskOpsMixin:
 
     # —— 协办 ——
 
-    def assist(
-        self, task_id: str, users: list[str], actor: str, comment: str = ""
-    ) -> list[TaskInfo]:
-        """协办：为主任务生成 assist 类型任务（完成不影响流程推进）。"""
-        result: list[TaskInfo] = self._engine.execute(
-            lambda ctx: self._assist(ctx, task_id, users, actor, comment)
-        )
-        return result
-
-    def _assert_participant_room(
-        self, ctx: CommandContext, task: TaskRow, users: list[str], *, task_type: str
-    ) -> None:
-        """规模护栏（code-review 2026-10 P1-16）：assist/consult 与加签同守——
-        同根在办同型任务＋本次请求超 max_participants 即整笔拒绝（None＝不设防）。"""
-        limit = self._engine.config.max_participants
-        if limit is None:
-            return
-        from sqlalchemy import select
-
-        root = task.root_task_id or task.id
-        open_same = len(
-            ctx.session.scalars(
-                select(TaskRow.id).where(
-                    TaskRow.instance_id == task.instance_id,
-                    TaskRow.root_task_id == root,
-                    TaskRow.task_type == task_type,
-                    TaskRow.state == "ready",
-                )
-            ).all()
-        )
-        if len(users) + open_same > limit:
-            raise TaskNotAvailableError(
-                f"{task_type} 请求 {len(users)} 人＋同根在办 {open_same} 人"
-                f"超过上限 {limit}（EngineConfig.max_participants）——拒绝而非截断"
-            )
-
-    def _assist(
-        self, ctx: CommandContext, task_id: str, users: list[str], actor: str, comment: str
-    ) -> list[TaskInfo]:
-        task = self._ready_task(ctx, task_id, action="assist")
-        self._assert_participant_room(ctx, task, users, task_type="assist")
-        ctx.touch(self._instance(ctx, task.instance_id))
-        kernel = self._engine.kernel_for(ctx)
-        root = task.root_task_id or task.id
-        created = [
-            self._clone_task(ctx, task, assignee=user, task_type="assist", root=root)
-            for user in users
-        ]
-        kernel.record_event(
-            "task_assist_created",
-            {"task_id": task_id, "users": users, "actor": actor, "comment": comment},
-            task.instance_id,
-        )
-        return [self._task_info(t) for t in created]
-
-    def _cancel_assist_tasks(self, ctx: CommandContext, task: TaskRow) -> None:
-        """主任务终态（complete/reject）同事务收口其令牌下的协办待办。
-
-        协办不占票也不卡流程（spec §5.1）：主任务已出结果，协办意见失去时效，
-        挂着只会变脏待办——收口落历史 outcome=assist_cancel（actor=system，
-        与主任务办理动作同一事务）。转办不触发（等待未终结，协办随新办理人继续）。
-        """
-        kernel = self._engine.kernel_for(ctx)
-        for assist in kernel.tasks(ctx.session, task.instance_id, token_id=task.token_id):
-            if assist.task_type != "assist":
-                continue
-            kernel.archive_task(
-                ctx.session,
-                assist,
-                outcome="assist_cancel",
-                comment="主任务已办理，协办自动收口",
-                actor="system",
-            )
-            kernel.record_event(
-                "task_assist_cancelled",
-                {"task_id": assist.id, "root_task_id": task.id, "assignee": assist.assignee},
-                assist.instance_id,
-            )
-
-    def complete_assist(self, task_id: str, actor: str, comment: str = "") -> None:
-        """完成协办任务：仅归档，不推进流程。"""
-
-        def _command(ctx: CommandContext) -> None:
-            task = self._ready_task(ctx, task_id, expected_type="assist", action="complete_assist")
-            ctx.touch(self._instance(ctx, task.instance_id))
-            kernel = self._engine.kernel_for(ctx)
-            kernel.archive_task(ctx.session, task, outcome="assist", comment=comment, actor=actor)
-
-        self._engine.execute(_command)
-
-    # —— 共享助手（task_rework/task_cc/task_admin 及 task_service 交叉使用）——
-
     def _instance(self, ctx: CommandContext, instance_id: str) -> ProcessInstanceRow:
         from flowork.persistence.orm import ProcessInstanceRow as _Row
 
@@ -277,6 +186,7 @@ class TaskOpsMixin:
             name=task.name,
             assignee=assignee,
             task_type=task_type or task.task_type,
+            priority=task.priority,  # P2-8：转办/加签/协办后优先级不回落默认
             context_payload=dict(task.context_payload),
             root_task_id=root,
         )

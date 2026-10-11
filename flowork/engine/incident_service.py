@@ -228,11 +228,17 @@ class IncidentMixin:
         major: int | None = None,
         revision: int | None = None,
         state: str | None = None,
+        include_simulated: bool = False,
     ) -> list[InstanceInfo]:
-        """实例清单（可按定义版本过滤——「多少在跑实例钉旧版」的查询，spec §6.5）。"""
+        """实例清单（可按定义版本过滤——「多少在跑实例钉旧版」的查询，spec §6.5）。
+
+        模拟实例默认排除（code-review 2026-10 P2-2，与 history 面对齐——
+        spec A10「模拟一等公民但默认被查询面隔离」）。"""
 
         def _command(ctx: CommandContext) -> Any:
             stmt = select(ProcessInstanceRow).order_by(ProcessInstanceRow.started_at.desc())
+            if not include_simulated:
+                stmt = stmt.where(ProcessInstanceRow.simulated == False)  # noqa: E712
             if definition_code is not None:
                 stmt = stmt.where(ProcessInstanceRow.definition_code == definition_code)
             if major is not None:

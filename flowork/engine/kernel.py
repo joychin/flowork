@@ -127,13 +127,15 @@ class Kernel(TaskRecordsMixin, TokenRecordsMixin):
             instance.state = end_status
             instance.finished_at = self.config.now()
             session.flush()
-            self.record_event(
-                DomainEvent.PROCESS_COMPLETED
-                if end_status == "completed"
-                else DomainEvent.PROCESS_CANCELLED,
-                {"end_status": end_status},
-                instance.id,
-            )
+            if end_status == "completed":
+                # 仅 completed 在此发事件（code-review 2026-10 P2-1）：cancelled/
+                # terminated 由调用方独占（带 actor/reason/cascade 溯源）——
+                # 此前终止路径双发假 cancelled（状态与事件序列矛盾）
+                self.record_event(
+                    DomainEvent.PROCESS_COMPLETED,
+                    {"end_status": end_status},
+                    instance.id,
+                )
             from flowork.engine.subprocess_support import resume_parent_if_waiting
 
             resume_parent_if_waiting(self, session, instance)

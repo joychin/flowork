@@ -42,7 +42,11 @@ class IdempotentSink:
         self._memory = memory
 
     def __call__(self, envelope: dict[str, Any]) -> None:
-        event_id = str(envelope.get("id"))
+        raw_id = envelope.get("id")
+        if raw_id is None:
+            self._emit(envelope)  # 缺 id：去重不可判定，放行（P2-21，不再共享 'None' 键）
+            return
+        event_id = str(raw_id)
         if event_id in self._seen:
             return  # 至少一次交付下的重发，幂等丢弃
         self._seen.add(event_id)

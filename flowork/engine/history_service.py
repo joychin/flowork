@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any
 from sqlalchemy import select
 
 from flowork.engine.history_archive import ArchiveMixin
+from flowork.engine.history_trace import TraceEntry, TraceMixin
 from flowork.engine.ops import CommandContext
 from flowork.persistence.orm import (
     EventOutboxRow,
@@ -49,18 +50,7 @@ class Page(BaseModel):
     limit: int = 50
 
 
-class TraceEntry(BaseModel):
-    """流转轨迹条目（令牌/已办/事件合并时间线）。"""
-
-    model_config = ConfigDict(extra="forbid")
-
-    time: str
-    kind: str  # token / task / event
-    title: str
-    detail: str = ""
-
-
-class HistoryService(ArchiveMixin):
+class HistoryService(ArchiveMixin, TraceMixin):
     """历史与只读查询服务（待办查询在 TaskService.list_tasks）。"""
 
     def __init__(self, engine: ProcessEngine) -> None:
@@ -68,7 +58,14 @@ class HistoryService(ArchiveMixin):
 
     def events(self, instance_id: str | None = None, *, limit: int = 200) -> list[EventInfo]:
         def _command(ctx: CommandContext) -> Any:
-            stmt = select(EventOutboxRow).order_by(EventOutboxRow.occurred_at)
+            # 全局查询（无实例维度）取最近（P2-7：ASC+limit 曾截「最旧 N 条」）；
+            # 实例维度保持 asc（事件序列可读）
+            order = (
+                EventOutboxRow.occurred_at.desc()
+                if instance_id is None
+                else EventOutboxRow.occurred_at
+            )
+            stmt = select(EventOutboxRow).order_by(order)
             if instance_id:
                 stmt = stmt.where(EventOutboxRow.instance_id == instance_id)
             return [
@@ -121,7 +118,12 @@ class HistoryService(ArchiveMixin):
         limit: int = 200,
     ) -> list[TaskHistoryInfo]:
         def _command(ctx: CommandContext) -> Any:
-            stmt = select(TaskHistoryRow).order_by(TaskHistoryRow.created_at)
+            order = (
+                TaskHistoryRow.created_at.desc()
+                if instance_id is None and assignee is None
+                else TaskHistoryRow.created_at
+            )  # 全局/按人查询取最近（P2-7）；实例维度保持 asc
+            stmt = select(TaskHistoryRow).order_by(order)
             if instance_id:
                 stmt = stmt.where(TaskHistoryRow.instance_id == instance_id)
             if assignee:

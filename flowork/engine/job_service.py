@@ -101,12 +101,14 @@ class JobService:
 
         def _command(ctx: CommandContext) -> list[JobClaim]:
             moment = self._engine.config.now()  # 统一时钟（第十四轮）：租约与调度同源
-            # 可领＝未持有（scheduled 且无租约），或租约到期（leased 且 lease_until<now）
+            # 可领＝已到 run_at（退避生效，P2-4 对齐内部 tick 口径）且未持有
+            # （scheduled 且无租约），或租约到期（leased 且 lease_until<now）
             claimable = (JobRow.lease_until.is_(None)) | (JobRow.lease_until < moment)
             candidates = ctx.session.scalars(
                 select(JobRow)
                 .where(
                     JobRow.job_kind == "worker",
+                    JobRow.run_at <= moment,
                     JobRow.job_type.in_(job_types),
                     JobRow.state.in_(("scheduled", "leased")),
                     claimable,
