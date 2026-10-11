@@ -246,3 +246,89 @@ def test_withdraw_preserves_pending_parallel_sibling(engine: ProcessEngine):
     assert [
         t.activity_code for t in engine.task.list_tasks(instance_id=instance_id, assignee="u_j")
     ] == ["join"]
+
+
+def test_withdraw_on_countersign_retracts_vote_and_reuses_token(engine: ProcessEngine):
+    """回归（拍板 3 方案 A 实证深化）：并行会签出口未达成时撤回＝原令牌撤票
+    重建待办。实证修复前该场景建第二令牌：撤回的票仍算数（approve 不回退）、
+    双令牌双推进（下游出现重复待办）。"""
+    from sqlalchemy import select
+
+    from flowork.persistence.orm import TokenRow
+
+    flow = (
+        FlowBuilder("wd_cs")
+        .start()
+        .user_task("n", assignees=["'u_a'", "'u_b'", "'u_c'"], multi_instance={"mode": "parallel"})
+        .user_task("next", assignee="'u_n'")
+        .end()
+        .connect("start", "n")
+        .connect("n", "next")
+        .connect("next", "end")
+    )
+    engine.repository.deploy(flow.build())
+    instance_id = engine.runtime.start_process("wd_cs", start_user="u_s")
+
+    def complete(assignee: str) -> None:
+        task = engine.task.list_tasks(instance_id=instance_id, assignee=assignee)[0]
+        engine.task.complete(task.id, actor=assignee)
+
+    complete("u_a")  # 1/3，出口未达成
+    from flowork.persistence.orm import TaskHistoryRow
+
+    a_history = None
+    with engine.session_factory() as session:
+        a_history = session.scalars(
+            select(TaskHistoryRow).where(TaskHistoryRow.instance_id == instance_id)
+        ).first()
+    assert a_history is not None
+    engine.task.withdraw(a_history.task_id, actor="u_a")
+
+    with engine.session_factory() as session:
+        tokens = session.scalars(
+            select(TokenRow).where(TokenRow.instance_id == instance_id)
+        ).all()
+        n_tokens = [t for t in tokens if t.activity_code == "n"]
+        assert len(n_tokens) == 1, "同令牌重建：不建第二令牌"
+        assert n_tokens[0].approve_count == 0, "撤回的票回退"
+    tasks = engine.task.list_tasks(instance_id=instance_id)
+    assert sorted(t.assignee for t in tasks) == ["u_a", "u_b", "u_c"], "三人各自待办"
+
+    complete("u_b")
+    complete("u_c")  # 2/3，等 a
+    complete("u_a")  # 3/3 出口达成
+    next_tasks = engine.task.list_tasks(instance_id=instance_id, assignee="u_n")
+    assert [t.activity_code for t in next_tasks] == ["next"], "单次推进（不双推）"
+    assert engine.runtime.get_instance(instance_id).state == "running"
+
+
+def test_withdraw_on_sequential_countersign_rejected(engine: ProcessEngine):
+    """拍板 3 边界：串行会签的已办不支持撤回（轮次已交棒，撤票与轮次语义
+    纠缠）——指路驳回。"""
+    from flowork.definitions.node import MultiInstance
+    from sqlalchemy import select
+
+    flow = (
+        FlowBuilder("wd_seq")
+        .start()
+        .user_task(
+            "n",
+            assignees=["'u_a'", "'u_b'"],
+            multi_instance=MultiInstance(mode="sequential"),
+        )
+        .end()
+        .connect("start", "n")
+        .connect("n", "end")
+    )
+    engine.repository.deploy(flow.build())
+    instance_id = engine.runtime.start_process("wd_seq", start_user="u_s")
+    task = engine.task.list_tasks(instance_id=instance_id, assignee="u_a")[0]
+    engine.task.complete(task.id, actor="u_a")  # 换棒给 u_b
+    from flowork.persistence.orm import TaskHistoryRow
+
+    with engine.session_factory() as session:
+        history = session.scalars(
+            select(TaskHistoryRow).where(TaskHistoryRow.instance_id == instance_id)
+        ).first()
+    with pytest.raises(TaskNotAvailableError, match="串行"):
+        engine.task.withdraw(history.task_id, actor="u_a")

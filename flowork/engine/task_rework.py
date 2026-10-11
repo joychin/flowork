@@ -187,9 +187,53 @@ class TaskReworkMixin:
         for token in kernel.tokens(ctx.session, instance.id, states=(TokenState.UNFINISHED.value,)):
             if token.activity_code in downstream:
                 kernel.cancel_token(ctx.session, token)
-        # 原节点重建：新令牌 + 原办理人待办
+
         node = definition.node(history.activity_code)
         assert node is not None
+        # 撤回分流（拍板 3 方案 A 实证深化）：原令牌仍在该节点未完结（并行会签
+        # 出口未达成）→ 撤票回退计数 + 同令牌重建待办——实证修复前该场景建第二
+        # 令牌：撤回的票仍算数（原令牌 approve 不回退）、双令牌双推进（下游出现
+        # 重复待办）。原令牌已完结（单任务节点）→ 既有路径：新令牌重建。
+        original_token = ctx.session.get(TokenRow, history.token_id)
+        if (
+            original_token is not None
+            and original_token.state == TokenState.UNFINISHED.value
+            and original_token.activity_code == history.activity_code
+        ):
+            from flowork.definitions.builtin import UserTaskSpec
+
+            spec = node if isinstance(node, UserTaskSpec) else None
+            assert spec is not None
+            if spec.multi_instance is not None and spec.multi_instance.mode == "sequential":
+                # 串行换棒的轮次语义与撤回纠缠（轮次已消耗/下棒在办）——不支持，
+                # 指路驳回（驳回有完整的复活圈定语义）
+                raise TaskNotAvailableError(
+                    "串行会签节点的已办暂不支持撤回（轮次已交棒）：请使用驳回"
+                )
+            original_token.approve_count = max(0, original_token.approve_count - 1)
+            kernel.create_task(
+                ctx.session,
+                instance,
+                original_token,
+                node,
+                assignee=history.assignee,
+                name=history.name,
+            )
+            ctx.session.flush()
+            kernel.record_event(
+                "task_withdrawn",
+                {
+                    "task_id": task_id,
+                    "actor": actor,
+                    "comment": comment,
+                    "token_id": original_token.id,
+                    "vote_retracted": True,
+                },
+                instance.id,
+            )
+            tasks = kernel.tasks(ctx.session, instance.id, token_id=original_token.id)
+            return self._task_info(tasks[-1])
+        # 原节点重建：新令牌 + 原办理人待办
         token = kernel.activate(
             ctx.session,
             instance,
