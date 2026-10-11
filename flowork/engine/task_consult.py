@@ -80,6 +80,7 @@ class TaskConsultMixin:
         self, ctx: CommandContext, task_id: str, users: list[str], actor: str, comment: str
     ) -> list[TaskInfo]:
         task = self._ready_task(ctx, task_id, action="consult")
+        self._assert_participant_room(ctx, task, users, task_type="consult")  # P1-16
         ctx.touch(self._instance(ctx, task.instance_id))
         kernel = self._engine.kernel_for(ctx)
         root = task.root_task_id or task.id

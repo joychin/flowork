@@ -394,3 +394,73 @@ def test_add_countersigner_duplicate_rejected_wholesale(engine: ProcessEngine):
     # 新人加签不受影响
     engine.task.add_countersigner(p1.id, users=["u_extra"], actor="u_p1")
     assert "u_extra" in [t.assignee for t in engine.task.list_tasks(instance_id=instance_id)]
+
+
+# —— code-review 2026-10 P1-5 / P1-16 ——
+
+
+def test_reject_revival_of_countersigned_node_succeeds(engine: ProcessEngine):
+    """回归（P1-5）：加签过的未声明 multi_instance 节点被驳回复活不再挂起。
+    manual 名单＝历史定格（加签扩员/复活圈定），不适用「单人节点多人＝错误」
+    守卫——修复前复活必然 ParticipantCountMismatchError。"""
+    flow = (
+        FlowBuilder("p15")
+        .start()
+        .user_task("a", assignee="'u_a'")
+        .user_task("b", assignee="'u_b'")
+        .end()
+        .connect("start", "a")
+        .connect("a", "b")
+        .connect("b", "end")
+    )
+    publish(engine, flow.build())
+    instance_id = engine.runtime.start_process("p15", start_user="u_s")
+    a_task = engine.task.list_tasks(instance_id=instance_id, assignee="u_a")[0]
+    engine.task.add_countersigner(a_task.id, users=["u_a2"], actor="u_a")
+    engine.task.complete(
+        engine.task.list_tasks(instance_id=instance_id, assignee="u_a")[0].id, actor="u_a"
+    )
+    engine.task.complete(
+        engine.task.list_tasks(instance_id=instance_id, assignee="u_a2")[0].id, actor="u_a2"
+    )
+    b_task = engine.task.list_tasks(instance_id=instance_id, assignee="u_b")[0]
+    engine.task.reject(b_task.id, actor="u_b", target="a")  # 驳回到 a：复活两名办理人
+    revived = engine.task.list_tasks(instance_id=instance_id)
+    assert sorted(t.assignee for t in revived) == ["u_a", "u_a2"], "复活名单完整"
+
+
+def test_assist_and_consult_respect_max_participants():
+    """回归（P1-16）：assist/consult 与加签同守规模护栏——同根在办＋请求
+    超 max_participants 整笔拒绝（此前不设防可无限开任务）。"""
+    from flowork.api import EngineConfig
+
+    bounded = ProcessEngine(EngineConfig(max_participants=2))
+    instance_id = start(bounded)
+    complete_of(bounded, instance_id, "u_a")
+    claimable = bounded.task.list_tasks(instance_id=instance_id)[0]
+    bounded.task.claim(claimable.id, "u_c1")
+    bounded.task.complete(claimable.id, actor="u_c1")
+    p1 = bounded.task.list_tasks(instance_id=instance_id, assignee="u_p1")[0]
+
+    from flowork.errors import TaskNotAvailableError
+
+    created = bounded.task.assist(p1.id, users=["u_x1"], actor="u_p1")  # 累计 1 ≤ 2
+    assert [t.task_type for t in created] == ["assist"]
+    with pytest.raises(TaskNotAvailableError, match="超过上限"):
+        bounded.task.assist(p1.id, users=["u_x2", "u_x3"], actor="u_p1")  # 1+2 > 2
+
+    # 咨询软挂起使主任务二次 consult 被拦——limit=1 引擎单任务一次请求即触顶
+    bounded2 = ProcessEngine(EngineConfig(max_participants=1))
+    bounded2.repository.deploy(
+        FlowBuilder("ops2")
+        .start()
+        .user_task("a", assignee="'u_m'")
+        .end()
+        .connect("start", "a")
+        .connect("a", "end")
+        .build()
+    )
+    instance_id2 = bounded2.runtime.start_process("ops2", start_user="u_s")
+    p1b = bounded2.task.list_tasks(instance_id=instance_id2, assignee="u_m")[0]
+    with pytest.raises(TaskNotAvailableError, match="超过上限"):
+        bounded2.task.consult(p1b.id, users=["u_y1", "u_y2"], actor="u_m")

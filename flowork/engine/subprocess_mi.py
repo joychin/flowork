@@ -127,6 +127,14 @@ def mi_finish(ctx: RuntimeNodeContext, spec: CallActivitySpec, children: list[An
                 outputs = _mapping_values("输出映射", spec.output_mappings or {}, ctx, child)
                 for target, value in outputs.items():
                     ctx.variables[target] = value
+    # input 契约边界③（code-review 2026-10 P1-17）：聚合写回后父变量全集仍须
+    # 满足契约——与单子路径（sub_process_finished）同一条守卫，此前不对称
+    import json
+
+    from flowork.definitions.contract import validate_input_contract
+
+    schema = (json.loads(ctx.instance.definition_snapshot) or {}).get("input")
+    validate_input_contract(schema, dict(ctx.variables), boundary="node_output")
     return True
 
 

@@ -96,6 +96,10 @@ def iter_expression_positions(definition: ProcessDefinition) -> Iterator[tuple[s
                     node.code,
                 )
             mi = getattr(node, "multi_instance", None)
+            if isinstance(mi, dict):  # builder 无 registry 的 dict 袋（P1-15）
+                from flowork.definitions.node import MultiInstance
+
+                mi = MultiInstance(**mi)
             if mi is not None:
                 if mi.approve_exit:
                     yield (

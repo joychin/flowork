@@ -398,3 +398,39 @@ def test_mapping_output_reserved_word_position_still_checked():
             .connect("sub", "end")
             .build()
         )
+
+
+def test_mi_collect_output_respects_input_contract():
+    """回归（code-review 2026-10 P1-17）：MI 聚合写回后过 input 契约
+    node_output 边界——与单子路径同一条守卫，越界数据不再经 collect 入父。"""
+    from flowork.definitions.definition import ProcessVariable
+    from flowork.errors import FloworkError
+
+    engine = ProcessEngine()
+    _deploy_child(engine)
+    engine.repository.deploy(
+        FlowBuilder("mi_contract")
+        .start()
+        .call_activity(
+            "sub",
+            process_code="mi_child",
+            multi_instance={"subjects": ["'u_a'"], "output_mode": "collect"},
+            output_mappings={"who": "worker"},
+        )
+        .end()
+        .connect("start", "sub")
+        .connect("sub", "end")
+        .build()
+        .model_copy(
+            update={
+                "input": {
+                    "type": "object",
+                    "properties": {"who": {"type": "number"}},  # 子输出是 string→违约
+                }
+            }
+        )
+    )
+    instance_id = _start(engine, "mi_contract")
+    with pytest.raises(FloworkError):
+        _complete_n(engine, 1)  # collect 写回 string 违约 → 技术故障
+    _ = instance_id, ProcessVariable

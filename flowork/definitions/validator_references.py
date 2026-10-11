@@ -57,6 +57,11 @@ def check_variable_references(
     - 取人/改派位根调用 returns 非 one_user/users → ERROR（谓词误用提前拦）。
     """
     declared = {v.name for v in definition.variables}
+    # input 契约属性同样是变量声明（code-review 2026-10 P1-14）：运行时
+    # 白名单＝声明 ∪ input schema ∪ 既有键——设计期只看 variables 段会把
+    # 纯契约驱动图纸误拦发布（口径分裂）
+    input_schema = definition.input if isinstance(definition.input, dict) else None
+    declared |= set((input_schema or {}).get("properties") or {})
     for variable in definition.variables:
         if variable.name in RESERVED_IDENTIFIERS:
             error(

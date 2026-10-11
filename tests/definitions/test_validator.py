@@ -602,3 +602,58 @@ def test_exit_formula_inside_multi_instance_passes(registry):
         .build(registry)
     )
     assert "user_task.exit.misplaced" not in error_rules(definition, registry)
+
+
+# —— 健壮性收口（code-review 2026-10 P1-14/P1-15）——
+
+
+def test_input_contract_properties_count_as_declared(registry):
+    """回归（P1-14）：input 契约属性计入声明集——与运行时白名单三源并集口径
+    对齐，纯契约驱动图纸不再被误拦发布。"""
+    definition = (
+        FlowBuilder("contract_only")
+        .start()
+        .user_task("a", assignee="'u_a'")
+        .branch("gate")
+        .user_task("big", assignee="'u_b'")
+        .user_task("small", assignee="'u_s'")
+        .end()
+        .connect("start", "a")
+        .connect("a", "gate")
+        .flow("gate", "big", condition="amount > 100")
+        .flow("gate", "small", default=True)
+        .connect("big", "end")
+        .connect("small", "end")
+        .build()
+        .model_copy(
+            update={
+                "variables": [],
+                "input": {
+                    "type": "object",
+                    "properties": {"amount": {"type": "number"}},
+                    "required": ["amount"],
+                },
+            }
+        )
+    )
+    assert error_rules(definition, registry) == set()
+
+
+def test_dict_extra_bag_does_not_crash_validator(registry):
+    """回归（P1-15）：builder 无 registry 产出的 dict 袋（multi_instance/
+    deadlines）不再让校验器 AttributeError 崩溃——归一后正常校验。"""
+    definition = (
+        FlowBuilder("dict_bag")
+        .start()
+        .user_task(
+            "a",
+            assignee="'u_a'",
+            multi_instance={"mode": "parallel"},
+            deadlines=[{"after_minutes": 5, "action": "notify"}],
+        )
+        .end()
+        .connect("start", "a")
+        .connect("a", "end")
+        .build()
+    )
+    assert error_rules(definition, registry) == set()

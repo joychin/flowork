@@ -28,9 +28,20 @@ _REQUIRED_TARGET = {"reassign": "reassign_to", "escalate": "escalate_to"}
 _MAX_DEADLINES = 8
 
 
+def _normalize(raw: Any) -> Any:
+    """dict 袋（builder 无 registry 形态）→ TaskDeadline；其余原样。"""
+    from flowork.definitions.node import TaskDeadline
+
+    return TaskDeadline(**raw) if isinstance(raw, dict) else raw
+
+
 def deadline_positions(node: Any) -> Iterator[tuple[str, str]]:
-    """某节点的全部超时表达式位：yield (where, expression)。"""
-    for index, deadline in enumerate(getattr(node, "deadlines", None) or []):
+    """某节点的全部超时表达式位：yield (where, expression)。
+
+    dict 袋静默 getattr None＝零校验（code-review 2026-10 P1-15）——先归一。
+    """
+    for index, raw in enumerate(getattr(node, "deadlines", None) or []):
+        deadline = _normalize(raw)
         for field in TARGET_FIELDS:
             expression = getattr(deadline, field, None)
             if expression:
@@ -47,7 +58,8 @@ def check_deadlines(definition: ProcessDefinition, error: IssueFn) -> None:
                 f"超时动作列表上限 {_MAX_DEADLINES} 条（当前 {len(deadlines)}）",
                 node=node.code,
             )
-        for deadline in deadlines:
+        for raw in deadlines:
+            deadline = _normalize(raw)
             field = _REQUIRED_TARGET.get(str(deadline.action))
             if field and not getattr(deadline, field, None):
                 # 引擎不含组织模型（spec §5.5）：升级目标必须由图纸给出——

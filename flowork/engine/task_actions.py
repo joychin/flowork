@@ -109,10 +109,38 @@ class TaskOpsMixin:
         )
         return result
 
+    def _assert_participant_room(
+        self, ctx: CommandContext, task: TaskRow, users: list[str], *, task_type: str
+    ) -> None:
+        """规模护栏（code-review 2026-10 P1-16）：assist/consult 与加签同守——
+        同根在办同型任务＋本次请求超 max_participants 即整笔拒绝（None＝不设防）。"""
+        limit = self._engine.config.max_participants
+        if limit is None:
+            return
+        from sqlalchemy import select
+
+        root = task.root_task_id or task.id
+        open_same = len(
+            ctx.session.scalars(
+                select(TaskRow.id).where(
+                    TaskRow.instance_id == task.instance_id,
+                    TaskRow.root_task_id == root,
+                    TaskRow.task_type == task_type,
+                    TaskRow.state == "ready",
+                )
+            ).all()
+        )
+        if len(users) + open_same > limit:
+            raise TaskNotAvailableError(
+                f"{task_type} 请求 {len(users)} 人＋同根在办 {open_same} 人"
+                f"超过上限 {limit}（EngineConfig.max_participants）——拒绝而非截断"
+            )
+
     def _assist(
         self, ctx: CommandContext, task_id: str, users: list[str], actor: str, comment: str
     ) -> list[TaskInfo]:
         task = self._ready_task(ctx, task_id, action="assist")
+        self._assert_participant_room(ctx, task, users, task_type="assist")
         ctx.touch(self._instance(ctx, task.instance_id))
         kernel = self._engine.kernel_for(ctx)
         root = task.root_task_id or task.id

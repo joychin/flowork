@@ -139,7 +139,17 @@ class TaskRecordsMixin:
             assert_participant_limit(
                 len(resolution.todo) + len(resolution.skipped), limit, where=where
             )
-            if spec.multi_instance is None and len(resolution.todo) > 1:
+            # manual 名单＝历史定格（加签扩员/驳回复活圈定，code-review 2026-10
+            # P1-5）：不是表达式解析结果，不适用「单人节点多人＝错误」守卫——
+            # 加签过的未声明 multi_instance 节点被驳回复活曾必然挂起
+            manual_roster = bool(
+                (getattr(ctx.token, "manual_participants", None) or {}).get(spec.code)
+            ) if ctx.token is not None else False
+            if (
+                not manual_roster
+                and spec.multi_instance is None
+                and len(resolution.todo) > 1
+            ):
                 from flowork.engine.kernel import ParticipantCountMismatchError
 
                 raise ParticipantCountMismatchError(
