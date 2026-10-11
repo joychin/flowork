@@ -241,6 +241,7 @@ class TaskOpsMixin:
         import uuid
 
         new_task = TaskRow(
+            created_at=self._engine.config.now(),  # P1-10：与原任务同源时钟
             id=uuid.uuid4().hex,
             instance_id=task.instance_id,
             token_id=task.token_id,

@@ -170,6 +170,8 @@ class RuntimeService(InstanceLifecycleMixin, IncidentMixin, VariableActionsMixin
             # allow_duplicate＝明示放弃幂等：不落 key（联合唯一索引下同 key 只能一行）
             idempotency_key=idempotency_key if reuse != "allow_duplicate" else None,
             state="running",
+            # 业务时刻单源 config.now（P1-11：与 updated_at/finished_at/deadline_at 同钟）
+            started_at=self._engine.config.now(),
             start_user=start_user,
             variables=dict(variables or {}),
             parent_id=parent_instance_id,
@@ -201,6 +203,7 @@ class RuntimeService(InstanceLifecycleMixin, IncidentMixin, VariableActionsMixin
                     id=_uuid.uuid4().hex,
                     job_type="timer",
                     state="scheduled",
+                    created_at=self._engine.config.now(),  # P1-11：与 run_at 同钟
                     run_at=instance.deadline_at,
                     instance_id=instance.id,
                     payload={

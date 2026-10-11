@@ -176,6 +176,7 @@ def schedule_wait_job(ctx: RuntimeNodeContext, spec: WaitSpec) -> None:
             id=uuid.uuid4().hex,
             job_type="timer",
             state="scheduled",
+            created_at=ctx.kernel.config.now(),  # P1-11：与 run_at 同钟
             run_at=ctx.kernel.config.now() + timedelta(minutes=spec.timeout.after_minutes),
             instance_id=ctx.instance.id,
             payload={

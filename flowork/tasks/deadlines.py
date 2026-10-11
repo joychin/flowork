@@ -61,6 +61,7 @@ def _carry(session: Any, old_task_id: str, instance_id: str, new: TaskRow) -> No
                 id=uuid.uuid4().hex,
                 job_type="timer",
                 state="scheduled",
+                created_at=job.created_at,  # P1-11：carry 保持原钟源
                 run_at=job.run_at,
                 instance_id=job.instance_id,
                 payload=payload,
@@ -91,6 +92,7 @@ def schedule_deadline_jobs(ctx: RuntimeNodeContext, spec: UserTaskSpec, task_id:
                 id=uuid.uuid4().hex,
                 job_type="timer",
                 state="scheduled",
+                created_at=now,  # P1-11：与 run_at 同钟
                 run_at=now + timedelta(minutes=deadline.after_minutes),
                 instance_id=ctx.instance.id,
                 payload={

@@ -106,7 +106,8 @@ class MessageService:
                     correlation_key=correlation_key,
                     message_id=message_id_,
                     payload=dict(payload or {}),
-                    expires_at=utc_now() + timedelta(seconds=ttl_seconds),
+                    # TTL 与其他写路径同源（code-review 2026-10 P1-18）：此前墙钟
+                    expires_at=self._engine.config.now() + timedelta(seconds=ttl_seconds),
                 )
             )
             self._emit(ctx, DomainEvent.MESSAGE_RECEIVED, name, correlation_key, None)
@@ -284,7 +285,7 @@ class MessageService:
     def _purge_expired(self, ctx: CommandContext) -> None:
         from flowork.engine.message_flow import purge_expired
 
-        purge_expired(ctx.session)
+        purge_expired(ctx.session, now=self._engine.config.now())
 
     def _emit(
         self,

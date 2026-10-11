@@ -53,6 +53,8 @@ class TaskRecordsMixin:
 
         task = _TaskRow(
             id=_new_id(),
+            # 业务时刻与 due_at/cost_seconds 同源 config.now（P1-10；列 default 仅兜底）
+            created_at=self.config.now(),
             instance_id=instance.id,
             token_id=token.id,
             activity_code=node.code,

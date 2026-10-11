@@ -327,3 +327,127 @@ def test_worker_lease_follows_engine_clock():
         ["pull"], worker_id="w-2", visibility_timeout_seconds=3600
     )
     assert reclaim.job_id == job_id
+
+
+# —— 批次三收尾（code-review 2026-10 P1-9/P1-10/P1-11/P1-18）——
+
+
+def test_task_created_at_follows_engine_clock():
+    """回归（P1-10）：任务行业务时刻与引擎时钟同源——cost_seconds 不再混钟。
+    修复前 created_at 走墙钟（2026-10），假钟停在 2026-01：complete 时的
+    cost_seconds = 假钟 - 墙钟 ≈ -270 天（天文数字，污染 used_time 判断面）。"""
+    engine, clock = build_engine()
+    engine.repository.deploy(
+        FlowBuilder("clk_task")
+        .start()
+        .user_task("a", assignee="'u_a'")
+        .end()
+        .connect("start", "a")
+        .connect("a", "end")
+        .build()
+    )
+    iid = engine.runtime.start_process("clk_task", start_user="u_s")
+    clock.advance_minutes(5)
+    _complete_first(engine, iid, "u_a")
+    from sqlalchemy import select
+
+    from flowork.persistence.orm import TaskHistoryRow
+
+    with engine.session_factory() as session:
+        row = session.scalars(
+            select(TaskHistoryRow).where(TaskHistoryRow.instance_id == iid)
+        ).first()
+        assert row is not None and row.cost_seconds is not None
+        assert abs(row.cost_seconds - 300) < 5, row.cost_seconds
+
+
+def test_instance_started_at_follows_engine_clock():
+    """回归（P1-11）：实例 started_at 与 finished_at/updated_at 同钟——
+    修复前 started_at 走墙钟，假钟实例出现 finished_at < started_at 乱序。"""
+    engine, clock = build_engine()
+    engine.repository.deploy(
+        FlowBuilder("clk_inst")
+        .start()
+        .user_task("a", assignee="'u_a'")
+        .end()
+        .connect("start", "a")
+        .connect("a", "end")
+        .build()
+    )
+    clock.advance_minutes(3)
+    iid = engine.runtime.start_process("clk_inst", start_user="u_s")
+    with engine.session_factory() as session:
+        from flowork.persistence.orm import ProcessInstanceRow
+
+        row = session.get(ProcessInstanceRow, iid)
+        assert row is not None
+        assert row.started_at is not None
+        assert abs((row.started_at - clock()).total_seconds()) < 5, row.started_at
+
+
+def test_delegation_window_follows_engine_clock():
+    """回归（P1-9）：委托窗口判定走引擎时钟。窗口设在假钟日内（墙钟早已
+    越界）——修复前 resolver 不传 when 走墙钟，窗口内委托被误判失效。"""
+    from flowork.api import StaticOrgDirectory
+
+    org = StaticOrgDirectory.from_dict(
+        {
+            "users": {
+                "u_bob": {"department": "d_eng"},
+                "u_dave": {"department": "d_eng"},
+                "u_admin": {},
+            },
+            "departments": {"d_eng": {"head": "u_bob"}},
+            # 假钟 2026-01-01 前后一天有效——墙钟 2026-10 下必然过界
+            "delegations": [
+                {"from": "u_bob", "to": "u_dave",
+                 "since": "2025-12-31", "until": "2026-01-02"}
+            ],
+            "admins": ["u_admin"],
+        }
+    )
+    engine, _clock = build_engine()
+    engine.config.org = org
+    engine.repository.deploy(
+        FlowBuilder("clk_deleg")
+        .start()
+        .user_task("a", assignee="'u_bob'")
+        .end()
+        .connect("start", "a")
+        .connect("a", "end")
+        .build()
+    )
+    iid = engine.runtime.start_process("clk_deleg", start_user="u_s")
+    tasks = engine.task.list_tasks(instance_id=iid)
+    assert [t.assignee for t in tasks] == ["u_dave"], "窗口内委托按引擎时钟生效"
+
+
+def test_message_ttl_follows_engine_clock():
+    """回归（P1-18）：消息缓冲 TTL 走引擎时钟——修复前 expires_at 用墙钟，
+    假钟快进到 TTL 之外仍不过期（缓冲永不清理）。"""
+    from flowork.persistence.orm import MessageBufferRow
+
+    engine, clock = build_engine()
+    engine.repository.deploy(
+        FlowBuilder("clk_ttl")
+        .start()
+        .user_task("a", assignee="'u_a'")
+        .end()
+        .connect("start", "a")
+        .connect("a", "end")
+        .build()
+    )
+    iid = engine.runtime.start_process("clk_ttl", start_user="u_s")
+    engine.messages.publish_message("m1", "K-1", {}, message_id="x1", ttl_seconds=60)
+    clock.advance_minutes(2)  # 假钟已过 TTL
+    engine.messages.publish_message("m2", "K-2", {}, message_id="x2")  # 触发 purge
+    with engine.session_factory() as session:
+        from sqlalchemy import select
+
+        buffered = [
+            b.message_id
+            for b in session.scalars(select(MessageBufferRow)).all()
+        ]
+    assert "x1" not in buffered, "过 TTL 的缓冲按引擎时钟清理"
+    assert "x2" in buffered
+    _ = iid

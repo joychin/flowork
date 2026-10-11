@@ -117,6 +117,7 @@ def start_sub_process(ctx: RuntimeNodeContext, spec: CallActivitySpec) -> None:
         definition_revision=row.revision,
         definition_snapshot=row.content,
         state="running",
+        started_at=ctx.kernel.config.now(),  # P1-11：业务时刻单源
         start_user=ctx.instance.start_user,
         variables=dict(input_variables),
         parent_id=ctx.instance.id,

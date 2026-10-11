@@ -205,12 +205,18 @@ def _apply_strategies(
     return todo, skipped
 
 
-def _delegation_replace(todo: list[str], org: OrgDirectoryLike) -> tuple[list[str], dict[str, str]]:
-    """委托替换：返回（替换后待办人, 委托人→受托人映射）。"""
+def _delegation_replace(
+    todo: list[str], org: OrgDirectoryLike, *, now: datetime | None
+) -> tuple[list[str], dict[str, str]]:
+    """委托替换：返回（替换后待办人, 委托人→受托人映射）。
+
+    now＝引擎统一时钟（code-review 2026-10 P1-9）：窗口判定与同时刻的路由/
+    时限/审计同源，修复前走墙钟（FakeClock 下委托生效/失效与其他位点分叉）。
+    """
     replaced: list[str] = []
     mapping: dict[str, str] = {}
     for user in todo:
-        trustee = org.delegation_of(user)
+        trustee = org.delegation_of(user, when=now)
         if trustee and trustee != user:
             mapping[user] = trustee
             replaced.append(trustee)
@@ -227,7 +233,7 @@ def resolve_with_delegation(
 ) -> tuple[ParticipantResolution, dict[str, str]]:
     """解析 + 委托替换（供行为层使用）。"""
     resolution = resolve_participants(ctx, spec, functions)
-    todo, mapping = _delegation_replace(resolution.todo, org)
+    todo, mapping = _delegation_replace(resolution.todo, org, now=ctx.kernel.config.now())
     return ParticipantResolution(todo=todo, skipped=resolution.skipped), mapping
 
 

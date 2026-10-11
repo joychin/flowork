@@ -77,6 +77,7 @@ class JobService:
                     job_type=job_type,
                     job_kind="worker",
                     state="scheduled",
+                    created_at=self._engine.config.now(),  # P1-11：与 run_at 同钟
                     run_at=self._engine.config.now(),
                     max_retries=max_retries,
                     instance_id=instance_id,

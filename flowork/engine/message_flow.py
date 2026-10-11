@@ -190,14 +190,16 @@ def correlated_payload(
     }
 
 
-def purge_expired(session: Session) -> None:
-    """清理过期缓冲行（TTL）。"""
+def purge_expired(session: Session, *, now: Any = None) -> None:
+    """清理过期缓冲行（TTL；now＝引擎统一时钟，缺省墙钟仅留无引擎调用兜底）。"""
 
     from sqlalchemy import delete
 
     from flowork.clock import utc_now
 
-    session.execute(delete(MessageBufferRow).where(MessageBufferRow.expires_at < utc_now()))
+    session.execute(
+        delete(MessageBufferRow).where(MessageBufferRow.expires_at < (now or utc_now()))
+    )
 
 
 def emit_message_event(
@@ -223,7 +225,7 @@ def broadcast_signal(engine: ProcessEngine, name: str) -> int:
     """
 
     def _command(ctx: CommandContext) -> int:
-        purge_expired(ctx.session)
+        purge_expired(ctx.session, now=engine.config.now())
         rows = ctx.session.scalars(
             select(MessageSubscriptionRow).where(
                 MessageSubscriptionRow.name == name,
