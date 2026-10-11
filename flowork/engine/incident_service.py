@@ -130,6 +130,10 @@ class IncidentMixin:
                 if instance is not None:
                     ctx.touch(instance)
                     instance.state = "running"
+                    # 拍板 1：挂起期消息落缓冲——恢复后补消费（对齐 resume_process）
+                    from flowork.engine.message_flow import retro_poll_instance
+
+                    retro_poll_instance(ctx, self._engine, instance)
             elif action == "cancel":
                 self._cancel_in_ctx(
                     ctx, incident.instance_id, actor=actor, reason="incident:cancel"
@@ -151,6 +155,9 @@ class IncidentMixin:
                 if instance is not None:
                     ctx.touch(instance)
                     instance.state = "running"
+                    from flowork.engine.message_flow import retro_poll_instance
+
+                    retro_poll_instance(ctx, self._engine, instance)  # 同 resume 补消费
             elif action == "skip":
                 self._skip_failed_nodes(ctx, incident.instance_id, actor)
             elif action == "fail":

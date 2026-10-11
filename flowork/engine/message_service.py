@@ -163,7 +163,8 @@ class MessageService:
     def _first_open_subscription(
         self, ctx: CommandContext, name: str, correlation_key: str
     ) -> MessageSubscriptionRow | None:
-        """首个可消费的 open 订阅（FCFS；跳过暂停实例——spec §7.2 暂停拦截）。"""
+        """首个可消费的 open 订阅（FCFS；跳过暂停/挂起实例——spec §7.2 暂停
+        拦截 + 拍板 1：挂起对齐暂停，消息落缓冲、故障解决后补消费）。"""
         from flowork.persistence.orm import ProcessInstanceRow
 
         rows = ctx.session.scalars(
@@ -177,7 +178,7 @@ class MessageService:
         ).all()
         for row in rows:
             instance = ctx.session.get(ProcessInstanceRow, row.instance_id)
-            if instance is None or instance.state == "paused":
+            if instance is None or instance.state in ("paused", "suspended"):
                 continue
             return row
         return None

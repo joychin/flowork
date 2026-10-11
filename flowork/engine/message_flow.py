@@ -95,14 +95,15 @@ def hit_subscription(
 ) -> bool:
     """命中 open 订阅的完整动作：关联（含映射）→ 推进等待令牌（同事务）。
 
-    暂停拦截（既有全动作拦截原则）：实例 paused 不消费，返回 False——
-    publish 侧消息继续走下一优先级；令牌已被取消/完结（竞速败者）同样
-    返回 False，命中事实不重复作用。
+    暂停/挂起拦截（既有全动作拦截原则；拍板 1 方案 A：挂起与暂停对齐）：
+    实例 paused/suspended 不消费，返回 False——publish 侧消息继续走下一
+    优先级（落缓冲，故障解决后补消费）；令牌已被取消/完结（竞速败者）
+    同样返回 False，命中事实不重复作用。
     """
     from flowork.persistence.orm import TokenRow
 
     instance = ctx.session.get(ProcessInstanceRow, subscription.instance_id)
-    if instance is None or instance.state == "paused":
+    if instance is None or instance.state in ("paused", "suspended"):
         return False
     kernel = engine.kernel_for(ctx)
     node = kernel.definition_of(ctx.session, instance).node(subscription.node_id)

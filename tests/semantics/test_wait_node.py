@@ -518,3 +518,66 @@ def test_wait_correlation_node_facts_available():
     engine.task.complete(u1.id, actor="u_w")  # 令牌到 w，correlation 求值
     assert engine.messages.publish_message("m1", "u_w") is True, "按 node() 取到的关联键命中"
     assert [t.activity_code for t in engine.task.list_tasks(instance_id=instance_id)] == ["after"]
+
+
+
+def test_suspended_instance_subscription_not_consumed():
+    """回归（拍板 1 方案 A）：挂起实例的订阅与暂停同拦——publish 不消费、
+    消息落缓冲；故障恢复（incident resolve resume）后补消费推进。
+    修复前挂起实例的订阅被照常消费（订阅钉死、实例挂起不推进），恢复后
+    这条消息永远不会再来。"""
+    import pytest
+
+    from flowork.definitions.builtin import RouteMode
+    from flowork.errors import FloworkError
+    from flowork.persistence.orm import MessageBufferRow
+
+    engine = ProcessEngine()
+    definition = (
+        FlowBuilder("wf_susp_msg")
+        .start()
+        .branch("route", route_mode=RouteMode.ALL_MATCH)
+        .user_task("a", assignee="'u_a'")
+        .service_task("boom", "会炸的步骤", action="explode", params={})
+        .wait("w", message={"name": "m1", "correlation_key": "'K-1'"})
+        .user_task("after", assignee="'u_x'")
+        .end(advance_policy="all")
+        .connect("start", "route")
+        .connect("route", "a")
+        .connect("route", "w")
+        .connect("a", "boom")
+        .connect("boom", "end")
+        .connect("w", "after")
+        .connect("after", "end")
+        .build()
+    )
+    engine.repository.deploy(definition)
+
+    def explode(ctx, params):
+        raise RuntimeError("炸")
+
+    engine.register_handler("explode", explode)
+    instance_id = engine.runtime.start_process("wf_susp_msg", start_user="u_s")
+    # 分支扇出：a 臂任务 + w 臂订阅同时就绪
+    assert len(_open_subscriptions(engine, instance_id)) == 1
+
+    task_a = engine.task.list_tasks(instance_id=instance_id, assignee="u_a")[0]
+    with pytest.raises(FloworkError):
+        engine.task.complete(task_a.id, actor="u_a")  # boom 炸 → 挂起（命令回滚）
+    assert engine.runtime.get_instance(instance_id).state == "suspended"
+    assert len(_open_subscriptions(engine, instance_id)) == 1, "订阅仍在（此前命令未动它）"
+
+    # 挂起期 publish：不消费（消息落缓冲）
+    assert engine.messages.publish_message("m1", "K-1", {"x": 1}) is False
+    assert len(_open_subscriptions(engine, instance_id)) == 1, "挂起期订阅不被消费"
+    with engine.session_factory() as session:
+        buffered = session.scalars(select(MessageBufferRow)).all()
+        assert len(buffered) == 1 and buffered[0].name == "m1"
+
+    # 故障恢复（resolve resume）：补消费 → w 推进到 after
+    incident = engine.runtime.list_incidents(instance_id=instance_id)[0]
+    engine.runtime.resolve_incident(incident["id"], action="resume", actor="ops")
+    assert engine.runtime.get_instance(instance_id).state == "running"
+    tasks = [t.activity_code for t in engine.task.list_tasks(instance_id=instance_id)]
+    assert "after" in tasks, "缓冲消息补消费，w 推进到 after"
+    assert len(_open_subscriptions(engine, instance_id)) == 0
