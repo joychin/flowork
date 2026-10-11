@@ -18,8 +18,6 @@ from flowork.directory.audit import record_audit
 from flowork.directory.common import DirectoryError
 from flowork.directory.orm import DelegationRow, OrgUserRow
 
-_MAX = 50
-
 
 @dataclass(frozen=True)
 class DelegationInfo:
@@ -114,33 +112,35 @@ class DelegationDirectoryMixin:
     # —— 读（不缓存：窗口随时间滑动，频率低） ——
 
     def delegation_of(self, user_id: str, when: datetime | None = None) -> str | None:
-        """窗口内最新一条有效委托的受托人；无则 None。"""
+        """窗口内最新一条有效委托的受托人；无则 None。
+
+        窗口判定下推 SQL（code-review 2026-10 P2-22）：此前固定取最近 50 条
+        再内存过滤——历史攒多后当前窗口内的委托可能排在 50 名之外被静默
+        漏掉（表现为「委托没生效」）。下推后命中的至多一行，无截断面。
+        """
         moment = when or utc_now()
         with self._factory() as session:
-            rows = session.scalars(
+            row = session.scalars(
                 select(DelegationRow)
                 .where(
                     DelegationRow.delegate_from == user_id,
                     DelegationRow.revoked_at.is_(None),
+                    (DelegationRow.since.is_(None)) | (DelegationRow.since <= moment),
+                    (DelegationRow.until.is_(None)) | (moment <= DelegationRow.until),
                 )
                 .order_by(DelegationRow.id.desc())
-                .limit(_MAX)
-            ).all()
-            for row in rows:
-                if (row.since is None or row.since <= moment) and (
-                    row.until is None or moment <= row.until
-                ):
-                    return row.delegate_to
-            return None
+                .limit(1)
+            ).first()
+            return row.delegate_to if row is not None else None
 
     def delegations_of(self, user_id: str) -> list[DelegationInfo]:
-        """该用户全部委托（含已撤销，倒序）——管理/展示查询面。"""
+        """该用户全部委托（含已撤销，倒序）——管理/展示查询面（按人取全，
+        P2-22：截断会让管理面看不见旧委托）。"""
         with self._factory() as session:
             rows = session.scalars(
                 select(DelegationRow)
                 .where(DelegationRow.delegate_from == user_id)
                 .order_by(DelegationRow.id.desc())
-                .limit(_MAX)
             ).all()
             return [
                 DelegationInfo(
