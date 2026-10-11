@@ -561,6 +561,8 @@ CRUD：新增与更新＝同一操作 `deploy`——**纯数据写入（INSERT �
 
 **暂停的拦截范围【v2.3 第二十轮，初学者问答审计 D2】**：暂停＝冻结。拦截清单——任务动作面（办理/驳回/认领/转办等）、消息消费与定时器触发（冻结期间不推进）、外部变量写（`update_variables` 拒，冻结快照取证语义；修数据路径＝resume → 改 → 再 pause）、完成跃迁（`finish_instance` 与 `move_token` 到 end 均拒——终态只从运行态走，清档请 resume 或改用 cancel）。**管理员手术明文允许**：activate_node / cancel_node / move_token（到中间节点）在暂停实例上照常可用且不改变暂停态（处置冻结实例的运维通道）；cancel/terminate 不拦（砍树对暂停子照常结算）。
 
+**挂起（suspended）的拦截面【拍板 1/2，2026-10-11】**：挂起与暂停在两个位点对齐——① 消息消费：挂起实例的订阅不消费（与暂停同拦，消息落缓冲），故障恢复（incident resolve 的 resume/retry）后 retro_poll 补消费；② 定时器：调度面 collect 过滤已含挂起（P0-5）。**明文差异**：外部变量写（update_variables）在挂起期**放行**——这是有意的「故障期修数据通道」：管理员修完引发故障的变量值再恢复实例，避免 resume 后故障复发（拍板 2：确认为设计意图，非漏网）；暂停期仍拒（冻结快照取证语义不变）。
+
 ### 7.1 start_on_message：消息启动实例【v2 新增，2026-10-09 定稿】
 
 定义顶层声明 `start_on_message: [{name, correlation_key?, input_mappings?, start_user?, business_key?}]`（列表可多条，常见一条）——**启动订阅＝定义派生**：published 定义即生效、retire 即失效，不落订阅表（部署动作天然增删订阅，零表结构变更）。
