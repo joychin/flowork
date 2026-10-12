@@ -1,6 +1,6 @@
 """推进门（advance_policy）语义测试：any 任一到达 / all 等全部到齐 / 吸收 / 驳回绕门 / 校验。
 
-对位 对标产品：preCondition(ALL/ANY) + handleActiviteActivity（或汇聚取消兄弟）。
+对位行业惯例：ALL/ANY 推进策略 + 汇聚取消兄弟。
 """
 
 from __future__ import annotations

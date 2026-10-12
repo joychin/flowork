@@ -70,7 +70,7 @@ class RouteMode(StrEnum):
     """条件分支的匹配方式（分支侧语义；汇聚侧见 FlowNode.advance_policy）。
 
     - FIRST_MATCH 命中即走：按出边顺序取第一条条件为真者；全不中走默认边。
-    - ALL_MATCH 命中的都走：条件为真的边全部激活（对标产品 原生语义）；皆空走默认边。
+    - ALL_MATCH 命中的都走：条件为真的边全部激活（行业原生语义）；皆空走默认边。
     """
 
     FIRST_MATCH = "first_match"
@@ -155,7 +155,7 @@ class CcTaskSpec(FlowNode):
 
     kind: Literal["cc_task"] = KIND_CC_TASK
     recipients: list[str] = Field(default_factory=list)
-    # 传阅恒按 any 推进（对齐 对标产品 CIRCULATE 强制 ANY），多入边不等待
+    # 传阅恒按 any 推进（对齐传阅类强制 ANY 的行业惯例），多入边不等待
     advance_policy: Literal["any", "all"] | None = "any"
 
 

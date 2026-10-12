@@ -2,10 +2,10 @@
 
 - FIRST_MATCH 命中即走：按出边顺序取第一条条件为真的边；全不中走默认边；再无则 RouteError。
 - ALL_MATCH 命中的都走：无条件边全部激活 + 条件为真者激活；皆空走默认边
-  （对标产品 原生语义：命中几条走几条）。
+  （行业原生语义：命中几条走几条）。
 
 汇聚语义不在本类：由 kernel 推进门按目标节点 ``advance_policy``（any/all）决定
-（对齐 对标产品 preCondition ALL/ANY + handleActiviteActivity 兄弟取消）。
+（对齐 ALL/ANY 推进策略与汇聚时取消兄弟的行业惯例）。
 """
 
 from __future__ import annotations

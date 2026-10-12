@@ -19,7 +19,7 @@
 3. [kernel-v2/expression-dataface.md](docs/product/kernel-v2/expression-dataface.md) / [variable-io-api.md](docs/product/kernel-v2/variable-io-api.md): 判断面与读写面两份已批设计
 4. [kernel-v2-plan.md](docs/product/kernel-v2-plan.md): 内核 v2 实施排期
 
-## 设计文档（位于 ../../benchmark_refs/out/，按权威优先级）
+## 仓库外设计文档（只读，按权威优先级）
 
 1. 本期建设边界.md：范围、排除清单、里程碑验收标准（冲突时以本文为准）
 2. Python流程引擎实施规划.md：里程碑排期与技术基线
@@ -27,7 +27,7 @@
 4. 节点抽象与扩展设计.md：Spec/Behavior 分离、注册表、生命周期钩子
 5. AI友好设计.md：AI 参与流程 / MCP 操作引擎 / AGENTS.md 代码库友好
 6. 主流流程引擎借鉴分析.md：jBPM/Flowable/Camunda/Temporal 借鉴与不抄清单
-7. 流程引擎行为基准分析报告.md：对标产品 语义基准（clean-room 参考）
+7. 流程引擎行为基准分析报告.md：行为基准语义基准（clean-room 参考）
 
 ## 关键入口
 
@@ -36,5 +36,5 @@
 - flowork/runtime/registry.py: NodeRegistry / HandlerRegistry（扩展机制核心，内部实现阅读）
 - flowork/runtime/behavior.py: NodeBehavior 生命周期契约（内部实现阅读）
 - flowork/engine/branch.py: 条件分支行为（first_match / all_match 路由，内部实现阅读）
-- flowork/engine/kernel.py: 推进门 _advance（advance_policy any/all，对齐 对标产品 preCondition，内部实现阅读）
+- flowork/engine/kernel.py: 推进门 _advance（advance_policy any/all，对齐 ALL/ANY 推进策略，内部实现阅读）
 - flowork/definitions/validator.py: 设计时校验器（内部实现阅读）

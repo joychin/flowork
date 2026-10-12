@@ -60,7 +60,7 @@ designer/          流程设计器前端（React Flow + zustand + Vite；详见 
 
 ## 硬约束（违反即打回）
 
-1. **命名**：遵循《命名规范》（benchmark_refs/out/命名规范.md）。禁用 对标产品 名
+1. **命名**：禁用对标产品遗留命名模式
    （Biz*/分词命名/错拼Service/*Impl 等）；标识符一律英文；类禁 Impl/Factory/Manager/Util 后缀。
 2. **引擎核心不得出现节点 kind 的 if/else 分支**——节点语义只经 NodeRegistry → NodeBehavior。
 3. **钩子/行为只观察与写变量，不得改变路由**；路由决策只属于引擎 + 条件求值。
@@ -73,9 +73,9 @@ designer/          流程设计器前端（React Flow + zustand + Vite；详见 
 
 - 仓库内：`docs/product/engine-v1/`（产品 v1 范围权威，11 篇）、`docs/product/kernel-v2/spec.md`（内核 v2 范围权威）、
   `docs/API.md`（四服务 API 参考）、`docs/integration.md`（集成部署：表结构/超时调度/运维）。
-- 仓库外（同级目录 `../benchmark_refs/out/`，**不在本仓库内**）：边界（范围权威）→ 实施规划 → 命名规范 →
+- 仓库外（同级目录，**不在本仓库内**）：边界（范围权威）→ 实施规划 → 命名规范 →
   节点抽象与扩展设计 → AI友好设计 → 主流流程引擎借鉴分析；
-  语义参考 基准材料/（对标产品 行为基准源码，clean-room：只对齐行为，不搬代码/命名）。
+  语义参考为行为基准基准源码 基准材料/（clean-room：只对齐行为，不搬代码/命名）。
 
 ## 当前里程碑
 
@@ -264,7 +264,7 @@ contrib.web）」+ 静态纪律测试 `tests/test_projection_surface.py`「投�
 随 Alembic 后重排刀（spec §15）一批处理。
 
 **测试方案落地批 A·地基（2026-10-09，依据 docs_research/flowork测试方案-2026-10.md；
-与 对标产品-delta 批并行，工作区分离）**：
+与对标批并行，工作区分离）**：
 ① pytest marker 体系（slow/quarantined/randomized/needs_http 注册 + --strict-markers，
 addopts 默认排除后三者——重档测试显式开门，防红灯失去含义）。
 ② 覆盖审计第四重「引擎→矩阵」反向（test_node_features_cover_engine_kinds：
@@ -279,7 +279,7 @@ autouse，exclude 豁免有意留运行态的实例），接入场景随机两�
 ⑤ 覆盖率口径改「照明指标，不作提交门禁」+ 回归测试带来源纪律入提交规范。
 矩阵自此覆盖 tests/suite 与 tests/pilot 全部走查（678 测试全绿）。
 
-**对标产品 对标两轮+第一批落地（2026-10-09，spec v2.3 第八轮）**：
+**行业对标两轮+第一批落地（2026-10-09，spec v2.3 第八轮）**：
 ① 对标三篇入 docs/product/kernel-v2/：对标明细.md（A/B/C 三档速览+四拍板项，行业列
 ✅⚠❌）、对标明细详设.md（A1–A11 逐项详设，行业修正版）、delta-industry-benchmark.md
 （Camunda 7.23/8、Flowable 7、jBPM 7.74、Temporal、SpiffWorkflow、Conductor 源码级对拍）。
@@ -302,7 +302,7 @@ _assert_operable/_complete/_reject 三点）。678 测试全绿。第二批（A2
 **对标第二批落地（2026-10-09，spec v2.3 第九轮；与等待节点 WIP 并行会话同工作区，文件互不重叠）**：
 ① A2 撤回下游闸门：`downstream_basin`（graph.py，upstream_basin 对偶）界定本节点正向可达
 下游；人工进展＝非取消已办 ∪ 工作节点（user_task/call_activity）已完结令牌——穿透节点
-（branch/cc_task）即时完结不拦（对齐 对标产品 穿透 CONNECTION/CIRCULATE；**实现即踩坑**：
+（branch/cc_task）即时完结不拦（对齐行业穿透节点不拦口径；**实现即踩坑**：
 首版把 branch 的即时完结当进展，pilot leave 撤回被误拦，修正后判据只认工作节点）。下游有
 进展→拒绝并提示改用驳回（错误带进展明细）；闸门生效后"取消全部未完令牌"与"只取消下游"
 等价（拍板④自然覆盖）。withdraw 归类实例修改类动作（授权归宿主）。

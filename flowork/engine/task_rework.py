@@ -163,8 +163,7 @@ class TaskReworkMixin:
         ① 下游存在表决行（表决行口径，spec §5.1 第十九轮——协办/咨询/自动
         通过不算进展；branch/cc/service 不产生任务历史天然只统计人工办理）；
         ② 下游**工作节点**（user_task/call_activity）存在已完结令牌——穿透节点
-        （branch/cc_task/start/end）的即时完结**不拦**，对齐 对标产品
-        getChildRevokeActivityCodes 穿透 CONNECTION/CIRCULATE 的口径（pilot
+        （branch/cc_task/start/end）的即时完结**不拦**，对齐穿透型节点不拦的行业口径（pilot
         leave 实证：branch 即刻完结曾误拦）；判据②同时覆盖「节点整体完成
         （含出口自动通过）」的进展。判据保守方向：不评条件，未命中分支上的
         人工进展同样拦截。行业零实现，flowork 首创（delta-industry-benchmark §2）。

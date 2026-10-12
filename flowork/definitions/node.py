@@ -123,7 +123,7 @@ class FlowNode(BaseModel):
     code: str
     name: str = ""
     kind: str
-    # —— 开始条件（推进策略，对齐 对标产品 preCondition ALL/ANY）——
+    # —— 开始条件（推进策略，对齐 ALL/ANY 推进策略的行业惯例）——
     # 仅多条入边节点有意义：any=任一前置分支到达即开始（缺省，竞速并取消兄弟挂起分支）；
     # all=所有前置分支到齐再开始（与汇聚）。cc_task 恒按 any 执行。
     advance_policy: Literal["any", "all"] | None = None

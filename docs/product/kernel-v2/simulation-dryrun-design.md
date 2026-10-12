@@ -11,7 +11,7 @@
 
 **第二层 · 打桩真执行（simulated 实例）**：
 - `ProcessInstanceRow.simulated: bool = False`（§14 迁移一列）+ `RuntimeService.start_process(..., simulated=True)` 或独立 `engine.simulate(definition, variables) -> SimulationReport`；
-- 行为规则：user_task 进入即自动完成（outcome="simulated"、actor=system，**不走 auto_pass 票数语义**）；service_task **必须 stub**（行业共识：模拟绝不执行真实副作用——这是与 对标产品 灰区的关键分野），记 node_stubbed 事件；cc_task 自动已阅；call_activity 递归模拟；**不建 deadline job**；定时器可跳过（Clock 注入，Temporal time skipping 同款）；
+- 行为规则：user_task 进入即自动完成（outcome="simulated"、actor=system，**不走 auto_pass 票数语义**）；service_task **必须 stub**（行业共识：模拟绝不执行真实副作用——这是与对标产品灰区的关键分野），记 node_stubbed 事件；cc_task 自动已阅；call_activity 递归模拟；**不建 deadline job**；定时器可跳过（Clock 注入，Temporal time skipping 同款）；
 - 条件走向由「初始变量+路由条件」真求值（与第一层相反）。
 
 ## 隔离与报告（两处行业空白）

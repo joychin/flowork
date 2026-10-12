@@ -245,7 +245,7 @@ class Kernel(TaskRecordsMixin, TokenRecordsMixin):
             raise RouteError(f"目标节点不存在：{flow.target}")
         self._advance(session, instance, target, flow, definition)
 
-    # —— 推进门（对齐 对标产品 checkCanBeActivited + handleActiviteActivity）——
+    # —— 推进门（对齐行业推进校验与激活处理语义）——
 
     def _advance(
         self,

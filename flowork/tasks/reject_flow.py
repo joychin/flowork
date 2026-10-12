@@ -1,7 +1,7 @@
 """驳回回流（TaskService 组合件，入口 engine.task.reject 不变）。
 
 从 task_service.py 拆出（单文件 ≤300 行回归），镜像 anticipate.py 放法。
-语义（对齐 对标产品，实现为追加式）：
+语义（对齐行业，实现为追加式）：
 - 单人节点：一票即回退；多实例节点：达到 disapprove_exit（默认 1 票）回退。
 - 目标节点 = 显式 target > 节点配置 reject_target > 来源节点。
 - 回退 = 新令牌（reject_flag=True）+ 为目标节点原办理人生成新待办
