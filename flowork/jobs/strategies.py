@@ -14,7 +14,11 @@ from flowork.engine.ops import CommandContext
 from flowork.errors import TaskNotAvailableError
 from flowork.events.domain import DomainEvent
 from flowork.persistence.orm import JobRow, ProcessInstanceRow, TaskRow
-from flowork.runtime.lifecycle import TokenState
+from flowork.runtime.lifecycle import (
+    FROZEN_INSTANCE_STATES,
+    TERMINAL_INSTANCE_STATES,
+    TokenState,
+)
 
 if TYPE_CHECKING:
     from flowork.engine.engine import ProcessEngine
@@ -74,7 +78,7 @@ class DeadlineStrategiesMixin:
                 self._execute_strategy(ctx, strategy, task_id)
         except TaskNotAvailableError as exc:
             instance = ctx.session.get(ProcessInstanceRow, job.instance_id)
-            if instance is not None and instance.state in ("paused", "suspended"):
+            if instance is not None and instance.state in FROZEN_INSTANCE_STATES:
                 # collect→claim 竞态窗插队的冻结（P1-12）：不消费，解冻后触发
                 job.state = "scheduled"
                 job.result_payload = {**(job.result_payload or {}), "deferred": instance.state}
@@ -107,10 +111,10 @@ class DeadlineStrategiesMixin:
             job.result_payload = {**(job.result_payload or {}), "skipped": "wait already resolved"}
             return
         instance = ctx.session.get(ProcessInstanceRow, job.instance_id)
-        if instance is None or instance.state in ("completed", "cancelled", "terminated"):
+        if instance is None or instance.state in TERMINAL_INSTANCE_STATES:
             job.result_payload = {**(job.result_payload or {}), "skipped": "instance finished"}
             return
-        if instance.state in ("paused", "suspended"):
+        if instance.state in FROZEN_INSTANCE_STATES:
             # 冻结期（P1-12 collect→claim 竞态窗）：不消费，解冻后触发——
             # 与 collect 过滤「冻结是推迟不是吞掉」同语义
             job.state = "scheduled"
@@ -142,10 +146,10 @@ class DeadlineStrategiesMixin:
         """实例时限到点（v2.2 spec §7）：mark 打标继续跑 / cancel 作废 / terminate 终止。"""
         strategy = job.payload.get("strategy", "mark")
         instance = ctx.session.get(ProcessInstanceRow, job.instance_id)
-        if instance is None or instance.state in ("completed", "cancelled", "terminated"):
+        if instance is None or instance.state in TERMINAL_INSTANCE_STATES:
             job.result_payload = {**(job.result_payload or {}), "skipped": "instance finished"}
             return  # 实例已完成则静默不触发
-        if instance.state in ("paused", "suspended"):
+        if instance.state in FROZEN_INSTANCE_STATES:
             # 冻结期（P1-12）：不消费，解冻后触发（resume 会顺延 run_at）
             job.state = "scheduled"
             job.result_payload = {**(job.result_payload or {}), "deferred": instance.state}

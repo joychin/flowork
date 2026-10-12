@@ -36,7 +36,8 @@ flowork/
 ├── runtime/       运行时：behavior(NodeBehavior+NodeContext) registry(注册表) lifecycle(状态枚举)
 ├── expr/          表达式层：cel(CEL 沙箱+静态检查) catalog(词汇目录) context(上下文装配)
 │                  conditions(条件求值薄层)
-├── spi/           端口协议：Clock/WorkCalendar/OrgDirectory/ExpressionFunctions/EventSink
+├── spi/           端口协议：ExpressionFunctions（表达式函数注册）；schema 数据类
+│                  （FunctionSignature/ExpressionFunction）；目录面在 participants
 ├── events/        领域事件类型（M1 起随 Command 管线落 outbox）
 ├── tasks/ participants/ persistence/ engine/ jobs/   # 内核主体（engine 已按职责拆分多文件）
 ├── directory/     目录（M-A）：组织/角色/用户/Agent/委托（agents/roles/delegation/
@@ -565,3 +566,19 @@ tasks（paged_tasks）/versions 列表+按版本取发布 spec（spec §12 同�
 +SchemaForm 取人/动作字段 datalist。**D3 公式中文投影未做**（计划既定可选降级项）。
 **971 测试全绿，五道门全过**；批 B/只读嵌入页浏览器实测（模拟/实例/发布判定/
 readonly demo 四场景）。
+
+**公开面死符号收口批（2026-10-12）**：盘点 testsuite 对 flowork.api 全部符号的消费
+（AST 绑定感知扫描，区分经门面/深路径/文本提及），发现 5 个全仓零引用符号：
+① `Clock`/`EventSink` 两死协议删除（时钟实际由 `EngineConfig.now` 裸 Callable 承载、
+全仓 FakeClock 十二处一致注入；outbox 消费者接收裸 sink 回调）；② `NodeLifecycle`
+枚举删除（生命周期阶段表达为 on_enter/try_complete 方法调用序列，枚举零引用）；
+③ `InstanceState` 保留并**接线**——内核全部实例状态字符串字面量改枚举成员，并抽出
+四个语义常量（`TERMINAL_INSTANCE_STATES`/`FROZEN_INSTANCE_STATES`/
+`UNSETTLED_INSTANCE_STATES`/`FAILED_INSTANCE_STATES`，与既有 `_CHILD_SETTLED_STATES`
+等本地集合归一），StrEnum 与字符串/Pydantic/SQL 全互通，零行为变化；
+④ `spi.ports.OrgDirectory` 四方法协议删除（与 `participants.OrgDirectoryLike` 概念
+重复且零消费——引擎消费面只有 OrgDirectoryLike，公开面同名歧义消除）。
+公开面 66→62。新增守卫 `tests/test_api_dead_symbols.py`：公开面符号全仓零引用即
+红灯，两类豁免须显式登记理由（内部构造返回模型 FunctionEntry/JobClaim/NotFoundError、
+门面契约常量）——与死端口收口（Notifier/ResourceProvider/WorkCalendar/VariableStore）
+同口径的第五批。spec §9/kernel-v2-plan/integration.md/包地图同步。

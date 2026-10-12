@@ -18,7 +18,7 @@ from flowork.engine.token_records import TokenRecordsMixin
 from flowork.errors import FloworkError
 from flowork.events.domain import DomainEvent
 from flowork.runtime.behavior import NodeBehavior
-from flowork.runtime.lifecycle import TokenState
+from flowork.runtime.lifecycle import UNSETTLED_INSTANCE_STATES, InstanceState, TokenState
 from flowork.runtime.registry import HandlerRegistry, NodeRegistry
 
 if TYPE_CHECKING:
@@ -115,7 +115,10 @@ class Kernel(TaskRecordsMixin, TokenRecordsMixin):
     def complete_instance(
         self, session: Session, instance: ProcessInstanceRow, end_status: str
     ) -> None:
-        if instance.state == "paused" and end_status == "completed":
+        if (
+            instance.state == InstanceState.PAUSED.value
+            and end_status == InstanceState.COMPLETED.value
+        ):
             # 暂停不可直接「完成」（审计 D2：终态跃迁只从运行态走——清档请 resume
             # 或改用 cancel；cancel/terminate 不拦，级联砍树对暂停子照常结算）
             from flowork.errors import TaskNotAvailableError
@@ -123,11 +126,11 @@ class Kernel(TaskRecordsMixin, TokenRecordsMixin):
             raise TaskNotAvailableError(
                 "实例已暂停，不可直接完成——先 resume 或改用 cancel（spec §7 第二十轮）"
             )
-        if instance.state in ("running", "suspended", "paused"):
+        if instance.state in UNSETTLED_INSTANCE_STATES:
             instance.state = end_status
             instance.finished_at = self.config.now()
             session.flush()
-            if end_status == "completed":
+            if end_status == InstanceState.COMPLETED.value:
                 # 仅 completed 在此发事件（code-review 2026-10 P2-1）：cancelled/
                 # terminated 由调用方独占（带 actor/reason/cascade 溯源）——
                 # 此前终止路径双发假 cancelled（状态与事件序列矛盾）

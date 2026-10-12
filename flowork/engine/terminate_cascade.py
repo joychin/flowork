@@ -16,7 +16,11 @@ from typing import TYPE_CHECKING
 
 from flowork.engine.ops import CommandContext
 from flowork.persistence.orm import ProcessInstanceRow
-from flowork.runtime.lifecycle import TokenState
+from flowork.runtime.lifecycle import (
+    TERMINAL_INSTANCE_STATES,
+    InstanceState,
+    TokenState,
+)
 
 if TYPE_CHECKING:
     from flowork.engine.engine import ProcessEngine
@@ -24,7 +28,7 @@ if TYPE_CHECKING:
 __all__ = ["cascade_terminate"]
 
 # 结算=终态（与 subprocess_support._CHILD_SETTLED_STATES 同口径）
-_SETTLED = frozenset({"completed", "terminated", "cancelled", "failed"})
+_SETTLED = TERMINAL_INSTANCE_STATES
 
 
 def cascade_terminate(
@@ -75,7 +79,7 @@ def cascade_terminate(
     # 3) 子实例落终态（逆 BFS＝子先父后）+ 终态事件（cascade_from 溯源）
     terminal_event = (
         DomainEvent.PROCESS_TERMINATED
-        if end_status == "terminated"
+        if end_status == InstanceState.TERMINATED.value
         else DomainEvent.PROCESS_CANCELLED
     )
     for child in reversed(descendants):

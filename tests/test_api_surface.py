@@ -11,7 +11,6 @@ import flowork.api as api
 # 冻结快照（字母序，与 api.__all__ 逐字对齐）
 EXPECTED_SURFACE = frozenset(
     {
-        "Clock",
         "ConditionError",
         "DefinitionError",
         "DefinitionNotPublishedError",
@@ -19,7 +18,6 @@ EXPECTED_SURFACE = frozenset(
         "DuplicateStartError",
         "EngineConfig",
         "EventInfo",
-        "EventSink",
         "ExpressionFunction",
         "ExpressionFunctions",
         "FlowBuilder",
@@ -43,10 +41,8 @@ EXPECTED_SURFACE = frozenset(
         "MultiInstance",
         "NodeBehavior",
         "NodeContext",
-        "NodeLifecycle",
         "NodeRegistry",
         "NotFoundError",
-        "OrgDirectory",
         "OrgDirectoryLike",
         "ProcessDefinition",
         "ProcessVariable",

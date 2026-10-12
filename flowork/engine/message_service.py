@@ -7,8 +7,7 @@
   契约 node_output 边界把关）＋ ``message_correlated``＋推进（等待节点）。
 - ``correlate_message``：同步关联（不缓冲）——命中回传签收凭证/无人在等
   None/重复幂等回放（spec §7.2 配套面，Zeebe correlate 同款）。
-- ``waiting``：open 订阅反查（谁在等什么，运维面）。
-- ``signal(name)``：广播唤醒所有同名 open 订阅（不带数据）。
+- ``waiting``：open 订阅反查（谁在等什么，运维面）；``signal(name)`` 广播唤醒同名订阅。
 - 暂停实例的订阅不消费（全动作拦截——消息落缓冲，恢复反查补消费）。
 - session 级共用件与查询实现在 engine.message_query（守 300 行红线）。
 """
@@ -25,6 +24,7 @@ from sqlalchemy import delete, select
 from flowork.engine.ops import CommandContext
 from flowork.events.domain import DomainEvent
 from flowork.persistence.orm import MessageBufferRow, MessageSubscriptionRow
+from flowork.runtime.lifecycle import FROZEN_INSTANCE_STATES
 
 if TYPE_CHECKING:
     from flowork.engine.engine import ProcessEngine
@@ -178,7 +178,7 @@ class MessageService:
         ).all()
         for row in rows:
             instance = ctx.session.get(ProcessInstanceRow, row.instance_id)
-            if instance is None or instance.state in ("paused", "suspended"):
+            if instance is None or instance.state in FROZEN_INSTANCE_STATES:
                 continue
             return row
         return None

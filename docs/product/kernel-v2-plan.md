@@ -56,13 +56,13 @@
 
 | 端口 | 现状 | 说明 |
 |---|---|---|
-| Clock | ✓ | 确定性测试 |
-| WorkCalendar | ✓ | 工时换算（审批 SLA 用） |
-| OrgDirectory | ◐ 扩展 | 现有 manager_of/users_with_role；对齐 SCIM 形状（User/Group/manager 指针），加 roles、delegation |
+| Clock | 已删（2026-10-12 死符号收口） | 可注入时钟由 `EngineConfig.now`（裸 Callable）承载，协议零消费删除；见 spec §9 |
+| WorkCalendar | 已删（2026-10-09 死端口收口 A5） | 全仓零消费+行业对拍双日历零实现；工作日超时将来按 Flowable 形态重立 |
+| OrgDirectory | 已删（2026-10-12 死符号收口） | spi 四方法协议与 `participants.OrgDirectoryLike` 重复且零消费；引擎消费面＝OrgDirectoryLike |
 | Notifier | 已删（2026-10-09 死端口收口） | notify 实际直接 record_event 落 outbox，事件即通知面，零消费删除 |
-| **ExpressionFunctions**（新增） | ✗ | CEL 自定义函数注册：`manager_of()`/`role()` 等走这里→转 OrgDirectory。这是「语言与词典」的缝 |
+| **ExpressionFunctions**（新增） | ✓ 已接线 | CEL 自定义函数注册：`manager_of()`/`role()` 等走这里→转目录。这是「语言与词典」的缝 |
 | **ResourceProvider**（新增） | 已删（2026-10-09 死端口收口） | M-B 预声明零消费；落地时按实际形状重声明 |
-| **EventSink / Exporter**（新增） | ✗ | 事件外发（CloudEvents 信封）；默认=outbox 轮询器 |
+| **EventSink / Exporter**（新增） | 已删（2026-10-12 死符号收口） | outbox 消费者接收裸 sink 回调；webhook 落地时按实际形状重声明 |
 | Storage | 评估 | persistence/ 已有实现，评估是否升格 Protocol（多副本 PG 路线的需要） |
 
 ### 3.2 领域事件（对外发布）

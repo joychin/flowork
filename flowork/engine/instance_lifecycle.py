@@ -14,6 +14,7 @@ from flowork.engine.ops import CommandContext
 from flowork.errors import InstanceNotFoundError
 from flowork.events.domain import DomainEvent
 from flowork.persistence.orm import ProcessInstanceRow
+from flowork.runtime.lifecycle import TERMINAL_INSTANCE_STATES, InstanceState
 from flowork.tasks.models import InstanceInfo
 
 if TYPE_CHECKING:
@@ -32,12 +33,12 @@ class InstanceLifecycleMixin:
 
         def _command(ctx: CommandContext) -> Any:
             instance = _load(ctx, instance_id)
-            if instance.state != "running":
+            if instance.state != InstanceState.RUNNING.value:
                 raise InstanceNotFoundError(
                     f"实例 {instance_id} 状态 {instance.state!r} 不可暂停（须 running）"
                 )
             ctx.touch(instance)
-            instance.state = "paused"
+            instance.state = InstanceState.PAUSED.value
             instance.paused_at = self._engine.config.now()
             kernel = self._engine.kernel_for(ctx)
             kernel.record_event(
@@ -55,7 +56,7 @@ class InstanceLifecycleMixin:
             from flowork.persistence.orm import JobRow
 
             instance = _load(ctx, instance_id)
-            if instance.state != "paused":
+            if instance.state != InstanceState.PAUSED.value:
                 raise InstanceNotFoundError(
                     f"实例 {instance_id} 状态 {instance.state!r} 不可恢复（须 paused）"
                 )
@@ -64,7 +65,7 @@ class InstanceLifecycleMixin:
             paused_minutes = 0
             if instance.paused_at is not None:
                 paused_minutes = int((now - instance.paused_at).total_seconds() // 60)
-            instance.state = "running"
+            instance.state = InstanceState.RUNNING.value
             instance.paused_at = None
             for job in ctx.session.scalars(
                 select(JobRow).where(JobRow.instance_id == instance_id, JobRow.state == "scheduled")
@@ -113,7 +114,7 @@ class InstanceLifecycleMixin:
         在同一事务内调用——嵌套 engine.execute 曾把 incident 已 resolved 与实例
         终态拆进两笔事务，中间崩溃＝实例还跑、单子永闭。"""
         instance = _load(ctx, instance_id)
-        if instance.state in ("completed", "cancelled", "terminated"):
+        if instance.state in TERMINAL_INSTANCE_STATES:
             raise InstanceNotFoundError(f"实例 {instance_id} 已终态（{instance.state}）")
         ctx.touch(instance)
         kernel = self._engine.kernel_for(ctx)
@@ -140,7 +141,7 @@ class InstanceLifecycleMixin:
     ) -> None:
         """取消的命令体内联体（同 _terminate_in_ctx，P2-5）。"""
         instance = _load(ctx, instance_id)
-        if instance.state in ("completed", "cancelled", "terminated"):
+        if instance.state in TERMINAL_INSTANCE_STATES:
             # 终态守卫（code-review 2026-10 P1-2）：对齐 terminate_process——
             # complete_instance 对终态静默跳过，但本命令的取消事件无条件发，
             # 曾对 completed 实例发出假 process_cancelled（状态与事件背离）

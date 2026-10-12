@@ -1,63 +1,28 @@
 """端口（Protocol）：引擎内核与外部能力的边界。
 
 全部端口有默认实现（静态配置/内存/no-op），保证内核可裸跑、可单测。
-v2.1 定稿（kernel-v2 spec §9）：OrgDirectory 瘦身为引擎必需四方法——
-取人（组→人）＝表达式词汇全部宿主注册（见 flowork.contrib），关系判断（人→组）
-与身份定格＝引擎自己的行为，走本端口，方向相反、不可互换。
+引擎消费的目录查询面＝``participants.org_directory.OrgDirectoryLike``（前四个
+方法为引擎必需最小面；spec §9 曾另行声明的四方法 OrgDirectory 协议全仓零消费，
+随 2026-10-12 死符号收口批删除）。
+
+**死符号收口（2026-10-12）**：Clock 删除——可注入时钟由 `EngineConfig.now`
+（裸 `Callable[[], datetime]`）承载，全仓零实现零注解消费；EventSink 删除——
+outbox 消费者接收裸 `Callable[[envelope], None]`，webhook 落地时按实际形状重声明；
+OrgDirectory（四方法协议）删除——与 OrgDirectoryLike 概念重复且零消费。
+历史决策见 docs/product/kernel-v2-plan.md、spec §9。
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from datetime import datetime
-from typing import Any, NamedTuple, Protocol, runtime_checkable
+from typing import NamedTuple, Protocol, runtime_checkable
 
 __all__ = [
-    "Clock",
-    "EventSink",
     "ExpressionFunction",
     "ExpressionFunctions",
     "FunctionSignature",
-    "OrgDirectory",
 ]
-
-
-@runtime_checkable
-class Clock(Protocol):
-    """时钟端口：注入以支持超时场景的确定性测试。"""
-
-    def now(self) -> datetime: ...
-
-
-@runtime_checkable
-class OrgDirectory(Protocol):
-    """组织目录端口（v2.1 定稿：引擎必需四方法）。
-
-    组引用格式：``role:{name}`` / ``org:{code}``；组展开＝直接成员，不含子部门。
-    默认实现＝静态目录（空配置时四方法返回 False/[]/None/{}，裸跑不受影响）。
-    """
-
-    def is_member(self, user: str, group: str) -> bool:
-        """人→组：候选命中判断（引擎查「张三属不属于这个组」）。"""
-        ...
-
-    def subjects_in(self, group: str) -> list[str]:
-        """组→人：候选列表展开（直接成员，不含子部门）。"""
-        ...
-
-    def manager_of(self, user: str) -> str | None:
-        """转上级（宿主词汇的数据源，如 contrib 的 ``manager_of`` 函数）。
-
-        AI 代理的 id → 负责人 owner（单跳）；吃 ``org:`` 返回部门负责人。
-        引擎自身不再消费本方法（超时 escalate 的目标自 v2.3 第十四轮起由图纸的
-        ``escalate_to`` 表达式给出——取人语义归宿主，spec §5.5）。
-        """
-        ...
-
-    def snapshot(self, subject: str) -> dict[str, Any]:
-        """身份快照：完成事务内定格操作者当时的岗位/角色/部门（默认 {}）。"""
-        ...
 
 
 @dataclass(frozen=True)
@@ -91,10 +56,3 @@ class ExpressionFunctions(Protocol):
     """
 
     def functions(self) -> Mapping[str, ExpressionFunction]: ...
-
-
-@runtime_checkable
-class EventSink(Protocol):
-    """事件外发（默认=outbox 轮询；webhook 实现挂这）。"""
-
-    def emit(self, envelope: dict[str, object]) -> None: ...

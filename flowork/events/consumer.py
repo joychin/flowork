@@ -1,7 +1,7 @@
 """outbox 消费器（kernel-v2 spec §10/P0-3）：至少一次分发＋按 id 幂等。
 
 - ``OutboxConsumer.poll()``：取未送达行（按发生时间有序）→ 包装 CloudEvents
-  信封 → 交给 EventSink → 标记 delivered_at（同事务）。先送达后标记：送达后
+  信封 → 交给 sink 回调 → 标记 delivered_at（同事务）。先送达后标记：送达后
   崩溃会重发，因此交付语义是「至少一次」。
 - ``IdempotentSink``：按信封 id 去重的消费端装饰器（有界记忆集）——重发不重算。
 - ``purge_delivered()``：清理已送达且超保留期的行（默认 90 天，spec §14）。
@@ -57,7 +57,7 @@ class IdempotentSink:
 
 
 class OutboxConsumer:
-    """轮询 wf_event_outbox 并向 EventSink 分发 CloudEvents 信封。"""
+    """轮询 wf_event_outbox 并向 sink 回调分发 CloudEvents 信封。"""
 
     def __init__(
         self,

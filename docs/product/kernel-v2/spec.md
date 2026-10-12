@@ -605,24 +605,22 @@ CRUD：新增与更新＝同一操作 `deploy`——**纯数据写入（INSERT �
 
 ## 9. SPI 端口（内核的标准插座，内核只依赖协议）
 
-现有 2 个端口 ✓（默认实现保证内核可裸跑可单测）：`Clock.now()`；`OrgDirectory`（【v2.1】瘦身为引擎必需四方法，见下）。（**死端口收口，2026-10-09**：Notifier 删除——notify 动作实际直接 `record_event` 落 outbox，事件即内核原生通知面，端口零消费多余；ResourceProvider 删除——M-B 预声明零消费，落地时按实际形状重声明；**WorkCalendar 删除【v2.3 第二批 A5】——全仓零消费的死端口，且行业对拍确认双日历口径零实现（历史耗时一律墙钟、C7 按人算的参数是死参数、Flowable 已删）**；将来要工作日超时按 Flowable 形态重立（节点级具名日历+注册表+发布期校验），不复活本端口。VariableStore 端口于变量 I/O 批删除——零引用零实现：变量持久化由实例行 JSON 列承担，schema 边界校验落在 contract.py 四边界，外部读写走 §11 RuntimeService 变量面。）
+现有 1 个端口 ✓（默认实现保证内核可裸跑可单测）：`ExpressionFunctions`（表达式函数注册，见下）；目录查询面＝`participants.OrgDirectoryLike` 四方法最小面（引擎内部协议，非 spi 端口）。（**死端口收口，2026-10-09**：Notifier 删除——notify 动作实际直接 `record_event` 落 outbox，事件即内核原生通知面，端口零消费多余；ResourceProvider 删除——M-B 预声明零消费，落地时按实际形状重声明；**WorkCalendar 删除【v2.3 第二批 A5】——全仓零消费的死端口，且行业对拍确认双日历口径零实现（历史耗时一律墙钟、C7 按人算的参数是死参数、Flowable 已删）**；将来要工作日超时按 Flowable 形态重立（节点级具名日历+注册表+发布期校验），不复活本端口。VariableStore 端口于变量 I/O 批删除——零引用零实现：变量持久化由实例行 JSON 列承担，schema 边界校验落在 contract.py 四边界，外部读写走 §11 RuntimeService 变量面。）**死符号收口，2026-10-12（公开面零消费守卫批）**：`Clock` 协议删除——可注入时钟实际由 `EngineConfig.now`（裸 `Callable[[], datetime]`）承载，全仓 FakeClock 十二处一致注入 config.now，协议本身零实现零注解消费；`EventSink` 协议删除——outbox 消费者接收裸 `Callable[[envelope], None]`，webhook 落地时按实际形状重声明；spi 的四方法 `OrgDirectory` 协议删除——与 `participants.OrgDirectoryLike`（引擎真实消费面，`EngineConfig.org` 的注解类型）概念重复且零消费，组引用语义（role:/org:）已并入该协议文档。三者与快照里 `InstanceState` 零引用（内核全用字符串字面量）同批盘点暴露——InstanceState 保留并接线（内核状态读写全位点改引用枚举成员/`TERMINAL_INSTANCE_STATES`/`FROZEN_INSTANCE_STATES`/`UNSETTLED_INSTANCE_STATES` 常量），`tests/test_api_dead_symbols.py` 固化守卫（公开面符号全仓零引用即红灯，豁免须显式登记理由）。
 
 **找人分工（v2.1 定稿）**：取人（组→人）＝表达式词汇，全部宿主注册（5.5，内核零内置，contrib 三个便利函数基于本端口实现）；关系判断（人→组）与身份定格＝**引擎自己的行为**，走本端口——方向相反，自定义函数表达不了（「我的待办」要算张三属不属于 role:finance，是引擎在问，不是图纸在问）。
 
-【v2】新增 2 个端口、重构 OrgDirectory（签名如下；ResourceProvider 曾在此预声明，2026-10-09 死端口收口删除）：
+【v2】新增端口、重构目录面（签名如下；ResourceProvider 曾在此预声明，2026-10-09 死端口收口删除；EventSink 与四方法 OrgDirectory 协议经 2026-10-12 死符号收口删除，见上段）：
 
 ```python
-class OrgDirectory(Protocol):            # ◐ v2.1 瘦身定稿：引擎必需的四方法
+class OrgDirectoryLike(Protocol):        # ✓ v2.1 瘦身定稿：引擎消费的目录查询面（participants 包；前四方法为引擎必需最小面）
     def is_member(self, user: str, group: str) -> bool: ...        # 人→组：候选命中判断（引擎查「张三属不属于这个组」）
     def subjects_in(self, group: str) -> list[str]: ...            # 组→人：候选列表展开（直接成员，不含子部门，5.5）
     def manager_of(self, user: str) -> str | None: ...             # 转上级（*宿主词汇的数据源*，如 contrib 的 manager_of 函数；引擎自身不再消费【v2.3 第十四轮】）
     def snapshot(self, subject: str) -> dict: ...                  # 身份快照：完成事务内定格操作者当时的岗位/角色/部门（5.6）
+    # 其余为宿主函数与既有解析管线使用的丰富面（user_exists/users_with_role/delegation_of/admins 等）
 
 class ExpressionFunctions(Protocol):     # ✓ CEL 自定义函数来源（4.3，已接线；contrib.cel_vocabulary 三词汇）
     def functions(self) -> Mapping[str, Callable]: ...
-
-class EventSink(Protocol):               # ✗ 事件外发（默认=outbox 轮询；webhook 实现挂这）
-    def emit(self, envelope: dict) -> None: ...
 ```
 
 **目录的默认实现与强制程度（显式选择，不强制实现）**：默认给**静态目录**（配置文件写死映射，小团队、demo、CI 裸跑够用）；空配置时四方法返回 False/[]/None/{}。validate 对「图纸用了 role:/org: 组主体而目录为空配置」给**警告**（deploy 不拦，后果＝组待办无人能认领，宿主部署时已见过警告）；escalate 目标由图纸的 escalate_to 表达式给出（5.1），不再要求目录实现 manager_of。纯服务编排、agent 编排类宿主根本不用组主体，完全不需要实现目录。

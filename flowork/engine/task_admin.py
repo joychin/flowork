@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 
 from flowork.engine.ops import CommandContext
 from flowork.errors import InstanceNotFoundError
-from flowork.runtime.lifecycle import TokenState
+from flowork.runtime.lifecycle import UNSETTLED_INSTANCE_STATES, TokenState
 
 if TYPE_CHECKING:
     from flowork.engine.engine import ProcessEngine
@@ -141,9 +141,7 @@ class TaskAdminMixin:
                 )
                 descendants.extend(rows)
                 frontier = [row.id for row in rows]
-            unsettled = [
-                row.id for row in descendants if row.state in ("running", "paused", "suspended")
-            ]
+            unsettled = [row.id for row in descendants if row.state in UNSETTLED_INSTANCE_STATES]
             if unsettled:
                 raise InstanceNotFoundError(
                     f"实例 {instance_id} 存在未结算子实例（{len(unsettled)} 个）"

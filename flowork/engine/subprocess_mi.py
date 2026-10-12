@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Any
 from flowork.engine.kernel import EngineExecutionError
 from flowork.errors import DefinitionNotPublishedError
 from flowork.expr.cel import FormulaError, evaluate_formula_value
+from flowork.runtime.lifecycle import FAILED_INSTANCE_STATES, InstanceState
 
 if TYPE_CHECKING:
     from flowork.definitions.builtin import CallActivitySpec
@@ -81,7 +82,7 @@ def _create_child(
         definition_major=row.major,
         definition_revision=row.revision,
         definition_snapshot=row.content,
-        state="running",
+        state=InstanceState.RUNNING.value,
         started_at=ctx.kernel.config.now(),  # P1-11：业务时刻单源
         start_user=ctx.instance.start_user,
         variables=dict(variables),
@@ -111,8 +112,8 @@ def mi_finish(ctx: RuntimeNodeContext, spec: CallActivitySpec, children: list[An
     mi = spec.multi_instance
     assert mi is not None
     total = len(children)
-    completed = sum(1 for child in children if child.state == "completed")
-    failed = sum(1 for child in children if child.state in ("terminated", "cancelled", "failed"))
+    completed = sum(1 for child in children if child.state == InstanceState.COMPLETED.value)
+    failed = sum(1 for child in children if child.state in FAILED_INSTANCE_STATES)
     if mi.completion != "all":
         if not _completion_hit(ctx, spec, mi.completion, total, completed, failed):
             return False
@@ -123,7 +124,7 @@ def mi_finish(ctx: RuntimeNodeContext, spec: CallActivitySpec, children: list[An
         _collect_outputs(ctx, spec, children, total)
     else:  # merge：validator 已拦 MI+merge，防御回退逐子覆写
         for child in children:
-            if child.state == "completed":
+            if child.state == InstanceState.COMPLETED.value:
                 outputs = _mapping_values("输出映射", spec.output_mappings or {}, ctx, child)
                 for target, value in outputs.items():
                     ctx.variables[target] = value
@@ -184,7 +185,7 @@ def _collect_outputs(
         target: [None] * total for target in (spec.output_mappings or {})
     }
     for child in children:
-        if child.state != "completed" or child.parent_index is None:
+        if child.state != InstanceState.COMPLETED.value or child.parent_index is None:
             continue
         outputs = _mapping_values("输出映射", spec.output_mappings or {}, ctx, child)
         for target, value in outputs.items():
@@ -201,13 +202,13 @@ def _terminate_running_children(ctx: RuntimeNodeContext, children: list[Any]) ->
     from flowork.runtime.lifecycle import TokenState
 
     for child in children:
-        if child.state != "running":
+        if child.state != InstanceState.RUNNING.value:
             continue
         for token in ctx.kernel.tokens(
             ctx.session, child.id, states=(TokenState.UNFINISHED.value,)
         ):
             ctx.kernel.cancel_token(ctx.session, token)
-        child.state = "cancelled"
+        child.state = InstanceState.CANCELLED.value
         child.finished_at = ctx.kernel.config.now()
         ctx.kernel.record_event(
             "process_cancelled",

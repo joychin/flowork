@@ -13,7 +13,7 @@ from flowork.engine.ops import CommandContext
 from flowork.errors import InstanceNotFoundError
 from flowork.events.domain import DomainEvent
 from flowork.persistence.orm import ProcessInstanceRow
-from flowork.runtime.lifecycle import TokenState
+from flowork.runtime.lifecycle import InstanceState, TokenState
 from flowork.tasks.models import InstanceInfo
 
 if TYPE_CHECKING:
@@ -73,8 +73,8 @@ class IncidentMixin:
                 )
             )
             instance = ctx.session.get(ProcessInstanceRow, instance_id)
-            if instance is not None and instance.state == "running":
-                instance.state = "suspended"
+            if instance is not None and instance.state == InstanceState.RUNNING.value:
+                instance.state = InstanceState.SUSPENDED.value
             kernel.record_event(
                 "incident_raised",
                 {"message": str(error), "error_class": type(error).__name__},
@@ -129,7 +129,7 @@ class IncidentMixin:
                 instance = ctx.session.get(ProcessInstanceRow, incident.instance_id)
                 if instance is not None:
                     ctx.touch(instance)
-                    instance.state = "running"
+                    instance.state = InstanceState.RUNNING.value
                     # 拍板 1：挂起期消息落缓冲——恢复后补消费（对齐 resume_process）
                     from flowork.engine.message_flow import retro_poll_instance
 
@@ -154,7 +154,7 @@ class IncidentMixin:
                 instance = ctx.session.get(ProcessInstanceRow, incident.instance_id)
                 if instance is not None:
                     ctx.touch(instance)
-                    instance.state = "running"
+                    instance.state = InstanceState.RUNNING.value
                     from flowork.engine.message_flow import retro_poll_instance
 
                     retro_poll_instance(ctx, self._engine, instance)  # 同 resume 补消费
@@ -210,8 +210,8 @@ class IncidentMixin:
                 target = definition.node(flow.target)
                 if target is not None:
                     kernel.activate(ctx.session, instance, target, source_activity_code=node.code)
-        if instance.state == "suspended":
-            instance.state = "running"
+        if instance.state == InstanceState.SUSPENDED.value:
+            instance.state = InstanceState.RUNNING.value
         ctx.touch(instance)
 
     def move_token(self, token_id: str, target_activity: str, actor: str = "admin") -> str:

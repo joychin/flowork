@@ -13,6 +13,7 @@ from flowork.engine.ops import CommandContext
 from flowork.errors import InstanceNotFoundError, TaskNotAvailableError
 from flowork.events.domain import DomainEvent
 from flowork.persistence.orm import TaskRow
+from flowork.runtime.lifecycle import InstanceState
 from flowork.tasks.actions import allowed_actions, assert_action_allowed
 from flowork.tasks.deadlines import carry_deadline_jobs
 from flowork.tasks.models import TaskInfo
@@ -134,9 +135,9 @@ class TaskOpsMixin:
         保持仅实例态守卫（withdraw 等特殊路径自带专属守卫）。
         """
         instance = self._instance(ctx, task.instance_id)
-        if instance.state == "suspended":
+        if instance.state == InstanceState.SUSPENDED.value:
             raise TaskNotAvailableError("实例已挂起（Incident 待修复），不可操作")
-        if instance.state == "paused":
+        if instance.state == InstanceState.PAUSED.value:
             raise TaskNotAvailableError("实例已暂停，恢复后才可操作")
         if action is not None:
             assert_action_allowed(action, task)

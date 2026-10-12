@@ -17,6 +17,7 @@ from flowork.engine.task_rework import TaskReworkMixin
 from flowork.errors import TaskNotAvailableError
 from flowork.events.domain import DomainEvent
 from flowork.persistence.orm import TaskHistoryRow, TaskRow
+from flowork.runtime.lifecycle import InstanceState
 from flowork.tasks.anticipate import AnticipateMixin
 from flowork.tasks.models import TaskCompleteResult, TaskInfo
 from flowork.tasks.reject_flow import RejectMixin
@@ -154,9 +155,9 @@ class TaskService(
         # 变量留痕归因：本命令内的变量变化（任务 output + 后续钩子写）记 task_output
         ctx.write_source = "task_output"
         ctx.write_actor = actor
-        if instance.state == "suspended":
+        if instance.state == InstanceState.SUSPENDED.value:
             raise TaskNotAvailableError("实例已挂起（Incident 待修复），不可办理")
-        if instance.state == "paused":
+        if instance.state == InstanceState.PAUSED.value:
             raise TaskNotAvailableError("实例已暂停，恢复后才可办理")
         if task.assignee == "":
             raise TaskNotAvailableError("候选任务需先 claim 认领")
@@ -210,7 +211,7 @@ class TaskService(
             return TaskCompleteResult(task_id=task_id, outcome=outcome, instance_state="unknown")
         instance = self._instance(ctx, history.instance_id)
         next_tasks: list[TaskInfo] = []
-        if instance.state == "running":
+        if instance.state == InstanceState.RUNNING.value:
             rows = ctx.session.scalars(
                 select(TaskRow).where(TaskRow.instance_id == instance.id, TaskRow.state == "ready")
             )

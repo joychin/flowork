@@ -16,7 +16,7 @@ from flowork.engine.ops import CommandContext
 from flowork.errors import TaskNotAvailableError
 from flowork.events.domain import DomainEvent
 from flowork.persistence.orm import TaskHistoryRow, TaskRow
-from flowork.runtime.lifecycle import TokenState
+from flowork.runtime.lifecycle import InstanceState, TokenState
 from flowork.tasks.models import TaskCompleteResult
 from flowork.tasks.vote import vote_criteria
 
@@ -100,9 +100,9 @@ class RejectMixin:
         # 变量留痕归因：驳回携带的 variables 与驳回复活路径写变量记 task_reject
         ctx.write_source = "task_reject"
         ctx.write_actor = actor
-        if instance.state == "suspended":
+        if instance.state == InstanceState.SUSPENDED.value:
             raise TaskNotAvailableError("实例已挂起（Incident 待修复），不可驳回")
-        if instance.state == "paused":
+        if instance.state == InstanceState.PAUSED.value:
             raise TaskNotAvailableError("实例已暂停，恢复后才可驳回")
         if variables:
             # input 契约边界（spec §3.2）：驳回携带的 variables 同为任务提交侧输出

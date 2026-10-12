@@ -145,7 +145,7 @@ FLOWORK_TEST_PG_URL=postgresql+psycopg://... uv run pytest -m needs_postgres   #
   待办/办理面（引擎不区分主体类型，2026-10-10 第十七轮）。
 - **UI 设计器**：`designer/`（React Flow）已可用——Spec 唯一事实源、schema 驱动表单、
   校验闭环；任务页/Console 随产品 v1 M-C。
-- **组织系统**：替换 `EngineConfig.org`（实现 `OrgDirectory` 同形接口或适配现有库；
+- **组织系统**：替换 `EngineConfig.org`（实现目录查询协议 `OrgDirectoryLike` 或适配现有库；
   持久化目录 `flowork.directory.DirectoryStore` 已起步，M-A）。引擎只消费
   `snapshot`（身份定格）/ `delegation_of`（委托）/ `admins`（无参与者兜底）
   三个方法——**不含任何组织模型语义**（「上级」由图纸表达式给出，见

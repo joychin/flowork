@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 from flowork.engine.ops import CommandContext
 from flowork.errors import TaskNotAvailableError
 from flowork.persistence.orm import TaskHistoryRow, TokenRow
-from flowork.runtime.lifecycle import TokenState
+from flowork.runtime.lifecycle import InstanceState, TokenState
 from flowork.tasks.models import TaskInfo
 
 if TYPE_CHECKING:
@@ -73,7 +73,7 @@ class TaskReworkMixin:
         if history is None or history.outcome != "agree" or history.acted_by != actor:
             raise TaskNotAvailableError(f"任务不可撤回（未办理/非本人/非同意）：{task_id}")
         instance = self._instance(ctx, history.instance_id)
-        if instance.state != "running":
+        if instance.state != InstanceState.RUNNING.value:
             raise TaskNotAvailableError("实例已结束，不可撤回")
         ctx.touch(instance)
         kernel = self._engine.kernel_for(ctx)

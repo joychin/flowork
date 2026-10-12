@@ -20,6 +20,11 @@ from flowork.engine.kernel import EngineExecutionError
 from flowork.errors import DefinitionNotPublishedError
 from flowork.expr.cel import FormulaError, evaluate_formula_value
 from flowork.expr.context import expression_context, expression_functions_of
+from flowork.runtime.lifecycle import (
+    TERMINAL_INSTANCE_STATES,
+    InstanceState,
+    TokenState,
+)
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
@@ -37,7 +42,7 @@ _BARE_IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 # 子实例「已结算」= 终态；running/paused/suspended 一律未结算（回归：原只挡 running，
 # 暂停/挂起中的子实例被当已结算，父侧无输出映射直通）。cancelled/failed 算结算：
 # 管理员修复/强杀场景（对齐 _mapping_values 的缺键 None 语义）。
-_CHILD_SETTLED_STATES = frozenset({"completed", "terminated", "cancelled", "failed"})
+_CHILD_SETTLED_STATES = TERMINAL_INSTANCE_STATES
 
 
 def _mapping_values(
@@ -116,7 +121,7 @@ def start_sub_process(ctx: RuntimeNodeContext, spec: CallActivitySpec) -> None:
         definition_major=row.major,
         definition_revision=row.revision,
         definition_snapshot=row.content,
-        state="running",
+        state=InstanceState.RUNNING.value,
         started_at=ctx.kernel.config.now(),  # P1-11：业务时刻单源
         start_user=ctx.instance.start_user,
         variables=dict(input_variables),
@@ -154,7 +159,7 @@ def sub_process_finished(ctx: RuntimeNodeContext, spec: CallActivitySpec) -> boo
     if any(child.state not in _CHILD_SETTLED_STATES for child in children):
         return False
     for child in children:
-        if child.state == "completed":
+        if child.state == InstanceState.COMPLETED.value:
             outputs = _mapping_values("输出映射", spec.output_mappings, ctx, child)
             for target, value in outputs.items():
                 ctx.variables[target] = value
@@ -176,10 +181,10 @@ def resume_parent_if_waiting(kernel: Kernel, session: Session, child: ProcessIns
     from flowork.persistence.orm import TokenRow
 
     parent = session.get(_InstanceRow, child.parent_id)
-    if parent is None or parent.state != "running":
+    if parent is None or parent.state != InstanceState.RUNNING.value:
         return
     token = session.get(TokenRow, child.parent_token_id)
-    if token is None or token.state != "unfinished":
+    if token is None or token.state != TokenState.UNFINISHED.value:
         return
     kernel.advance_after_task(session, parent, token)
 

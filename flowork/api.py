@@ -60,21 +60,19 @@ from flowork.expr.cel import FormulaError, evaluate_formula_value
 from flowork.expr.conditions import evaluate_condition
 from flowork.expr.context import expression_functions_of
 
-# StaticOrgDirectory：participants 的 yaml 静态目录实现类（OrgDirectory.from_yaml）。
-# 与 spi.ports.OrgDirectory（四方法端口 Protocol）同名，公开面以别名消歧——
-# 端口用 OrgDirectory，装配实现用 StaticOrgDirectory。
+# 目录协议与实现：OrgDirectoryLike＝引擎消费的目录协议（EngineConfig.org 类型，
+# spec §9 四方法最小面）；StaticOrgDirectory＝participants 的 yaml 静态实现类。
+# spi.ports 的同名四方法死协议（与 OrgDirectoryLike 重复且零消费）随
+# 2026-10-12 死符号收口批删除——公开面不再有同名歧义。
 from flowork.participants.org_directory import OrgDirectory as StaticOrgDirectory
 from flowork.participants.org_directory import OrgDirectoryLike
 from flowork.runtime.behavior import InMemoryNodeContext, NodeBehavior, NodeContext
-from flowork.runtime.lifecycle import InstanceState, NodeLifecycle, TokenState
+from flowork.runtime.lifecycle import InstanceState, TokenState
 from flowork.runtime.registry import NodeRegistry, create_registry
 from flowork.spi.ports import (
-    Clock,
-    EventSink,
     ExpressionFunction,
     ExpressionFunctions,
     FunctionSignature,
-    OrgDirectory,
 )
 from flowork.tasks.models import (
     EventInfo,
@@ -85,7 +83,6 @@ from flowork.tasks.models import (
 )
 
 __all__ = [
-    "Clock",
     "ConditionError",
     "DefinitionError",
     "DefinitionNotPublishedError",
@@ -93,7 +90,6 @@ __all__ = [
     "DuplicateStartError",
     "EngineConfig",
     "EventInfo",
-    "EventSink",
     "ExpressionFunction",
     "ExpressionFunctions",
     "FlowBuilder",
@@ -117,10 +113,8 @@ __all__ = [
     "MultiInstance",
     "NodeBehavior",
     "NodeContext",
-    "NodeLifecycle",
     "NodeRegistry",
     "NotFoundError",
-    "OrgDirectory",
     "OrgDirectoryLike",
     "ProcessDefinition",
     "ProcessEngine",

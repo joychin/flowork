@@ -14,6 +14,7 @@ from flowork.definitions.contract import InputContractError
 from flowork.engine.ops import CommandContext
 from flowork.errors import InstanceNotFoundError
 from flowork.persistence.orm import ProcessInstanceRow, VariableHistoryRow
+from flowork.runtime.lifecycle import TERMINAL_INSTANCE_STATES, InstanceState
 
 if TYPE_CHECKING:
     from flowork.engine.engine import ProcessEngine
@@ -21,7 +22,7 @@ if TYPE_CHECKING:
 __all__ = ["VariableActionsMixin", "VariableChangeInfo"]
 
 # 终态不可写（循 pause 惯例以 InstanceNotFoundError 拒；/v2 批再评估 409 语义）
-_TERMINAL_STATES = frozenset({"completed", "terminated", "cancelled", "failed"})
+_TERMINAL_STATES = TERMINAL_INSTANCE_STATES
 # 求值上下文保留标识符（expr/context 注入），外部写入一律拒绝
 _RESERVED_KEYS = frozenset({"initiator", "task"})
 _MAX_UPDATES_BYTES = 256 * 1024
@@ -104,7 +105,7 @@ class VariableActionsMixin:
                 raise InstanceNotFoundError(
                     f"实例已终态（{instance.state}），不可外部更新变量：{instance_id}"
                 )
-            if instance.state == "paused":
+            if instance.state == InstanceState.PAUSED.value:
                 # 暂停＝冻结快照（审计 D2，spec §7 第二十轮）：取证期间不可写；
                 # 修数据路径＝resume → 改 → 再 pause
                 raise InstanceNotFoundError(
