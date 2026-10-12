@@ -650,6 +650,12 @@ class ExpressionFunctions(Protocol):     # ✓ CEL 自定义函数来源（4.3�
 
 ## 12. REST API（web 包，C8 v2 风格）【v2 大部分新增】
 
+> **落地状态（2026-10-12，openface-plugin-design.md）**：本面已作为 contrib/rest
+> 插件实施（用户裁定 REST/MCP=插件层；本节标题「web 包」即指插件位而非内核）。
+> 实施差异三处：① 发起端点 `POST /v2/instances` 为本节缺口补齐（原文只列动作没列发起）；
+> ② 分页游标为 offset 语义（`page.after`，`before` 不支持）；③ tasks 的
+> flow_code/priority/due_before 三过滤维待 `list_tasks` 扩参，暂未开放（登记后置）。
+
 - 搜索：`POST /v2/{definitions|instances|tasks|jobs|incidents|messages|events}/search`，请求体 `{filter, sort:[{field,order}], page:{after?/before?, limit}}`（游标分页）；响应带 `next_cursor`。
 - tasks 过滤维度：state × assignee × candidate × flow_code × instance_id × priority × due_before（后两项依赖 wf_task 新列，第 14 章）。
 - 动作：`POST /v2/tasks/{id}/{claim|unclaim|complete|reject|transfer|assist|complete_assist}`；`POST /v2/instances/{id}/{pause|resume|cancel|terminate|signal}`；`POST /v2/messages/publish`；`POST /v2/jobs/activate`（长轮询：request_timeout 参数）；`POST /v2/jobs/{id}/{complete|fail}`；`POST /v2/definitions/deploy`；`POST /v2/definitions/{code}/retire`；`GET /v2/definitions/{code}?major=&revision=`（purge 仅 CLI，不出 REST）。
@@ -658,6 +664,10 @@ class ExpressionFunctions(Protocol):     # ✓ CEL 自定义函数来源（4.3�
 - 错误体统一 `{"error": {code, message, details}}`。
 
 ## 13. MCP 工具（M7 落地）
+
+> **落地状态（2026-10-12）**：18 工具已作为 contrib/mcp 插件实施（设计
+> openface-plugin-design.md §3：catalog 纯 dispatch + lowlevel Server 传输壳；
+> stdio 启动 `python -m flowork.contrib.mcp.server`）。
 
 首批 18 个：validate_spec / dry_run / deploy / **definition_drift**（AI/CI 对账，6.5）/ list_definitions / start_instance / query_instance / signal_instance / publish_message / **update_instance_variables**（外部改值，随 M7 落地，入参出参复用 §11）/ list_my_tasks / claim_task / complete_task / reject_task / **anticipate_task**（AI 预判提交后果，只读，v2.2）/ pause_instance / list_incidents / resolve_incident。入参出参直接复用第 11 章的 pydantic DTO（tasks/models.py 已为 MCP 预留 typed DTO ✓）。
 
@@ -703,7 +713,7 @@ flowork/
   events/envelope.py    # ✗ CloudEvents 封装
   spi/ports.py          # 8 端口
   contrib/              # ✗ v2.1 便利包：org 词汇三函数（基于 OrgDirectory 端口），可选一行挂上
-  mcp/                  # ✗ M7
+  contrib/（web/ rest/ mcp/ 同列）  # ✓ REST/MCP 经用户裁定进驻插件位（spec §15 原顶层 mcp/ 作废）
   participants/ web/ cli/ jobs/ persistence/（保持）
 ```
 

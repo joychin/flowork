@@ -8,7 +8,13 @@
 - 内核模块重排（spec §15 重构刀）只准重排内部件，本门面的路径与符号名冻结；
 - 新增符号须同步 tests/test_api_surface.py 快照（快照红=显式扩面）；
 - 删除或改名符号为破坏性变更，走 major 版本（spec P0-4）。
+
+API_VERSION：门面契约版本（openface-plugin-design.md §4）。增符号=minor（同步
+快照即可）；删/改名=major。插件以 REQUIRES_FLOWORK_API 声明依赖的门面版本，
+兼容性测试断言插件要求 ≤ 当前值。
 """
+
+from typing import Final
 
 from flowork.clock import utc_now
 from flowork.definitions.builder import FlowBuilder
@@ -82,7 +88,10 @@ from flowork.tasks.models import (
     TaskInfo,
 )
 
+API_VERSION: Final = "1"
+
 __all__ = [
+    "API_VERSION",
     "ConditionError",
     "DefinitionError",
     "DefinitionNotPublishedError",

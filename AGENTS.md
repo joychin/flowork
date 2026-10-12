@@ -43,7 +43,8 @@ flowork/
 ├── directory/     目录（M-A）：组织/角色/用户/Agent/委托（agents/roles/delegation/
 │                  queries 读缓存/audit 写审计/store/orm）
 ├── cli/           CLI 投影面（运维+用户面）——只准走 flowork.api（静态纪律测试守卫）
-├── contrib/       官方插件包：词汇插件(cel/numeric) + web 传输面(web/，rest/mcp 进驻后同列）
+├── contrib/       官方插件包：词汇插件(cel/numeric) + 三传输面（web/ 设计器内部面、
+│                  rest/ 对外 /v2 集成面、mcp/ AI 18 工具面）——全经 flowork.api
 │                  ——内核禁止 import 它；插件只准经 flowork.api 用内核（双向铁律）
 ├── clock.py       时间戳统一 naive UTC 的唯一出口
 ├── errors.py      异常体系
@@ -582,3 +583,22 @@ readonly demo 四场景）。
 红灯，两类豁免须显式登记理由（内部构造返回模型 FunctionEntry/JobClaim/NotFoundError、
 门面契约常量）——与死端口收口（Notifier/ResourceProvider/WorkCalendar/VariableStore）
 同口径的第五批。spec §9/kernel-v2-plan/integration.md/包地图同步。
+
+
+**开放面插件批（2026-10-12，REST /v2 + MCP 18 工具落地；设计=openface-plugin-design.md）**：
+① `flowork/contrib/rest`（/v2 对外集成面，spec §12 全量+一处补缺）：七搜索面（游标=offset
+base64；before 明示 422）+ 实例四态动作 + 七任务动作 + 变量三端点 + anticipate +
+messages/jobs（activate 长轮询）+ **实例级 signal=回执核验式关联**（内核无实例域 signal，
+按本实例 open 订阅 (name,key) correlate、回执 instance_id 必须相等，409 防串单）；
+错误体 {"error":{code,message,details}}，状态映射 isinstance 链+类名兜底表（未导出错误家族
+按名映射，不为错误扩公开面）；actor=X-Flowork-Actor 头（鉴权归宿主，既定裁定）；装配两形态
+create_app()/register_rest_routes(app, engine)。② `flowork/contrib/mcp`（18 工具，spec §13）：
+catalog 纯 dispatch（传输无关可直测）+ lowlevel Server 传输壳 + stdio 入口
+（`python -m flowork.contrib.mcp.server`；依赖钉 mcp>=1.10.1,<2——2.x 换构造器注册 API，
+本批取 1.x 稳定线）。③ 公开面扩一点：`flowork.api.API_VERSION="1"`（门面契约版本；
+插件 REQUIRES_FLOWORK_API ≤ 当前值，兼容声明测试钉住）；import-linter 契约二 forbidden
+扩为全量 contrib（api 不 import 任何插件）。④ 内核唯一改动：`JobService.list_jobs`
+（只读查询，/v2/jobs/search 数据源）。快照三件（REST 路由表/MCP 工具名/公开面）+ 行为两件
+（REST 全链 14 例/MCP dispatch 10 例）。**1020 测试全绿，五道门全过。**
+挂账：tasks 三过滤维（flow_code/priority/due_before，待 list_tasks 扩参）、
+DirectoryStore 与事件消费帮手的公开面扩面（目录/推送面落地时先扩）、完整模拟 MCP 工具。

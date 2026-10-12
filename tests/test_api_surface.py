@@ -11,6 +11,7 @@ import flowork.api as api
 # 冻结快照（字母序，与 api.__all__ 逐字对齐）
 EXPECTED_SURFACE = frozenset(
     {
+        "API_VERSION",
         "ConditionError",
         "DefinitionError",
         "DefinitionNotPublishedError",

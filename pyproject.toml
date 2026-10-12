@@ -18,6 +18,7 @@ dependencies = [
     "cel-python>=0.5.0",
     "jsonschema>=4.26.0",
     "alembic>=1.13",
+    "mcp>=1.10.1,<2",
 ]
 
 [dependency-groups]
@@ -74,7 +75,7 @@ ignore_imports = []
 # engine.routing），分层拆解不在本契约范围——随内核 v2 模块重排（spec §15）再立。
 
 [[tool.importlinter.contracts]]
-name = "内核不得 import 投影/插件宿主面（cli 与 contrib.web）——依赖单向：投影→api→内核"
+name = "内核与公开门面不得 import 投影/插件（cli 与 contrib 全量）——依赖单向：投影/插件→api→内核"
 type = "forbidden"
 source_modules = [
     "flowork.api",
@@ -92,7 +93,7 @@ source_modules = [
     "flowork.errors",
     "flowork.clock",
 ]
-forbidden_modules = ["flowork.cli", "flowork.contrib.web"]
+forbidden_modules = ["flowork.cli", "flowork.contrib"]
 ignore_imports = []
 # 注 1：「投影/插件只准直接 import flowork.api」的正向纪律由
 # tests/test_projection_surface.py 静态扫描守卫——forbidden 契约按传递闭包判定，

@@ -112,3 +112,20 @@ Worker 面（service_task mode=worker，`engine.worker_jobs`）：
 - **表达式函数（全位点 CEL 词汇）**：经 `ExpressionFunctions` 端口注册（必须带 FunctionSignature 签名，纯读闭包无 ctx）；一行挂官方词汇：`config.expression_functions = contrib.cel_vocabulary(org)`（manager_of/users_with_role/has_role——`manager_of` 对 AI 代理的 id 返回其负责人 owner）。取人/传阅/改派+升级/连线条件/子流程映射共用同一注册面。
 - **判断面事实**：公式可用 `now`/`prev_task`/`node("code")`（引擎注入，词汇目录见 spec §4.3/C.4，权威在 `expr/catalog.py`）。
 - **事件消费**：消费 `wf_event_outbox`（CloudEvents 信封，按 id 幂等；`flowork.events.consumer.IdempotentSink` 为参考实现）。
+
+## 传输面插件（REST /v2 与 MCP，openface-plugin-design.md）
+
+内核四服务之上的两个官方传输插件（进驻 `flowork/contrib/`，全经本公开门面）：
+
+- **REST /v2**（`flowork/contrib/rest`）：spec §12 对外集成面——七搜索面（offset 游标）、
+  实例/任务动作、变量三端点、anticipate、messages、jobs（长轮询 activate）。独立进程
+  `uvicorn flowork.contrib.rest.app:app` 或 `register_rest_routes(app, engine)` 挂载。
+  快照守卫 `tests/test_rest_api_surface.py`。
+- **MCP**（`flowork/contrib/mcp`）：spec §13 的 18 工具（validate/deploy/dry_run/
+  definition_drift/list_definitions/start/query/signal/pause_instance/update_variables/
+  publish_message/list_my_tasks/claim/complete/reject/anticipate/list_incidents/
+  resolve_incident）。stdio：`python -m flowork.contrib.mcp.server`。快照守卫
+  `tests/test_mcp_tool_surface.py`。
+
+门面契约版本 `flowork.api.API_VERSION`（当前 "1"）：增符号=minor（同步快照）、
+删/改名=major；插件以 `REQUIRES_FLOWORK_API` 声明依赖版本。

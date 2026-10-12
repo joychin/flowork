@@ -1,0 +1,84 @@
+"""REST /v2 传输面：对外集成面（设计器内部面见 contrib/web，三面互不复用）。
+
+装配两形态（openface-plugin-design.md §2.6）：
+- ``create_app()``：独立进程——FLOWORK_DB / FLOWORK_ORG / FLOWORK_JOBS 语义同 web；
+- ``register_rest_routes(app, engine)``：宿主自带引擎与鉴权时，把 /v2 挂进既有 FastAPI。
+
+启动：``uvicorn flowork.contrib.rest.app:app``（惰性属性，import 无副作用）。
+"""
+
+from __future__ import annotations
+
+import os
+from pathlib import Path
+from typing import Any
+
+from fastapi import FastAPI
+from fastapi.responses import JSONResponse
+
+from flowork.api import EngineConfig, FloworkError, ProcessEngine, StaticOrgDirectory
+from flowork.contrib.rest._common import error_payload, status_of
+from flowork.contrib.rest.routes_definitions import register_definition_routes
+from flowork.contrib.rest.routes_instances import register_instance_routes
+from flowork.contrib.rest.routes_system import register_system_routes
+from flowork.contrib.rest.routes_tasks import register_task_routes
+
+__all__ = ["create_app", "create_engine", "register_rest_routes"]
+
+
+def create_engine(db_file: str | Path | None = None) -> ProcessEngine:
+    """按 web 同款环境约定装配引擎（db/org）。"""
+    db_path = db_file or os.environ.get("FLOWORK_DB", "flowork.db")
+    config_kwargs: dict[str, Any] = {"db_file": db_path}
+    org_path = os.environ.get("FLOWORK_ORG")
+    if org_path:
+        config_kwargs["org"] = StaticOrgDirectory.from_yaml(org_path)
+    return ProcessEngine(EngineConfig(**config_kwargs))
+
+
+def register_rest_routes(app: FastAPI, engine: ProcessEngine) -> None:
+    """把 /v2 路由挂进宿主 FastAPI（宿主自带鉴权中间件时用这个入口）。"""
+
+    @app.exception_handler(FloworkError)
+    async def _flowork_error(_request: Any, exc: FloworkError) -> JSONResponse:
+        return JSONResponse(status_code=status_of(exc), content=error_payload(exc))
+
+    register_definition_routes(app, engine)
+    register_instance_routes(app, engine)
+    register_task_routes(app, engine)
+    register_system_routes(app, engine)
+
+    @app.get("/v2/health")
+    def health() -> dict[str, str]:
+        return {"status": "ok", "surface": "v2"}
+
+
+def create_app(db_file: str | Path | None = None) -> FastAPI:
+    """独立进程应用：引擎 + /v2 路由 + 内置调度（FLOWORK_JOBS=off 可关）。"""
+    engine = create_engine(db_file)
+    app = FastAPI(title="flowork REST API", version="0.1.0")
+    app.state.engine = engine
+    register_rest_routes(app, engine)
+
+    jobs_enabled = os.environ.get("FLOWORK_JOBS", "on").lower() not in ("off", "0", "false")
+    job_interval = int(os.environ.get("FLOWORK_JOB_INTERVAL", "30"))
+
+    if jobs_enabled:
+
+        @app.on_event("startup")
+        def _start_jobs() -> None:
+            engine.jobs.start(interval_seconds=job_interval)
+
+    @app.on_event("shutdown")
+    def _shutdown() -> None:
+        engine.jobs.stop()
+        engine.close()
+
+    return app
+
+
+def __getattr__(name: str) -> Any:
+    """``uvicorn flowork.contrib.rest.app:app`` 的惰性默认应用（import 无副作用）。"""
+    if name == "app":
+        return create_app()
+    raise AttributeError(f"模块属性不存在：{name}")

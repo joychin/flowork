@@ -206,6 +206,48 @@ class JobService:
 
         return self._engine.execute(_command)
 
+    def list_jobs(
+        self,
+        *,
+        state: str | None = None,
+        job_type: str | None = None,
+        instance_id: str | None = None,
+        job_kind: str = "worker",
+        offset: int = 0,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        """Job 清单（只读运维查询，REST /v2/jobs/search 数据源；offset 分页）。"""
+
+        def _command(ctx: CommandContext) -> list[dict[str, Any]]:
+            stmt = select(JobRow).order_by(JobRow.created_at.desc(), JobRow.id)
+            if job_kind:
+                stmt = stmt.where(JobRow.job_kind == job_kind)
+            if state:
+                stmt = stmt.where(JobRow.state == state)
+            if job_type:
+                stmt = stmt.where(JobRow.job_type == job_type)
+            if instance_id:
+                stmt = stmt.where(JobRow.instance_id == instance_id)
+            return [
+                {
+                    "id": row.id,
+                    "job_kind": row.job_kind,
+                    "job_type": row.job_type,
+                    "state": row.state,
+                    "instance_id": row.instance_id,
+                    "retry_count": row.retry_count,
+                    "max_retries": row.max_retries,
+                    "worker_id": row.worker_id,
+                    "lease_until": row.lease_until,
+                    "run_at": row.run_at,
+                    "created_at": row.created_at,
+                    "last_error": row.last_error,
+                }
+                for row in ctx.session.scalars(stmt.offset(offset).limit(limit))
+            ]
+
+        return self._engine.execute(_command)
+
     # —— 内部 ——
 
     def _leased_by(self, session: Session, job_id: str, worker_id: str) -> JobRow:

@@ -136,13 +136,27 @@ FLOWORK_TEST_PG_URL=postgresql+psycopg://... uv run pytest -m needs_postgres   #
 
 ## 与后续系统对接（二期入口已预留）
 
-- **HTTP 服务**：`flowork/contrib/web`（插件位）已上线设计器面（定义草稿/校验/发布/试算，前缀 `/api`）；
-  实例/任务/搜索 REST 面随 kernel-v2 §12（`/v2`）落地，四服务方法即路由一一映射。
+- **HTTP 服务（REST /v2，已落地）**：`flowork/contrib/rest`（插件位）——对外集成面，
+  spec §12 全量（七搜索面游标分页/实例与任务动作/变量三端点/anticipate/messages/jobs 长轮询）
+  + 发起端点 `POST /v2/instances`（spec 缺口补齐）。四服务方法即路由一一映射；错误体
+  `{"error":{code,message,details}}`；actor 走 `X-Flowork-Actor` 头（鉴权归宿主）。
+
+  ```bash
+  FLOWORK_DB=/path/prod.db uv run uvicorn flowork.contrib.rest.app:app   # 独立进程
+  # 或挂进宿主 FastAPI：from flowork.contrib.rest import register_rest_routes; register_rest_routes(app, engine)
+  ```
+
+- **AI（MCP，已落地）**：`flowork/contrib/mcp`——18 工具（清单=kernel-v2 spec §13），
+  全 typed、幂等键、行动提示式返回；AI 与人共用同一待办/办理面（引擎不区分主体类型）。
+
+  ```bash
+  FLOWORK_DB=/path/prod.db uv run python -m flowork.contrib.mcp.server   # stdio
+  ```
+
+- **设计器面**：`flowork/contrib/web`（插件位）已上线设计器面（定义草稿/校验/发布/试算，前缀 `/api`）
+  ——设计器内部契约，与对外 `/v2` 面分属两个插件、各自冻结。
 - **消息推送**：订阅 `wf_event_outbox`（CloudEvents 信封，按 id 幂等；
   `flowork.events.consumer.IdempotentSink` 为参考实现；事件即内核原生通知面，无独立 notifier 端口）。
-- **AI（MCP）**：MCP 工具面随 M7 落地（18 个工具，清单见 kernel-v2 spec §13）；
-  当期已落实：全 typed、双语 docstring、幂等键、行动提示式返回；AI 与人共用同一
-  待办/办理面（引擎不区分主体类型，2026-10-10 第十七轮）。
 - **UI 设计器**：`designer/`（React Flow）已可用——Spec 唯一事实源、schema 驱动表单、
   校验闭环；任务页/Console 随产品 v1 M-C。
 - **组织系统**：替换 `EngineConfig.org`（实现目录查询协议 `OrgDirectoryLike` 或适配现有库；

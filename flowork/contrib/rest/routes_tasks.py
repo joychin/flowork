@@ -1,0 +1,93 @@
+"""REST /v2 tasks 面：search + 七动作 + anticipate（spec §12）。"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from fastapi import FastAPI, Request
+
+from flowork.api import ProcessEngine
+from flowork.contrib.rest._common import actor_of, dump, page_payload, page_request
+
+__all__ = ["register_task_routes"]
+
+
+def register_task_routes(app: FastAPI, engine: ProcessEngine) -> None:
+    task = engine.task
+
+    @app.post("/v2/tasks/search")
+    def tasks_search(body: dict[str, Any]) -> dict[str, Any]:
+        flt = body.get("filter") or {}
+        rows = task.list_tasks(
+            instance_id=flt.get("instance_id"),
+            assignee=flt.get("assignee"),
+            candidate=flt.get("candidate"),
+            state=flt.get("state", "ready"),
+        )
+        offset, limit = page_request(body.get("page"))
+        return page_payload([dump(row) for row in rows], offset, limit)
+
+    @app.post("/v2/tasks/{task_id}/claim")
+    def claim(task_id: str, body: dict[str, Any]) -> Any:
+        return dump(task.claim(task_id, str(body.get("user") or "")))
+
+    @app.post("/v2/tasks/{task_id}/unclaim")
+    def unclaim(task_id: str, body: dict[str, Any]) -> Any:
+        return dump(task.unclaim(task_id, str(body.get("user") or "")))
+
+    @app.post("/v2/tasks/{task_id}/complete")
+    def complete(request: Request, task_id: str, body: dict[str, Any]) -> Any:
+        variables = body.get("variables")
+        return dump(
+            task.complete(
+                task_id,
+                actor_of(request, body),
+                comment=str(body.get("comment") or ""),
+                variables=variables if isinstance(variables, dict) else None,
+                idempotency_key=body.get("idempotency_key"),
+            )
+        )
+
+    @app.post("/v2/tasks/{task_id}/reject")
+    def reject(request: Request, task_id: str, body: dict[str, Any]) -> Any:
+        return dump(
+            task.reject(
+                task_id,
+                actor_of(request, body),
+                comment=str(body.get("comment") or ""),
+                target=body.get("target"),
+            )
+        )
+
+    @app.post("/v2/tasks/{task_id}/transfer")
+    def transfer(request: Request, task_id: str, body: dict[str, Any]) -> Any:
+        return dump(
+            task.transfer(
+                task_id,
+                str(body.get("to_user") or ""),
+                actor_of(request, body),
+                comment=str(body.get("comment") or ""),
+            )
+        )
+
+    @app.post("/v2/tasks/{task_id}/assist")
+    def assist(request: Request, task_id: str, body: dict[str, Any]) -> Any:
+        users = body.get("users")
+        rows = task.assist(
+            task_id,
+            users if isinstance(users, list) else [],
+            actor_of(request, body),
+            comment=str(body.get("comment") or ""),
+        )
+        return [dump(row) for row in rows]
+
+    @app.post("/v2/tasks/{task_id}/complete_assist")
+    def complete_assist(request: Request, task_id: str, body: dict[str, Any]) -> Any:
+        task.complete_assist(
+            task_id, actor_of(request, body), comment=str(body.get("comment") or "")
+        )
+        return {"task_id": task_id, "completed": True}
+
+    @app.post("/v2/tasks/{task_id}/anticipate")
+    def anticipate(task_id: str, body: dict[str, Any]) -> Any:
+        return dump(task.anticipate(task_id, outcome=str(body.get("outcome") or "agree")))
