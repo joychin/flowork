@@ -9,19 +9,37 @@ build/
 .mypy_cache/
 .ruff_cache/
 .coverage
+.coverage.*
 htmlcov/
 
 # uv
 uv.lock.bak
 
-# SQLite local dev artifacts
+# SQLite 本地运行产物（FLOWORK_DB：designer.db* 及 -shm/-wal/.bak-* 同族）
 *.db
+*.db-shm
+*.db-wal
+*.db-journal
 *.sqlite3
+*.bak-*
+
+# 环境变量（本地配置不入库；模板用 !.env.example 放行）
+.env
+.env.*
+!.env.example
 
 # Editors / OS
 .idea/
 .vscode/
 .DS_Store
-*.bak-*
-designer.db-shm
-designer.db-wal
+
+# AI 编码环境产物（ZCode 及插件：截图/快照/计划/缓存，验证截图请存 out/）
+.zcode/
+.playwright-mcp/
+.v2c/
+.video_agent/
+/out/
+/*.png
+
+# 调研素材（本地资料，不入库；正式设计文档在 docs/product/）
+docs_research/
