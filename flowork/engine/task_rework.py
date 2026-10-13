@@ -80,7 +80,24 @@ class TaskReworkMixin:
         ctx.touch(instance)
         kernel = self._engine.kernel_for(ctx)
         self._assert_downstream_idle(ctx, instance, history.activity_code)
-        kernel = self._engine.kernel_for(ctx)
+        # 重复撤回守卫（全仓 review 2026-10-13 批 3 P1-1）：本人在本节点已有
+        # 在办待办＝上次撤回已生效（重建任务未办），再撤会产生双令牌双待办
+        # （其一永久无人收口）。只认本人在办——并行会签他人的任务同节点在办
+        # 不拦合法撤票。
+        from flowork.persistence.orm import TaskRow
+
+        own_live = ctx.session.scalars(
+            select(TaskRow).where(
+                TaskRow.instance_id == instance.id,
+                TaskRow.activity_code == history.activity_code,
+                TaskRow.assignee == history.assignee,
+            )
+        ).first()
+        if own_live is not None:
+            raise TaskNotAvailableError(
+                f"节点 {history.activity_code} 已有你的在办待办（上次撤回已生效），"
+                f"不能重复撤回：{own_live.id}"
+            )
         # 只取消下游盆内的未完令牌（code-review 2026-10 P0-3）：此前的「取消全部
         # 未完」在含并行分叉的图上会把仍在办理的兄弟分支一并砍掉——兄弟令牌不在
         # 本节点下游、闸门不拦，其审批人待办被静默作废；拍板④「取消全部与只取消
