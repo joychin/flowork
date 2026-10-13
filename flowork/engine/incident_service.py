@@ -80,6 +80,9 @@ class IncidentMixin:
                 DomainEvent.INCIDENT_RAISED,
                 {
                     "incident_id": incident_id,  # B3：与 incident_resolved 可配对
+                    # 错误归因（2026-10-13 事件 review 复核批）：节点作用域帧标注
+                    # 的定位——修前订阅方只能解析 message 文本猜节点
+                    "activity_code": getattr(error, "activity_code", None),
                     "message": str(error),
                     "error_class": type(error).__name__,
                 },

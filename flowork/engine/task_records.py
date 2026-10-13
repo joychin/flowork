@@ -196,32 +196,37 @@ class TaskRecordsMixin:
         """任务提交后的统一推进入口（自 kernel.py 迁入，第二十轮）。"""
         from typing import cast
 
-        from flowork.engine.kernel import EngineExecutionError, Kernel
+        from flowork.engine.errors import EngineExecutionError, attribute_node_error
+        from flowork.engine.kernel import Kernel
         from flowork.runtime.lifecycle import TokenState
 
         kernel = cast("Kernel", self)
         node = kernel.definition_of(session, instance).node(token.activity_code)
         if node is None:
             raise EngineExecutionError(f"令牌节点不存在：{token.activity_code}")
-        kernel._maybe_complete(session, instance, node, token)
-        # 出口不可达兜底（审计 D4，spec §4.1 第二十轮）：全部待办办结而令牌
-        # 未完（两侧出口公式均未达成）＝技术故障——挂起+故障单，拒绝静默卡死。
-        # kind 知识住行为（code-review 2026-10 P1-7：KIND_USER_TASK 分支违反
-        # 硬约束 2）——owns_pending_tasks 声明「名下有待办域」：call_activity
-        # 等子实例、wait 等消息名下本无待办；串行下一位已在 on_task_completed
-        # （先行于本守卫）派发，不误报。
-        behavior_cls = kernel.registry.behavior_cls(node.kind)
-        if (
-            getattr(behavior_cls, "owns_pending_tasks", False)
-            and token.state == TokenState.UNFINISHED.value
-            and not kernel.tasks(session, instance.id, token_id=token.id)
-        ):
-            raise EngineExecutionError(
-                f"会签出口不可达：节点 {node.code} 全部待办已办结"
-                f"（item_count={token.item_count}, approve={token.approve_count},"
-                f" disapprove={token.disapprove_count}）而两侧出口公式均未达成"
-                "——按技术故障挂起（spec §4.1 第二十轮）；处置：管理员手术或终态"
-            )
+        try:  # 错误归因（复核批）：任务提交后的推进失败定位到本节点
+            kernel._maybe_complete(session, instance, node, token)
+            # 出口不可达兜底（审计 D4，spec §4.1 第二十轮）：全部待办办结而令牌
+            # 未完（两侧出口公式均未达成）＝技术故障——挂起+故障单，拒绝静默卡死。
+            # kind 知识住行为（code-review 2026-10 P1-7：KIND_USER_TASK 分支违反
+            # 硬约束 2）——owns_pending_tasks 声明「名下有待办域」：call_activity
+            # 等子实例、wait 等消息名下本无待办；串行下一位已在 on_task_completed
+            # （先行于本守卫）派发，不误报。
+            behavior_cls = kernel.registry.behavior_cls(node.kind)
+            if (
+                getattr(behavior_cls, "owns_pending_tasks", False)
+                and token.state == TokenState.UNFINISHED.value
+                and not kernel.tasks(session, instance.id, token_id=token.id)
+            ):
+                raise EngineExecutionError(
+                    f"会签出口不可达：节点 {node.code} 全部待办已办结"
+                    f"（item_count={token.item_count}, approve={token.approve_count},"
+                    f" disapprove={token.disapprove_count}）而两侧出口公式均未达成"
+                    "——按技术故障挂起（spec §4.1 第二十轮）；处置：管理员手术或终态"
+                )
+        except EngineExecutionError as error:
+            attribute_node_error(error, node.code)
+            raise
 
     def _actor_context_of(self, actor: str) -> dict[str, Any]:
         """身份快照：完成事务内经目录端口定格操作者当时的岗位/角色/部门。

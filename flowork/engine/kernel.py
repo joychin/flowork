@@ -14,10 +14,19 @@ from typing import TYPE_CHECKING, Any
 from flowork.definitions.definition import ProcessDefinition, load_definition
 from flowork.engine.context import RuntimeNodeContext
 from flowork.engine.declared_hooks import run_declared_hook
+from flowork.engine.errors import (
+    DeadLoopError,
+    EngineExecutionError,
+    NoParticipantError,
+    ParticipantCountMismatchError,
+    ParticipantLimitError,
+    RejectTargetMissing,
+    RouteError,
+    attribute_node_error,
+)
 from flowork.engine.join_gate import should_release
 from flowork.engine.task_records import TaskRecordsMixin
 from flowork.engine.token_records import TokenRecordsMixin
-from flowork.errors import FloworkError
 from flowork.events.domain import DomainEvent
 from flowork.runtime.behavior import NodeBehavior
 from flowork.runtime.lifecycle import UNSETTLED_INSTANCE_STATES, InstanceState, TokenState
@@ -31,42 +40,17 @@ if TYPE_CHECKING:
     from flowork.engine.config import EngineConfig
     from flowork.persistence.orm import ProcessInstanceRow, TokenRow
 
-__all__ = ["DeadLoopError", "EngineExecutionError", "Kernel", "RouteError"]
-
-
-class EngineExecutionError(FloworkError):
-    """引擎执行错误（将转为 Incident，M5）。"""
-
-
-class RouteError(EngineExecutionError):
-    """路由无法确定（如条件分支条件全不满足且无默认边）。"""
-
-
-class DeadLoopError(EngineExecutionError):
-    """死循环守卫触发。"""
-
-
-class NoParticipantError(EngineExecutionError):
-    """审批节点无可用的参与者。"""
-
-
-class ParticipantLimitError(EngineExecutionError):
-    """参与者规模超过上限（EngineConfig.max_participants）——拒绝而非截断。
-
-    解析位（user_task/cc 进入）触发时按技术故障处理：挂起+故障单（可见、可修、
-    可 retry）；调用方位（加签）由 TaskService 拦截为请求拒绝，实例不受影响。
-    """
-
-
-class ParticipantCountMismatchError(EngineExecutionError):
-    """单人审批节点（未声明 multi_instance）解析出多名参与者——拒绝宽松并行。
-
-    spec v2.3 第十八轮：多人必须显式声明会签；解析位＝技术故障（挂起+故障单，首节点整笔回滚）。
-    """
-
-
-class RejectTargetMissing(EngineExecutionError):
-    """驳回目标节点缺失（未配置且无来源节点）。"""
+__all__ = [
+    "DeadLoopError",
+    "EngineExecutionError",
+    "Kernel",
+    "NoParticipantError",
+    "ParticipantCountMismatchError",
+    "ParticipantLimitError",
+    "RejectTargetMissing",
+    "RouteError",
+    "attribute_node_error",
+]
 
 
 class Kernel(TaskRecordsMixin, TokenRecordsMixin):
@@ -165,23 +149,27 @@ class Kernel(TaskRecordsMixin, TokenRecordsMixin):
         manual_participants: dict[str, list[str]] | None = None,
     ) -> TokenRow:
         """激活节点：建令牌 → node_entered → on_enter → 完成判定。"""
-        token = self.create_token(
-            session,
-            instance,
-            node.code,
-            source_activity_code=source_activity_code,
-            reject_flag=reject_flag,
-            manual_participants=manual_participants,
-        )
-        self.record_event(
-            DomainEvent.NODE_ENTERED,
-            {"activity_code": node.code, "token_id": token.id},  # B4：并行分支可区分
-            instance.id,
-        )
-        ctx = RuntimeNodeContext(self, session, instance, node, token)
-        run_declared_hook(ctx, node.hooks.on_enter)  # 声明式先于行为：写变量供行为消费
-        self.behavior_of(node).on_enter(ctx)
-        self._maybe_complete(session, instance, node, token)
+        try:
+            token = self.create_token(
+                session,
+                instance,
+                node.code,
+                source_activity_code=source_activity_code,
+                reject_flag=reject_flag,
+                manual_participants=manual_participants,
+            )
+            self.record_event(
+                DomainEvent.NODE_ENTERED,
+                {"activity_code": node.code, "token_id": token.id},  # B4：并行分支可区分
+                instance.id,
+            )
+            ctx = RuntimeNodeContext(self, session, instance, node, token)
+            run_declared_hook(ctx, node.hooks.on_enter)  # 声明式先于行为：写变量供行为消费
+            self.behavior_of(node).on_enter(ctx)
+            self._maybe_complete(session, instance, node, token)
+        except EngineExecutionError as error:  # 错误归因（复核批）：挂起可定位节点
+            attribute_node_error(error, node.code)
+            raise
         return token
 
     def _maybe_complete(

@@ -166,6 +166,9 @@ def test_incident_raised_carries_incident_id():
         engine.task.complete(task.id, actor="u1")
     raised = _events_of(engine, iid, "incident_raised")[0]
     assert raised["incident_id"]  # 修前载荷无此键，故障发生与修复无法配对
+    # 错误归因（复核批）：钩子失败的 incident_raised 带节点定位——修前只能
+    # 解析 message 文本
+    assert raised["activity_code"] == "b"
     incident = engine.runtime.list_incidents(iid)[0]
     assert raised["incident_id"] == incident["id"]
     engine.close()

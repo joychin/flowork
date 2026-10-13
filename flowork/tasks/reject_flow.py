@@ -86,6 +86,7 @@ class RejectMixin:
         variables: dict[str, Any] | None,
     ) -> TaskCompleteResult:
         from flowork.definitions.builtin import UserTaskSpec
+        from flowork.engine.errors import EngineExecutionError
         from flowork.engine.kernel import RejectTargetMissing
         from flowork.persistence.orm import TokenRow as _TokenRow
 
@@ -143,18 +144,24 @@ class RejectMixin:
         from flowork.tasks.facts import instance_facts
 
         expr = mi.disapprove_exit if mi is not None else "task.disapprove_count >= 1"
-        exit_hit = exit_reached(
-            expr,
-            side="disapprove",
-            item_count=token.item_count,
-            approve_count=token.approve_count,
-            disapprove_count=token.disapprove_count,
-            variables=instance.variables,
-            start_user=instance.start_user,
-            functions=expression_functions_of(self._engine.config),
-            instance=instance_facts(instance),
-            now=self._engine.config.now(),  # 第十五轮时钟统一：与办理侧出口同一时钟
-        )
+        try:  # 错误归因（复核批）：驳回出口求值失败定位到本节点
+            exit_hit = exit_reached(
+                expr,
+                side="disapprove",
+                item_count=token.item_count,
+                approve_count=token.approve_count,
+                disapprove_count=token.disapprove_count,
+                variables=instance.variables,
+                start_user=instance.start_user,
+                functions=expression_functions_of(self._engine.config),
+                instance=instance_facts(instance),
+                now=self._engine.config.now(),  # 第十五轮时钟统一：与办理侧出口同一时钟
+            )
+        except EngineExecutionError as error:
+            from flowork.engine.errors import attribute_node_error
+
+            attribute_node_error(error, node.code)
+            raise
         if not exit_hit:
             from flowork.engine.context import RuntimeNodeContext
 

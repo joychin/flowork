@@ -217,18 +217,25 @@ def finish_wait(
         "message_id": message_id,
     }
     ctx = RuntimeNodeContext(kernel, session, instance, node, token)
-    behavior.on_exit(ctx)
-    # 声明式 on_exit 补齐（2026-10-13 事件 review 复核批）：三路收口（命中/
-    # 到时/广播）与内核完成路径同契约，修前静默跳过宿主钩子
-    from flowork.engine.declared_hooks import run_declared_hook
+    try:  # 错误归因（复核批）：等待收口失败定位到等待节点
+        behavior.on_exit(ctx)
+        # 声明式 on_exit 补齐（2026-10-13 事件 review 复核批）：三路收口（命中/
+        # 到时/广播）与内核完成路径同契约，修前静默跳过宿主钩子
+        from flowork.engine.declared_hooks import run_declared_hook
 
-    run_declared_hook(ctx, node.hooks.on_exit)
-    kernel.finish_token(session, token, approval_exit=token.approval_exit)
-    kernel.record_event(
-        DomainEvent.NODE_EXITED,
-        {"activity_code": node.code, "token_id": token.id},  # B4：并行分支可区分
-        instance.id,
-    )
+        run_declared_hook(ctx, node.hooks.on_exit)
+        kernel.finish_token(session, token, approval_exit=token.approval_exit)
+        kernel.record_event(
+            DomainEvent.NODE_EXITED,
+            {"activity_code": node.code, "token_id": token.id},  # B4：并行分支可区分
+            instance.id,
+        )
+    except EngineExecutionError as error:
+        from flowork.engine.errors import attribute_node_error
+
+        attribute_node_error(error, node.code)
+        raise
+
     kernel.route(session, instance, node, token, behavior_override=behavior)
 
 
