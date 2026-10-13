@@ -39,6 +39,7 @@ def cascade_terminate(
     end_status: str,
     actor: str,
     reason: str,
+    cause: str | None = None,
 ) -> list[str]:
     """撤整棵树的未完令牌，未结算子实例（子先父后）落终态；返回子实例 id 清单。
 
@@ -46,6 +47,9 @@ def cascade_terminate(
     ``resume_parent_if_waiting`` 只在「父令牌仍 unfinished」时推进父侧，
     先撤令牌保证子终态不会误唤醒任何中间层父（与正常完成路径互斥）。
     根实例的 complete 与终态事件由调用方收尾（携带本函数返回的级联清单）。
+    ``cause``＝node_cancelled.by 覆盖值（2026-10-13 事件 review 复核批：by
+    统一语义标签——缺省 ``instance_{end_status}``，MI 收工传
+    multi_instance_completion；修前混传终态值与标签两套口径）。
     """
     from sqlalchemy import select
 
@@ -73,10 +77,11 @@ def cascade_terminate(
             descendants.append(row)
             frontier.append(row.id)
     # 2) 整树撤令牌（根 + 后代）：cancel_token 经行为取消钩子（wait 关订阅删 Job）；
-    #    逐节点 node_cancelled(by=end_status)+task_cancelled 由咽喉统一发（A4）
+    #    逐节点 node_cancelled(by=cause 标签)+task_cancelled 由咽喉统一发（A4）
+    cancel_cause = cause or f"instance_{end_status}"
     for instance in [root, *descendants]:
         for token in kernel.tokens(ctx.session, instance.id, states=(TokenState.UNFINISHED.value,)):
-            kernel.cancel_token(ctx.session, token, cause=end_status, actor=actor)
+            kernel.cancel_token(ctx.session, token, cause=cancel_cause, actor=actor)
     # 3) 子实例落终态（逆 BFS＝子先父后）+ 终态事件（cascade_from 溯源）
     terminal_event = (
         DomainEvent.PROCESS_TERMINATED

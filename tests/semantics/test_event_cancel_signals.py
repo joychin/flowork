@@ -66,7 +66,8 @@ def test_terminate_emits_node_cancelled_with_cause():
     engine.task.complete(engine.task.list_tasks(instance_id=iid)[0].id, actor="u1")
     engine.runtime.terminate_process(iid, actor="u_admin")
     cancelled = _events(engine, iid, "node_cancelled")
-    assert [(p["activity_code"], p["by"]) for p in cancelled] == [("b", "terminated")]
+    # by 统一语义标签（2026-10-13 事件 review 复核批）：修前混传终态值 "terminated"
+    assert [(p["activity_code"], p["by"]) for p in cancelled] == [("b", "instance_terminated")]
     assert _events(engine, iid, "task_cancelled")
     engine.close()
 

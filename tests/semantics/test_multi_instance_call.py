@@ -434,3 +434,62 @@ def test_mi_collect_output_respects_input_contract():
     with pytest.raises(FloworkError):
         _complete_n(engine, 1)  # collect 写回 string 违约 → 技术故障
     _ = instance_id, ProcessVariable
+
+
+def test_early_finish_cascades_to_grandchildren():
+    """回归（2026-10-13 事件 review 复核批）：MI 提前收工修前只撤子自己的
+    令牌、直接置 child.state——子自身是子流程时，其孙实例孤儿 running 且
+    零事件。修后走 cascade_terminate 整树级联（孙先子后落终态）。"""
+    engine = ProcessEngine()
+    engine.repository.deploy(
+        FlowBuilder("mi_grand")
+        .start()
+        .user_task("g", assignee="'u_g'")
+        .end()
+        .connect("start", "g")
+        .connect("g", "end")
+        .build()
+    )
+    engine.repository.deploy(
+        FlowBuilder("mi_child_nest")
+        .start()
+        .call_activity("inner", process_code="mi_grand")
+        .end()
+        .connect("start", "inner")
+        .connect("inner", "end")
+        .build()
+    )
+    engine.repository.deploy(
+        FlowBuilder("mi_nest_parent")
+        .start()
+        .call_activity(
+            "sub",
+            process_code="mi_child_nest",
+            multi_instance={
+                "subjects": ["'u_a'", "'u_b'", "'u_c'"],
+                "completion": "child_completed >= 2",
+            },
+        )
+        .end()
+        .connect("start", "sub")
+        .connect("sub", "end")
+        .build()
+    )
+    instance_id = _start(engine, "mi_nest_parent")
+
+    # 办完两个孙任务 → 两个子完结 → completion 命中提前收工
+    for _ in range(2):
+        task = engine.task.list_tasks(assignee="u_g", state="ready")[0]
+        engine.task.complete(task.id, actor="u_g")
+
+    assert engine.runtime.get_instance(instance_id).state == "completed"
+    kids = _children_of(engine, instance_id)
+    kid_states = sorted(k.state for k in kids)
+    assert kid_states == ["cancelled", "completed", "completed"]
+    grand_ids = {k.id for k in kids}
+    grands = [i for i in engine.history.instances() if i.parent_id in grand_ids]
+    assert len(grands) == 3
+    # 修前：被收工子的孙实例保持 running（孤儿，无终态无事件）
+    assert all(g.state in ("completed", "cancelled") for g in grands)
+    assert engine.task.list_tasks(assignee="u_g", state="ready") == []
+    engine.close()

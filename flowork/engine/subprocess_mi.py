@@ -204,21 +204,28 @@ def _collect_outputs(
 
 
 def _terminate_running_children(ctx: RuntimeNodeContext, children: list[Any]) -> None:
-    """提前收工：终止剩余 running 子（撤令牌与待办，对齐 terminate_process 形态）。
+    """提前收工：终止剩余 running 子（**整树级联**，对齐 terminate_process 形态）。
 
-    suspended/paused 子不终止（管理员域）。
+    suspended/paused 子不终止（管理员域）。级联修复（2026-10-13 事件 review
+    复核批）：修前直接置 child.state、不 BFS——MI 子自身含子实例时孙实例
+    孤儿 running 且零事件；改用 cascade_terminate 复用整树语义（先撤光令牌
+    再子先父后落终态、孙事件带 cascade_from）。
     """
-    from flowork.runtime.lifecycle import TokenState
+    from flowork.engine.terminate_cascade import cascade_terminate
 
     for child in children:
         if child.state != InstanceState.RUNNING.value:
             continue
-        for token in ctx.kernel.tokens(
-            ctx.session, child.id, states=(TokenState.UNFINISHED.value,)
-        ):
-            ctx.kernel.cancel_token(ctx.session, token, cause="multi_instance_completion")
-        child.state = InstanceState.CANCELLED.value
-        child.finished_at = ctx.kernel.config.now()
+        cascade_terminate(
+            ctx.kernel.engine,
+            ctx.kernel.command_ctx,  # RuntimeNodeContext 不承载命令缓冲，级联走命令上下文
+            child,
+            end_status=InstanceState.CANCELLED.value,
+            actor="system",
+            reason="multi_instance_completion",
+            cause="multi_instance_completion",  # by 保留 MI 语义标签（缺省 instance_cancelled）
+        )
+        ctx.kernel.complete_instance(ctx.session, child, InstanceState.CANCELLED.value)
         ctx.kernel.record_event(
             DomainEvent.PROCESS_CANCELLED,
             {
