@@ -43,6 +43,9 @@ export function ContextMenu() {
   if (node) {
     const select = useStore.getState().select
     const deletable = node.kind !== 'start'
+    // start 有且仅有一个(校验 structure.start.count),且删除守卫硬拦一切 start——
+    // 放行复制会产出一个删不掉的副本,流程从此带 ERROR
+    const duplicatable = node.kind !== 'start'
     items.push(
       {
         label: '从这里拉线',
@@ -55,7 +58,8 @@ export function ContextMenu() {
       },
       {
         label: '复制节点',
-        hint: '连配置一起克隆',
+        hint: duplicatable ? '连配置一起克隆' : 'start 有且仅有一个',
+        disabled: !duplicatable,
         run: () => useStore.getState().duplicateNode(node.code),
       },
       { label: '编辑属性', run: () => select({ type: 'node', id: node.code }) },
@@ -75,11 +79,15 @@ export function ContextMenu() {
   if (flow) {
     const select = useStore.getState().select
     const edgeId = `${flow.source}->${flow.target}`
+    // 默认边只在条件分支的路由里被引擎消费(routing/validator 均只认 branch 出边),
+    // 其他连线设了是发布不拦、运行不用的死配置——菜单直接拦在门口
+    const defaultEligible = spec.nodes.find((n) => n.code === flow.source)?.kind === 'branch'
     items.push(
       { label: '编辑连线', hint: flow.condition ? '含条件公式' : '无条件', run: () => select({ type: 'edge', id: edgeId }) },
       {
         label: flow.is_default ? '取消默认边' : '设为默认边',
-        hint: flow.is_default ? undefined : '同源互斥;原条件清空',
+        hint: flow.is_default ? undefined : defaultEligible ? '同源互斥;原条件清空' : '仅条件分支的出线可设',
+        disabled: !flow.is_default && !defaultEligible,
         run: () => useStore.getState().toggleDefaultEdge(flow.source, flow.target),
       },
       {
@@ -93,8 +101,8 @@ export function ContextMenu() {
     )
   }
 
-  // 视口折返:靠右/靠下时往回弹,避免菜单出屏
-  const W = 168
+  // 视口折返:靠右/靠下时往回弹,避免菜单出屏(W = min-width 176 + 边框 2)
+  const W = 178
   const H = items.length * 34 + 12
   const x = Math.min(menu.x, window.innerWidth - W - 8)
   const y = Math.min(menu.y, window.innerHeight - H - 8)

@@ -325,6 +325,11 @@ export const useStore = create<Store>((set, get) => ({
     const flow = spec.flows.find((f) => f.source === source && f.target === target)
     if (!flow) return
     const willBeDefault = !flow.is_default
+    // 默认边只在条件分支路由被引擎消费;其他连线设了是死配置(与右键菜单守卫同源)
+    if (willBeDefault && spec.nodes.find((n) => n.code === source)?.kind !== 'branch') {
+      get().showToast('默认边仅对条件分支的出线有意义 — 已忽略')
+      return
+    }
     get().mutate((draft) => {
       for (const f of draft.flows) {
         if (f.source === source) f.is_default = false

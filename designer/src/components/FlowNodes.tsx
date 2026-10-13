@@ -2,7 +2,7 @@
  *  组件全部 memo:配合 adapter 的元素签名缓存,未变化的节点/连线不重渲染。 */
 
 import { memo, useCallback, useRef, useState } from 'react'
-import { Handle, Position, BaseEdge, EdgeLabelRenderer, EdgeText, getSmoothStepPath, useStore as useRFStore } from '@xyflow/react'
+import { Handle, Position, BaseEdge, EdgeLabelRenderer, EdgeText, getSmoothStepPath, useReactFlow, useStore as useRFStore } from '@xyflow/react'
 import type { EdgeProps, NodeProps } from '@xyflow/react'
 import type { NodeData } from '../adapter'
 import { useStore } from '../store'
@@ -187,6 +187,15 @@ function SmoothEdgeImpl(props: EdgeProps) {
   // 改道拖拽:选中后从两端拖点拖到目标节点身上松手;也可直接抓线身拖(按按下点靠近哪端改哪端)。
   // 多线汇入同一节点时拖点按兄弟偏移错开
   const [rehover, setRehover] = useState<string | null>(null)
+  // 橡皮筋预览:拖拽中画一条固定端口→鼠标的虚线(与拉新线同款样式),线跟着手走
+  const [rubber, setRubber] = useState<{ end: 'source' | 'target'; x: number; y: number } | null>(null)
+  const { screenToFlowPosition } = useReactFlow()
+  // 橡皮筋路径:改终点→源端口固定不动;改起点→目标端口固定。样式与拉新线(connectionLine)一致
+  const rubberPath = rubber
+    ? rubber.end === 'target'
+      ? getSmoothStepPath({ sourceX, sourceY, sourcePosition, targetX: rubber.x, targetY: rubber.y, targetPosition, borderRadius: 14 })[0]
+      : getSmoothStepPath({ sourceX: rubber.x, sourceY: rubber.y, sourcePosition, targetX, targetY, targetPosition, borderRadius: 14 })[0]
+    : null
   const rehoverRef = useRef<string | null>(null)
   const movedRef = useRef(false)
   const nodeUnder = useCallback((cx: number, cy: number): string | null => {
@@ -207,7 +216,9 @@ function SmoothEdgeImpl(props: EdgeProps) {
     if (id) document.querySelector(`.react-flow__node[data-id="${id}"]`)?.classList.add('fk-rehover')
   }, [])
   const beginReconnect = useCallback(
-    (end: 'source' | 'target') => (e: { clientX: number; clientY: number; stopPropagation?: () => void; preventDefault?: () => void }) => {
+    (end: 'source' | 'target') => (e: { clientX: number; clientY: number; button?: number; stopPropagation?: () => void; preventDefault?: () => void }) => {
+      // 只认主键:右键按下线身/手柄不得静默启动改接(与右键菜单手势隔离)
+      if (e.button !== undefined && e.button !== 0) return
       e.stopPropagation?.()
       e.preventDefault?.()
       movedRef.current = false
@@ -223,6 +234,8 @@ function SmoothEdgeImpl(props: EdgeProps) {
       }
       const onMove = (ev: PointerEvent) => {
         if (!movedRef.current && Math.hypot(ev.clientX - startX, ev.clientY - startY) > 3) movedRef.current = true
+        // 过 3px 阈值(确认真拖)才画橡皮筋,原地点击不留残影
+        if (movedRef.current) setRubber({ end, ...screenToFlowPosition({ x: ev.clientX, y: ev.clientY }) })
         const id2 = nodeUnder(ev.clientX, ev.clientY)
         if (id2 !== rehoverRef.current) {
           rehoverRef.current = id2
@@ -256,6 +269,7 @@ function SmoothEdgeImpl(props: EdgeProps) {
         rehoverRef.current = null
         markHover(null)
         setRehover(null)
+        setRubber(null)
         document.body.classList.remove('fk-dragging')
       }
       document.body.classList.add('fk-dragging')
@@ -263,7 +277,7 @@ function SmoothEdgeImpl(props: EdgeProps) {
       window.addEventListener('pointerup', onUp)
       window.addEventListener('keydown', onKey)
     },
-    [source, target, reconnectFlow, showToast, nodeUnder, markHover],
+    [source, target, reconnectFlow, showToast, nodeUnder, markHover, screenToFlowPosition],
   )
   // 整条线可拖:选中后在线身按下即开始改接,**恒改终点(箭头端)** ——「把 A→B 的线拖到 C」
   // 语义就是箭头指向 C;要改起点用起点端的拖点手柄。未选中时这次按下只负责选中(上层
@@ -294,6 +308,16 @@ function SmoothEdgeImpl(props: EdgeProps) {
       style={{ cursor: 'pointer' }}
     >
       <BaseEdge id={id} path={path} markerEnd={markerEnd} style={{ stroke: active ? '#2f6bff' : hit ? '#16a34a' : '#9aa8bd', strokeWidth: active || hit ? 2.2 : 1.6 }} />
+      {rubberPath && (
+        <path
+          d={rubberPath}
+          fill="none"
+          stroke="#2f6bff"
+          strokeWidth={2.2}
+          strokeDasharray="7 5"
+          pointerEvents="none"
+        />
+      )}
       {label ? (
         <EdgeText
           x={labelX}
