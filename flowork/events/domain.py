@@ -40,6 +40,9 @@ class DomainEvent(StrEnum):
     PROCESS_PAUSED = "process_paused"
     PROCESS_RESUMED = "process_resumed"
     PROCESS_TERMINATED = "process_terminated"
+    # 挂起/恢复对称（2026-10-13 事件 review 复核批）：挂起侧此前只有
+    # incident_raised（故障单层），实例生命周期层无冻结/解冻信号
+    PROCESS_SUSPENDED = "process_suspended"
     INSTANCE_DEADLINE_REACHED = "instance_deadline_reached"  # v2.2（spec §10）
     TIMER_FIRED = "timer_fired"  # spec §7 定时器行承诺事件；等待节点到时首发
     TASK_ESCALATED = "task_escalated"
@@ -50,6 +53,9 @@ class DomainEvent(StrEnum):
     # 注意：ctx.emit 端口对宿主仍是开放事件名（tests/pilot 的
     # payment_executed 即自定义业务事件），本枚举只承诺「引擎自发事件」全集。
     SUB_PROCESS_STARTED = "sub_process_started"
+    # 父侧子完成信号（2026-10-13 事件 review 复核批）：修前只有 started——
+    # 子实例完结时父侧零事件（挂起期唤醒落空更无痕）
+    SUB_PROCESS_COMPLETED = "sub_process_completed"
     TASK_ASSIST_CREATED = "task_assist_created"
     TASK_ASSIST_CANCELLED = "task_assist_cancelled"
     TASK_CONSULT_CREATED = "task_consult_created"

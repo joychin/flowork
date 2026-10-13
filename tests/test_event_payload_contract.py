@@ -329,3 +329,74 @@ def test_escalated_event_carries_locator():
     assert escalated and escalated[0]["activity_code"] == "a"
     assert escalated[0]["task_type"] == "approval"
     engine.close()
+
+
+def test_sub_process_completed_signals_parent():
+    """复核批：子实例完结时父侧发 sub_process_completed（修前只有 started，
+    挂起期唤醒落空更无痕）——载荷带子定义/终态/父节点。"""
+    engine = ProcessEngine()
+    engine.repository.deploy(
+        FlowBuilder("payload_child2")
+        .start()
+        .user_task("w", assignee="'u1'")
+        .end()
+        .connect("start", "w")
+        .connect("w", "end")
+        .build()
+    )
+    engine.repository.deploy(
+        FlowBuilder("payload_parent2")
+        .start()
+        .call_activity("sub", process_code="payload_child2")
+        .end()
+        .connect("start", "sub")
+        .connect("sub", "end")
+        .build()
+    )
+    iid = engine.runtime.start_process("payload_parent2", start_user="u_s")
+    child = next(i for i in engine.history.instances() if i.parent_id == iid)
+    task = engine.task.list_tasks(instance_id=child.id)[0]
+    engine.task.complete(task.id, actor="u1")
+
+    done = _events_of(engine, iid, "sub_process_completed")
+    assert len(done) == 1
+    assert done[0]["sub_instance_id"] == child.id
+    assert done[0]["child_definition_code"] == "payload_child2"
+    assert done[0]["end_status"] == "completed"
+    assert done[0]["parent_node"] == "sub"
+    assert engine.runtime.get_instance(iid).state == "completed"
+    engine.close()
+
+
+def test_suspension_emits_process_suspended_and_resumed():
+    """复核批：挂起/恢复与 pause/resume 对称——incident 挂起补
+    process_suspended（带故障单与节点定位），resolve 恢复补 process_resumed。"""
+    engine = ProcessEngine()
+    engine.repository.deploy(
+        FlowBuilder("payload_susp")
+        .start()
+        .user_task("a", assignee="'u1'")
+        .user_task("b", assignee="'u2'", hooks={"on_enter": {"handler": "nope"}})
+        .end()
+        .connect("start", "a")
+        .connect("a", "b")
+        .connect("b", "end")
+        .build()
+    )
+    iid = engine.runtime.start_process("payload_susp", start_user="u_s")
+    with pytest.raises(FloworkError):
+        engine.task.complete(  # 推进到 b → 钩子未注册 → 回滚 + 挂起
+            engine.task.list_tasks(instance_id=iid)[0].id, actor="u1"
+        )
+    suspended = _events_of(engine, iid, "process_suspended")
+    assert len(suspended) == 1
+    assert suspended[0]["activity_code"] == "b"  # 错误归因联动
+    assert suspended[0]["incident_id"]
+
+    incident = engine.runtime.list_incidents(iid)[0]
+    engine.runtime.resolve_incident(incident["id"], action="resume", actor="boss")
+    resumed = _events_of(engine, iid, "process_resumed")
+    assert len(resumed) == 1 and resumed[0]["reason"] == "incident:resume"
+    assert resumed[0]["actor"] == "boss"
+    assert engine.runtime.get_instance(iid).state == "running"  # a 回到可办
+    engine.close()

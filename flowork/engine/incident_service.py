@@ -13,7 +13,7 @@ from flowork.engine.ops import CommandContext
 from flowork.errors import InstanceNotFoundError
 from flowork.events.domain import DomainEvent
 from flowork.persistence.orm import ProcessInstanceRow
-from flowork.runtime.lifecycle import InstanceState, TokenState
+from flowork.runtime.lifecycle import InstanceState
 from flowork.tasks.models import InstanceInfo
 
 if TYPE_CHECKING:
@@ -76,6 +76,14 @@ class IncidentMixin:
             instance = ctx.session.get(ProcessInstanceRow, instance_id)
             if instance is not None and instance.state == InstanceState.RUNNING.value:
                 instance.state = InstanceState.SUSPENDED.value
+                kernel.record_event(
+                    DomainEvent.PROCESS_SUSPENDED,  # 挂起/暂停对称（复核批）
+                    {
+                        "incident_id": incident_id,
+                        "activity_code": getattr(error, "activity_code", None),
+                    },
+                    instance_id,
+                )
             kernel.record_event(
                 DomainEvent.INCIDENT_RAISED,
                 {
@@ -136,16 +144,7 @@ class IncidentMixin:
             if action == "resume":
                 instance = ctx.session.get(ProcessInstanceRow, incident.instance_id)
                 if instance is not None:
-                    ctx.touch(instance)
-                    instance.state = InstanceState.RUNNING.value
-                    # 拍板 1：挂起期消息落缓冲——恢复后补消费（对齐 resume_process）
-                    from flowork.engine.instance_lifecycle import advance_unfinished_tokens
-                    from flowork.engine.message_flow import retro_poll_instance
-
-                    retro_poll_instance(ctx, self._engine, instance)
-                    # 挂起期间到达的子实例完结补推进（2026-10-13 事件 review
-                    # 复核批）：修前只补消息——父恢复后等待子节点永久卡住
-                    advance_unfinished_tokens(self._engine, ctx, instance)
+                    self._resume_from_suspension(ctx, instance, actor, "incident:resume")
             elif action == "cancel":
                 self._cancel_in_ctx(
                     ctx, incident.instance_id, actor=actor, reason="incident:cancel"
@@ -165,13 +164,7 @@ class IncidentMixin:
                     job.lease_until = None
                 instance = ctx.session.get(ProcessInstanceRow, incident.instance_id)
                 if instance is not None:
-                    ctx.touch(instance)
-                    instance.state = InstanceState.RUNNING.value
-                    from flowork.engine.instance_lifecycle import advance_unfinished_tokens
-                    from flowork.engine.message_flow import retro_poll_instance
-
-                    retro_poll_instance(ctx, self._engine, instance)  # 同 resume 补消费
-                    advance_unfinished_tokens(self._engine, ctx, instance)  # 同 resume 补推进
+                    self._resume_from_suspension(ctx, instance, actor, "incident:retry")
             elif action == "skip":
                 self._skip_failed_nodes(ctx, incident.instance_id, actor)
             elif action == "fail":
@@ -191,45 +184,39 @@ class IncidentMixin:
 
         self._engine.execute(_command)
 
-    def _skip_failed_nodes(self, ctx: CommandContext, instance_id: str, actor: str) -> None:
-        """跳过故障节点：未完令牌视为完成，按条件路由激活后继（管理员手术，绕放行门）。"""
-        from flowork.engine.route_audit import RoutingAudit, persist_route_decision
-        from flowork.engine.routing import evaluation_variables, select_outgoing
-        from flowork.expr.context import expression_functions_of
-        from flowork.tasks.facts import attach_node
+    def _resume_from_suspension(
+        self,
+        ctx: CommandContext,
+        instance: ProcessInstanceRow,
+        actor: str,
+        reason: str,
+    ) -> None:
+        """挂起恢复共享体（resume/retry）：置 running + 补消息 + 补推进 + 事件。
 
-        kernel = self._engine.kernel_for(ctx)
-        instance = ctx.session.get(ProcessInstanceRow, instance_id)
-        assert instance is not None
-        definition = kernel.definition_of(ctx.session, instance)
-        base_functions = expression_functions_of(self._engine.config)
-        for token in kernel.tokens(ctx.session, instance_id, states=(TokenState.UNFINISHED.value,)):
-            node = definition.node(token.activity_code)
-            # node_cancelled/task_cancelled 由 cancel_token 咽喉统一发（A4，
-            # by=incident:skip）——此处不再手发防双发
-            kernel.cancel_token(ctx.session, token, cause="incident:skip", actor=actor)
-            if node is None:
-                continue
-            audit = RoutingAudit()
-            outgoing = select_outgoing(
-                definition.outgoing(node.code),
-                evaluation_variables(
-                    instance, instance.variables, session=ctx.session, now=ctx.engine.config.now()
-                ),
-                mode="all_match",
-                functions=attach_node(
-                    base_functions, ctx.session, instance.id, node_calls=audit.node_calls
-                ),
-                audit=audit,
-            )
-            persist_route_decision(ctx.session, instance_id, token.id, audit)
-            for flow in outgoing:
-                target = definition.node(flow.target)
-                if target is not None:
-                    kernel.activate(ctx.session, instance, target, source_activity_code=node.code)
-        if instance.state == InstanceState.SUSPENDED.value:
-            instance.state = InstanceState.RUNNING.value
+        process_resumed（复核批）：挂起/暂停恢复对称——挂起侧此前只有
+        incident_resolved（故障单生命周期），实例生命周期层无信号。
+        """
+        from flowork.engine.instance_lifecycle import advance_unfinished_tokens
+        from flowork.engine.message_flow import retro_poll_instance
+
         ctx.touch(instance)
+        instance.state = InstanceState.RUNNING.value
+        # 拍板 1：挂起期消息落缓冲——恢复后补消费（对齐 resume_process）
+        retro_poll_instance(ctx, self._engine, instance)
+        # 挂起期间到达的子实例完结补推进（2026-10-13 事件 review 复核批）：
+        # 修前只补消息——父恢复后等待子节点永久卡住
+        advance_unfinished_tokens(self._engine, ctx, instance)
+        self._engine.kernel_for(ctx).record_event(
+            DomainEvent.PROCESS_RESUMED,
+            {"actor": actor, "reason": reason, "deferred_minutes": None},
+            instance.id,
+        )
+
+    def _skip_failed_nodes(self, ctx: CommandContext, instance_id: str, actor: str) -> None:
+        """跳过故障节点（实现拆至 incident_skip.py 守行数红线；语义不变）。"""
+        from flowork.engine.incident_skip import skip_failed_nodes
+
+        skip_failed_nodes(self._engine, self._engine.kernel_for(ctx), ctx, instance_id, actor)
 
     def move_token(self, token_id: str, target_activity: str, actor: str = "admin") -> str:
         """管理员修复：把未完令牌直移到目标节点（返回新令牌 ID）。"""

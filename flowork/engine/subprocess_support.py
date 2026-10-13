@@ -183,12 +183,31 @@ def sub_process_finished(ctx: RuntimeNodeContext, spec: CallActivitySpec) -> boo
 
 
 def resume_parent_if_waiting(kernel: Kernel, session: Session, child: ProcessInstanceRow) -> None:
-    """子实例完结后，唤醒等待中的父 CallActivity 令牌。"""
+    """子实例完结后，唤醒等待中的父 CallActivity 令牌。
+
+    先落 ``sub_process_completed``（复核批）：父侧子完成信号——无论父此刻
+    能否被唤醒（挂起/暂停期唤醒落空）都留痕，修前父侧订阅方对子实例完结
+    完全失明（只有 sub_process_started，没有完成侧）。
+    """
     if not child.parent_id or not child.parent_token_id:
         return
     from flowork.persistence.orm import ProcessInstanceRow as _InstanceRow
     from flowork.persistence.orm import TokenRow
 
+    parent_node: str | None = None
+    parent_token = session.get(TokenRow, child.parent_token_id)
+    if parent_token is not None:
+        parent_node = parent_token.activity_code
+    kernel.record_event(
+        DomainEvent.SUB_PROCESS_COMPLETED,
+        {
+            "sub_instance_id": child.id,
+            "child_definition_code": child.definition_code,
+            "end_status": child.state,
+            "parent_node": parent_node,
+        },
+        child.parent_id,
+    )
     parent = session.get(_InstanceRow, child.parent_id)
     if parent is None or parent.state != InstanceState.RUNNING.value:
         return
