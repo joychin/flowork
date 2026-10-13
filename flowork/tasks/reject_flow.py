@@ -167,15 +167,17 @@ class RejectMixin:
         unfinished = (TokenState.UNFINISHED.value,)
         for other in kernel.tokens(ctx.session, instance.id, states=unfinished):
             if other.id != token.id:
-                kernel.cancel_token(ctx.session, other)
+                kernel.cancel_token(ctx.session, other, cause="reject")
         for pending in kernel.tasks(ctx.session, instance.id, token_id=token.id):
-            kernel.archive_task(
+            from flowork.tasks.auto_pass import archive_auto_pass
+
+            archive_auto_pass(
+                kernel,
                 ctx.session,
                 pending,
-                outcome="auto_pass",
                 comment="节点已否决",
-                actor="system",
                 cause_token_id=token.id,
+                reason="node_rejected",
             )
         kernel.record_event(DomainEvent.NODE_EXITED, {"activity_code": node.code}, instance.id)
         from sqlalchemy import select

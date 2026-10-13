@@ -77,6 +77,20 @@ class TaskOpsMixin:
         ctx.touch(self._instance(ctx, task.instance_id))
         task.assignee = ""
         ctx.session.flush()
+        # 对称补齐（事件 review A7）：claim 有事件、unclaim 无——候选池回流
+        # 对订阅方不可见。assignee 记取消认领人（回池前状态）。
+        kernel = self._engine.kernel_for(ctx)
+        kernel.record_event(
+            DomainEvent.TASK_UNCLAIMED,
+            {
+                "task_id": task.id,
+                "activity_code": task.activity_code,
+                "task_type": task.task_type,
+                "assignee": user,
+                "actor": user,
+            },
+            task.instance_id,
+        )
         return self._task_info(task)
 
     # —— 转办 ——

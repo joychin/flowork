@@ -8,7 +8,7 @@
 from __future__ import annotations
 
 import uuid
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from flowork.runtime.lifecycle import TokenState
 
@@ -31,6 +31,10 @@ class TokenRecordsMixin:
     """令牌 CRUD 与取消；宿主 Kernel 提供 config 与任务查询。"""
 
     config: EngineConfig
+
+    def record_event(self, name: str, payload: dict[str, Any], instance_id: str | None) -> None:
+        """事件记录由 Kernel 提供（类型桩，mypy strict Mixin 契约）。"""
+        raise NotImplementedError
 
     def tasks(
         self,
@@ -102,12 +106,15 @@ class TokenRecordsMixin:
             token.approval_exit = approval_exit
         session.flush()
 
-    def cancel_token(self, session: Session, token: TokenRow) -> None:
+    def cancel_token(self, session: Session, token: TokenRow, *, cause: str = "") -> None:
         """取消令牌并撤销其未办任务（任务落历史 outcome=cancelled）。
 
-        先经行为取消钩子（runtime/behavior.py 契约的全仓首个调用点）：
-        等待节点在此关订阅、删到时 Job——竞速收尾/终止/实例时限路径统一覆盖。
+        事件咽喉（2026-10-13 事件 review A4）：节点级 ``node_cancelled``
+        （``by``=cause——撤回/终态级联/竞速/驳回/MI 收工/故障跳过/管理员七路
+        统一）与逐任务 ``task_cancelled`` 都在此发，订阅方对「下游被撤回连带
+        取消」不再失明。先经行为取消钩子（wait 关订阅删 Job，契约不变）。
         """
+        from flowork.events.domain import DomainEvent
         from flowork.persistence.orm import TaskHistoryRow
 
         self._notify_cancel(session, token)
@@ -129,9 +136,24 @@ class TokenRecordsMixin:
                 )
             )
             session.delete(task)
+            self.record_event(
+                DomainEvent.TASK_CANCELLED,
+                {
+                    "task_id": task.id,
+                    "activity_code": task.activity_code,
+                    "task_type": task.task_type,
+                    "assignee": task.assignee,
+                },
+                token.instance_id,
+            )
         token.state = TokenState.CANCELLED.value
         token.finished_at = self.config.now()
         session.flush()
+        self.record_event(
+            DomainEvent.NODE_CANCELLED,
+            {"activity_code": token.activity_code, "by": cause},
+            token.instance_id,
+        )
 
     def cancel_racing_arms(
         self,
@@ -150,7 +172,7 @@ class TokenRecordsMixin:
         racing = racing_basin(definition, code) - {code}
         for token in self.tokens(session, instance.id, states=(TokenState.UNFINISHED.value,)):
             if token.activity_code in racing:
-                self.cancel_token(session, token)
+                self.cancel_token(session, token, cause="racing")
 
     def _notify_cancel(self, session: Session, token: TokenRow) -> None:
         """行为取消钩子（registry 中介，无行为/节点缺失时静默跳过）。"""

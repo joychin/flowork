@@ -76,6 +76,19 @@ class MessageService:
             if duplicate:
                 return False
 
+            # 到达事实先落事件（事件 review A3 三路统一，语义见方法 docstring）
+            from flowork.engine.message_flow import emit_message_event
+
+            emit_message_event(
+                self._engine,
+                ctx,
+                DomainEvent.MESSAGE_RECEIVED,
+                name,
+                correlation_key,
+                None,
+                message_id=message_id_,
+            )
+
             # 在途订阅优先（FCFS）；暂停实例的订阅跳过（全动作拦截——spec §7.2：
             # 暂停不消费，消息落下一优先级），命中走完整管线（映射+推进）。
             from flowork.engine.message_query import first_open_subscription
@@ -109,7 +122,6 @@ class MessageService:
                     expires_at=self._engine.config.now() + timedelta(seconds=ttl_seconds),
                 )
             )
-            self._emit(ctx, DomainEvent.MESSAGE_RECEIVED, name, correlation_key, None)
             return False
 
         return self._engine.execute(_command)
@@ -286,15 +298,3 @@ class MessageService:
         from flowork.engine.message_flow import purge_expired
 
         purge_expired(ctx.session, now=self._engine.config.now())
-
-    def _emit(
-        self,
-        ctx: CommandContext,
-        event: DomainEvent,
-        name: str,
-        correlation_key: str,
-        instance_id: str | None,
-    ) -> None:
-        from flowork.engine.message_flow import emit_message_event
-
-        emit_message_event(self._engine, ctx, event, name, correlation_key, instance_id)

@@ -1,7 +1,9 @@
 """领域事件类型（过去时命名）。
 
-M0 仅定义类型；M1 起随 Command 管线写入 ``wf_event_outbox``（HistoryInterceptor），
-后续消息中心 / UI / MCP 订阅方统一消费事件表。
+事件全集＝本枚举（收编批起「枚举即全集」，tests/test_event_surface.py 静态守卫
+引擎代码的字符串实参必须 ∈ 值集）。事件随 Command 管线缓冲、命令尾由
+``ops._flush_history`` 同事务写入 ``wf_event_outbox``；``ctx.emit`` 端口对宿主
+仍是开放事件名（自定义业务事件合法），本枚举只承诺「引擎自发事件」全集。
 """
 
 from __future__ import annotations
@@ -20,7 +22,6 @@ class DomainEvent(StrEnum):
     NODE_ENTERED = "node_entered"
     NODE_EXITED = "node_exited"
     NODE_CANCELLED = "node_cancelled"
-    NODE_FAILED = "node_failed"
     TASK_CREATED = "task_created"
     TASK_COMPLETED = "task_completed"
     TASK_REJECTED = "task_rejected"
@@ -62,3 +63,11 @@ class DomainEvent(StrEnum):
     TOKEN_MOVED_BY_ADMIN = "token_moved_by_admin"
     PROCESS_FINISHED_BY_ADMIN = "process_finished_by_admin"
     INCIDENT_RESOLVED = "incident_resolved"  # spec §10 承诺（2026-10-13 拍板③补发）
+    # —— 信号补全批（2026-10-13 事件 review A4/A6/A7）：取消族统一咽喉
+    # （cancel_token 逐任务发 task_cancelled、节点级 node_cancelled 带 by=原因）；
+    # auto_pass 四处归档零事件补齐；认领/协办完成对称补齐。node_failed 成员
+    # 随本批删除（全仓零发射，节点故障的真实信号是 incident_raised+挂起）。
+    TASK_CANCELLED = "task_cancelled"
+    TASK_AUTO_PASSED = "task_auto_passed"
+    TASK_UNCLAIMED = "task_unclaimed"
+    TASK_ASSIST_FINISHED = "task_assist_finished"

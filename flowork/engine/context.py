@@ -66,6 +66,7 @@ class RuntimeNodeContext(NodeContext):
         task_type: str = "approval",
         context_payload: Mapping[str, Any] | None = None,
         root_task_id: str | None = None,
+        emit_event: bool = True,
     ) -> TaskRow:
         assert self.token is not None, "无令牌节点不能创建任务"
         return self.kernel.create_task(
@@ -78,6 +79,7 @@ class RuntimeNodeContext(NodeContext):
             task_type=task_type,
             context_payload=dict(context_payload or {}),
             root_task_id=root_task_id,
+            emit_event=emit_event,
         )
 
     def complete_instance(self, end_status: str = "completed") -> None:

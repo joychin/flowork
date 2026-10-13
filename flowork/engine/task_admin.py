@@ -64,7 +64,7 @@ class TaskAdminMixin:
             tokens = kernel.tokens(ctx.session, instance_id, states=(TokenState.UNFINISHED.value,))
             for token in tokens:
                 if token.activity_code == activity_code:
-                    kernel.cancel_token(ctx.session, token)
+                    kernel.cancel_token(ctx.session, token, cause="admin")
             kernel.record_event(
                 DomainEvent.NODE_CANCELLED_BY_ADMIN,
                 {"activity_code": activity_code, "actor": actor},
@@ -80,16 +80,19 @@ class TaskAdminMixin:
             instance = self._instance(ctx, instance_id)
             ctx.touch(instance)
             kernel = self._engine.kernel_for(ctx)
+            from flowork.tasks.auto_pass import archive_auto_pass
+
             for token in kernel.tokens(
                 ctx.session, instance_id, states=(TokenState.UNFINISHED.value,)
             ):
                 for task in kernel.tasks(ctx.session, instance_id, token_id=token.id):
-                    kernel.archive_task(
+                    archive_auto_pass(
+                        kernel,
                         ctx.session,
                         task,
-                        outcome="auto_pass",
                         comment="实例强制完成",
                         actor=actor,
+                        reason="admin_finish",
                     )
                 kernel.finish_token(ctx.session, token)
             kernel.complete_instance(ctx.session, instance, "completed")

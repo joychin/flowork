@@ -72,10 +72,11 @@ def cascade_terminate(
             seen.add(row.id)
             descendants.append(row)
             frontier.append(row.id)
-    # 2) 整树撤令牌（根 + 后代）：cancel_token 经行为取消钩子（wait 关订阅删 Job）
+    # 2) 整树撤令牌（根 + 后代）：cancel_token 经行为取消钩子（wait 关订阅删 Job）；
+    #    逐节点 node_cancelled(by=end_status)+task_cancelled 由咽喉统一发（A4）
     for instance in [root, *descendants]:
         for token in kernel.tokens(ctx.session, instance.id, states=(TokenState.UNFINISHED.value,)):
-            kernel.cancel_token(ctx.session, token)
+            kernel.cancel_token(ctx.session, token, cause=end_status)
     # 3) 子实例落终态（逆 BFS＝子先父后）+ 终态事件（cascade_from 溯源）
     terminal_event = (
         DomainEvent.PROCESS_TERMINATED

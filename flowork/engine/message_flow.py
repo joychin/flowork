@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select
 
+from flowork.events.domain import DomainEvent
 from flowork.persistence.orm import MessageBufferRow, MessageSubscriptionRow, ProcessInstanceRow
 from flowork.runtime.lifecycle import FROZEN_INSTANCE_STATES
 
@@ -207,14 +208,24 @@ def purge_expired(session: Session, *, now: Any = None) -> None:
 def emit_message_event(
     engine: ProcessEngine,
     ctx: CommandContext,
-    event: Any,
+    event: DomainEvent,
     name: str,
     correlation_key: str,
     instance_id: str | None,
+    *,
+    message_id: str | None = None,
 ) -> None:
-    """消息面事件发射（MESSAGE_RECEIVED 等的薄包装）。"""
+    """消息面事件发射（MESSAGE_RECEIVED 等的薄包装）。
+
+    message_received 三路统一先发（事件 review A3）：立即关联/消息启动/入缓冲
+    都发（带 message_id，防重追踪不断链）——此前仅缓冲分支发，名不副实。
+    """
     kernel = engine.kernel_for(ctx)
-    kernel.record_event(event, {"name": name, "correlation_key": correlation_key}, instance_id)
+    kernel.record_event(
+        event,
+        {"name": name, "correlation_key": correlation_key, "message_id": message_id},
+        instance_id,
+    )
 
 
 def broadcast_signal(engine: ProcessEngine, name: str) -> int:

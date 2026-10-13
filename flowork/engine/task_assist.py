@@ -150,6 +150,18 @@ class TaskAssistMixin:
             ctx.touch(self._instance(ctx, task.instance_id))
             kernel = self._engine.kernel_for(ctx)
             kernel.archive_task(ctx.session, task, outcome="assist", comment=comment, actor=actor)
+            # 对称补齐（事件 review A7）：协办有 created/cancelled、完成无事件
+            kernel.record_event(
+                DomainEvent.TASK_ASSIST_FINISHED,
+                {
+                    "task_id": task.id,
+                    "activity_code": task.activity_code,
+                    "root_task_id": task.root_task_id,
+                    "assignee": task.assignee,
+                    "actor": actor,
+                },
+                task.instance_id,
+            )
 
         self._engine.execute(_command)
 

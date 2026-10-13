@@ -47,13 +47,17 @@ class UserTaskBehavior(NodeBehavior):
         ctx.token.approve_count = len(resolution.skipped)  # 自动通过计入同意
         ctx.token_updated()
         for user in resolution.skipped:
-            task = ctx.create_task(assignee=user)
-            ctx.kernel.archive_task(
+            # 幻影抑制（事件 review A6）：策略命中者建了即归档，task_created
+            # 不发（待办通知不误报），统一走 auto_pass 咽喉发 task_auto_passed
+            from flowork.tasks.auto_pass import archive_auto_pass
+
+            task = ctx.create_task(assignee=user, emit_event=False)
+            archive_auto_pass(
+                ctx.kernel,
                 ctx.session,
                 task,
-                outcome="auto_pass",
                 comment="参与者策略命中，自动通过",
-                actor="system",
+                reason="strategy",
             )
         sequential = spec.multi_instance is not None and spec.multi_instance.mode == "sequential"
         targets = [resolution.todo[0]] if sequential and resolution.todo else resolution.todo
@@ -100,14 +104,16 @@ class UserTaskBehavior(NodeBehavior):
         """会签出口达成：本令牌剩余待办撤销（记录为 auto_pass）。"""
         assert isinstance(ctx, RuntimeNodeContext)
         assert ctx.token is not None
+        from flowork.tasks.auto_pass import archive_auto_pass
+
         remaining = ctx.kernel.tasks(ctx.session, ctx.instance.id, token_id=ctx.token.id)
         for task in remaining:
-            ctx.kernel.archive_task(
+            archive_auto_pass(
+                ctx.kernel,
                 ctx.session,
                 task,
-                outcome="auto_pass",
                 comment="会签出口已达成，自动通过",
-                actor="system",
+                reason="exit_reached",
             )
 
     def on_task_completed(self, ctx: NodeContext, task_id: str, outcome: str) -> None:

@@ -210,7 +210,7 @@ def _terminate_running_children(ctx: RuntimeNodeContext, children: list[Any]) ->
         for token in ctx.kernel.tokens(
             ctx.session, child.id, states=(TokenState.UNFINISHED.value,)
         ):
-            ctx.kernel.cancel_token(ctx.session, token)
+            ctx.kernel.cancel_token(ctx.session, token, cause="multi_instance_completion")
         child.state = InstanceState.CANCELLED.value
         child.finished_at = ctx.kernel.config.now()
         ctx.kernel.record_event(

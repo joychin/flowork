@@ -50,7 +50,10 @@ class TaskRecordsMixin:
         task_type: str = "approval",
         context_payload: dict[str, Any] | None = None,
         root_task_id: str | None = None,
+        emit_event: bool = True,
     ) -> TaskRow:
+        """建任务并发 task_created；``emit_event=False`` 供「建了即归档」的
+        auto_pass 幻影任务抑制误报（事件 review A6）。"""
         from flowork.persistence.orm import TaskRow as _TaskRow
 
         task = _TaskRow(
@@ -68,16 +71,17 @@ class TaskRecordsMixin:
         )
         session.add(task)
         session.flush()
-        self.record_event(
-            DomainEvent.TASK_CREATED,
-            {
-                "task_id": task.id,
-                "activity_code": node.code,
-                "assignee": assignee,
-                "task_type": task_type,
-            },
-            instance.id,
-        )
+        if emit_event:
+            self.record_event(
+                DomainEvent.TASK_CREATED,
+                {
+                    "task_id": task.id,
+                    "activity_code": node.code,
+                    "assignee": assignee,
+                    "task_type": task_type,
+                },
+                instance.id,
+            )
         return task
 
     def tasks(

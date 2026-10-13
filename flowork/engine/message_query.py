@@ -70,6 +70,14 @@ def correlate_message(
         ).first()
         if stamped is not None:
             return _receipt_of(ctx, stamped, duplicate=True)  # 已消费：幂等回放
+        # 到达事实先落事件（事件 review A3 三路统一；correlate 无缓冲分支，
+        # 此前该入口零 received）——重复 message_id 回放不算新到达，不发。
+        from flowork.engine.message_flow import emit_message_event
+        from flowork.events.domain import DomainEvent
+
+        emit_message_event(
+            engine, ctx, DomainEvent.MESSAGE_RECEIVED, name, correlation_key, None, message_id=mid
+        )
         from flowork.engine.message_flow import hit_subscription
 
         subscription = first_open_subscription(ctx, name, correlation_key)

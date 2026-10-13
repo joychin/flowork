@@ -91,7 +91,7 @@ class TaskReworkMixin:
         downstream = downstream_basin(definition, history.activity_code) - {history.activity_code}
         for token in kernel.tokens(ctx.session, instance.id, states=(TokenState.UNFINISHED.value,)):
             if token.activity_code in downstream:
-                kernel.cancel_token(ctx.session, token)
+                kernel.cancel_token(ctx.session, token, cause="withdraw")
 
         node = definition.node(history.activity_code)
         assert node is not None
