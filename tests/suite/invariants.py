@@ -13,8 +13,8 @@ from flowork.engine.engine import ProcessEngine
 
 # 实例终态（与 runtime/lifecycle.py 的 InstanceState 对齐；failed 亦是终态）
 TERMINAL_INSTANCE_STATES = frozenset({"completed", "terminated", "cancelled", "failed"})
-# 令牌终态（wf_token.state：finished / cancelled 之外皆视为活跃）
-TERMINAL_TOKEN_STATES = frozenset({"finished", "cancelled"})
+# 令牌终态（TokenState：unfinished 之外皆终态；revoked=撤回、failed=节点故障）
+TERMINAL_TOKEN_STATES = frozenset({"finished", "cancelled", "revoked", "failed"})
 
 
 def assert_no_dangling(engine: ProcessEngine, *, exclude: Collection[str] = ()) -> None:
