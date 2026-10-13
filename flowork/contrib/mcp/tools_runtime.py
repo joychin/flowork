@@ -76,6 +76,13 @@ def runtime_tools(engine: ProcessEngine) -> list[ToolSpec]:
         )
         return {"instance_id": instance_id, "state": "paused"}
 
+    def resume_instance(args: dict[str, Any]) -> Any:
+        instance_id = str(args.get("instance_id") or "")
+        runtime.resume_process(
+            instance_id, str(args.get("actor") or "mcp"), reason=str(args.get("reason") or "")
+        )
+        return {"instance_id": instance_id, "state": "running"}
+
     def update_instance_variables(args: dict[str, Any]) -> Any:
         updates = args.get("updates")
         if not isinstance(updates, dict):
@@ -167,7 +174,7 @@ def runtime_tools(engine: ProcessEngine) -> list[ToolSpec]:
         ),
         ToolSpec(
             name="pause_instance",
-            description="暂停实例（timer 冻结；恢复走宿主面）",
+            description="暂停实例（timer 冻结；消息落缓冲）",
             input_schema={
                 "type": "object",
                 "properties": {
@@ -178,6 +185,20 @@ def runtime_tools(engine: ProcessEngine) -> list[ToolSpec]:
                 "required": ["instance_id"],
             },
             handler=pause_instance,
+        ),
+        ToolSpec(
+            name="resume_instance",
+            description="恢复暂停实例（timer 顺延；补消费挂起期缓冲消息）",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "instance_id": {"type": "string"},
+                    "actor": {"type": "string"},
+                    "reason": {"type": "string"},
+                },
+                "required": ["instance_id"],
+            },
+            handler=resume_instance,
         ),
         ToolSpec(
             name="update_instance_variables",

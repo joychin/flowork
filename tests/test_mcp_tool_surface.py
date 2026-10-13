@@ -1,4 +1,4 @@
-"""MCP 工具面快照守卫（openface-plugin-design.md §7）：18 工具名冻结 + 兼容声明。
+"""MCP 工具面快照守卫（openface-plugin-design.md §7）：19 工具名冻结 + 兼容声明。
 
 工具清单即 AI 契约（spec §13）；增删工具=红灯=显式动作（同步本快照 + spec §13）。
 """
@@ -12,7 +12,7 @@ from flowork.api import EngineConfig, ProcessEngine
 from flowork.contrib.mcp import REQUIRES_FLOWORK_API, TOOL_NAMES
 from flowork.contrib.mcp.catalog import build_tools
 
-# 冻结清单（spec §13 首批 18 个，字母序）
+# 冻结清单（spec §13：首批 18 + resume_instance【2026-10-13 拍板④】，字母序）
 EXPECTED: frozenset[str] = frozenset(
     {
         "anticipate_task",
@@ -29,6 +29,7 @@ EXPECTED: frozenset[str] = frozenset(
         "query_instance",
         "reject_task",
         "resolve_incident",
+        "resume_instance",
         "signal_instance",
         "start_instance",
         "update_instance_variables",

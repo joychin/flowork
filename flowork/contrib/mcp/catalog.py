@@ -1,4 +1,4 @@
-"""MCP 18 工具目录：ToolSpec 注册与 dispatch（传输无关，纯同步）。
+"""MCP 19 工具目录：ToolSpec 注册与 dispatch（传输无关，纯同步）。
 
 设计（openface-plugin-design.md §3）：catalog 层可脱离 stdio 直接测试；
 server.py 只做 mcp lowlevel Server 传输壳。全部内核访问经 flowork.api。
@@ -26,7 +26,7 @@ class ToolSpec:
 
 
 def build_tools(engine: ProcessEngine) -> list[ToolSpec]:
-    """装配 18 工具（spec §13 清单；重名即装配错误）。"""
+    """装配 19 工具（spec §13 清单；重名即装配错误）。"""
     from flowork.contrib.mcp.tools_definitions import definition_tools
     from flowork.contrib.mcp.tools_runtime import runtime_tools
     from flowork.contrib.mcp.tools_tasks import task_tools
@@ -64,6 +64,7 @@ TOOL_NAMES: frozenset[str] = frozenset(
         "reject_task",
         "anticipate_task",
         "pause_instance",
+        "resume_instance",
         "list_incidents",
         "resolve_incident",
     }

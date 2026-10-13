@@ -671,11 +671,13 @@ class ExpressionFunctions(Protocol):     # ✓ CEL 自定义函数来源（4.3�
 
 ## 13. MCP 工具（M7 落地）
 
-> **落地状态（2026-10-12）**：18 工具已作为 contrib/mcp 插件实施（设计
-> openface-plugin-design.md §3：catalog 纯 dispatch + lowlevel Server 传输壳；
-> stdio 启动 `python -m flowork.contrib.mcp.server`）。
+> **落地状态（2026-10-12 实施；2026-10-13 收尾批增至 19）**：已作为 contrib/mcp
+> 插件实施（设计 openface-plugin-design.md §3：catalog 纯 dispatch + lowlevel
+> Server 传输壳；stdio 启动 `python -m flowork.contrib.mcp.server`）。
 
 首批 18 个：validate_spec / dry_run / deploy / **definition_drift**（AI/CI 对账，6.5）/ list_definitions / start_instance / query_instance / signal_instance / publish_message / **update_instance_variables**（外部改值，随 M7 落地，入参出参复用 §11）/ list_my_tasks / claim_task / complete_task / reject_task / **anticipate_task**（AI 预判提交后果，只读，v2.2）/ pause_instance / list_incidents / resolve_incident。入参出参直接复用第 11 章的 pydantic DTO（tasks/models.py 已为 MCP 预留 typed DTO ✓）。
+
+【收尾批，2026-10-13】增 **resume_instance**（拍板④：pause 无 resume 不对称——AI 暂停后需人走 REST/CLI 兜底；恢复暂停是低风险对称动作，内核 resume_process 已就绪）。
 
 ## Part C：实施层（怎么开工）
 

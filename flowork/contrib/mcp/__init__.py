@@ -1,4 +1,4 @@
-"""MCP 18 工具面插件（AI 工具面；spec §13 清单，openface-plugin-design.md §3）。
+"""MCP 19 工具面插件（AI 工具面；spec §13 清单，openface-plugin-design.md §3）。
 
 分层：catalog（ToolSpec 注册与 dispatch，传输无关）+ server（mcp lowlevel 传输壳）。
 全部内核访问经 flowork.api——tests/test_projection_surface.py 与 import-linter 强制。

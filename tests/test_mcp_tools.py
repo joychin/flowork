@@ -144,6 +144,11 @@ def test_pause_and_incident_tools(engine: ProcessEngine) -> None:
     dispatch(engine, "pause_instance", {"instance_id": instance_id, "actor": "u_admin"})
     view = dispatch(engine, "query_instance", {"instance_id": instance_id})
     assert view["instance"]["state"] == "paused"
+    # 收尾批 6（拍板④）：pause/resume 对称——AI 暂停后可自恢复
+    result = dispatch(engine, "resume_instance", {"instance_id": instance_id, "actor": "u_admin"})
+    assert result == {"instance_id": instance_id, "state": "running"}
+    view = dispatch(engine, "query_instance", {"instance_id": instance_id})
+    assert view["instance"]["state"] == "running"
 
     assert dispatch(engine, "list_incidents", {}) == []
     with pytest.raises(FloworkError):

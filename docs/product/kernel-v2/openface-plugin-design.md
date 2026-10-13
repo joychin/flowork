@@ -1,7 +1,7 @@
 # REST /v2 与 MCP 插件设计（开放面第一刀）
 
 > 状态：2026-10-12 定稿并随批实施（本文件即实施依据）。
-> 范围权威：kernel-v2 spec §12（REST）、§13（MCP 18 工具）。本设计只做「插件位怎么落、
+> 范围权威：kernel-v2 spec §12（REST）、§13（MCP 工具，2026-10-13 收尾批起 19 个）。本设计只做「插件位怎么落、
 > 契约怎么冻、缺口怎么补」的工程裁定，不改语义。
 
 ## 0. 定位与既定裁定
@@ -26,9 +26,9 @@ flowork/contrib/rest/
   routes_system.py         messages/jobs/incidents/events
 flowork/contrib/mcp/
   __init__.py
-  catalog.py               ToolSpec + 18 工具装配 + dispatch（纯同步，可脱离传输测试）
+  catalog.py               ToolSpec + 19 工具装配 + dispatch（纯同步，可脱离传输测试）
   tools_definitions.py     validate_spec / dry_run / deploy / definition_drift / list_definitions
-  tools_runtime.py         start/query/signal/pause_instance + update_instance_variables
+  tools_runtime.py         start/query/signal/pause/resume_instance + update_instance_variables
                            + publish_message + list_incidents + resolve_incident
   tools_tasks.py           list_my_tasks / claim / complete / reject / anticipate_task
   server.py                mcp lowlevel Server 传输壳 + stdio 入口（python -m flowork.contrib.mcp.server）
@@ -108,19 +108,20 @@ JobStateError→409`、`DefinitionError→422`（`InvalidDefinition` 的 issues 
 
 ## 3. MCP 面
 
-- **分层**：`catalog.py` 纯 dispatch（18 工具注册与执行，同步函数，可脱离 stdio 直接
+- **分层**：`catalog.py` 纯 dispatch（19 工具注册与执行，同步函数，可脱离 stdio 直接
   测试）+ `server.py` 传输壳（mcp SDK lowlevel Server：`list_tools` 回传目录、
   `call_tool` 转 dispatch 结果为 TextContent；`python -m flowork.contrib.mcp.server`
   走 stdio）。传输换壳不动工具层。
-- **18 工具映射**（§13 → 内核）：validate_spec→validate_definition；dry_run→
-  simulate_route（**完整模拟 simulate 不在 18 清单内，后置**）；deploy→repository.deploy；
+- **19 工具映射**（§13 → 内核）：validate_spec→validate_definition；dry_run→
+  simulate_route（**完整模拟 simulate 不在清单内，后置**）；deploy→repository.deploy；
   definition_drift→repository.definition_drift（入参目录路径）；list_definitions→
   repository.list_definitions；start_instance→runtime.start_process；query_instance→
   get_instance + variables_of；signal_instance→§2.4 语义；publish_message→
   messages.publish_message；update_instance_variables→runtime.update_variables；
   list_my_tasks→task.list_tasks（assignee 必填，candidate 可选）；claim/complete/
   reject_task→task.*；anticipate_task→task.anticipate；pause_instance→
-  runtime.pause_process；list_incidents→runtime.list_incidents；resolve_incident→
+  runtime.pause_process；resume_instance→runtime.resume_process（2026-10-13 收尾批，
+  拍板④对称性）；list_incidents→runtime.list_incidents；resolve_incident→
   runtime.resolve_incident。
 - **DTO**：出参 pydantic 模型 `model_dump(mode="json")`；dataclass（VersionVerdict/
   JobClaim 等）手工转 dict；写工具 `actor` 必填入参（裸 id，AI 与人同路）。
@@ -155,6 +156,6 @@ JobStateError→409`、`DefinitionError→422`（`InvalidDefinition` 的 issues 
 ## 7. 验收
 
 快照三件：`tests/test_rest_api_surface.py`（/v2 路由表冻结）、
-`tests/test_mcp_tool_surface.py`（18 工具名冻结）、公开面快照增 `API_VERSION`。
+`tests/test_mcp_tool_surface.py`（19 工具名冻结）、公开面快照增 `API_VERSION`。
 行为两件：`tests/test_rest_v2_api.py`（部署→发起→办理→变量→signal→jobs 全链）、
 `tests/test_mcp_tools.py`（dispatch 逐工具）。五道门全绿。
