@@ -65,7 +65,7 @@ engine.close()
 | `add_countersigner(task_id, users, actor)` | 加签（item_count 联动） |
 | `withdraw(task_id, actor)` | 撤回已办（取消下游、原人重办） |
 | `activate_node(instance_id, activity_code, actor, participants=None)` / `cancel_node(...)` | 管理员激活/取消节点 |
-| `finish_instance(instance_id, actor)` / `remove_instance(instance_id, actor)` | 强制完成 / 删除实例 |
+| `finish_instance(instance_id, actor)` / `remove_instance(instance_id, actor)` | 强制完成 / 删除实例（remove 连实例事件含**未投递**行一并删除——「至少一次」对被删实例的明示例外） |
 | `anticipate(task_id, outcome="agree") -> {node_exit, instance_complete}` | 只读预判「照此提交后节点是否出、实例是否完」（不落库；主流引擎无等价 API） |
 
 `complete/reject` 返回 `TaskCompleteResult{task_id, outcome, instance_state, next_tasks}`（行动提示式）。
@@ -74,7 +74,7 @@ engine.close()
 
 | 方法 | 说明 |
 |---|---|
-| `events(instance_id=None, limit=200)` | 事件 outbox |
+| `events(instance_id=None, limit=200)` | 事件 outbox（`ORDER BY (occurred_at, id)`＝事件全序；id 为可排序串——同命令内按发射顺序） |
 | `task_history(instance_id=None, assignee=None, limit=200)` | 已办（append-only） |
 | `paged_tasks(*, assignee, instance_id, offset, limit) -> Page` | 已办分页 |
 | `instances(*, state=None, definition_code=None, limit=100)` | 实例列表 |
@@ -115,7 +115,7 @@ Worker 面（service_task mode=worker，`engine.worker_jobs`）：
 - **声明式钩子**：节点 `hooks={"on_exit": {"handler": "name", "params": {...}}}` + `engine.register_handler("name", fn)`。
 - **表达式函数（全位点 CEL 词汇）**：经 `ExpressionFunctions` 端口注册（必须带 FunctionSignature 签名，纯读闭包无 ctx）；一行挂官方词汇：`config.expression_functions = contrib.cel_vocabulary(org)`（manager_of/users_with_role/has_role——`manager_of` 对 AI 代理的 id 返回其负责人 owner）。取人/传阅/改派+升级/连线条件/子流程映射共用同一注册面。
 - **判断面事实**：公式可用 `now`/`prev_task`/`node("code")`（引擎注入，词汇目录见 spec §4.3/C.4，权威在 `expr/catalog.py`）。
-- **事件消费**：消费 `wf_event_outbox`（CloudEvents 信封，按 id 幂等；`from flowork.api import OutboxConsumer, IdempotentSink` 为官方帮手——至少一次分发 + 按 id 幂等去重，2026-10-13 收尾批起在门面上）。
+- **事件消费**：消费 `wf_event_outbox`（CloudEvents 信封，按 id 幂等；`from flowork.api import OutboxConsumer, IdempotentSink, DomainEvent` 为官方帮手——至少一次分发 + 按 id 幂等去重 + 引擎自发事件全集枚举，2026-10-13 起在门面上）。口径：投递序＝`(occurred_at, id)` 事件全序；事件表默认即审计历史（`purge_delivered` 缺省不清理，显式传 `retention_days` 才删）；消费器无 SKIP LOCKED——多副本同跑会重复投递（契约内），跨进程去重由业务侧落库幂等兜底；`history_level=activity` 只记 process_/node_/incident_ 前缀事件。
 
 ## 传输面插件（REST /v2 与 MCP，openface-plugin-design.md）
 

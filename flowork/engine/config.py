@@ -64,9 +64,14 @@ def resolve_db_url(config: EngineConfig) -> str:
 
 
 def should_record_event(config: EngineConfig, event: DomainEvent | str) -> bool:
-    """历史分级过滤（M6 完整生效；当前 full/audit 全记）。"""
+    """历史分级过滤（M6 完整生效；当前 full/audit 全记）。
+
+    activity 档白名单＝process_/node_/incident_ 前缀（事件 review C2，2026-10-13：
+    incidents 是故障告警信号，不再被该档静默吞掉；task_*/message_*/definition_*
+    等仍只在 audit/full 档记录——选 activity 的宿主拿不到任务级事件）。
+    """
     name = event.value if isinstance(event, DomainEvent) else str(event)
     level = config.history_level
     if level == "none":
         return False
-    return not (level == "activity" and not name.startswith(("process_", "node_")))
+    return not (level == "activity" and not name.startswith(("process_", "node_", "incident_")))

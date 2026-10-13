@@ -631,12 +631,19 @@ class ExpressionFunctions(Protocol):     # ✓ CEL 自定义函数来源（4.3�
 
 ## 10. 领域事件
 
-现有 14 个 ✓（process_started/completed/cancelled；node_entered/exited/cancelled/failed；task_created/completed/rejected/claimed/transferred；incident_raised；job_dead_lettered）。【v2】增补 14 个：process_paused / process_resumed / process_terminated / definition_deployed / definition_retired / definition_purged / task_escalated / timer_fired / instance_deadline_reached【v2.2】 / message_received / message_correlated / sub_process_started / task_withdrawn / incident_resolved。【变量 I/O 批，2026-10-08】增补 variables_updated（仅外部变量更新命令发射，payload 含 actor 与逐键改前/改后值）。幂等部署（内容哈希相同）不发 definition_deployed（降噪）。
+现有 13 个 ✓（process_started/completed/cancelled；node_entered/exited/cancelled；task_created/completed/rejected/claimed/transferred；incident_raised；job_dead_lettered）。【v2】增补 14 个：process_paused / process_resumed / process_terminated / definition_deployed / definition_retired / definition_purged / task_escalated / timer_fired / instance_deadline_reached【v2.2】 / message_received / message_correlated / sub_process_started / task_withdrawn / incident_resolved。【变量 I/O 批，2026-10-08】增补 variables_updated（仅外部变量更新命令发射，payload 含 actor 与逐键改前/改后值）。幂等部署（内容哈希相同）不发 definition_deployed（降噪）。
 
-【收编批，2026-10-13】**枚举即全集**：此前 12 个事件以裸字符串实发、不在 `DomainEvent` 枚举（sub_process_started/task_assist_created/task_assist_cancelled/task_consult_created/task_consult_finished/task_countersigner_added/task_withdrawn/timeout_warned/cc_created/node_activated_by_admin/node_cancelled_by_admin/token_moved_by_admin/process_finished_by_admin）——全部入册，守卫测试钉住「引擎代码字符串实参必须 ∈ 枚举值集」。`incident_resolved` 本批起随 resolve_incident 发射（拍板③）；**task_delegated/task_resolved 从本清单划掉**（与 task_transferred、assist/consult 专属事件语义重复，零实现零补发）。端口口径：`ctx.emit` 对宿主仍是开放事件名（自定义业务事件合法，如宿主的 payment_executed），枚举只承诺**引擎自发事件**全集。
+【收编批，2026-10-13】**枚举即全集**：此前 12 个事件以裸字符串实发、不在 `DomainEvent` 枚举——全部入册，守卫测试钉住「引擎代码字符串实参必须 ∈ 枚举值集」。`incident_resolved` 本批起随 resolve_incident 发射（拍板③）；**task_delegated/task_resolved 从本清单划掉**（与 task_transferred、assist/consult 专属事件语义重复，零实现零补发）。端口口径：`ctx.emit` 对宿主仍是开放事件名（自定义业务事件合法，如宿主的 payment_executed），枚举只承诺**引擎自发事件**全集。
 
-- **信封**：CloudEvents 1.0.2——type=事件名，id=outbox 行 id（UUID，消费端按 id 去重），source=`flowork://{engine_id}`，data=事件字段。
-- **交付保证**：事件与业务变更**同一个数据库事务**写入 outbox（transactional outbox，库形态独有优势）；分发为至少一次，消费端需幂等。
+【事件面修复批，2026-10-13】四项收口（依据当日事件 review，四提交）：
+
+- **全序与时钟（A1/A2）**：事件 id 为可排序串 `{usec:016x}{nonce:06x}{counter:010x}`（时间前缀+引擎 nonce+进程内计数），`ORDER BY (occurred_at, id)` 即事件全序——同命令内按发射顺序（修前微秒平局随机定序，实证 start 节点先退后进）；`occurred_at` 统一取 `config.now()`（命令时刻，与任务/令牌同源；修前列默认墙钟）。
+- **信号补全（A3–A7）**：`message_received` 三路统一先发（立即关联/消息启动/入缓冲/correlate 入口都发，载荷带 message_id——修前仅缓冲分支发，名不副实）；取消族统一咽喉＝`cancel_token` 逐任务发 `task_cancelled`、节点级 `node_cancelled{by=原因}`（撤回/终态级联/竞速/驳回/MI 收工/故障跳过/管理员七路——修前仅故障跳过一路，撤回下游取消对订阅方失明）；auto_pass 四处归档统一发 `task_auto_passed{reason: strategy|exit_reached|node_rejected|admin_finish}`，策略命中的幻影任务不再发 task_created；补 `task_unclaimed`/`task_assist_finished`；删 `node_failed` 成员（全仓零发射，节点故障的真实信号＝incident_raised+挂起）。枚举 43 个成员。
+- **载荷契约（B1–B4）**：task 族统一带 `activity_code`+`task_type`（同名事件同形——修前转办克隆的 task_created 与主路径不一致）；`task_completed`/`task_rejected` 带 `comment`（驳回理由进事件）；`incident_raised` 带 `incident_id`（与 resolved 可配对）；`node_entered`/`node_exited` 带 `token_id`（并行分支可区分）；`process_started` 带 `major`/`revision`；`sub_process_started` 带 `child_definition_code`/`parent_node`；`timeout_warned` 带 `task_id`/`activity_code`。契约由 tests/test_event_payload_contract.py 钉死。
+- **口径（C1/C2）**：事件表默认即审计历史——`purge_delivered` 缺省**不清理**（宿主显式传 retention_days 才删；修前默认 90 天会静默删审计）；`history_level=activity` 白名单＝process_/node_/incident_ 前缀（故障告警不再被该档吞掉，task_*/message_* 仍只在 audit/full 档）。`remove_instance` 连实例事件（含未投递）一并删除——「至少一次」对被删实例的明示例外。
+
+- **信封**：CloudEvents 1.0.2——type=事件名，id=outbox 行 id（可排序唯一串，消费端按 id 去重），source=`flowork://{engine_id}`，data=事件字段。
+- **交付保证**：事件与业务变更**同一个数据库事务**写入 outbox（transactional outbox，库形态独有优势）；分发为至少一次，消费端需幂等（IdempotentSink 为进程内参考实现；消费器无 SKIP LOCKED/CAS，多副本同跑会重复投递——跨进程去重由业务侧落库幂等兜底）。
 - **不发什么**：引擎内部写变量不发事件（防刷屏——任务提交/钩子/映射的变量变更走 wf_variable_history 留痕表，见 14 章；血缘查询可得）；外部变量更新命令例外，发 variables_updated（低频高关注）；传阅已读不发（查询可得）。
 
 ## 11. Python API（进程内调用，四组）

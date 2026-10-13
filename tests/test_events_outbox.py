@@ -85,17 +85,40 @@ def test_consumer_idempotent_on_redelivery(engine: ProcessEngine):
 
 
 def test_purge_delivered_respects_retention(engine: ProcessEngine):
+    """保留口径（事件 review C1 拍板「默认永久保留」）：缺省不清理——事件表
+    兼任审计历史；显式传 retention_days 才删过保行。"""
     _run_flow(engine)
     consumer = OutboxConsumer(engine.session_factory, lambda env: None)
     assert consumer.poll() > 0
-    assert consumer.purge_delivered() == 0  # 刚送达，未过保留期
 
     stale = utc_now() - timedelta(days=91)
     with engine.session_factory() as session, session.begin():
         session.execute(update(EventOutboxRow).values(delivered_at=stale))
-    assert consumer.purge_delivered() > 0
+    # 缺省（None）＝不清理：过保行仍在（修前默认 90 天会静默删审计）
+    assert consumer.purge_delivered() == 0
+    with engine.session_factory() as session:
+        assert session.scalars(select(EventOutboxRow)).first() is not None
+    # 显式传天数才清理
+    assert consumer.purge_delivered(retention_days=90) > 0
     with engine.session_factory() as session:
         assert session.scalars(select(EventOutboxRow)).first() is None
+
+
+def test_activity_level_whitelist_keeps_incidents():
+    """分级白名单（事件 review C2）：activity 档保 process_/node_/incident_，
+    故障告警不再被静默吞掉；task_*/message_* 只在 audit/full 档。"""
+    from flowork.engine.config import EngineConfig, should_record_event
+
+    activity = EngineConfig(history_level="activity")
+    assert should_record_event(activity, "incident_raised")  # 修前该档吞故障告警
+    assert should_record_event(activity, "process_started")
+    assert should_record_event(activity, "node_entered")
+    assert not should_record_event(activity, "task_created")
+    assert not should_record_event(activity, "message_received")
+    full = EngineConfig(history_level="full")
+    assert should_record_event(full, "task_created")
+    none_level = EngineConfig(history_level="none")
+    assert not should_record_event(none_level, "incident_raised")
 
 
 def test_idempotent_sink_bounded_memory():

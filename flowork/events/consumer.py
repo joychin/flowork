@@ -1,10 +1,14 @@
 """outbox 消费器（kernel-v2 spec §10/P0-3）：至少一次分发＋按 id 幂等。
 
-- ``OutboxConsumer.poll()``：取未送达行（按发生时间有序）→ 包装 CloudEvents
+- ``OutboxConsumer.poll()``：取未送达行（``ORDER BY (occurred_at, id)``＝事件
+  全序，id 为可排序串，见 ProcessEngine.next_event_id）→ 包装 CloudEvents
   信封 → 交给 sink 回调 → 标记 delivered_at（同事务）。先送达后标记：送达后
-  崩溃会重发，因此交付语义是「至少一次」。
-- ``IdempotentSink``：按信封 id 去重的消费端装饰器（有界记忆集）——重发不重算。
-- ``purge_delivered()``：清理已送达且超保留期的行（默认 90 天，spec §14）。
+  崩溃会重发，因此交付语义是「至少一次」。无 SELECT SKIP LOCKED/CAS——
+  多副本同时消费会重复投递（契约内），跨进程去重由业务侧落库幂等兜底。
+- ``IdempotentSink``：按信封 id 去重的消费端装饰器（有界记忆集，进程内）——
+  重发不重算。
+- ``purge_delivered()``：缺省不清理（事件表默认即审计历史）；显式传
+  ``retention_days`` 才删已送达旧行（事件 review C1 拍板，2026-10-13）。
 """
 
 from __future__ import annotations
@@ -98,8 +102,17 @@ class OutboxConsumer:
                 break
         return total
 
-    def purge_delivered(self, *, retention_days: int = DEFAULT_RETENTION_DAYS) -> int:
-        """删除已送达且超过保留期的行（spec §14：消费确认后可清理，默认 90 天）。"""
+    def purge_delivered(self, *, retention_days: int | None = None) -> int:
+        """删除已送达且超过保留期的行；**缺省 None＝不清理**。
+
+        保留口径（2026-10-13 事件 review C1 拍板「默认永久保留」）：事件表
+        兼任审计历史（events/trace/REST 搜索面的数据源），默认清理会静默删
+        审计；宿主确要清理须显式传 ``retention_days``（参考值
+        DEFAULT_RETENTION_DAYS=90）。注意 remove_instance 连实例事件（含未
+        投递）一并删除——管理面「不可恢复」语义的明示例外。
+        """
+        if retention_days is None:
+            return 0
         cutoff: datetime = utc_now() - timedelta(days=retention_days)
         with self._factory() as session, session.begin():
             stale_ids = session.scalars(

@@ -156,7 +156,8 @@ FLOWORK_TEST_PG_URL=postgresql+psycopg://... uv run pytest -m needs_postgres   #
 - **设计器面**：`flowork/contrib/web`（插件位）已上线设计器面（定义草稿/校验/发布/试算，前缀 `/api`）
   ——设计器内部契约，与对外 `/v2` 面分属两个插件、各自冻结。
 - **消息推送**：订阅 `wf_event_outbox`（CloudEvents 信封，按 id 幂等；
-  `flowork.events.consumer.IdempotentSink` 为参考实现；事件即内核原生通知面，无独立 notifier 端口）。
+  `from flowork.api import OutboxConsumer, IdempotentSink, DomainEvent` 为官方帮手；投递序＝`(occurred_at, id)` 事件全序（2026-10-13 事件面修复批）；
+  事件表默认即审计历史（`purge_delivered` 缺省不清理）；事件即内核原生通知面，无独立 notifier 端口）。
 - **UI 设计器**：`designer/`（React Flow）已可用——Spec 唯一事实源、schema 驱动表单、
   校验闭环；任务页/Console 随产品 v1 M-C。
 - **组织系统**：替换 `EngineConfig.org`（实现目录查询协议 `OrgDirectoryLike` 或适配现有库；

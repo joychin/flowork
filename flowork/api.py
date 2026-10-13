@@ -61,9 +61,12 @@ from flowork.errors import (
     UnknownNodeKind,
 )
 
-# 事件消费帮手（收尾批 5 扩面）：outbox 只写不消费的现状下，宿主消费侧的
-# 至少一次分发 + 按 id 幂等去重参考实现（spec §10）。
+# 事件消费帮手（收尾批 5 扩面）与事件名枚举（事件面修复批扩点）：outbox
+# 只写不消费的现状下，宿主消费侧的至少一次分发 + 按 id 幂等去重参考实现
+# （spec §10）；DomainEvent＝引擎自发事件全集（「枚举即全集」，按枚举编程
+# 的订阅方入口上公开面——事件面修复批 C6）。
 from flowork.events.consumer import IdempotentSink, OutboxConsumer
+from flowork.events.domain import DomainEvent
 from flowork.expr.catalog import (
     FunctionEntry,
     engine_functions,
@@ -106,6 +109,7 @@ __all__ = [
     "DefinitionRetiredError",
     "DirectoryError",
     "DirectoryStore",
+    "DomainEvent",
     "DuplicateStartError",
     "EngineConfig",
     "EventInfo",

@@ -18,6 +18,7 @@ EXPECTED_SURFACE = frozenset(
         "DefinitionRetiredError",
         "DirectoryError",
         "DirectoryStore",
+        "DomainEvent",
         "DuplicateStartError",
         "EngineConfig",
         "EventInfo",
