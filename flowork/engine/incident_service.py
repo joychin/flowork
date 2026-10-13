@@ -136,9 +136,13 @@ class IncidentMixin:
                     ctx.touch(instance)
                     instance.state = InstanceState.RUNNING.value
                     # 拍板 1：挂起期消息落缓冲——恢复后补消费（对齐 resume_process）
+                    from flowork.engine.instance_lifecycle import advance_unfinished_tokens
                     from flowork.engine.message_flow import retro_poll_instance
 
                     retro_poll_instance(ctx, self._engine, instance)
+                    # 挂起期间到达的子实例完结补推进（2026-10-13 事件 review
+                    # 复核批）：修前只补消息——父恢复后等待子节点永久卡住
+                    advance_unfinished_tokens(self._engine, ctx, instance)
             elif action == "cancel":
                 self._cancel_in_ctx(
                     ctx, incident.instance_id, actor=actor, reason="incident:cancel"
@@ -160,9 +164,11 @@ class IncidentMixin:
                 if instance is not None:
                     ctx.touch(instance)
                     instance.state = InstanceState.RUNNING.value
+                    from flowork.engine.instance_lifecycle import advance_unfinished_tokens
                     from flowork.engine.message_flow import retro_poll_instance
 
                     retro_poll_instance(ctx, self._engine, instance)  # 同 resume 补消费
+                    advance_unfinished_tokens(self._engine, ctx, instance)  # 同 resume 补推进
             elif action == "skip":
                 self._skip_failed_nodes(ctx, incident.instance_id, actor)
             elif action == "fail":

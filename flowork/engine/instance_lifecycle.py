@@ -20,7 +20,26 @@ from flowork.tasks.models import InstanceInfo
 if TYPE_CHECKING:
     from flowork.engine.engine import ProcessEngine
 
-__all__ = ["InstanceLifecycleMixin"]
+__all__ = ["InstanceLifecycleMixin", "advance_unfinished_tokens"]
+
+
+def advance_unfinished_tokens(
+    engine: ProcessEngine, ctx: CommandContext, instance: ProcessInstanceRow
+) -> None:
+    """恢复（暂停/挂起）后数据驱动补一轮推进。
+
+    冻结期间到达的子实例完结不会唤醒父（resume_parent_if_waiting 在父非
+    running 时直接 return、不留补偿）——恢复后逐未完令牌问行为 try_complete
+    （kind 无关：等待中的 CallActivity 子实例已全部结算即放行；user_task/
+    wait 等行为自判 no-op）。暂停恢复（code-review 2026-10 P0-2）与故障恢复
+    （2026-10-13 事件 review 复核批：挂起期间子完成，父 resume 后永久卡住）
+    共用本补偿。
+    """
+    from flowork.runtime.lifecycle import TokenState
+
+    kernel = engine.kernel_for(ctx)
+    for token in kernel.tokens(ctx.session, instance.id, states=(TokenState.UNFINISHED.value,)):
+        kernel.advance_after_task(ctx.session, instance, token)
 
 
 class InstanceLifecycleMixin:
@@ -82,18 +101,9 @@ class InstanceLifecycleMixin:
 
             retro_poll_instance(ctx, self._engine, instance)
 
-            # 暂停期间到达的子实例完结补推进（code-review 2026-10 P0-2）：
-            # resume_parent_if_waiting 在父 paused 时直接 return、不留补偿——
-            # 恢复后数据驱动补一轮：逐未完令牌问行为 try_complete（kind 无关，
-            # 等待中的 CallActivity 子实例已全部结算即放行；user_task/wait 等
-            # 行为自判 no-op）。
-            from flowork.runtime.lifecycle import TokenState
-
-            kernel = self._engine.kernel_for(ctx)
-            for token in kernel.tokens(
-                ctx.session, instance_id, states=(TokenState.UNFINISHED.value,)
-            ):
-                kernel.advance_after_task(ctx.session, instance, token)
+            # 冻结期间到达的子实例完结补推进（code-review 2026-10 P0-2），
+            # 与故障恢复共用补偿（见 advance_unfinished_tokens）。
+            advance_unfinished_tokens(self._engine, ctx, instance)
 
         self._engine.execute(_command)
 

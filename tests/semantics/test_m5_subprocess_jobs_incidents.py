@@ -11,6 +11,7 @@ from flowork.definitions.definition import ProcessVariable
 from flowork.definitions.node import TimeoutPolicy
 from flowork.engine.config import EngineConfig
 from flowork.engine.engine import ProcessEngine
+from flowork.errors import FloworkError
 
 
 class FakeClock:
@@ -452,3 +453,73 @@ def test_resume_advances_parent_when_child_finished_during_pause(engine: Process
     assert engine.runtime.get_instance(parent_id).state == "completed", (
         "恢复后补推进：子已结算 → 父令牌放行直达终态"
     )
+
+
+def test_incident_resume_advances_parent_when_child_finished_during_suspension(
+    engine: ProcessEngine,
+):
+    """回归（2026-10-13 事件 review 复核批）：父挂起期间子实例办结，incident
+    resume 修前只补消息（retro_poll）不补推进——父恢复后 CallActivity 令牌
+    永久 unfinished（死锁），与 pause 恢复 P0-2 同症不同路。修后共用
+    advance_unfinished_tokens 补偿。"""
+    child = (
+        FlowBuilder("susp_child")
+        .start()
+        .user_task("verify", assignee="'u_compliance'")
+        .end()
+        .connect("start", "verify")
+        .connect("verify", "end")
+        .build()
+    )
+    publish(engine, child)
+    # trap=挂起载具：永假条件分支上的 service 节点，注册即炸的 handler——
+    # 正常推进永不经过；管理员手动激活它 = 技术故障整笔回滚 + 父挂起
+    parent = (
+        FlowBuilder("susp_parent")
+        .start()
+        .service_task("trap", "载具", action="explode")
+        .user_task("apply", assignee="'u_maker'")
+        .call_activity("sub", name="子流程", process_code="susp_child")
+        .user_task("after", assignee="'u_x'")
+        .end()
+        .flow("start", "trap", condition="1 == 2")
+        .connect("trap", "end")
+        .connect("start", "apply")
+        .connect("apply", "sub")
+        .connect("sub", "after")
+        .connect("after", "end")
+        .build()
+    )
+    publish(engine, parent)
+
+    def explode(ctx, params):
+        raise RuntimeError("外部接口炸了")
+
+    engine.register_handler("explode", explode)
+
+    parent_id = engine.runtime.start_process("susp_parent", start_user="u_maker")
+    apply_task = engine.task.list_tasks(instance_id=parent_id)[0]
+    engine.task.complete(apply_task.id, actor="u_maker")
+    child_row = next(i for i in engine.history.instances() if i.parent_id == parent_id)
+
+    # 父挂起：activate_node 触碰父后失败（整笔回滚，incident 落库 + suspended）
+    with pytest.raises(FloworkError):
+        engine.task.activate_node(parent_id, "trap", actor="boss")
+    assert engine.runtime.get_instance(parent_id).state == "suspended"
+
+    # 挂起期间子实例办结：唤醒尝试落空（父非 running），到达不留补偿
+    sub_task = engine.task.list_tasks(instance_id=child_row.id)[0]
+    engine.task.complete(sub_task.id, actor="u_compliance")
+    assert engine.runtime.get_instance(child_row.id).state == "completed"
+
+    incident = engine.runtime.list_incidents(parent_id)[0]
+    engine.runtime.resolve_incident(incident["id"], action="resume", actor="boss")
+    exited = [
+        e.payload["activity_code"]
+        for e in engine.history.events(parent_id, limit=200)
+        if e.event_name == "node_exited"
+    ]
+    assert "sub" in exited, "恢复后补推进：子已结算 → CallActivity 令牌放行（修前永缺）"
+    # 补偿推进直达下一站（after 待办出现），主路径无复发节点
+    after_tasks = engine.task.list_tasks(instance_id=parent_id)
+    assert after_tasks and after_tasks[0].activity_code == "after"
