@@ -218,6 +218,11 @@ def finish_wait(
     }
     ctx = RuntimeNodeContext(kernel, session, instance, node, token)
     behavior.on_exit(ctx)
+    # 声明式 on_exit 补齐（2026-10-13 事件 review 复核批）：三路收口（命中/
+    # 到时/广播）与内核完成路径同契约，修前静默跳过宿主钩子
+    from flowork.engine.declared_hooks import run_declared_hook
+
+    run_declared_hook(ctx, node.hooks.on_exit)
     kernel.finish_token(session, token, approval_exit=token.approval_exit)
     kernel.record_event(
         DomainEvent.NODE_EXITED,

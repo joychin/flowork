@@ -143,6 +143,13 @@ class UserTaskBehavior(NodeBehavior):
     def _finish_now(self, ctx: RuntimeNodeContext) -> None:
         """全员自动通过：节点立即完成（复用引擎完成路径）。"""
         assert ctx.token is not None
+        # 声明式 on_exit 补齐（2026-10-13 事件 review 复核批）：对齐
+        # kernel._finish_and_route 次序契约（行为 on_exit → 声明式 → finish_token）
+        # ——修前三处手工完成路径静默跳过宿主钩子
+        from flowork.engine.declared_hooks import run_declared_hook
+
+        self.on_exit(ctx)
+        run_declared_hook(ctx, ctx.node.hooks.on_exit)
         ctx.kernel.finish_token(ctx.session, ctx.token, approval_exit="agree")
         ctx.kernel.record_event(
             DomainEvent.NODE_EXITED,

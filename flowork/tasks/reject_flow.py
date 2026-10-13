@@ -169,6 +169,16 @@ class RejectMixin:
         if not reject_target:
             raise RejectTargetMissing(f"任务 {task_id} 无可用驳回目标")
         token.approval_exit = "reject"
+        # 声明式 on_exit 补齐（2026-10-13 事件 review 复核批）：修前驳回路径
+        # 静默跳过宿主钩子。行为侧 on_exit 的剩余待办撤销已由下方 node_rejected
+        # 归档等价实现，此处只补声明式（加行为钩子会双归档）
+        from flowork.engine.context import RuntimeNodeContext
+        from flowork.engine.declared_hooks import run_declared_hook
+
+        run_declared_hook(
+            RuntimeNodeContext(kernel, ctx.session, instance, node, token),
+            node.hooks.on_exit,
+        )
         kernel.finish_token(ctx.session, token, approval_exit="reject")
         # 并行场景：驳回归零——取消其余未完令牌（兄弟分支不再继续）
         unfinished = (TokenState.UNFINISHED.value,)

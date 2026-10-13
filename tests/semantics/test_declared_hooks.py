@@ -255,3 +255,84 @@ def test_registered_hook_handlers_pass_deploy_check():
         spec, session=_session(engine), handlers=engine.handlers.names()
     )
     assert issues == []
+
+
+# —— 复核批（2026-10-13 事件 review 复核批）：三处手工完成路径的 on_exit ——
+# 修前 user_task 全员自动通过 / wait 三路收口 / 驳回流转均自行 finish_token，
+# 静默跳过声明式 on_exit（契约：每次完成都跑，declared_hooks.py 模块头）。
+
+
+def test_on_exit_runs_on_auto_pass_finish_now():
+    """全员自动通过（_finish_now）路径跑声明式 on_exit——修前静默跳过。"""
+    engine = ProcessEngine()
+    calls: list[str] = []
+
+    def stamp(ctx, params):
+        calls.append(ctx.node.code)
+
+    engine.register_handler("stamp", stamp)
+    engine.repository.deploy(
+        FlowBuilder("hk_autopass")
+        .start()
+        .user_task("a", assignee="'u_s'", auto_pass_originator=True, hooks={"on_exit": _HOOK})
+        .end()
+        .connect("start", "a")
+        .connect("a", "end")
+        .build()
+    )
+    iid = engine.runtime.start_process("hk_autopass", start_user="u_s")
+    assert engine.runtime.get_instance(iid).state == "completed"
+    assert calls == ["a"]  # 修前 calls == []
+    engine.close()
+
+
+def test_on_exit_runs_on_wait_finish():
+    """等待节点消息命中收口跑声明式 on_exit——修前静默跳过。"""
+    engine = ProcessEngine()
+    calls: list[str] = []
+
+    def stamp(ctx, params):
+        calls.append(ctx.node.code)
+
+    engine.register_handler("stamp", stamp)
+    engine.repository.deploy(
+        FlowBuilder("hk_wait")
+        .start()
+        .wait("w", message={"name": "m1"}, hooks={"on_exit": _HOOK})
+        .end()
+        .connect("start", "w")
+        .connect("w", "end")
+        .build()
+    )
+    iid = engine.runtime.start_process("hk_wait", start_user="u_s")
+    engine.messages.publish_message("m1", payload={"a": 1}, message_id="hk1")
+    assert engine.runtime.get_instance(iid).state == "completed"
+    assert calls == ["w"]  # 修前 calls == []
+    engine.close()
+
+
+def test_on_exit_runs_on_reject_flow():
+    """驳回流转跑声明式 on_exit——修前静默跳过。"""
+    engine = ProcessEngine()
+    calls: list[str] = []
+
+    def stamp(ctx, params):
+        calls.append(ctx.node.code)
+
+    engine.register_handler("stamp", stamp)
+    engine.repository.deploy(
+        FlowBuilder("hk_reject")
+        .start()
+        .user_task("a", assignee="'u1'", hooks={"on_exit": _HOOK})
+        .user_task("b", assignee="'u2'")
+        .end()
+        .connect("start", "a")
+        .connect("a", "b")
+        .connect("b", "end")
+        .build()
+    )
+    iid = engine.runtime.start_process("hk_reject", start_user="u_s")
+    task = engine.task.list_tasks(instance_id=iid)[0]
+    engine.task.reject(task.id, actor="u1")
+    assert calls == ["a"]  # 修前 calls == []
+    engine.close()
