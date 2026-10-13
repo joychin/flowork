@@ -35,6 +35,10 @@ from flowork.definitions.validator import (
     ValidateIssue,
     validate_definition,
 )
+
+# 目录持久化实现（收尾批 5 扩面）：DB 版目录此前仓内仅 tests 可达，宿主
+# 走门面无路——DirectoryStore(engine.session_factory) 构造后挂 EngineConfig.org。
+from flowork.directory import DirectoryError, DirectoryStore
 from flowork.engine.config import EngineConfig
 from flowork.engine.engine import ProcessEngine
 from flowork.engine.history_service import HistoryService
@@ -56,6 +60,10 @@ from flowork.errors import (
     UnknownHandler,
     UnknownNodeKind,
 )
+
+# 事件消费帮手（收尾批 5 扩面）：outbox 只写不消费的现状下，宿主消费侧的
+# 至少一次分发 + 按 id 幂等去重参考实现（spec §10）。
+from flowork.events.consumer import IdempotentSink, OutboxConsumer
 from flowork.expr.catalog import (
     FunctionEntry,
     engine_functions,
@@ -96,6 +104,8 @@ __all__ = [
     "DefinitionError",
     "DefinitionNotPublishedError",
     "DefinitionRetiredError",
+    "DirectoryError",
+    "DirectoryStore",
     "DuplicateStartError",
     "EngineConfig",
     "EventInfo",
@@ -108,6 +118,7 @@ __all__ = [
     "FunctionEntry",
     "FunctionSignature",
     "HistoryService",
+    "IdempotentSink",
     "InMemoryNodeContext",
     "InstanceInfo",
     "InstanceNotFoundError",
@@ -125,6 +136,7 @@ __all__ = [
     "NodeRegistry",
     "NotFoundError",
     "OrgDirectoryLike",
+    "OutboxConsumer",
     "ProcessDefinition",
     "ProcessEngine",
     "ProcessVariable",

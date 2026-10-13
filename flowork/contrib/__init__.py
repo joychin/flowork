@@ -43,6 +43,10 @@ if TYPE_CHECKING:
 
 __all__ = ["ContribDirectoryMissing", "cel_vocabulary", "numeric_vocabulary"]
 
+# 兼容声明（词汇包 cel_vocabulary/numeric_vocabulary；openface-plugin-design §4）：
+# 依赖的门面契约版本；tests/test_plugin_compat.py 断言 ≤ flowork.api.API_VERSION。
+REQUIRES_FLOWORK_API = "1"
+
 
 class ContribDirectoryMissing(FloworkError):
     """contrib 词汇需要配置组织目录（EngineConfig.org）。"""

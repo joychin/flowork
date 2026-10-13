@@ -12,3 +12,7 @@ RepositoryService 方法的一一映射（见《命名规范》第 2 节）。
 from flowork.contrib.web.app import create_app
 
 __all__ = ["create_app"]
+
+# 兼容声明（openface-plugin-design §4）：依赖的门面契约版本；
+# tests/test_plugin_compat.py 断言 ≤ flowork.api.API_VERSION。
+REQUIRES_FLOWORK_API = "1"

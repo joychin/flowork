@@ -14,6 +14,10 @@ engine = ProcessEngine(EngineConfig(
     org=StaticOrgDirectory.from_yaml("org.yaml"),  # 参与者体系（可选；取人词汇数据源）
     history_level="full",                     # none / activity / audit / full（audit 当前同 full 全记）
 ))
+# DB 版目录（与引擎共用会话工厂，写操作留审计痕）：宿主经门面构造后挂 org——
+from flowork.api import DirectoryStore
+store = DirectoryStore(engine.session_factory)
+engine.config.org = store
 engine.register_handler("my_action", handler) # ServiceTask 动作 / 声明式钩子
 engine.close()
 ```
@@ -111,7 +115,7 @@ Worker 面（service_task mode=worker，`engine.worker_jobs`）：
 - **声明式钩子**：节点 `hooks={"on_exit": {"handler": "name", "params": {...}}}` + `engine.register_handler("name", fn)`。
 - **表达式函数（全位点 CEL 词汇）**：经 `ExpressionFunctions` 端口注册（必须带 FunctionSignature 签名，纯读闭包无 ctx）；一行挂官方词汇：`config.expression_functions = contrib.cel_vocabulary(org)`（manager_of/users_with_role/has_role——`manager_of` 对 AI 代理的 id 返回其负责人 owner）。取人/传阅/改派+升级/连线条件/子流程映射共用同一注册面。
 - **判断面事实**：公式可用 `now`/`prev_task`/`node("code")`（引擎注入，词汇目录见 spec §4.3/C.4，权威在 `expr/catalog.py`）。
-- **事件消费**：消费 `wf_event_outbox`（CloudEvents 信封，按 id 幂等；`flowork.events.consumer.IdempotentSink` 为参考实现）。
+- **事件消费**：消费 `wf_event_outbox`（CloudEvents 信封，按 id 幂等；`from flowork.api import OutboxConsumer, IdempotentSink` 为官方帮手——至少一次分发 + 按 id 幂等去重，2026-10-13 收尾批起在门面上）。
 
 ## 传输面插件（REST /v2 与 MCP，openface-plugin-design.md）
 

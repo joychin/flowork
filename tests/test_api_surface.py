@@ -16,6 +16,8 @@ EXPECTED_SURFACE = frozenset(
         "DefinitionError",
         "DefinitionNotPublishedError",
         "DefinitionRetiredError",
+        "DirectoryError",
+        "DirectoryStore",
         "DuplicateStartError",
         "EngineConfig",
         "EventInfo",
@@ -28,6 +30,7 @@ EXPECTED_SURFACE = frozenset(
         "FunctionEntry",
         "FunctionSignature",
         "HistoryService",
+        "IdempotentSink",
         "InMemoryNodeContext",
         "InstanceInfo",
         "InstanceNotFoundError",
@@ -45,6 +48,7 @@ EXPECTED_SURFACE = frozenset(
         "NodeRegistry",
         "NotFoundError",
         "OrgDirectoryLike",
+        "OutboxConsumer",
         "ProcessDefinition",
         "ProcessVariable",
         "ProcessEngine",
@@ -89,3 +93,28 @@ def test_api_surface_snapshot() -> None:
 def test_api_exports_resolve_to_real_objects() -> None:
     for name in api.__all__:
         assert getattr(api, name, None) is not None, f"公开面符号失效：{name}"
+
+
+def test_directory_store_reachable_via_facade() -> None:
+    """收尾批 5 冒烟：DB 版目录经门面可达——构造、挂 EngineConfig.org、跑通候选认领。"""
+    from flowork.api import DirectoryStore, FlowBuilder, ProcessEngine
+
+    spec = (
+        FlowBuilder("apismoke")
+        .start()
+        .user_task("a", candidate_users=['"u_cand"'])
+        .end()
+        .connect("start", "a")
+        .connect("a", "end")
+        .build()
+    )
+    engine = ProcessEngine()
+    store = DirectoryStore(engine.session_factory)  # 与引擎共用同一会话工厂
+    store.create_user("u_cand", name="候选人")
+    engine.repository.deploy(spec)
+    engine.config.org = store  # 装配面：DB 目录即 OrgDirectoryLike
+    iid = engine.runtime.start_process("apismoke", start_user="u")
+    task = engine.task.list_tasks(instance_id=iid)[0]
+    assert task.assignee == ""
+    engine.task.claim(task.id, "u_cand")  # 组/候选判定走 store
+    assert engine.task.list_tasks(assignee="u_cand")[0].id == task.id

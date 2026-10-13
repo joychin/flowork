@@ -32,6 +32,10 @@ from flowork.contrib._registry import FixedFunctions
 
 __all__ = ["numeric_vocabulary"]
 
+# 兼容声明（词汇包；openface-plugin-design §4）：依赖的门面契约版本；
+# tests/test_plugin_compat.py 断言 ≤ flowork.api.API_VERSION。
+REQUIRES_FLOWORK_API = "1"
+
 
 def _numeric(value: Any, name: str) -> int | float:
     """数值守卫：BoolType 是 int 子类，先拒布尔再收数值。"""
