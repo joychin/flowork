@@ -153,7 +153,7 @@ NodeHooks: on_enter（进入节点时）/ on_exit（离开时）/ on_cancel（�
 HandlerRef = { handler: "处理器名", params: {...} }   # 按名从 HandlerRegistry 解析
 ```
 
-【2026-10-13 收尾批接线语义】on_enter/on_exit/on_cancel 三时机经统一咽喉（`engine/declared_hooks.py`）执行：on_enter 先于行为钩子（写 `ctx.variables` 供行为与完成判定消费）、on_exit 后于行为钩子先于令牌落定、on_cancel 先于行为钩子；连线 `on_take` 同一咽喉。未注册 handler＝**部署期 WARNING**（`node.hooks.handler_unknown`/`flow.on_take.handler_unknown`，strict 升 ERROR；「先部署后注册」仍是合法模式）+ **运行期技术故障**（EngineExecutionError 挂起+故障单，spec §8）；handler 自身异常同样包引擎错误。模拟试跑（A10）**跳过执行**（模拟绝不执行宿主 handler）。`on_fail` 接线挂账错误归因专题（行为层 `NodeBehavior.on_fail` 亦零调用），字段已收、部署期引用照查。
+【2026-10-13 收尾批接线语义】on_enter/on_exit/on_cancel 三时机经统一咽喉（`engine/declared_hooks.py`）执行：on_enter 先于行为钩子（写 `ctx.variables` 供行为与完成判定消费）、on_exit 后于行为钩子先于令牌落定、on_cancel 先于行为钩子；连线 `on_take` 同一咽喉。未注册 handler＝**部署期 WARNING**（`node.hooks.handler_unknown`/`flow.on_take.handler_unknown`，strict 升 ERROR；「先部署后注册」仍是合法模式）+ **运行期技术故障**（EngineExecutionError 挂起+故障单，spec §8）；handler 自身异常同样包引擎错误。模拟试跑（A10）**跳过执行**（模拟绝不执行宿主 handler）。`on_fail` 已接线（复核批·终章）：故障单事务内经 `engine/fail_hooks.py` 执行——行为 `on_fail(ctx, error)` + 声明式 `hooks.on_fail`（错误经 `ctx.failure`，签名统一 `(ctx, params)`）。语义口径：钩子观察的是**回滚后持久态**（原命令整笔回滚）；`ctx.token` 可为 None（节点在失败命令内激活后回滚——最常见形态）；无未完令牌且节点不在图纸 → 不执行；实例未持久化（start 整笔回滚）→ 不执行；`TokenState.FAILED` 仍零写入（失败令牌停留 unfinished+实例 suspended 是现行设计，FAILED 态涉汇聚/复活语义属重设计）；钩子异常不吞故障单（log 后继续）；模拟实例不执行（A10）。
 
 **层 2——全代码 Behavior（有状态的完整行为）**：继承 `NodeBehavior`，按需覆写五个钩子：`on_enter / on_exit / on_cancel / on_fail(ctx, error) / on_task_completed(ctx, task_id, outcome)`（runtime/behavior.py ✓，钩子统一接收 NodeContext；引擎传入的 RuntimeNodeContext 才提供内核服务，行为内 `assert isinstance` 收窄）。
 

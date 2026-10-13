@@ -63,7 +63,12 @@ class IncidentMixin:
         from flowork.persistence.orm import IncidentRow
 
         kernel = self._engine.kernel_for(ctx)
+        real_ids: list[str] = []
         for instance_id in instance_ids:
+            instance = ctx.session.get(ProcessInstanceRow, instance_id)
+            if instance is not None and instance.simulated:
+                continue  # 模拟实例不落故障单（A10 隔离；修前模拟失败产孤儿故障单）
+            real_ids.append(instance_id)
             incident_id = _uuid.uuid4().hex
             ctx.session.add(
                 IncidentRow(
@@ -73,7 +78,6 @@ class IncidentMixin:
                     error_class=type(error).__name__,
                 )
             )
-            instance = ctx.session.get(ProcessInstanceRow, instance_id)
             if instance is not None and instance.state == InstanceState.RUNNING.value:
                 instance.state = InstanceState.SUSPENDED.value
                 kernel.record_event(
@@ -96,6 +100,11 @@ class IncidentMixin:
                 },
                 instance_id,
             )
+        # on_fail 接线（复核批·终章）：故障单落库同事务执行失败钩子——
+        # 行为 on_fail(ctx, error) + 声明式 hooks.on_fail（错误经 ctx.failure）
+        from flowork.engine.fail_hooks import run_fail_hooks
+
+        run_fail_hooks(self._engine, ctx, real_ids, error)
 
     def list_incidents(self, instance_id: str | None = None) -> list[dict[str, Any]]:
         """查询 Incident（open/resolved）。"""

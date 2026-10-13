@@ -120,7 +120,7 @@ _HOOK_TIMINGS = ("on_enter", "on_exit", "on_cancel", "on_fail")
 def _check_declared_hook_refs(node: Any, handlers: tuple[str, ...], issue: Any) -> None:
     """节点级声明式钩子的 handler 引用（L3，kind 无关——FlowNode 基字段）。
 
-    on_fail 一并检查：字段已收下（图纸可写），即便运行期接线挂账中，
+    on_fail 一并检查：字段已收下（图纸可写），运行期已在故障单事务接线，
     引用不存在也该在部署期可见。getattr 防 extra 袋（builder 惯例）。
     """
     hooks = getattr(node, "hooks", None)

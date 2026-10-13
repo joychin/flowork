@@ -96,7 +96,12 @@ class NodeBehavior:
         """节点被取消（并行分支取消/撤回/实例取消）。"""
 
     def on_fail(self, ctx: NodeContext, error: Exception) -> None:
-        """节点异常（引擎随后置 FAILED 并创建 Incident）。"""
+        """节点异常钩子（故障单事务内执行——原命令已整笔回滚）。
+
+        语义口径（engine/fail_hooks.py 成文）：看到的是回滚后的持久状态；
+        ``ctx.token`` 可能为 None（节点在失败命令内激活、随整笔回滚）；
+        只可观察与写变量，不得改变路由；令牌状态不变（FAILED 态零写入）。
+        """
 
     def on_task_completed(self, ctx: NodeContext, task_id: str, outcome: str) -> None:
         """本节点的任务提交后（UserTask 家族：串行会签推进等）。"""

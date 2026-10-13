@@ -9,7 +9,9 @@
                              │   ▲
                              │   └── 未满足：保持 RUNNING（等任务/等信号/等定时）
                              ├─ 并行取消/撤回/实例取消 ──on_cancel()──▶ CANCELLED
-                             └─ 任何环节异常 ──────────on_fail()──▶ FAILED → Incident
+                             └─ 任何环节异常（命令整笔回滚）──▶ Incident 事务内 on_fail()
+                                 （令牌停留 unfinished、实例转 suspended——FAILED 态零
+                                  写入是现行设计，on_fail 语义口径见 engine/fail_hooks.py）
 
 硬不变量：钩子/行为只可观察与写变量，不得改变路由。
 """

@@ -22,6 +22,7 @@ from flowork.definitions.validator_deploy import check_deploy_references
 from flowork.engine.config import EngineConfig
 from flowork.engine.engine import ProcessEngine
 from flowork.engine.kernel import EngineExecutionError
+from flowork.errors import FloworkError
 
 _HOOK = {"handler": "stamp", "params": {"mark": 1}}
 
@@ -336,3 +337,109 @@ def test_on_exit_runs_on_reject_flow():
     engine.task.reject(task.id, actor="u1")
     assert calls == ["a"]  # 修前 calls == []
     engine.close()
+
+
+# —— 复核批·终章（2026-10-13 事件 review）：on_fail 接线 ——
+
+
+def _engine_with_boom_and_on_fail(calls: list, writes: bool = False):
+    engine = ProcessEngine()
+
+    def explode(ctx, params):
+        raise RuntimeError("外部接口炸了")
+
+    def on_fail(ctx, params):
+        calls.append((ctx.node.code, str(ctx.failure)))
+        if writes:
+            ctx.variables["compensated"] = True
+
+    engine.register_handler("explode", explode)
+    engine.register_handler("on_fail", on_fail)
+    engine.repository.deploy(
+        FlowBuilder("hk_fail")
+        .start()
+        .user_task("a", assignee="'u_a'")
+        .service_task("boom", "会炸", action="explode", hooks={"on_fail": {"handler": "on_fail"}})
+        .user_task("after", assignee="'u_b'")
+        .end()
+        .connect("start", "a")
+        .connect("a", "boom")
+        .connect("boom", "after")
+        .connect("after", "end")
+        .build()
+    )
+    return engine
+
+
+def test_on_fail_runs_in_incident_transaction():
+    """on_fail 声明式钩子在故障单事务内执行：ctx.failure 可取、写变量持久。"""
+    calls: list = []
+    engine = _engine_with_boom_and_on_fail(calls, writes=True)
+    iid = engine.runtime.start_process("hk_fail", start_user="u_s")
+    task = engine.task.list_tasks(instance_id=iid)[0]
+    with pytest.raises(FloworkError):
+        engine.task.complete(task.id, actor="u_a")  # boom 炸 → 回滚 + 挂起
+
+    assert calls and calls[0][0] == "boom"  # 定位到失败节点
+    assert "外部接口炸了" in calls[0][1]  # ctx.failure 携带原错误
+    assert engine.runtime.get_instance(iid).state == "suspended"
+    assert engine.runtime.variables_of(iid)["compensated"] is True  # 与故障单同事务持久
+    engine.close()
+
+
+def test_on_fail_skipped_when_node_not_durable():
+    """start 首节点整笔回滚（无持久令牌）→ on_fail 不执行——无失败现场可观察。"""
+    calls: list = []
+    engine = ProcessEngine()
+
+    def explode(ctx, params):
+        raise RuntimeError("启动即炸")
+
+    def on_fail(ctx, params):
+        calls.append(ctx.node.code)
+
+    engine.register_handler("explode", explode)
+    engine.register_handler("on_fail", on_fail)
+    engine.repository.deploy(
+        FlowBuilder("hk_fail_start")
+        .start()
+        .service_task("boom0", action="explode", hooks={"on_fail": {"handler": "on_fail"}})
+        .end()
+        .connect("start", "boom0")
+        .connect("boom0", "end")
+        .build()
+    )
+    with pytest.raises(FloworkError):
+        engine.runtime.start_process("hk_fail_start", start_user="u_s")
+    assert calls == []  # 节点未持久激活——不执行
+    engine.close()
+
+
+def test_on_fail_guarded_and_simulation_isolated():
+    """钩子自身异常不吞故障单；模拟实例失败不落故障单（A10 隔离）。"""
+    calls: list = []
+    engine = _engine_with_boom_and_on_fail(calls)
+
+    # 覆写 on_fail 为抛错版本（注册 replace）
+    def bad_on_fail(ctx, params):
+        raise RuntimeError("钩子自己也炸")
+
+    engine.register_handler("on_fail", bad_on_fail, replace=True)
+    iid = engine.runtime.start_process("hk_fail", start_user="u_s")
+    task = engine.task.list_tasks(instance_id=iid)[0]
+    with pytest.raises(FloworkError):
+        engine.task.complete(task.id, actor="u_a")
+    assert engine.runtime.list_incidents(iid), "钩子异常不得吞故障单"
+    assert engine.runtime.get_instance(iid).state == "suspended"
+    engine.close()
+
+    # 模拟实例：同定义失败 → 零故障单（修前模拟失败产孤儿故障单）
+    calls2: list = []
+    engine2 = _engine_with_boom_and_on_fail(calls2)
+    report = engine2.runtime.simulate("hk_fail", variables={})
+    all_incidents = [
+        i for i in engine2.runtime.list_incidents() if i["instance_id"] == report.instance_id
+    ]
+    assert all_incidents == []
+    assert calls2 == []  # 模拟绝不执行宿主 handler
+    engine2.close()

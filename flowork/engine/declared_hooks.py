@@ -15,8 +15,9 @@
 
 执行次序：on_enter 先于行为钩子（handler 写 ctx.variables 供行为与完成判定
 消费）；on_exit 后于行为钩子、先于 finish_token；on_cancel 先于行为钩子。
-on_fail 不经本咽喉（2026-10-13 拍板挂账：行为层 NodeBehavior.on_fail 亦零
-调用，接线需错误携带节点上下文，属错误归因专题）。
+on_fail 经 fail_hooks.py 在故障单事务内执行（复核批·终章接线；错误归因
+批解决节点上下文前置）——声明式侧错误经 ctx.failure 传递，仍走本咽喉的
+resolve/异常包语义。
 硬不变量（runtime/behavior.py）：钩子只可观察与写变量，不得改变路由。
 """
 
