@@ -11,7 +11,11 @@ from typing import TYPE_CHECKING
 from flowork.engine.ops import CommandContext
 from flowork.errors import InstanceNotFoundError
 from flowork.events.domain import DomainEvent
-from flowork.runtime.lifecycle import UNSETTLED_INSTANCE_STATES, TokenState
+from flowork.runtime.lifecycle import (
+    TERMINAL_INSTANCE_STATES,
+    UNSETTLED_INSTANCE_STATES,
+    TokenState,
+)
 
 if TYPE_CHECKING:
     from flowork.engine.engine import ProcessEngine
@@ -78,6 +82,13 @@ class TaskAdminMixin:
 
         def _command(ctx: CommandContext) -> None:
             instance = self._instance(ctx, instance_id)
+            # 终态守卫（2026-10-13 事件 review 复核批）：complete_instance 对终态
+            # 静默跳过但本命令事件无条件发——修前对已终态实例再调会发假
+            # process_finished_by_admin（与 cancel/terminate 已修的 P1-2 同类）
+            if instance.state in TERMINAL_INSTANCE_STATES:
+                raise InstanceNotFoundError(
+                    f"实例 {instance_id} 已终态（{instance.state}），不可强制完成"
+                )
             ctx.touch(instance)
             kernel = self._engine.kernel_for(ctx)
             from flowork.tasks.auto_pass import archive_auto_pass
@@ -95,6 +106,13 @@ class TaskAdminMixin:
                         reason="admin_finish",
                     )
                 kernel.finish_token(ctx.session, token)
+                # node_exited 补发（2026-10-13 事件 review 复核批）：订阅方按
+                # entered/exited 配对重建节点历史——修前该路径令牌有进无出
+                kernel.record_event(
+                    DomainEvent.NODE_EXITED,
+                    {"activity_code": token.activity_code, "token_id": token.id},
+                    instance_id,
+                )
             kernel.complete_instance(ctx.session, instance, "completed")
             kernel.record_event(
                 DomainEvent.PROCESS_FINISHED_BY_ADMIN, {"actor": actor}, instance_id

@@ -371,3 +371,26 @@ def test_message_received_on_correlate_entry():
     assert receipt is not None and receipt["matched"]
     assert "message_received" in _global_names_asc(engine)  # 修前 correlate 入口零 received
     engine.close()
+
+
+# —— 复核批（2026-10-13 事件 review 复核）：管理员强制完成 ——
+
+
+def test_admin_finish_guard_and_node_exited():
+    """finish_instance：终态守卫拒绝重复调用；强制完成的令牌补发 node_exited。"""
+    engine = ProcessEngine()
+    engine.repository.deploy(_flow_two_step("sig_admin_finish").build())
+    iid = engine.runtime.start_process("sig_admin_finish", start_user="u_s")
+    engine.task.finish_instance(iid, actor="boss")
+
+    # 修前：强制完成的令牌有 node_entered 无 node_exited（订阅方配对断裂）
+    entered = _events(engine, iid, "node_entered")
+    exited = _events(engine, iid, "node_exited")
+    assert {p["activity_code"] for p in entered} <= {p["activity_code"] for p in exited}
+
+    # 修前：对已终态实例再调会发假 process_finished_by_admin（complete_instance
+    # 静默跳过但事件无条件发）
+    with pytest.raises(FloworkError):
+        engine.task.finish_instance(iid, actor="boss")
+    assert len(_events(engine, iid, "process_finished_by_admin")) == 1
+    engine.close()
