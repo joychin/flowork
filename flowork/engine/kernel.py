@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any
 
 from flowork.definitions.definition import ProcessDefinition, load_definition
 from flowork.engine.context import RuntimeNodeContext
+from flowork.engine.declared_hooks import run_declared_hook
 from flowork.engine.join_gate import should_release
 from flowork.engine.task_records import TaskRecordsMixin
 from flowork.engine.token_records import TokenRecordsMixin
@@ -172,6 +173,7 @@ class Kernel(TaskRecordsMixin, TokenRecordsMixin):
         )
         self.record_event(DomainEvent.NODE_ENTERED, {"activity_code": node.code}, instance.id)
         ctx = RuntimeNodeContext(self, session, instance, node, token)
+        run_declared_hook(ctx, node.hooks.on_enter)  # 声明式先于行为：写变量供行为消费
         self.behavior_of(node).on_enter(ctx)
         self._maybe_complete(session, instance, node, token)
         return token
@@ -200,6 +202,7 @@ class Kernel(TaskRecordsMixin, TokenRecordsMixin):
             )
         ctx = RuntimeNodeContext(self, session, instance, node, token)
         self.behavior_of(node).on_exit(ctx)
+        run_declared_hook(ctx, node.hooks.on_exit)  # 行为语义完成后、令牌落定前
         self.finish_token(session, token, approval_exit=token.approval_exit)
         self.record_event(DomainEvent.NODE_EXITED, {"activity_code": node.code}, instance.id)
         self.route(session, instance, node, token)
@@ -230,11 +233,15 @@ class Kernel(TaskRecordsMixin, TokenRecordsMixin):
         definition: ProcessDefinition,
     ) -> None:
         if flow.on_take is not None:
-            handler = self.handlers.resolve(flow.on_take.handler)
             source_node = self._node(definition, flow.source)
             assert source_node is not None
-            hook_ctx = RuntimeNodeContext(self, session, instance, source_node, from_token)
-            handler(hook_ctx, flow.on_take.params)
+            # 声明式钩子统一咽喉（declared_hooks）：模拟跳过 + 未注册/异常＝
+            # 技术故障挂起——此前裸 resolve 直调（UnknownHandler 冒泡零留痕、
+            # 模拟试跑真执行宿主 handler，两处随 2026-10-13 收尾批归一）
+            run_declared_hook(
+                RuntimeNodeContext(self, session, instance, source_node, from_token),
+                flow.on_take,
+            )
         target = self._node(definition, flow.target)
         if target is None:
             raise RouteError(f"目标节点不存在：{flow.target}")

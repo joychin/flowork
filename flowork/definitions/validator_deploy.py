@@ -78,9 +78,11 @@ def check_deploy_references(
     """部署期 L3+L4：引用完整性与目录实体存在性（默认 WARNING，strict 升 ERROR）。"""
     issues: list[ValidateIssue] = []
 
-    def issue(default: IssueLevel, rule: str, message: str, node: str) -> None:
+    def issue(
+        default: IssueLevel, rule: str, message: str, node: str, *, flow: str | None = None
+    ) -> None:
         level = IssueLevel.ERROR if strict else default
-        issues.append(ValidateIssue(level, rule, message, node=node))
+        issues.append(ValidateIssue(level, rule, message, node=node, flow=flow))
 
     for node in definition.nodes:
         if node.kind == KIND_CALL_ACTIVITY:
@@ -94,11 +96,46 @@ def check_deploy_references(
                     f"handler {action!r} 未注册（可后注册；运行期解析不到将出故障单）",
                     node.code,
                 )
+        _check_declared_hook_refs(node, handlers, issue)
+    for flow in definition.flows:
+        if flow.on_take is not None and flow.on_take.handler not in handlers:
+            issue(
+                IssueLevel.WARNING,
+                "flow.on_take.handler_unknown",
+                f"on_take 钩子 handler {flow.on_take.handler!r} 未注册"
+                "（可后注册；运行期解析不到将出故障单）",
+                flow.source,
+                flow=flow.flow_code(),
+            )
     if subject_exists is not None:
         _check_subject_literals(definition, subject_exists, issue)
     for entry in issues:  # 可见优于静默：WARNING 也留痕
         logger.warning("deploy 校验：%s", entry)
     return issues
+
+
+_HOOK_TIMINGS = ("on_enter", "on_exit", "on_cancel", "on_fail")
+
+
+def _check_declared_hook_refs(node: Any, handlers: tuple[str, ...], issue: Any) -> None:
+    """节点级声明式钩子的 handler 引用（L3，kind 无关——FlowNode 基字段）。
+
+    on_fail 一并检查：字段已收下（图纸可写），即便运行期接线挂账中，
+    引用不存在也该在部署期可见。getattr 防 extra 袋（builder 惯例）。
+    """
+    hooks = getattr(node, "hooks", None)
+    if hooks is None:
+        return
+    for timing in _HOOK_TIMINGS:
+        ref = getattr(hooks, timing, None)
+        if ref is not None and ref.handler not in handlers:
+            issue(
+                IssueLevel.WARNING,
+                "node.hooks.handler_unknown",
+                f"节点钩子 {timing} 引用的 handler {ref.handler!r} 未注册"
+                "（可后注册；运行期解析不到将出故障单）",
+                node.code,
+            )
 
 
 def _check_call_target(

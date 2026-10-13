@@ -157,6 +157,7 @@ class TokenRecordsMixin:
         from typing import cast
 
         from flowork.engine.context import RuntimeNodeContext
+        from flowork.engine.declared_hooks import run_declared_hook
         from flowork.persistence.orm import ProcessInstanceRow
 
         kernel = cast("Kernel", self)
@@ -166,6 +167,6 @@ class TokenRecordsMixin:
         node = kernel.definition_of(session, instance).node(token.activity_code)
         if node is None or kernel.registry.behavior_cls(node.kind) is None:
             return
-        kernel.behavior_of(node).on_cancel(
-            RuntimeNodeContext(kernel, session, instance, node, token)
-        )
+        hook_ctx = RuntimeNodeContext(kernel, session, instance, node, token)
+        run_declared_hook(hook_ctx, node.hooks.on_cancel)  # 声明式先于行为（declared_hooks）
+        kernel.behavior_of(node).on_cancel(hook_ctx)
