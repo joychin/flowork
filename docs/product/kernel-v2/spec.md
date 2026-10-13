@@ -63,13 +63,13 @@
 | 字段 | 类型 | 必填 | 默认 | 说明 |
 |---|---|---|---|---|
 | code | str | ✓ | — | 节点编码，图内唯一，连线用它互相引用 |
-| kind | str | ✓ | — | 节点类型：start/end/user_task/service_task/call_activity/cc_task/branch，或自定义注册的类型 |
+| kind | str | ✓ | — | 节点类型：start/end/user_task/service_task/call_activity/cc_task/branch/wait，或自定义注册的类型 |
 | name | str | — | "" | 显示名 |
 | advance_policy | "any"/"all"/null | — | null | 推进策略（见 2.3）：多条入边到齐再开始（all）还是任一到即开始（any） |
 | hooks | NodeHooks | — | 空 | 四个生命周期钩子的声明式绑定（见 2.6 层 1） |
 | properties | dict | — | {} | 扩展袋：UI/外部系统放附加配置，引擎不解释 |
 
-**类型机制（可扩展性的根）**：kind 是节点注册表（`NodeRegistry`）的键。注册一个新类型要交三样东西：Spec 类（数据字段，pydantic 校验）、Behavior 类（运行行为）、ui 元数据（设计器展示，可选）。**内置七种类型与自定义类型走完全相同的注册入口**（builtin.py 的 `register_builtin_nodes` 与用户代码调同一个 `register`，这是「官方插件不吃小灶」铁律的落点 ✓）。加载图纸时遇到未注册的 kind 直接报错（设计期拦截 ✓）。
+**类型机制（可扩展性的根）**：kind 是节点注册表（`NodeRegistry`）的键。注册一个新类型要交三样东西：Spec 类（数据字段，pydantic 校验）、Behavior 类（运行行为）、ui 元数据（设计器展示，可选）。**内置八种类型与自定义类型走完全相同的注册入口**（builtin.py 的 `register_builtin_nodes` 与用户代码调同一个 `register`，这是「官方插件不吃小灶」铁律的落点 ✓）。加载图纸时遇到未注册的 kind 直接报错（设计期拦截 ✓）。
 
 ### 2.2 连线（flow）：图上的箭头
 
@@ -127,7 +127,7 @@
 |---|---|---|
 | start | 起点，一个图一个 | 无 |
 | end | 终点，令牌到这里消失；全消失则实例完成 | 无 |
-| user_task | 人工任务：等人操作（定义详见第 5.1 章） | assignee/assignees/candidate_users/candidate_groups（取人，支持表达式）；multi_instance（会签，见下）；reject_target（驳回到哪个节点）；auto_pass_originator/previous/participated（命中者自动通过）；no_participant_policy（找不到人：raise 报错/to_admins 转管理员）；deadlines（超时动作列表，见 5.1；【v2.2】现状单策略 timeout 为其退化形态，validate 兼容读取） |
+| user_task | 人工任务：等人操作（定义详见第 5.1 章） | assignee/assignees/candidate_users/candidate_groups（取人，支持表达式）；multi_instance（会签，见下）；reject_target（驳回到哪个节点）；auto_pass_originator/previous/participated（命中者自动通过）；no_participant_policy（找不到人：raise 报错/to_admins 转管理员）；deadlines（超时动作列表，见 5.1；【v2.2】现状单策略 timeout 为其退化形态，validate 兼容读取。**豁免成文【2026-10-13 收尾批拍板】**：此兼容读取为本仓「零兼容」哲学的**唯一明文例外**——FlowNode 为 extra=allow，删字段会让旧图纸的 timeout 键静默失效（比现状更糟），故保留翻译层并在此登记） |
 | service_task | 系统任务：程序自动执行（详见 5.2） | action（在 HandlerRegistry 注册的动作名，引擎内形态）；params（参数字典）；【v2】mode: handler\|worker（worker＝外部程序领取执行，此时 job_type 声明任务类型，见 5.2） |
 | call_activity | 子流程：调起另一个流程定义当一个节点用 | process_code；binding【v2.3 第十一批】（latest 缺省=运行期解析最新版，目标未发布 deploy 仅 WARNING；deployment=部署时必须已发布，ERROR——Zeebe bindingType 同义；**两值都不锁运行期版本【第二十轮明示，审计 D6-a】**：进入节点时恒解析最新 published，父流程长跑期间子定义发新 major 会静默切版——长跑锁定场景需宿主自管版本引用）；**multi_instance【v2.3 第十三批 A9】**（subjects 取人表达式＝每人一子实例，parent_index 记迭代序；input_mappings 按子求值注入 `subject`；completion 公式注入 child_total/completed/failed 只做提前收工；output collect＝index 对齐聚合 null 占位，空集合＝立即完成）｜is_synchronous（同步等它跑完/异步不管）；input_mappings/output_mappings（变量进出映射） |
 | cc_task | 传阅：给人看一眼，不卡流程 | recipients（接收人列表，支持表达式）；advance_policy 恒 any |
@@ -547,7 +547,7 @@ CRUD：新增与更新＝同一操作 `deploy`——**纯数据写入（INSERT �
 
 实例抄全文 snapshot（图纸 JSON 通常几 KB，10 万实例≈数百 MB，可接受；引用化优化不做）。`wf_process_definition` 补 `published_by/published_at/content_hash` 列。**审计四件套**（每件不可变，合起来回答「当时发生了什么、凭什么发生」）：definition_snapshot（当时按哪版图纸走）＋ actor_context 身份快照（他以什么身份操作，5.6）＋ wf_task_history（什么时间、什么动作、什么结论）＋ 走线记录（流程怎么走的）。「当时谁能审什么」＝实例 snapshot + 部署事件流 + 身份快照。资源（表单/权限）版本沿用同款哲学：发布不可变 + 定义引用资源版本（M8 落地）。
 
-## 7. 等待与唤醒【v2 新增语义，当前最大缺口】
+## 7. 等待与唤醒【v2 新增语义；2026-10-09 实施 ✓】
 
 流程停下来等三样东西，语义各不同：
 
@@ -645,7 +645,7 @@ class ExpressionFunctions(Protocol):     # ✓ CEL 自定义函数来源（4.3�
 |---|---|---|
 | 定义 | `deploy / validate / dry_run / semantic_diff / verdict(预演) / get_definition / list_definitions / retire / purge / definition_drift` | ✓ 全部（P0-4/P1-6；get_definition 参数为 code/major/revision） |
 | 实例 | `start_process(code, variables, start_user, business_key?, major?, revision?, idempotency_key?, reuse?)`；`pause / resume / terminate / get_instance`；`update_variables(instance_id, updates, *, actor, reason?)` / `variables_of(instance_id)` / `variable_history(instance_id, *, name?, limit, offset?)`【变量 I/O 批，2026-10-08】；**`simulate`【v2.3 第十二批 A10】（整图试跑→SimulationReport：条件边真求值、service_task 恒 stub、wait 冻结为卡点、事件不投 outbox、报告复用路由审计）** | ✓ 全部（幂等三策略 P0-5；pause/resume/terminate P1-3；分页为 offset 式非游标） |
-| 任务 | `get_task / list_tasks / claim / unclaim / complete / reject / transfer / assist / complete_assist / add_countersigner / list_cc_tasks / mark_cc_read`；`anticipate(task_id, outcome) → {node_exit, instance_complete}` | ✓ 全部（anticipate 只读预判，P1） |
+| 任务 | `get_task / list_tasks / claim / unclaim / complete / reject / transfer / assist / complete_assist / add_countersigner / consult / complete_consult`（v2.3 A8）/ `withdraw`（撤回，含下游进展闸门）/ `list_cc_tasks / mark_cc_read`；`anticipate(task_id, outcome) → {node_exit, instance_complete}` | ✓ 全部（anticipate 只读预判，P1；清单补齐于 2026-10-13 收尾批——§5.1 早已实现而本表漏记） |
 | 系统 | `signal / publish_message`【v2】；`activate_jobs / complete_job / fail_job`【v2】；`list_incidents / resolve_incident / move_token` | ✓ 全部（消息 P1-1；worker 租约 P1-2；resolve 五动作 P1-4） |
 
 启动幂等三策略：`reject`（撞 key 报错，默认）/ `return_existing`（返回已有实例）/ `allow_duplicate`（明示放弃幂等）。任务完成侧幂等已由历史表 idempotency_key 支撑 ✓。
@@ -697,6 +697,8 @@ class ExpressionFunctions(Protocol):     # ✓ CEL 自定义函数来源（4.3�
 | wf_message_subscription（新表） | instance_id, node_id, name, correlation_key, state(open/matched) |
 | wf_variable_index（新表） | instance_id, name, value_text, value_num |
 | wf_variable_history（新表，变量 I/O 批 2026-10-08） | instance_id, name, old_value, new_value, source, acted_by, created_at；追加只写，全写方覆盖（任务提交/钩子/外部命令），命令尾 diff 产生，值相等跳过 |
+| wf_route_decision（新表，F3 路由审计 2026-10-08） | instance_id, node_id, edges JSON（逐条件边 result），selected, snapshot JSON；无条件路由也落行 |
+| wf_designer_draft（新表，设计器批 C4 2026-10-11） | code, content（语义）, layout（画布，读写拆合）, published_versions；草稿与发布版独立 |
 
 迁移走 Alembic 基线（与多副本欠账合并排期）。
 
