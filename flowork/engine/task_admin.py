@@ -60,7 +60,10 @@ class TaskAdminMixin:
         return self._engine.execute(_command)
 
     def cancel_node(self, instance_id: str, activity_code: str, actor: str) -> None:
-        """管理员取消指定节点的全部未完令牌。"""
+        """管理员取消指定节点的全部未完令牌。
+
+        两级事件（复核批成文）：逐令牌 node_cancelled(by=admin, actor)=状态层；
+        结尾一条 node_cancelled_by_admin=动作留痕层——不是重复信号。"""
 
         def _command(ctx: CommandContext) -> None:
             ctx.touch(self._instance(ctx, instance_id))
@@ -114,8 +117,12 @@ class TaskAdminMixin:
                     instance_id,
                 )
             kernel.complete_instance(ctx.session, instance, "completed")
+            # 两级事件（复核批成文）：process_completed=状态事实（终态契约三件
+            # 套之一），本事件=管理动作留痕（end_status 标明落点）——不是双终态
             kernel.record_event(
-                DomainEvent.PROCESS_FINISHED_BY_ADMIN, {"actor": actor}, instance_id
+                DomainEvent.PROCESS_FINISHED_BY_ADMIN,
+                {"actor": actor, "end_status": "completed"},
+                instance_id,
             )
 
         self._engine.execute(_command)

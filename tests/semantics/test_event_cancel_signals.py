@@ -395,3 +395,33 @@ def test_admin_finish_guard_and_node_exited():
         engine.task.finish_instance(iid, actor="boss")
     assert len(_events(engine, iid, "process_finished_by_admin")) == 1
     engine.close()
+
+
+# —— 复核批续（2026-10-13 事件 review 复核批）：两级事件语义与载荷 ——
+
+
+def test_admin_finish_two_layer_terminal_events():
+    """两级语义（成文）：process_completed=状态事实，process_finished_by_admin
+    =管理动作留痕且带 end_status——终态契约始终是前者三件套。"""
+    engine = ProcessEngine()
+    engine.repository.deploy(_flow_two_step("sig_two_layer").build())
+    iid = engine.runtime.start_process("sig_two_layer", start_user="u_s")
+    engine.task.finish_instance(iid, actor="boss")
+    completed = _events(engine, iid, "process_completed")
+    finished = _events(engine, iid, "process_finished_by_admin")
+    assert len(completed) == 1 and len(finished) == 1
+    assert finished[0]["end_status"] == "completed" and finished[0]["actor"] == "boss"
+    engine.close()
+
+
+def test_node_cancelled_carries_actor():
+    """状态层 node_cancelled 也带 actor（复核批）：撤回/终止等取消的归因
+    不再只有动作层才有。"""
+    engine = ProcessEngine()
+    engine.repository.deploy(_flow_two_step("sig_nc_actor").build())
+    iid = engine.runtime.start_process("sig_nc_actor", start_user="u_s")
+    engine.task.complete(engine.task.list_tasks(instance_id=iid)[0].id, actor="u1")
+    engine.runtime.terminate_process(iid, actor="boss")
+    cancelled = _events(engine, iid, "node_cancelled")
+    assert cancelled and all(p["actor"] == "boss" for p in cancelled)
+    engine.close()

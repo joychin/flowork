@@ -58,6 +58,11 @@ class DomainEvent(StrEnum):
     TASK_WITHDRAWN = "task_withdrawn"
     TIMEOUT_WARNED = "timeout_warned"
     CC_CREATED = "cc_created"
+    # 管理员动作层（两级事件语义，2026-10-13 事件 review 复核批成文）：
+    # 状态层（node_entered/cancelled、process_completed 等）回答「流程现在是
+    # 什么样」，动作层（*_by_admin）回答「谁对它动了手术」——同一操作两层
+    # 各自完整，订阅方按需取层；终态信号契约始终是状态层三事件
+    # （process_completed/cancelled/terminated），*_by_admin 不是终态替代。
     NODE_ACTIVATED_BY_ADMIN = "node_activated_by_admin"
     NODE_CANCELLED_BY_ADMIN = "node_cancelled_by_admin"
     TOKEN_MOVED_BY_ADMIN = "token_moved_by_admin"

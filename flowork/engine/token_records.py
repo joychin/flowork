@@ -173,7 +173,12 @@ class TokenRecordsMixin:
         session.flush()
         self.record_event(
             DomainEvent.NODE_CANCELLED,
-            {"activity_code": token.activity_code, "by": cause},
+            {
+                "activity_code": token.activity_code,
+                "by": cause,
+                "token_id": token.id,
+                "actor": actor,  # 两级语义：状态层也带归因（复核批）
+            },
             token.instance_id,
         )
 
