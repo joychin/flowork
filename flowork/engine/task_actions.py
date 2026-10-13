@@ -109,7 +109,9 @@ class TaskOpsMixin:
         ctx.touch(self._instance(ctx, task.instance_id))
         kernel = self._engine.kernel_for(ctx)
         self._emit_task_event(ctx, DomainEvent.TASK_TRANSFERRED, task, actor)
-        new_task = self._clone_task(ctx, task, assignee=to_user, root=task.root_task_id or task.id)
+        new_task = self._clone_task(
+            ctx, task, assignee=to_user, operator=actor, root=task.root_task_id or task.id
+        )
         carry_deadline_jobs(ctx.session, task, new_task)
         kernel.archive_task(ctx.session, task, outcome="transfer", comment=comment, actor=actor)
         return self._task_info(new_task)
@@ -187,6 +189,7 @@ class TaskOpsMixin:
         task: TaskRow,
         *,
         assignee: str,
+        operator: str,
         task_type: str | None = None,
         root: str | None = None,
     ) -> TaskRow:
@@ -207,7 +210,8 @@ class TaskOpsMixin:
         )
         ctx.session.add(new_task)
         ctx.session.flush()
-        self._emit_task_event(ctx, DomainEvent.TASK_CREATED, new_task, assignee)
+        # actor=发起克隆的人（2026-10-13 事件 review 复核批：修前误记被指派人）
+        self._emit_task_event(ctx, DomainEvent.TASK_CREATED, new_task, operator)
         return new_task
 
     def _task_info(self, task: TaskRow) -> TaskInfo:

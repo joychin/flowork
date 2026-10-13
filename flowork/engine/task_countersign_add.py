@@ -51,6 +51,7 @@ class TaskCountersignAddMixin:
         task: TaskRow,
         *,
         assignee: str,
+        operator: str,
         task_type: str | None = None,
         root: str | None = None,
     ) -> TaskRow:
@@ -119,7 +120,13 @@ class TaskCountersignAddMixin:
         kernel = self._engine.kernel_for(ctx)
         kernel.record_event(
             DomainEvent.TASK_COUNTERSIGNER_ADDED,
-            {"task_id": task_id, "users": users, "actor": actor, "comment": comment},
+            {
+                "task_id": task_id,
+                "activity_code": task.activity_code,
+                "users": users,
+                "actor": actor,
+                "comment": comment,
+            },
             task.instance_id,
         )
         root = task.root_task_id or task.id
@@ -145,7 +152,9 @@ class TaskCountersignAddMixin:
             raise TaskNotAvailableError(
                 f"加签人已在会签名单（同令牌在办）：{'、'.join(duplicates)}"
             )
-        created = [self._clone_task(ctx, task, assignee=user, root=root) for user in users]
+        created = [
+            self._clone_task(ctx, task, assignee=user, operator=actor, root=root) for user in users
+        ]
         # 加签人同样进 SLA（code-review 2026-10 P2-9）：克隆任务此前零 timer 零
         # due_at——加签人不办则会签节点无限期悬挂。新票人按并行会签同款独立满档。
         if isinstance(node, UserTaskSpec):

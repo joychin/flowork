@@ -47,6 +47,7 @@ class TaskAssistMixin:
         task: TaskRow,
         *,
         assignee: str,
+        operator: str,
         task_type: str | None = None,
         root: str | None = None,
     ) -> TaskRow:
@@ -108,22 +109,31 @@ class TaskAssistMixin:
         kernel = self._engine.kernel_for(ctx)
         root = task.root_task_id or task.id
         created = [
-            self._clone_task(ctx, task, assignee=user, task_type="assist", root=root)
+            self._clone_task(
+                ctx, task, assignee=user, operator=actor, task_type="assist", root=root
+            )
             for user in users
         ]
         kernel.record_event(
             DomainEvent.TASK_ASSIST_CREATED,
-            {"task_id": task_id, "users": users, "actor": actor, "comment": comment},
+            {
+                "task_id": task_id,
+                "activity_code": task.activity_code,
+                "users": users,
+                "actor": actor,
+                "comment": comment,
+            },
             task.instance_id,
         )
         return [self._task_info(t) for t in created]
 
-    def _cancel_assist_tasks(self, ctx: CommandContext, task: TaskRow) -> None:
+    def _cancel_assist_tasks(self, ctx: CommandContext, task: TaskRow, actor: str) -> None:
         """主任务终态（complete/reject）同事务收口其令牌下的协办待办。
 
         协办不占票也不卡流程（spec §5.1）：主任务已出结果，协办意见失去时效，
-        挂着只会变脏待办——收口落历史 outcome=assist_cancel（actor=system，
-        与主任务办理动作同一事务）。转办不触发（等待未终结，协办随新办理人继续）。
+        挂着只会变脏待办——收口落历史 outcome=assist_cancel（归因主任务办理人，
+        2026-10-13 事件 review 复核批：修前一律记 system，事件缺定位缺 actor）。
+        转办不触发（等待未终结，协办随新办理人继续）。
         """
         kernel = self._engine.kernel_for(ctx)
         for assist in kernel.tasks(ctx.session, task.instance_id, token_id=task.token_id):
@@ -134,11 +144,17 @@ class TaskAssistMixin:
                 assist,
                 outcome="assist_cancel",
                 comment="主任务已办理，协办自动收口",
-                actor="system",
+                actor=actor,
             )
             kernel.record_event(
                 DomainEvent.TASK_ASSIST_CANCELLED,
-                {"task_id": assist.id, "root_task_id": task.id, "assignee": assist.assignee},
+                {
+                    "task_id": assist.id,
+                    "activity_code": assist.activity_code,
+                    "root_task_id": task.id,
+                    "assignee": assist.assignee,
+                    "actor": actor,
+                },
                 assist.instance_id,
             )
 

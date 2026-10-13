@@ -64,7 +64,7 @@ class TaskAdminMixin:
             tokens = kernel.tokens(ctx.session, instance_id, states=(TokenState.UNFINISHED.value,))
             for token in tokens:
                 if token.activity_code == activity_code:
-                    kernel.cancel_token(ctx.session, token, cause="admin")
+                    kernel.cancel_token(ctx.session, token, cause="admin", actor=actor)
             kernel.record_event(
                 DomainEvent.NODE_CANCELLED_BY_ADMIN,
                 {"activity_code": activity_code, "actor": actor},

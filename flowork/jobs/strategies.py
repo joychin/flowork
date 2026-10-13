@@ -254,7 +254,13 @@ class DeadlineStrategiesMixin:
         if strategy != "reassign":
             kernel.record_event(
                 DomainEvent.TASK_ESCALATED,
-                {"task_id": task.id, "from": task.assignee, "to": target},
+                {
+                    "task_id": task.id,
+                    "activity_code": task.activity_code,  # 2026-10-13 事件 review 复核批
+                    "task_type": task.task_type,
+                    "from": task.assignee,
+                    "to": target,
+                },
                 job.instance_id,
             )
         self._engine.task._transfer(ctx, task.id, target, "system:timeout", f"超时{strategy}")

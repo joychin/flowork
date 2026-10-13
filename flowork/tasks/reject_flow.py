@@ -42,7 +42,7 @@ class RejectMixin:
         """动作抢占咽喉（版本守卫+复验）由 TaskOpsMixin 提供。"""
         raise NotImplementedError
 
-    def _cancel_assist_tasks(self, ctx: CommandContext, task: TaskRow) -> None:
+    def _cancel_assist_tasks(self, ctx: CommandContext, task: TaskRow, actor: str) -> None:
         """协办随主任务收口由 TaskOpsMixin 提供。"""
         raise NotImplementedError
 
@@ -119,7 +119,7 @@ class RejectMixin:
         assert token is not None
         token.disapprove_count += 1
         kernel.archive_task(ctx.session, task, outcome="reject", comment=comment, actor=actor)
-        self._cancel_assist_tasks(ctx, task)  # 协办随主任务终态同事务收口（spec §5.1）
+        self._cancel_assist_tasks(ctx, task, actor)  # 协办随主任务终态同事务收口（spec §5.1）
         kernel.record_event(
             DomainEvent.TASK_REJECTED,
             {
@@ -174,7 +174,7 @@ class RejectMixin:
         unfinished = (TokenState.UNFINISHED.value,)
         for other in kernel.tokens(ctx.session, instance.id, states=unfinished):
             if other.id != token.id:
-                kernel.cancel_token(ctx.session, other, cause="reject")
+                kernel.cancel_token(ctx.session, other, cause="reject", actor=actor)
         for pending in kernel.tasks(ctx.session, instance.id, token_id=token.id):
             from flowork.tasks.auto_pass import archive_auto_pass
 

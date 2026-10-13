@@ -79,6 +79,9 @@ class TaskRecordsMixin:
                     "activity_code": node.code,
                     "assignee": assignee,
                     "task_type": task_type,
+                    # 键集与克隆路径对齐（2026-10-13 事件 review 复核批）：
+                    # 引擎解析产生无操作人 → None；转办/加签等克隆路径为发起人。
+                    "actor": None,
                 },
                 instance.id,
             )

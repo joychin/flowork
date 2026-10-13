@@ -198,7 +198,7 @@ class IncidentMixin:
             node = definition.node(token.activity_code)
             # node_cancelled/task_cancelled 由 cancel_token 咽喉统一发（A4，
             # by=incident:skip）——此处不再手发防双发
-            kernel.cancel_token(ctx.session, token, cause="incident:skip")
+            kernel.cancel_token(ctx.session, token, cause="incident:skip", actor=actor)
             if node is None:
                 continue
             audit = RoutingAudit()
@@ -238,7 +238,7 @@ class IncidentMixin:
             definition = kernel.definition_of(ctx.session, instance)
             target = definition.node(target_activity)
             assert target is not None, f"目标节点不存在：{target_activity}"
-            kernel.cancel_token(ctx.session, token, cause="admin_move")
+            kernel.cancel_token(ctx.session, token, cause="admin_move", actor=actor)
             new_token = kernel.activate(
                 ctx.session, instance, target, source_activity_code=token.activity_code
             )

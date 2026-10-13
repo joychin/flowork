@@ -123,13 +123,17 @@ class TokenRecordsMixin:
             token.approval_exit = approval_exit
         session.flush()
 
-    def cancel_token(self, session: Session, token: TokenRow, *, cause: str = "") -> None:
+    def cancel_token(
+        self, session: Session, token: TokenRow, *, cause: str = "", actor: str = "system"
+    ) -> None:
         """取消令牌并撤销其未办任务（任务落历史 outcome=cancelled）。
 
         事件咽喉（2026-10-13 事件 review A4）：节点级 ``node_cancelled``
         （``by``=cause——撤回/终态级联/竞速/驳回/MI 收工/故障跳过/管理员七路
         统一）与逐任务 ``task_cancelled`` 都在此发，订阅方对「下游被撤回连带
         取消」不再失明。先经行为取消钩子（wait 关订阅删 Job，契约不变）。
+        ``actor``（复核批：撤回/终止/驳回等有发起人的调用方穿透传入）——
+        事件载荷与已办 ``acted_by`` 归因一致，不再一律记 system。
         """
         from flowork.events.domain import DomainEvent
         from flowork.persistence.orm import TaskHistoryRow
@@ -149,7 +153,7 @@ class TokenRecordsMixin:
                     task_type=task.task_type,
                     outcome="cancelled",
                     context_payload=task.context_payload,
-                    acted_by="system",
+                    acted_by=actor,
                 )
             )
             session.delete(task)
@@ -160,6 +164,7 @@ class TokenRecordsMixin:
                     "activity_code": task.activity_code,
                     "task_type": task.task_type,
                     "assignee": task.assignee,
+                    "actor": actor,
                 },
                 token.instance_id,
             )

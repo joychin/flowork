@@ -58,6 +58,7 @@ class TaskConsultMixin:
         task: TaskRow,
         *,
         assignee: str,
+        operator: str,
         task_type: str | None = None,
         root: str | None = None,
     ) -> TaskRow:
@@ -92,12 +93,20 @@ class TaskConsultMixin:
         kernel = self._engine.kernel_for(ctx)
         root = task.root_task_id or task.id
         created = [
-            self._clone_task(ctx, task, assignee=user, task_type="consult", root=root)
+            self._clone_task(
+                ctx, task, assignee=user, operator=actor, task_type="consult", root=root
+            )
             for user in users
         ]
         kernel.record_event(
             DomainEvent.TASK_CONSULT_CREATED,
-            {"task_id": task_id, "users": users, "actor": actor, "comment": comment},
+            {
+                "task_id": task_id,
+                "activity_code": task.activity_code,
+                "users": users,
+                "actor": actor,
+                "comment": comment,
+            },
             task.instance_id,
         )
         return [self._task_info(t) for t in created]
@@ -125,7 +134,13 @@ class TaskConsultMixin:
         if not self._open_consults_of(ctx, task.instance_id, root):
             kernel.record_event(
                 DomainEvent.TASK_CONSULT_FINISHED,
-                {"root_task_id": root, "last_task_id": task.id},
+                {
+                    "root_task_id": root,
+                    "last_task_id": task.id,
+                    "activity_code": task.activity_code,  # 2026-10-13 事件 review 复核批
+                    "actor": actor,
+                    "opinion": opinion,
+                },
                 task.instance_id,
             )
 

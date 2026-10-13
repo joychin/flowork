@@ -48,6 +48,7 @@ class TaskReworkMixin:
         task: TaskRow,
         *,
         assignee: str,
+        operator: str,
         task_type: str | None = None,
         root: str | None = None,
     ) -> TaskRow:
@@ -91,7 +92,7 @@ class TaskReworkMixin:
         downstream = downstream_basin(definition, history.activity_code) - {history.activity_code}
         for token in kernel.tokens(ctx.session, instance.id, states=(TokenState.UNFINISHED.value,)):
             if token.activity_code in downstream:
-                kernel.cancel_token(ctx.session, token, cause="withdraw")
+                kernel.cancel_token(ctx.session, token, cause="withdraw", actor=actor)
 
         node = definition.node(history.activity_code)
         assert node is not None
@@ -134,6 +135,7 @@ class TaskReworkMixin:
                     "comment": comment,
                     "token_id": original_token.id,
                     "vote_retracted": True,
+                    "new_token": None,  # 键集与重建分支对齐（2026-10-13 事件 review 复核批）
                 },
                 instance.id,
             )
@@ -154,6 +156,8 @@ class TaskReworkMixin:
                 "activity_code": history.activity_code,
                 "actor": actor,
                 "comment": comment,
+                "token_id": history.token_id,  # 被撤回的原令牌
+                "vote_retracted": False,
                 "new_token": token.id,
             },
             instance.id,

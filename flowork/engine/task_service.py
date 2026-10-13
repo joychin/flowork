@@ -199,7 +199,7 @@ class TaskService(
             actor=actor,
             idempotency_key=idempotency_key,
         )
-        self._cancel_assist_tasks(ctx, task)  # 协办随主任务终态同事务收口（spec §5.1）
+        self._cancel_assist_tasks(ctx, task, actor)  # 协办随主任务终态同事务收口（spec §5.1）
         node = kernel.definition_of(ctx.session, instance).node(task.activity_code)
         assert node is not None, f"任务节点不存在：{task.activity_code}"
         behavior = kernel.behavior_of(node)
