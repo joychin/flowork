@@ -1,8 +1,9 @@
-"""消息查询与同步关联面（spec §7.2 配套面）：correlate_message / waiting。
+"""消息查询与同步关联面（spec §7.2 配套面）：correlate_message / waiting / 检索。
 
 从 message_service.py 拆出（单文件 ≤300 行红线）；流转件（订阅/命中/广播）
 在 message_flow.py。correlate 对标 Zeebe correlate 端点——「发布方想知道
-消息被谁消费」的同步答案；waiting 为等待实例反查（运维刚需）。
+消息被谁消费」的同步答案；waiting 为等待实例反查（运维刚需）；
+list_messages 为消息检索（收尾批 6，spec §12 messages/search 数据源）。
 """
 
 from __future__ import annotations
@@ -12,14 +13,35 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select
 
-from flowork.persistence.orm import MessageSubscriptionRow, ProcessInstanceRow
+from flowork.persistence.orm import MessageBufferRow, MessageSubscriptionRow, ProcessInstanceRow
+from flowork.runtime.lifecycle import FROZEN_INSTANCE_STATES
 
 if TYPE_CHECKING:
     from flowork.engine.engine import ProcessEngine
     from flowork.engine.ops import CommandContext
     from flowork.persistence.orm import MessageSubscriptionRow as _SubRow
 
-__all__ = ["correlate_message", "waiting"]
+__all__ = ["correlate_message", "first_open_subscription", "list_messages", "waiting"]
+
+
+def first_open_subscription(ctx: CommandContext, name: str, correlation_key: str) -> _SubRow | None:
+    """首个可消费的 open 订阅（FCFS；跳过暂停/挂起实例——spec §7.2 暂停
+    拦截 + 拍板 1：挂起对齐暂停，消息落缓冲、故障解决后补消费）。"""
+    rows = ctx.session.scalars(
+        select(MessageSubscriptionRow)
+        .where(
+            MessageSubscriptionRow.name == name,
+            MessageSubscriptionRow.correlation_key == correlation_key,
+            MessageSubscriptionRow.state == "open",
+        )
+        .order_by(MessageSubscriptionRow.created_at)
+    ).all()
+    for row in rows:
+        instance = ctx.session.get(ProcessInstanceRow, row.instance_id)
+        if instance is None or instance.state in FROZEN_INSTANCE_STATES:
+            continue
+        return row
+    return None
 
 
 def correlate_message(
@@ -50,7 +72,7 @@ def correlate_message(
             return _receipt_of(ctx, stamped, duplicate=True)  # 已消费：幂等回放
         from flowork.engine.message_flow import hit_subscription
 
-        subscription = engine.messages._first_open_subscription(ctx, name, correlation_key)
+        subscription = first_open_subscription(ctx, name, correlation_key)
         if subscription is not None and hit_subscription(
             ctx, engine, subscription, body, message_id=mid
         ):
@@ -100,6 +122,76 @@ def waiting(
             }
             for row, instance in session.execute(stmt).all()
         ]
+
+
+def list_messages(
+    engine: ProcessEngine,
+    *,
+    name: str | None = None,
+    correlation_key: str | None = None,
+    kind: str | None = None,
+    state: str | None = None,
+    offset: int = 0,
+    limit: int = 50,
+) -> list[dict[str, Any]]:
+    """消息检索（收尾批 6，spec §12 messages/search 数据源）。
+
+    两源合并按时间倒序：buffer（未消费缓冲，TTL 内）∪ subscription（订阅行
+    ——open=在等 / matched=已消费定格）。correlation_key 前缀匹配；kind 收窄
+    单源；state 仅对 subscription 源生效。分页为内存归并切片（两侧各取
+    offset+limit+1 行上界，调用方照 list_jobs 惯例传 limit+1 探测 has_more）。
+    """
+    take = offset + limit + 1
+    rows: list[dict[str, Any]] = []
+    with engine.session_factory() as session:
+        if kind in (None, "buffer"):
+            buf_stmt = select(MessageBufferRow).order_by(MessageBufferRow.received_at.desc())
+            if name is not None:
+                buf_stmt = buf_stmt.where(MessageBufferRow.name == name)
+            if correlation_key:
+                buf_stmt = buf_stmt.where(
+                    MessageBufferRow.correlation_key.like(f"{correlation_key}%")
+                )
+            rows.extend(
+                {
+                    "kind": "buffer",
+                    "id": row.id,
+                    "name": row.name,
+                    "correlation_key": row.correlation_key,
+                    "message_id": row.message_id,
+                    "payload": row.payload,
+                    "occurred_at": row.received_at.isoformat() if row.received_at else None,
+                }
+                for row in session.scalars(buf_stmt.limit(take))
+            )
+        if kind in (None, "subscription"):
+            sub_stmt = select(MessageSubscriptionRow).order_by(
+                MessageSubscriptionRow.created_at.desc()
+            )
+            if name is not None:
+                sub_stmt = sub_stmt.where(MessageSubscriptionRow.name == name)
+            if correlation_key:
+                sub_stmt = sub_stmt.where(
+                    MessageSubscriptionRow.correlation_key.like(f"{correlation_key}%")
+                )
+            if state is not None:
+                sub_stmt = sub_stmt.where(MessageSubscriptionRow.state == state)
+            rows.extend(
+                {
+                    "kind": "subscription",
+                    "id": row.id,
+                    "instance_id": row.instance_id,
+                    "node_id": row.node_id,
+                    "name": row.name,
+                    "correlation_key": row.correlation_key,
+                    "message_id": row.message_id,
+                    "state": row.state,
+                    "occurred_at": row.created_at.isoformat() if row.created_at else None,
+                }
+                for row in session.scalars(sub_stmt.limit(take))
+            )
+    rows.sort(key=lambda item: item["occurred_at"] or "", reverse=True)
+    return rows
 
 
 def _receipt_of(ctx: CommandContext, subscription: _SubRow, *, duplicate: bool) -> dict[str, Any]:

@@ -258,3 +258,41 @@ def test_cursor_pagination(env: tuple[TestClient, ProcessEngine]) -> None:
         },
     ).json()
     assert len(rest["items"]) == 1 and rest["next_cursor"] is None
+
+
+def test_messages_search_covers_buffer_and_subscription(
+    env: tuple[TestClient, ProcessEngine],
+) -> None:
+    """收尾批 6（spec §12 搜索族补齐）：订阅 open→matched 全程 + 缓冲两源检索。"""
+    client, _ = env
+    _deploy(client, _wait_spec())
+    instance_id = _start(client, "rest_wait")  # wait 节点进入即登记 open 订阅
+    open_rows = client.post(
+        "/v2/messages/search", json={"filter": {"kind": "subscription", "state": "open"}}
+    ).json()["items"]
+    assert len(open_rows) == 1 and open_rows[0]["instance_id"] == instance_id
+
+    client.post("/v2/messages/publish", json={"name": "sign_back"})  # 命中订阅 → matched
+    client.post(
+        "/v2/messages/publish",
+        json={"name": "evt.buffered", "correlation_key": "corr-42", "payload": {"x": 1}},
+    )
+    body = client.post("/v2/messages/search", json={"filter": {}}).json()
+    kinds = {row["kind"] for row in body["items"]}
+    assert kinds == {"buffer", "subscription"}
+
+    only_buffer = client.post("/v2/messages/search", json={"filter": {"kind": "buffer"}}).json()[
+        "items"
+    ]
+    assert [row["name"] for row in only_buffer] == ["evt.buffered"]
+
+    by_prefix = client.post(
+        "/v2/messages/search", json={"filter": {"correlation_key": "corr-"}}
+    ).json()["items"]
+    assert [row["correlation_key"] for row in by_prefix] == ["corr-42"]
+
+    matched = client.post(
+        "/v2/messages/search",
+        json={"filter": {"kind": "subscription", "state": "matched"}},
+    ).json()["items"]
+    assert matched and matched[0]["state"] == "matched"

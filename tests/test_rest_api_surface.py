@@ -43,6 +43,7 @@ EXPECTED: set[str] = {
     "POST /v2/tasks/{task_id}/anticipate",
     # system
     "POST /v2/messages/publish",
+    "POST /v2/messages/search",
     "POST /v2/jobs/activate",
     "POST /v2/jobs/{job_id}/complete",
     "POST /v2/jobs/{job_id}/fail",

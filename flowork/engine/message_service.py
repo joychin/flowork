@@ -7,9 +7,8 @@
   契约 node_output 边界把关）＋ ``message_correlated``＋推进（等待节点）。
 - ``correlate_message``：同步关联（不缓冲）——命中回传签收凭证/无人在等
   None/重复幂等回放（spec §7.2 配套面，Zeebe correlate 同款）。
-- ``waiting``：open 订阅反查（谁在等什么，运维面）；``signal(name)`` 广播唤醒同名订阅。
-- 暂停实例的订阅不消费（全动作拦截——消息落缓冲，恢复反查补消费）。
-- session 级共用件与查询实现在 engine.message_query（守 300 行红线）。
+- ``waiting``/``list_messages``：订阅反查与消息检索（运维面）；``signal`` 广播唤醒。
+- 暂停实例不消费（消息落缓冲，恢复补消费）；查询件下沉 engine.message_query（守红线）。
 """
 
 from __future__ import annotations
@@ -24,7 +23,6 @@ from sqlalchemy import delete, select
 from flowork.engine.ops import CommandContext
 from flowork.events.domain import DomainEvent
 from flowork.persistence.orm import MessageBufferRow, MessageSubscriptionRow
-from flowork.runtime.lifecycle import FROZEN_INSTANCE_STATES
 
 if TYPE_CHECKING:
     from flowork.engine.engine import ProcessEngine
@@ -80,7 +78,9 @@ class MessageService:
 
             # 在途订阅优先（FCFS）；暂停实例的订阅跳过（全动作拦截——spec §7.2：
             # 暂停不消费，消息落下一优先级），命中走完整管线（映射+推进）。
-            subscription = self._first_open_subscription(ctx, name, correlation_key)
+            from flowork.engine.message_query import first_open_subscription
+
+            subscription = first_open_subscription(ctx, name, correlation_key)
             if subscription is not None:
                 from flowork.engine.message_flow import hit_subscription
 
@@ -160,29 +160,6 @@ class MessageService:
 
         return broadcast_signal(self._engine, name)
 
-    def _first_open_subscription(
-        self, ctx: CommandContext, name: str, correlation_key: str
-    ) -> MessageSubscriptionRow | None:
-        """首个可消费的 open 订阅（FCFS；跳过暂停/挂起实例——spec §7.2 暂停
-        拦截 + 拍板 1：挂起对齐暂停，消息落缓冲、故障解决后补消费）。"""
-        from flowork.persistence.orm import ProcessInstanceRow
-
-        rows = ctx.session.scalars(
-            select(MessageSubscriptionRow)
-            .where(
-                MessageSubscriptionRow.name == name,
-                MessageSubscriptionRow.correlation_key == correlation_key,
-                MessageSubscriptionRow.state == "open",
-            )
-            .order_by(MessageSubscriptionRow.created_at)
-        ).all()
-        for row in rows:
-            instance = ctx.session.get(ProcessInstanceRow, row.instance_id)
-            if instance is None or instance.state in FROZEN_INSTANCE_STATES:
-                continue
-            return row
-        return None
-
     def _resolve_write(
         self, payload: dict[str, Any], mappings: dict[str, str] | None, node_id: str
     ) -> dict[str, Any]:
@@ -231,6 +208,29 @@ class MessageService:
         from flowork.engine import message_query as _mq
 
         return _mq.waiting(self._engine, name=name, correlation_key=correlation_key)
+
+    def list_messages(
+        self,
+        *,
+        name: str | None = None,
+        correlation_key: str | None = None,
+        kind: str | None = None,
+        state: str | None = None,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        """消息检索（spec §12 messages/search 数据源；缓冲∪订阅行，见 message_query）。"""
+        from flowork.engine import message_query as _mq
+
+        return _mq.list_messages(
+            self._engine,
+            name=name,
+            correlation_key=correlation_key,
+            kind=kind,
+            state=state,
+            offset=offset,
+            limit=limit,
+        )
 
     # —— 内部 ——
 

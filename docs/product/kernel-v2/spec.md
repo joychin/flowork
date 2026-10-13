@@ -661,6 +661,8 @@ class ExpressionFunctions(Protocol):     # ✓ CEL 自定义函数来源（4.3�
 > flow_code/priority/due_before 三过滤维待 `list_tasks` 扩参，暂未开放（登记后置）。
 
 - 搜索：`POST /v2/{definitions|instances|tasks|jobs|incidents|messages|events}/search`，请求体 `{filter, sort:[{field,order}], page:{after?/before?, limit}}`（游标分页）；响应带 `next_cursor`。
+
+  > 【收尾批，2026-10-13】messages/search 已实施（filter：name / correlation_key 前缀 / kind: buffer|subscription / state；两源合并时间倒序）；sort 仍未实施。
 - tasks 过滤维度：state × assignee × candidate × flow_code × instance_id × priority × due_before（后两项依赖 wf_task 新列，第 14 章）。
 - 动作：`POST /v2/tasks/{id}/{claim|unclaim|complete|reject|transfer|assist|complete_assist}`；`POST /v2/instances/{id}/{pause|resume|cancel|terminate|signal}`；`POST /v2/messages/publish`；`POST /v2/jobs/activate`（长轮询：request_timeout 参数）；`POST /v2/jobs/{id}/{complete|fail}`；`POST /v2/definitions/deploy`；`POST /v2/definitions/{code}/retire`；`GET /v2/definitions/{code}?major=&revision=`（purge 仅 CLI，不出 REST）。
 - 只读预判【v2.2】：`POST /v2/tasks/{id}/anticipate`（body 携带假想 outcome，返回 `{node_exit, instance_complete}`，不落库不改状态）。

@@ -54,6 +54,26 @@ def register_system_routes(app: FastAPI, engine: ProcessEngine) -> None:
         )
         return {"name": name, "matched": matched}
 
+    @app.post("/v2/messages/search")
+    def messages_search(body: dict[str, Any]) -> dict[str, Any]:
+        """消息检索（收尾批 6，spec §12 搜索族补齐）：filter={name?,
+        correlation_key?（前缀）, kind: buffer|subscription?, state?（订阅源）}。"""
+        flt = body.get("filter") or {}
+        offset, limit = page_request(body.get("page"))
+        rows = messages.list_messages(
+            name=flt.get("name"),
+            correlation_key=flt.get("correlation_key"),
+            kind=flt.get("kind"),
+            state=flt.get("state"),
+            offset=offset,
+            limit=limit + 1,
+        )
+        has_more = len(rows) > limit
+        return {
+            "items": rows[:limit],
+            "next_cursor": encode_offset(offset + limit) if has_more else None,
+        }
+
     @app.post("/v2/jobs/activate")
     def activate(body: dict[str, Any]) -> dict[str, Any]:
         """长轮询领活：request_timeout 秒内无活则轮询等待（上限 30s，0=立即返回）。"""
