@@ -260,7 +260,9 @@ def test_admin_remove_instance(engine: ProcessEngine):
     engine.task.remove_instance(instance_id, actor="admin")
     with pytest.raises(InstanceNotFoundError):
         engine.runtime.get_instance(instance_id)
-    assert engine.history.events(instance_id) == []
+    # 未投递事件保留（2026-10-13 事件 review 复核批）：删除实例不再连坐
+    # 未消费的事件流——实例没了，已发生的事还在（订阅方仍可消费）
+    assert engine.history.events(instance_id)
 
 
 def test_cancel_process_via_runtime(engine: ProcessEngine):
@@ -532,3 +534,60 @@ def test_transfer_keeps_priority(engine: ProcessEngine):
         session.commit()
     moved = engine.task.transfer(task.id, "u_backup", actor="u_a")
     assert moved.priority == 80, "转办后优先级保持"
+
+
+def test_remove_instance_keeps_undelivered_events_and_sweeps_descendants(
+    engine: ProcessEngine,
+):
+    """回归（2026-10-13 事件 review 复核批）：remove_instance 修前整删 outbox
+    含未投递行（订阅方丢事件、审计链断裂），且只按根 id 删运行时数据——
+    已结算子孙的任务/令牌/事件残留孤儿行。修后未投递行保留、全树同删。"""
+    from sqlalchemy import select
+
+    from flowork.persistence.orm import EventOutboxRow, TaskHistoryRow, TokenRow
+
+    child = (
+        FlowBuilder("rm2_child")
+        .start()
+        .user_task("work", assignee="'u_w'")
+        .end()
+        .connect("start", "work")
+        .connect("work", "end")
+        .build()
+    )
+    publish(engine, child)
+    parent = (
+        FlowBuilder("rm2_parent")
+        .start()
+        .call_activity("sub", process_code="rm2_child")
+        .end()
+        .connect("start", "sub")
+        .connect("sub", "end")
+        .build()
+    )
+    publish(engine, parent)
+    instance_id = engine.runtime.start_process("rm2_parent", start_user="u_s")
+
+    child_row = next(i for i in engine.history.instances() if i.parent_id == instance_id)
+    work = engine.task.list_tasks(instance_id=child_row.id)[0]
+    engine.task.complete(work.id, actor="u_w")  # 子结算（父随之完成，全树事件未消费）
+
+    engine.task.remove_instance(instance_id, actor="u_admin")
+    with engine.session_factory() as session:
+        # 未投递事件保留待消费（instance_id 悬空是删除实例的既定代价）
+        kept = session.scalars(
+            select(EventOutboxRow).where(EventOutboxRow.instance_id == instance_id)
+        ).all()
+        assert kept, "未投递事件不应随实例删除"
+        assert all(row.delivered_at is None for row in kept)
+        # 子孙运行时数据整树同删（修前按根 id 残留孤儿）
+        child_ids = {child_row.id}
+        assert (
+            session.scalars(select(TokenRow).where(TokenRow.instance_id.in_(child_ids))).all() == []
+        )
+        assert (
+            session.scalars(
+                select(TaskHistoryRow).where(TaskHistoryRow.instance_id.in_(child_ids))
+            ).all()
+            == []
+        )

@@ -127,6 +127,10 @@ class TaskAdminMixin:
         （或等子实例终态）再删——直接删父会留下继续运行的孤儿子实例，父子
         关系断裂不可恢复。v2 四表（变量索引/变量历史/路由审计/消息订阅）
         与实例同删——此前残留成永久孤儿行（wait 订阅行令 waiting 反查失真）。
+        整树删除（2026-10-13 事件 review 复核批）：运行时数据按全树 id 删
+        （修前只按根 id——已结算子孙的任务/令牌/审计残留孤儿行）；outbox
+        只删已送达行，**未投递行保留待消费**（修前整删——订阅方丢事件、
+        审计链断裂）。
         """
 
         def _command(ctx: CommandContext) -> None:
@@ -171,11 +175,14 @@ class TaskAdminMixin:
                     f"实例 {instance_id} 存在未结算子实例（{len(unsettled)} 个）"
                     "——先 terminate 级联或等子实例终态，再删除"
                 )
+            # 整树 id 集（复核批）：运行时数据逐实例同删——修前只按根 id，
+            # 已结算子孙的任务/令牌/审计/事件残留孤儿行（与 docstring 相悖）
+            tree_ids = [instance_id] + [row.id for row in descendants]
             # 身份关联经 task_id 挂靠，先于任务删除
             ctx.session.execute(
                 delete(IdentityLinkRow).where(
                     IdentityLinkRow.task_id.in_(
-                        select(TaskRow.id).where(TaskRow.instance_id == instance_id)
+                        select(TaskRow.id).where(TaskRow.instance_id.in_(tree_ids))
                     )
                 )
             )
@@ -190,11 +197,16 @@ class TaskAdminMixin:
                 RouteDecisionRow,
                 MessageSubscriptionRow,
             ):
-                ctx.session.execute(delete(row_type).where(row_type.instance_id == instance_id))
+                ctx.session.execute(delete(row_type).where(row_type.instance_id.in_(tree_ids)))
+            # outbox 只删已送达行（复核批）：未投递行保留待消费——事件是跨实例
+            # 的审计事实，整删会让订阅方永远收不到已发生的事
             ctx.session.execute(
-                delete(EventOutboxRow).where(EventOutboxRow.instance_id == instance_id)
+                delete(EventOutboxRow).where(
+                    EventOutboxRow.instance_id.in_(tree_ids),
+                    EventOutboxRow.delivered_at.is_not(None),
+                )
             )
-            ctx.session.execute(delete(IncidentRow).where(IncidentRow.instance_id == instance_id))
+            ctx.session.execute(delete(IncidentRow).where(IncidentRow.instance_id.in_(tree_ids)))
             for row in descendants:  # 已结算子树整树同删
                 ctx.session.delete(row)
             ctx.session.delete(instance)
