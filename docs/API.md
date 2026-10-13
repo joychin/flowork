@@ -65,7 +65,7 @@ engine.close()
 | `add_countersigner(task_id, users, actor)` | 加签（item_count 联动） |
 | `withdraw(task_id, actor)` | 撤回已办（取消下游、原人重办） |
 | `activate_node(instance_id, activity_code, actor, participants=None)` / `cancel_node(...)` | 管理员激活/取消节点 |
-| `finish_instance(instance_id, actor)` / `remove_instance(instance_id, actor)` | 强制完成 / 删除实例（remove 连实例事件含**未投递**行一并删除——「至少一次」对被删实例的明示例外） |
+| `finish_instance(instance_id, actor)` / `remove_instance(instance_id, actor)` | 强制完成（终态守卫；令牌补发 node_exited；process_completed+process_finished_by_admin 两级事件）/ 删除实例（运行时数据按全树删；事件只删**已送达**行，未投递保留待消费） |
 | `anticipate(task_id, outcome="agree") -> {node_exit, instance_complete}` | 只读预判「照此提交后节点是否出、实例是否完」（不落库；主流引擎无等价 API） |
 
 `complete/reject` 返回 `TaskCompleteResult{task_id, outcome, instance_state, next_tasks}`（行动提示式）。

@@ -618,3 +618,30 @@ catalog 纯 dispatch（传输无关可直测）+ lowlevel Server 传输壳 + std
 ② **信号目录补全（A3–A7）**——message_received 三路统一先发（立即关联/消息启动/入缓冲/correlate 入口，载荷带 message_id；修前仅缓冲分支发）；cancel_token 统一咽喉：cause 参数+逐任务 task_cancelled+节点级 node_cancelled{by=原因}（撤回/终态级联/竞速/驳回/MI 收工/故障跳过/管理员七路——修前撤回下游取消对订阅方完全失明）；auto_pass 四处归档统一发 task_auto_passed{reason}（strategy/exit_reached/node_rejected/admin_finish，新 tasks/auto_pass.py 咽喉）+create_task(emit_event=False) 抑制幻影 task_created（待办通知不再误报——修前策略命中者建了即归档还照发）；补 task_unclaimed/task_assist_finished；删 node_failed 死成员（全仓零发射，spec §10 首行清单同步）。枚举 40→43。tests/semantics/test_event_cancel_signals.py 15 例。
 ③ **载荷契约（B1–B4）+守卫（C5）**——task 族统一 activity_code/task_type（同名同形）；task_completed/rejected 带 comment（驳回理由进事件）；incident_raised 带 incident_id（与 resolved 可配对）；node_entered/exited 四发射点带 token_id；process_started 带 major/revision；sub_process_started 带 child_definition_code/parent_node；timeout_warned 带 task_id/activity_code；emit_message_event 形参 Any→DomainEvent（mypy 兜动态位点）+终态候选静态钉子。契约 tests/test_event_payload_contract.py 8 例钉死。死循环守卫自 kernel 迁 token_records（kernel 299 守红线）。
 ④ **口径（C1/C2/C3/C4/C6）**——purge_delivered 缺省 None=不清理（事件表默认即审计历史，显式传 retention_days 才删；修前默认 90 天静默删审计）；history_level=activity 白名单加 incident_ 前缀（故障告警不再被吞）；API.md/integration.md 记 remove_instance 删未投递事件（至少一次的明示例外）与消费并发口径（无 SKIP LOCKED，多副本去重业务侧兜底）；DomainEvent 上公开面（67→68，按枚举编程的订阅方入口）。spec §10 事件面修复批段成文。1008 测试全绿（默认套件实测），五道门全过。
+
+**事件面复核批（2026-10-13 18:00 定时任务，review 复核+续修；九提交 fd5d8da→7381e84）**：
+复核时点并行批已落地（e3bad0b/214ee0d/aa024a1），14 项发现 3 项半已被并行修掉，剩 11 项分六提交修完，
+用户令「继续修复」后再三提交清挂账——**1085 测试全绿，五道门全过，三批红绿验证**：
+① 载荷收尾（fd5d8da）：cancel_token 咽喉带 actor（task_cancelled/node_cancelled 与已办 acted_by 归因发起人，
+修前一律 system——撤回/终止连带的下游取消归因丢失，六路调用方穿透）；克隆 task_created actor=发起人
+（修前误记被指派人）+主路径补 actor=None 键集对齐；assist/consult/countersigner/escalated 补 activity_code；
+withdrawn 两分支键集统一。**教训：Mixin 桩签名（_clone_task×4）必须随实现同步改**。
+② finish_instance 三件套（06f78d5）：终态守卫（防假 process_finished_by_admin）+强制完成令牌补 node_exited。
+③ incident resume/retry 补推进（dc59d5c）：advance_unfinished_tokens 三处共用（pause 恢复 P0-2 同症不同路）；
+**挂起测试载具＝永假条件分支上的 service 节点（注册即炸 handler）——复发节点在主路径上会把 resume 命令一并炸回滚**。
+④ MI 收工整树级联+by 标签统一（27abe04）：cascade_terminate 复用（孙实例不再孤儿）；by 统一语义标签
+（级联缺省 instance_terminated/cancelled，MI 传 multi_instance_completion）。**RuntimeNodeContext 无 engine/events，
+级联要传 kernel.engine+kernel.command_ctx**。
+⑤ 声明式 on_exit 三处补齐（50a0b09）：user_task _finish_now/wait finish_wait/reject_flow；驳回侧只补声明式
+（行为 on_exit 已被 node_rejected 归档等价实现，加行为钩子会双归档）。
+⑥ remove_instance（a66fa83）：outbox 只删已送达行（未投递保留待消费）+运行时数据按全树 id 删；
+旧测试钉的恰是被判缺陷的整删行为，随语义更新。
+⑦ 错误归因（bf4b90b）：EngineExecutionError.activity_code——节点作用域四帧经 attribute_node_error 标注
+（只补不覆盖），incident_raised 带节点定位；错误族迁 engine/errors.py（kernel __all__ 再导出兼容，
+kernel 317→288 守红线）。on_fail 接线仍挂账（错误归因专题余项）。
+⑧ 两级事件语义成文（4f2edeb）：状态层（终态契约三件套）vs 动作层（*_by_admin）——终态唯一化会破坏
+「终态 ∈ 三件套」订阅契约，不做；process_finished_by_admin 补 end_status；domain.py 管理员事件段注释成文。
+⑨ 缺位信号（7381e84）：sub_process_completed（父侧子完成信号，先落事件再判唤醒——挂起期唤醒落空也留痕；
+MI 逐子与级联终止经 complete_instance 同点覆盖）；process_suspended（与 process_paused 对称）；
+process_resumed 补到 incident resume/retry/skip 三路（incident_resolved 保留为故障单层——两级语义）；
+_skip_failed_nodes 拆 incident_skip.py 守红线；枚举 45。spec §10 复核批段成文+remove_instance 口径改口。
