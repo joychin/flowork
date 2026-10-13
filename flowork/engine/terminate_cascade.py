@@ -40,6 +40,7 @@ def cascade_terminate(
     actor: str,
     reason: str,
     cause: str | None = None,
+    close_incidents: bool = True,
 ) -> list[str]:
     """撤整棵树的未完令牌，未结算子实例（子先父后）落终态；返回子实例 id 清单。
 
@@ -96,4 +97,26 @@ def cascade_terminate(
             {"actor": actor, "reason": reason, "cascade_from": root.id},
             child.id,
         )
+    # 4) 整树联动关闭 open 故障单（全仓 review 2026-10-13 P0-1）：实例已死，
+    #    open 单若留着，resolve(resume) 可把终态实例复活为 running。resolution
+    #    记 instance_{end_status} 标明联动关闭（非五动作处置）。resolve 的
+    #    cancel/fail 动作传 close_incidents=False——由 resolve 自身收口，避免
+    #    incident_resolved 双发。
+    if close_incidents:
+        from flowork.persistence.orm import IncidentRow
+
+        for incident in ctx.session.scalars(
+            select(IncidentRow).where(
+                IncidentRow.instance_id.in_([root.id, *[c.id for c in descendants]]),
+                IncidentRow.state == "open",
+            )
+        ):
+            resolution = f"instance_{end_status}"
+            incident.state = "resolved"
+            incident.resolution = resolution
+            kernel.record_event(
+                DomainEvent.INCIDENT_RESOLVED,
+                {"incident_id": incident.id, "action": resolution, "actor": actor},
+                incident.instance_id,
+            )
     return [child.id for child in descendants]

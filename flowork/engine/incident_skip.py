@@ -9,8 +9,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from flowork.errors import FloworkError
 from flowork.events.domain import DomainEvent
-from flowork.runtime.lifecycle import InstanceState, TokenState
+from flowork.runtime.lifecycle import TERMINAL_INSTANCE_STATES, InstanceState, TokenState
 
 if TYPE_CHECKING:
     from flowork.engine.engine import ProcessEngine
@@ -33,6 +34,10 @@ def skip_failed_nodes(
 
     instance: ProcessInstanceRow | None = ctx.session.get(ProcessInstanceRow, instance_id)
     assert instance is not None
+    if instance.state in TERMINAL_INSTANCE_STATES:
+        # 终态守卫（全仓 review 2026-10-13 P0-1）：skip 会激活后继节点——
+        # 对已终态实例执行会造出僵尸令牌（与 resume 守卫同批防线）
+        raise FloworkError(f"实例 {instance_id} 已终态（{instance.state}），不能跳过节点")
     definition = kernel.definition_of(ctx.session, instance)
     base_functions = expression_functions_of(engine.config)
     for token in kernel.tokens(ctx.session, instance_id, states=(TokenState.UNFINISHED.value,)):

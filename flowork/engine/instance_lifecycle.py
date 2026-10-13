@@ -118,7 +118,13 @@ class InstanceLifecycleMixin:
         )
 
     def _terminate_in_ctx(
-        self, ctx: CommandContext, instance_id: str, *, actor: str, reason: str
+        self,
+        ctx: CommandContext,
+        instance_id: str,
+        *,
+        actor: str,
+        reason: str,
+        close_incidents: bool = True,
     ) -> None:
         """终止的命令体内联体（code-review 2026-10 P2-5）：供 resolve_incident
         在同一事务内调用——嵌套 engine.execute 曾把 incident 已 resolved 与实例
@@ -131,7 +137,13 @@ class InstanceLifecycleMixin:
         from flowork.engine.terminate_cascade import cascade_terminate
 
         cascaded = cascade_terminate(
-            self._engine, ctx, instance, end_status="terminated", actor=actor, reason=reason
+            self._engine,
+            ctx,
+            instance,
+            end_status="terminated",
+            actor=actor,
+            reason=reason,
+            close_incidents=close_incidents,
         )
         kernel.complete_instance(ctx.session, instance, "terminated")
         kernel.record_event(
@@ -147,7 +159,13 @@ class InstanceLifecycleMixin:
         )
 
     def _cancel_in_ctx(
-        self, ctx: CommandContext, instance_id: str, *, actor: str, reason: str
+        self,
+        ctx: CommandContext,
+        instance_id: str,
+        *,
+        actor: str,
+        reason: str,
+        close_incidents: bool = True,
     ) -> None:
         """取消的命令体内联体（同 _terminate_in_ctx，P2-5）。"""
         instance = _load(ctx, instance_id)
@@ -161,7 +179,13 @@ class InstanceLifecycleMixin:
         from flowork.engine.terminate_cascade import cascade_terminate
 
         cascaded = cascade_terminate(
-            self._engine, ctx, instance, end_status="cancelled", actor=actor, reason=reason
+            self._engine,
+            ctx,
+            instance,
+            end_status="cancelled",
+            actor=actor,
+            reason=reason,
+            close_incidents=close_incidents,
         )
         kernel.complete_instance(ctx.session, instance, "cancelled")
         kernel.record_event(

@@ -26,12 +26,24 @@ class IncidentMixin:
     # —— 跨 Mixin 依赖（RuntimeService 组合时由 InstanceLifecycleMixin 提供，
     # MRO 前位遮蔽本桩；P2-5 命令内变体）——
     def _cancel_in_ctx(
-        self, ctx: CommandContext, instance_id: str, *, actor: str, reason: str
+        self,
+        ctx: CommandContext,
+        instance_id: str,
+        *,
+        actor: str,
+        reason: str,
+        close_incidents: bool = True,
     ) -> None:
         raise NotImplementedError
 
     def _terminate_in_ctx(
-        self, ctx: CommandContext, instance_id: str, *, actor: str, reason: str
+        self,
+        ctx: CommandContext,
+        instance_id: str,
+        *,
+        actor: str,
+        reason: str,
+        close_incidents: bool = True,
     ) -> None:
         raise NotImplementedError
 
@@ -155,8 +167,14 @@ class IncidentMixin:
                 if instance is not None:
                     self._resume_from_suspension(ctx, instance, actor, "incident:resume")
             elif action == "cancel":
+                # close_incidents=False：本命令末尾统一 resolve（resolution=cancel），
+                # 级联不再代关，避免 incident_resolved 双发
                 self._cancel_in_ctx(
-                    ctx, incident.instance_id, actor=actor, reason="incident:cancel"
+                    ctx,
+                    incident.instance_id,
+                    actor=actor,
+                    reason="incident:cancel",
+                    close_incidents=False,
                 )
             elif action == "retry":
                 moment = self._engine.config.now()
@@ -178,7 +196,11 @@ class IncidentMixin:
                 self._skip_failed_nodes(ctx, incident.instance_id, actor)
             elif action == "fail":
                 self._terminate_in_ctx(
-                    ctx, incident.instance_id, actor=actor, reason="incident:fail"
+                    ctx,
+                    incident.instance_id,
+                    actor=actor,
+                    reason="incident:fail",
+                    close_incidents=False,
                 )
             else:
                 raise ValueError(f"未知修复动作：{action}（支持 resume/cancel/retry/skip/fail）")
@@ -200,26 +222,11 @@ class IncidentMixin:
         actor: str,
         reason: str,
     ) -> None:
-        """挂起恢复共享体（resume/retry）：置 running + 补消息 + 补推进 + 事件。
+        """挂起恢复共享体（resume/retry；实现拆至 incident_resume.py 守行数
+        红线——状态守卫/补消息/补推进/process_resumed 见彼处）。"""
+        from flowork.engine.incident_resume import resume_from_suspension
 
-        process_resumed（复核批）：挂起/暂停恢复对称——挂起侧此前只有
-        incident_resolved（故障单生命周期），实例生命周期层无信号。
-        """
-        from flowork.engine.instance_lifecycle import advance_unfinished_tokens
-        from flowork.engine.message_flow import retro_poll_instance
-
-        ctx.touch(instance)
-        instance.state = InstanceState.RUNNING.value
-        # 拍板 1：挂起期消息落缓冲——恢复后补消费（对齐 resume_process）
-        retro_poll_instance(ctx, self._engine, instance)
-        # 挂起期间到达的子实例完结补推进（2026-10-13 事件 review 复核批）：
-        # 修前只补消息——父恢复后等待子节点永久卡住
-        advance_unfinished_tokens(self._engine, ctx, instance)
-        self._engine.kernel_for(ctx).record_event(
-            DomainEvent.PROCESS_RESUMED,
-            {"actor": actor, "reason": reason, "deferred_minutes": None},
-            instance.id,
-        )
+        resume_from_suspension(self._engine, ctx, instance, actor, reason)
 
     def _skip_failed_nodes(self, ctx: CommandContext, instance_id: str, actor: str) -> None:
         """跳过故障节点（实现拆至 incident_skip.py 守行数红线；语义不变）。"""
