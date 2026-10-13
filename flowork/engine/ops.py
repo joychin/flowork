@@ -188,6 +188,17 @@ def _run_once(engine: ProcessEngine, command: Callable[[CommandContext], T]) -> 
     except EngineExecutionError as error:
         _record_incidents(engine, ctx, error)  # 回滚后以独立事务记录 Incident
         raise
+    except RecursionError as error:
+        # 深直通链推进递归栈溢出（code-review 2026-10 P1-6；2026-10-13 收尾批
+        # 实测约 7 帧/节点、直通链 200 节点崩）：归一技术故障，与其他引擎错误
+        # 同管线（挂起+故障单；start 阶段整笔回滚时与「首节点失败」同语义）。
+        # 兄弟 except 不互捕，需显式记录后再抛。迭代化根治挂账内核重排刀（§15）。
+        converted = EngineExecutionError(
+            "流程推进深度超限（深直通链递归栈溢出），建议拆分子流程——"
+            "设计期 graph.flow.large 告警可提前提示"
+        )
+        _record_incidents(engine, ctx, converted)
+        raise converted from error
     except ObjectDeletedError as error:
         # 并发删行归一（v2.3 第二十轮，tests/edge submit vs timer 实证残留窗）：
         # 对手在本命令 claim-flush 之后提交了同一任务行的删除——claim 咽喉的

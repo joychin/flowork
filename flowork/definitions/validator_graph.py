@@ -57,9 +57,9 @@ def check_graph_lints(definition: ProcessDefinition, warning: IssueFn) -> None:
 
     if len(definition.nodes) > _LARGE_FLOW_NODES:
         # 推进为递归实现（code-review 2026-10 P1-6）：约 7 帧/节点，深直通链
-        # 超 Python 栈限会 RecursionError 且不经故障单。节点数是粗代理（分支
-        # 图无碍）——WARNING 提示拆子流程；推进迭代化为结构性改造，随内核
-        # 重排刀处理。
+        # 超 Python 栈限会 RecursionError。2026-10-13 收尾批起命令边界已归一为
+        # 技术故障（挂起+故障单，ops._run_once）；节点数仍是粗代理（分支图无
+        # 碍）——WARNING 提示拆子流程；推进迭代化为结构性改造，随内核重排刀。
         warning(
             "graph.flow.large",
             f"节点数 {len(definition.nodes)} 超过 {_LARGE_FLOW_NODES}：深直通链可能触发"

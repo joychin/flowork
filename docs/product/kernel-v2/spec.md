@@ -601,7 +601,7 @@ CRUD：新增与更新＝同一操作 `deploy`——**纯数据写入（INSERT �
 | 类别 | 例子 | 处理 |
 |---|---|---|
 | 业务失败 | 审批驳回；output 不符合 input 契约（拒绝提交） | 驳回走 reject_target；契约不合格当场拒收——都不产生故障单 |
-| 技术故障 | action 抛异常、CEL 求值错、外部 worker 重试耗尽 | 先自动重试（5.2）；耗尽 → 死信 + 故障单（state=open）。人工处置：`resolve_incident(instance_id, action)`，action 现状 resume/cancel ✓，【v2】扩 retry（重派）/skip（跳过节点）/fail（终止实例）。根因没修好，故障单会再冒出来（允许复发，成文） |
+| 技术故障 | action 抛异常、CEL 求值错、外部 worker 重试耗尽、**声明式钩子未注册/执行异常【2026-10-13】**、**推进深度超限（深直通链递归栈溢出，命令边界归一）【2026-10-13】** | 先自动重试（5.2）；耗尽 → 死信 + 故障单（state=open）。人工处置：`resolve_incident(instance_id, action)`，action 现状 resume/cancel ✓，【v2】扩 retry（重派）/skip（跳过节点）/fail（终止实例）。根因没修好，故障单会再冒出来（允许复发，成文） |
 
 ## Part B：接口层（怎么跟内核打交道）
 
