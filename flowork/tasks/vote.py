@@ -27,16 +27,10 @@ from flowork.persistence.orm import TaskHistoryRow
 __all__ = [
     "VOTED_OUTCOMES",
     "consumed_turn_criteria",
-    "is_vote_row",
     "vote_criteria",
 ]
 
 VOTED_OUTCOMES = frozenset({"agree", "reject"})
-
-
-def is_vote_row(row: TaskHistoryRow) -> bool:
-    """行级判定：审批类任务 + 真实表态（名单类查询的统一谓词）。"""
-    return row.task_type == "approval" and row.outcome in VOTED_OUTCOMES
 
 
 def vote_criteria() -> list[ColumnElement[bool]]:

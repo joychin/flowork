@@ -41,10 +41,6 @@ def create_schema(engine: Engine) -> None:
     Base.metadata.create_all(engine)
 
 
-def memory_url() -> str:
-    return "sqlite:///:memory:"
-
-
 def file_url(path: str | Path) -> str:
     return f"sqlite:///{Path(path)}"
 
@@ -71,7 +67,6 @@ __all__ = [
     "create_db_engine",
     "create_schema",
     "file_url",
-    "memory_url",
     "session_factory",
     "url_from_value",
 ]

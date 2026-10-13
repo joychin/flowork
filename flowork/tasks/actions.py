@@ -18,14 +18,10 @@ from __future__ import annotations
 from flowork.errors import TaskNotAvailableError
 from flowork.persistence.orm import TaskRow
 
-__all__ = ["ACTION_GROUPS", "allowed_actions", "assert_action_allowed"]
+__all__ = ["allowed_actions", "assert_action_allowed"]
 
-# 动词分组（Camunda 8 切分）：work＝办（出结果），dispatch＝分派（转移办理权）
-ACTION_GROUPS: dict[str, frozenset[str]] = {
-    "work": frozenset({"complete", "reject"}),
-    "dispatch": frozenset({"transfer", "assist", "add_countersigner", "claim", "unclaim"}),
-}
-
+# 已认领任务的全量动作（work＝办，dispatch＝分派——Camunda 8 动词切分，
+# 分组视图未消费，动作可用性以 allowed_actions 为准）
 _ASSIGNED_ACTIONS = [
     "complete",
     "reject",

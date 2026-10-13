@@ -83,9 +83,6 @@ class RuntimeNodeContext(NodeContext):
     def complete_instance(self, end_status: str = "completed") -> None:
         self.kernel.complete_instance(self.session, self.instance, end_status)
 
-    def instance_tokens(self, *states: str) -> list[TokenRow]:
-        return self.kernel.tokens(self.session, self.instance.id, states=states or None)
-
     def open_tasks(self) -> list[TaskRow]:
         token_id = self.token.id if self.token else None
         return self.kernel.tasks(self.session, self.instance.id, token_id=token_id)

@@ -1,6 +1,6 @@
 """版本判定（kernel-v2 spec §6.3）：破坏性规则、VersionVerdict、内容哈希。
 
-- 每条规则＝注册式检查器（同节点注册表哲学），默认四条（R1–R4），宿主可加严/放宽；
+- 每条规则＝注册式检查器（同节点注册表哲学），默认四条（R1–R4）；
 - deploy 可 force_major/allow_minor 覆盖（必须带 reason，进事件）；
 - 输出 ``VersionVerdict``：进 deploy 响应、事件载荷、日志，AI 可先跑预演（只判定不落库）；
 - 内容哈希＝去除生命周期字段（major/revision/status）与画布（layout）后的规范 JSON
@@ -25,7 +25,6 @@ __all__ = [
     "VersionVerdict",
     "compute_verdict",
     "content_hash_of",
-    "register_breaking_rule",
 ]
 
 # 生命周期与展示字段不参与内容身份
@@ -155,13 +154,6 @@ BREAKING_RULES: dict[str, BreakingRule] = {
     "R3_node_identity": _rule_node_identity,
     "R4_topology": _rule_topology,
 }
-
-
-def register_breaking_rule(name: str, rule: BreakingRule, *, replace: bool = False) -> None:
-    """宿主注册/覆盖破坏性规则（加严或放宽，spec §6.3）。"""
-    if name in BREAKING_RULES and not replace:
-        raise ValueError(f"破坏性规则 {name!r} 已注册（replace=True 可覆盖）")
-    BREAKING_RULES[name] = rule
 
 
 def content_hash_of(content: dict[str, Any]) -> str:

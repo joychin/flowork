@@ -75,10 +75,6 @@ CEL_BUILTIN_FUNCTIONS = frozenset(
 # comprehension 宏（方法或函数形态）：第一个参数是绑定变量，不算标识符引用。
 _COMPREHENSION_MACROS = frozenset({"all", "exists", "exists_one", "map", "filter"})
 
-# 计入链项护栏的二元运算符（Token 值精确匹配；字面量 Token 带引号不会撞上）。
-# lark 的 addition/multiplication 是每个操作数都套一层的前缀级联规则，不能数节点。
-_BINARY_OPERATORS = frozenset({"+", "-", "*", "/", "%", "&&", "||"})
-
 # activation 合法键＝CEL 标识符语法（ASCII）；中文等变量名不可被公式引用，装载即拒收。
 _CEL_IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 

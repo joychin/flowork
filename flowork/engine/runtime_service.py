@@ -89,32 +89,6 @@ class RuntimeService(InstanceLifecycleMixin, IncidentMixin, VariableActionsMixin
                 ) from exc
             return existing
 
-    def _start_child(
-        self,
-        *,
-        code: str,
-        start_user: str,
-        variables: dict[str, Any] | None,
-        parent_instance_id: str,
-        parent_token_id: str,
-    ) -> str:
-        result: str = self._engine.execute(
-            lambda ctx: self._start(
-                ctx,
-                code,
-                start_user,
-                variables,
-                None,
-                parent_instance_id,
-                parent_token_id,
-                None,
-                None,
-                None,
-                "reject",
-            )
-        )
-        return result
-
     def _existing_instance(self, ctx: CommandContext, code: str, key: str) -> str | None:
         """按 (definition_code, idempotency_key) 查已有实例。"""
 

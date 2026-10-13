@@ -143,11 +143,6 @@ class Kernel(TaskRecordsMixin, TokenRecordsMixin):
 
             resume_parent_if_waiting(self, session, instance)
 
-    def normal_flows(self, ctx: RuntimeNodeContext) -> list[SequenceFlow]:
-        """无条件出边（default 视同无条件）；条件路由见 engine.routing.select_outgoing。"""
-        definition = self.definition_of(ctx.session, ctx.instance)
-        return [flow for flow in definition.outgoing(ctx.node.code) if flow.condition is None]
-
     # —— 执行推进 ——
 
     def behavior_of(self, node: FlowNode) -> NodeBehavior:
