@@ -143,20 +143,26 @@ def _sync_variable_history(ctx: CommandContext) -> None:
 
 
 def _flush_history(ctx: CommandContext) -> None:
-    """HistoryFlush 拦截器：把命令期间缓冲的领域事件写入 outbox（同事务）。"""
-    import uuid
+    """HistoryFlush 拦截器：把命令期间缓冲的领域事件写入 outbox（同事务）。
 
+    全序与时钟（2026-10-13 事件 review A1/A2）：occurred_at＝命令时刻统一取
+    ``config.now()``（与任务/令牌同源，宿主假钟下不再分叉）；行 id 用引擎的
+    可排序串（时间前缀+nonce+计数），消费方 ``ORDER BY (occurred_at, id)``
+    即事件全序——同命令内按发射顺序，不再受列默认墙钟的微秒平局随机定序。
+    """
     from flowork.engine.config import should_record_event
 
+    stamp = ctx.engine.config.now()
     for name, payload, instance_id in ctx.events:
         if not should_record_event(ctx.engine.config, name):
             continue
         ctx.session.add(
             EventOutboxRow(
-                id=uuid.uuid4().hex,
+                id=ctx.engine.next_event_id(stamp),
                 event_name=name,
                 instance_id=instance_id,
                 payload=payload,
+                occurred_at=stamp,
             )
         )
     ctx.session.flush()

@@ -59,13 +59,16 @@ class HistoryService(ArchiveMixin, TraceMixin):
     def events(self, instance_id: str | None = None, *, limit: int = 200) -> list[EventInfo]:
         def _command(ctx: CommandContext) -> Any:
             # 全局查询（无实例维度）取最近（P2-7：ASC+limit 曾截「最旧 N 条」）；
-            # 实例维度保持 asc（事件序列可读）
-            order = (
-                EventOutboxRow.occurred_at.desc()
-                if instance_id is None
-                else EventOutboxRow.occurred_at
-            )
-            stmt = select(EventOutboxRow).order_by(order)
+            # 实例维度保持 asc（事件序列可读）。id 为可排序串（时间前缀+nonce+
+            # 计数）——同命令内微秒平局按发射顺序定序（事件 review A1）。
+            if instance_id is None:
+                stmt = select(EventOutboxRow).order_by(
+                    EventOutboxRow.occurred_at.desc(), EventOutboxRow.id.desc()
+                )
+            else:
+                stmt = select(EventOutboxRow).order_by(
+                    EventOutboxRow.occurred_at, EventOutboxRow.id
+                )
             if instance_id:
                 stmt = stmt.where(EventOutboxRow.instance_id == instance_id)
             return [

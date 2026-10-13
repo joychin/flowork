@@ -216,7 +216,20 @@ class TaskOpsMixin:
     def _emit_task_event(
         self, ctx: CommandContext, event: DomainEvent, task: TaskRow, actor: str
     ) -> None:
+        """任务事件统一载荷（事件 review B1）：全部带 activity_code/task_type。
+
+        此前该面只有 task_id/assignee/actor——消费者定位节点须反查历史表，
+        且转办克隆的 task_created 与主路径形状不一致；统一后同名事件同形。
+        """
         kernel = self._engine.kernel_for(ctx)
         kernel.record_event(
-            event, {"task_id": task.id, "assignee": task.assignee, "actor": actor}, task.instance_id
+            event,
+            {
+                "task_id": task.id,
+                "activity_code": task.activity_code,
+                "task_type": task.task_type,
+                "assignee": task.assignee,
+                "actor": actor,
+            },
+            task.instance_id,
         )

@@ -11,7 +11,10 @@
 
 from __future__ import annotations
 
+import secrets
 from collections.abc import Callable
+from datetime import datetime, timedelta
+from itertools import count as _count
 from typing import TypeVar
 
 from flowork.engine.config import EngineConfig, resolve_db_url
@@ -30,6 +33,8 @@ from flowork.tasks.behaviors import register_builtin_behaviors
 __all__ = ["ProcessEngine"]
 
 T = TypeVar("T")
+
+_EPOCH = datetime(1970, 1, 1)  # naive UTC（与 flowork.clock 口径一致）
 
 
 class ProcessEngine:
@@ -51,6 +56,20 @@ class ProcessEngine:
         from flowork.jobs.scheduler import JobScheduler
 
         self.jobs = JobScheduler(self)
+        # 事件全序原料（2026-10-13 事件 review A1）：nonce 区分同微秒的跨引擎
+        # 命令（成组不交错），counter 引擎实例内单调（冻结时钟下兜底全序）。
+        self._event_nonce = secrets.token_hex(3)
+        self._event_counter = _count()
+
+    def next_event_id(self, stamp: datetime) -> str:
+        """可排序事件 id：``{usec:016x}{nonce:06x}{counter:010x}``（32 hex）。
+
+        排序语义：``ORDER BY (occurred_at, id)`` 即事件全序——同命令内按发射
+        顺序（counter），冻结时钟（occurred_at 全同）亦然；跨引擎同微秒按
+        nonce 成组。id 唯一且不透明（CloudEvents envelope id 语义不变）。
+        """
+        usec = (stamp - _EPOCH) // timedelta(microseconds=1)
+        return f"{usec:016x}{self._event_nonce}{next(self._event_counter):010x}"
 
     def execute(self, command: Callable[[CommandContext], T]) -> T:
         """经 Command 管线执行（拦截器：事务/乐观锁重试/事件落库/指标）。"""

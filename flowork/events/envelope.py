@@ -1,6 +1,6 @@
 """CloudEvents 1.0.2 信封（kernel-v2 spec §10）。
 
-- type＝事件名；id＝outbox 行 id（UUID，消费端按 id 去重）；
+- type＝事件名；id＝outbox 行 id（可排序唯一串，消费端按 id 去重）；
   source＝``flowork://{engine_id}``；data＝事件字段。
 - 交付保证：事件与业务变更同一个数据库事务写入 outbox（transactional outbox）；
   分发为至少一次，消费端需幂等（见 consumer.IdempotentSink）。

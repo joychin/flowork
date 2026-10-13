@@ -181,6 +181,10 @@ class EventOutboxRow(Base):
 
     delivered_at（v2 P0-3）：消费器送达标记——None＝未送达；至少一次语义下
     送达后崩溃可能重发，消费端须按 id（CloudEvents envelope id＝本行 id）幂等。
+    排序契约（2026-10-13 事件 review A1）：``ORDER BY (occurred_at, id)`` 即
+    事件全序——id 为可排序串（时间前缀+引擎 nonce+进程内计数，见
+    ProcessEngine.next_event_id）；occurred_at 由命令管线统一取 ``config.now()``
+    （列 default 仅兜底，正常路径不触发——时钟同源见 A2）。
     """
 
     __tablename__ = "wf_event_outbox"
@@ -189,6 +193,7 @@ class EventOutboxRow(Base):
         Index("ix_event_delivered", "delivered_at"),
     )
 
+    # 可排序唯一串（32 hex），不再是随机 UUID——同微秒平局按它定序
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     event_name: Mapped[str] = mapped_column(String(64))
     instance_id: Mapped[str | None] = mapped_column(String(36), nullable=True)

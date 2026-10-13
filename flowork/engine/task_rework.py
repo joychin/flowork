@@ -129,6 +129,7 @@ class TaskReworkMixin:
                 DomainEvent.TASK_WITHDRAWN,
                 {
                     "task_id": task_id,
+                    "activity_code": history.activity_code,
                     "actor": actor,
                     "comment": comment,
                     "token_id": original_token.id,
@@ -148,7 +149,13 @@ class TaskReworkMixin:
         )
         kernel.record_event(
             DomainEvent.TASK_WITHDRAWN,
-            {"task_id": task_id, "actor": actor, "comment": comment, "new_token": token.id},
+            {
+                "task_id": task_id,
+                "activity_code": history.activity_code,
+                "actor": actor,
+                "comment": comment,
+                "new_token": token.id,
+            },
             instance.id,
         )
         tasks = kernel.tasks(ctx.session, instance.id, token_id=token.id)
