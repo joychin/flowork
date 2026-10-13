@@ -54,7 +54,12 @@ class DeadlineStrategiesMixin:
                 return
             kernel.record_event(
                 DomainEvent.TIMEOUT_WARNED,
-                {"job_id": job.id, "strategy": strategy},
+                {
+                    "job_id": job.id,
+                    "strategy": strategy,
+                    "task_id": task_id,  # B4：预警定位到任务（修前只有 job_id）
+                    "activity_code": task.activity_code if task is not None else None,
+                },
                 job.instance_id,
             )
             return

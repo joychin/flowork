@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from sqlalchemy.orm import Session
 
     from flowork.definitions.definition import ProcessDefinition
+    from flowork.definitions.node import FlowNode
     from flowork.engine.config import EngineConfig
     from flowork.engine.kernel import Kernel
     from flowork.persistence.orm import ProcessInstanceRow, TaskRow, TokenRow
@@ -35,6 +36,22 @@ class TokenRecordsMixin:
     def record_event(self, name: str, payload: dict[str, Any], instance_id: str | None) -> None:
         """事件记录由 Kernel 提供（类型桩，mypy strict Mixin 契约）。"""
         raise NotImplementedError
+
+    def assert_not_dead_loop(
+        self, session: Session, instance: ProcessInstanceRow, node: FlowNode
+    ) -> None:
+        """死循环守卫（自 kernel 迁入守行数红线）：同节点完成次数达上限即拒。"""
+        from flowork.engine.kernel import DeadLoopError
+
+        finished_count = sum(
+            1
+            for row in self.tokens(session, instance.id)
+            if row.activity_code == node.code and row.state == TokenState.FINISHED.value
+        )
+        if finished_count >= self.config.max_node_loops:
+            raise DeadLoopError(
+                f"节点 {node.code} 完成次数已达上限 {self.config.max_node_loops}，疑似死循环"
+            )
 
     def tasks(
         self,

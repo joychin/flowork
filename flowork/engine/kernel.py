@@ -173,7 +173,11 @@ class Kernel(TaskRecordsMixin, TokenRecordsMixin):
             reject_flag=reject_flag,
             manual_participants=manual_participants,
         )
-        self.record_event(DomainEvent.NODE_ENTERED, {"activity_code": node.code}, instance.id)
+        self.record_event(
+            DomainEvent.NODE_ENTERED,
+            {"activity_code": node.code, "token_id": token.id},  # B4：并行分支可区分
+            instance.id,
+        )
         ctx = RuntimeNodeContext(self, session, instance, node, token)
         run_declared_hook(ctx, node.hooks.on_enter)  # 声明式先于行为：写变量供行为消费
         self.behavior_of(node).on_enter(ctx)
@@ -192,21 +196,16 @@ class Kernel(TaskRecordsMixin, TokenRecordsMixin):
     def _finish_and_route(
         self, session: Session, instance: ProcessInstanceRow, node: FlowNode, token: TokenRow
     ) -> None:
-        # 死循环守卫
-        finished_count = sum(
-            1
-            for row in self.tokens(session, instance.id)
-            if row.activity_code == node.code and row.state == TokenState.FINISHED.value
-        )
-        if finished_count >= self.config.max_node_loops:
-            raise DeadLoopError(
-                f"节点 {node.code} 完成次数已达上限 {self.config.max_node_loops}，疑似死循环"
-            )
+        self.assert_not_dead_loop(session, instance, node)
         ctx = RuntimeNodeContext(self, session, instance, node, token)
         self.behavior_of(node).on_exit(ctx)
         run_declared_hook(ctx, node.hooks.on_exit)  # 行为语义完成后、令牌落定前
         self.finish_token(session, token, approval_exit=token.approval_exit)
-        self.record_event(DomainEvent.NODE_EXITED, {"activity_code": node.code}, instance.id)
+        self.record_event(
+            DomainEvent.NODE_EXITED,
+            {"activity_code": node.code, "token_id": token.id},  # B4：并行分支可区分
+            instance.id,
+        )
         self.route(session, instance, node, token)
 
     def route(

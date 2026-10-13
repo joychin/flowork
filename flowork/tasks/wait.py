@@ -219,7 +219,11 @@ def finish_wait(
     ctx = RuntimeNodeContext(kernel, session, instance, node, token)
     behavior.on_exit(ctx)
     kernel.finish_token(session, token, approval_exit=token.approval_exit)
-    kernel.record_event(DomainEvent.NODE_EXITED, {"activity_code": node.code}, instance.id)
+    kernel.record_event(
+        DomainEvent.NODE_EXITED,
+        {"activity_code": node.code, "token_id": token.id},  # B4：并行分支可区分
+        instance.id,
+    )
     kernel.route(session, instance, node, token, behavior_override=behavior)
 
 

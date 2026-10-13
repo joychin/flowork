@@ -198,6 +198,8 @@ class RuntimeService(InstanceLifecycleMixin, IncidentMixin, VariableActionsMixin
         kernel = self._engine.kernel_for(ctx)
         started_payload: dict[str, Any] = {
             "definition_code": code,
+            "major": instance.definition_major,  # B4：实例钉的版本事件面可见
+            "revision": instance.definition_revision,
             "start_user": start_user,
             "business_key": business_key,
         }

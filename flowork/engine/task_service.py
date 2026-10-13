@@ -180,7 +180,15 @@ class TaskService(
         token.approve_count += 1
         kernel.record_event(
             DomainEvent.TASK_COMPLETED,
-            {"task_id": task.id, "assignee": task.assignee, "actor": actor, "outcome": "agree"},
+            {
+                "task_id": task.id,
+                "activity_code": task.activity_code,
+                "task_type": task.task_type,
+                "assignee": task.assignee,
+                "actor": actor,
+                "outcome": "agree",
+                "comment": comment,  # 事件 review B2：办理意见进事件（通知面高价值）
+            },
             instance.id,
         )
         kernel.archive_task(

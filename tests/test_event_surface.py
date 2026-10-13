@@ -55,3 +55,17 @@ def test_domain_event_values_unique():
     """值唯一性（别名会稀释名单的「一一对应」承诺）。"""
     values = [member.value for member in DomainEvent]
     assert len(values) == len(set(values))
+
+
+def test_dynamic_event_sites_use_enum_members():
+    """动态实参位点钉子（事件 review C5）：守卫只扫字符串字面量，
+    terminate_cascade 的 terminal_event 是计算值——静态钉住其两翼仍引枚举
+    成员（改成裸字符串时本测试先红）；message 面经 emit_message_event 形参
+    类型 DomainEvent 收口（mypy strict 兜住调用侧）。
+    """
+    src = (REPO_ROOT / "flowork/engine/terminate_cascade.py").read_text(encoding="utf-8")
+    assert "DomainEvent.PROCESS_TERMINATED" in src
+    assert "DomainEvent.PROCESS_CANCELLED" in src
+    strategies_src = (REPO_ROOT / "flowork/jobs/strategies.py").read_text(encoding="utf-8")
+    assert "DomainEvent.PROCESS_TERMINATED" in strategies_src
+    assert "DomainEvent.PROCESS_CANCELLED" in strategies_src

@@ -145,7 +145,9 @@ class UserTaskBehavior(NodeBehavior):
         assert ctx.token is not None
         ctx.kernel.finish_token(ctx.session, ctx.token, approval_exit="agree")
         ctx.kernel.record_event(
-            DomainEvent.NODE_EXITED, {"activity_code": ctx.node.code}, ctx.instance.id
+            DomainEvent.NODE_EXITED,
+            {"activity_code": ctx.node.code, "token_id": ctx.token.id},  # B4
+            ctx.instance.id,
         )
         node = ctx.kernel.definition_of(ctx.session, ctx.instance).node(ctx.node.code)
         assert node is not None

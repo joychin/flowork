@@ -64,9 +64,10 @@ class IncidentMixin:
 
         kernel = self._engine.kernel_for(ctx)
         for instance_id in instance_ids:
+            incident_id = _uuid.uuid4().hex
             ctx.session.add(
                 IncidentRow(
-                    id=_uuid.uuid4().hex,
+                    id=incident_id,
                     instance_id=instance_id,
                     message=str(error),
                     error_class=type(error).__name__,
@@ -77,7 +78,11 @@ class IncidentMixin:
                 instance.state = InstanceState.SUSPENDED.value
             kernel.record_event(
                 DomainEvent.INCIDENT_RAISED,
-                {"message": str(error), "error_class": type(error).__name__},
+                {
+                    "incident_id": incident_id,  # B3：与 incident_resolved 可配对
+                    "message": str(error),
+                    "error_class": type(error).__name__,
+                },
                 instance_id,
             )
 

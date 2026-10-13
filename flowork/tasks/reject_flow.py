@@ -122,7 +122,14 @@ class RejectMixin:
         self._cancel_assist_tasks(ctx, task)  # 协办随主任务终态同事务收口（spec §5.1）
         kernel.record_event(
             DomainEvent.TASK_REJECTED,
-            {"task_id": task.id, "assignee": task.assignee, "actor": actor},
+            {
+                "task_id": task.id,
+                "activity_code": task.activity_code,
+                "task_type": task.task_type,
+                "assignee": task.assignee,
+                "actor": actor,
+                "comment": comment,  # 事件 review B2：驳回理由进事件
+            },
             instance.id,
         )
 
@@ -179,7 +186,11 @@ class RejectMixin:
                 cause_token_id=token.id,
                 reason="node_rejected",
             )
-        kernel.record_event(DomainEvent.NODE_EXITED, {"activity_code": node.code}, instance.id)
+        kernel.record_event(
+            DomainEvent.NODE_EXITED,
+            {"activity_code": node.code, "token_id": token.id},  # B4
+            instance.id,
+        )
         from sqlalchemy import select
 
         # 复活圈定「最近一轮」（spec §5.1 v2.3）：目标节点最近一个已完结令牌

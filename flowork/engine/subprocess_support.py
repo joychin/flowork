@@ -138,7 +138,13 @@ def start_sub_process(ctx: RuntimeNodeContext, spec: CallActivitySpec) -> None:
         child.id,
     )
     ctx.kernel.record_event(
-        DomainEvent.SUB_PROCESS_STARTED, {"sub_instance_id": child.id}, ctx.instance.id
+        DomainEvent.SUB_PROCESS_STARTED,
+        {
+            "sub_instance_id": child.id,
+            "child_definition_code": spec.process_code,  # B4：订阅方免反查
+            "parent_node": ctx.node.code,
+        },
+        ctx.instance.id,
     )
     start_node = definition.start_node()
     if start_node is None:
