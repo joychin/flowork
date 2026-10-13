@@ -645,3 +645,13 @@ kernel 317→288 守红线）。on_fail 接线仍挂账（错误归因专题余�
 MI 逐子与级联终止经 complete_instance 同点覆盖）；process_suspended（与 process_paused 对称）；
 process_resumed 补到 incident resume/retry/skip 三路（incident_resolved 保留为故障单层——两级语义）；
 _skip_failed_nodes 拆 incident_skip.py 守红线；枚举 45。spec §10 复核批段成文+remove_instance 口径改口。
+
+**on_fail 接线终章（2026-10-13 晚，89888d6）**：错误归因批（bf4b90b）解决了挂账前置——本批把最后
+一个零调用钩子接上。engine/fail_hooks.py：故障单事务内按 activity_code 定位失败现场，行为
+on_fail(ctx, error)+声明式 hooks.on_fail（错误经 RuntimeNodeContext.failure 新字段，签名统一
+(ctx, params)）。**语义口径（成文 lifecycle 契约图修订+spec §2.6）**：钩子观察回滚后持久态；
+ctx.token 可为 None——「节点在失败命令内激活后整笔回滚」是最常见失败形态（实证：service on_enter
+即炸的令牌查不到，首版按持久令牌严格匹配直接漏发，红绿测试逼出）；TokenState.FAILED 维持零写入
+（FAILED 态涉汇聚/复活语义属重设计）；钩子异常不吞故障单；模拟实例不执行（A10）——顺带修掉
+「模拟实例失败产孤儿故障单」旧洞（_record_incident 补模拟守卫）。1088 全绿，五道门全过。
+**至此事件 review 全链路（review→复核→续修→终章，13+1 提交）彻底闭环，账面零挂账。**
