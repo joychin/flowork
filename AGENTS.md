@@ -600,5 +600,15 @@ catalog 纯 dispatch（传输无关可直测）+ lowlevel Server 传输壳 + std
 扩为全量 contrib（api 不 import 任何插件）。④ 内核唯一改动：`JobService.list_jobs`
 （只读查询，/v2/jobs/search 数据源）。快照三件（REST 路由表/MCP 工具名/公开面）+ 行为两件
 （REST 全链 14 例/MCP dispatch 10 例）。**1020 测试全绿，五道门全过。**
-挂账：tasks 三过滤维（flow_code/priority/due_before，待 list_tasks 扩参）、
-DirectoryStore 与事件消费帮手的公开面扩面（目录/推送面落地时先扩）、完整模拟 MCP 工具。
+挂账：tasks 三过滤维（flow_code/priority/due_before，待 list_tasks 扩参）、完整模拟 MCP 工具。
+（DirectoryStore 与事件消费帮手的公开面扩面已随 2026-10-13 收尾批 5 落地销账。）
+
+**内核收尾批（2026-10-13，《内核完善与删减评估》七批落地；四拍板：钩子错误语义＝部署期拦+运行期挂故障单/On_fail 挂账/事件三空头处置/MCP 加 resume）**：
+① 死符号清理（8 符号：is_vote_row/ACTION_GROUPS/memory_url/register_breaking_rule/_BINARY_OPERATORS/_start_child/instance_tokens/normal_flows——register_breaking_rule 未上公开面＝合规宿主不可达，按死端口先例删）。
+② 声明式钩子接线——评估实证 ``FlowNode.hooks`` 被 pydantic 收下但引擎零读取（静默失效，设计器 FORM_EXCLUDE 还引导用户到 JSON Tab 手写）：新模块 ``engine/declared_hooks.py`` 统一咽喉（模拟跳过；未注册与 handler 异常＝EngineExecutionError 挂起+故障单）；三时机接线（on_enter 先于行为写变量供消费、on_exit 后于行为先于令牌落定、on_cancel 先于行为）；**on_take 一并归一**——此前裸 resolve 直调：未注册＝UnknownHandler 冒泡零留痕、模拟试跑真执行宿主 handler（A10 隔离漏）；L3 新规则 node.hooks/flow.on_take.handler_unknown（WARNING、strict 升 ERROR，先部署后注册仍合法）；spec §2.6 接线语义成文；tests/semantics/test_declared_hooks.py 10 例。
+③ 深链递归归一——实证直通链 200 节点 start_process 抛裸 RecursionError（约 7 帧/节点）：ops._run_once 增 RecursionError 分支归一 EngineExecutionError（挂起+故障单；start 阶段回滚同「首节点失败」语义＝孤儿故障单留痕），迭代化根治仍挂重排刀。**环境怪癖入档：celpy.CELPy.__init__ 会把进程递归上限抬到 2500**——全量套件里 celpy 先加载则 300 节点压不爆，测试显式收紧上限确定性触发（test_deep_chain_guard.py）。
+④ 事件枚举收编——评估实证 12+ 事件以裸字符串实发不在 DomainEvent（订阅方按官方枚举编程静默漏收咨询/撤回/加签/超时预警/管理员手术通知）：14 成员入册（26→40，含补发 incident_resolved），17 发射点换枚举（StrEnum 值不变零红）；resolve_incident 补发 incident_resolved（拍板③）；task_delegated/task_resolved 从 spec §10 划掉（与 task_transferred、assist/consult 事件语义重复）；record_event 签名面 DomainEvent|str——**实施修正：运行期不做值域拒绝**，ctx.emit 端口承载宿主自定义事件名（tests/pilot 的 payment_executed 实证），枚举只承诺引擎自发事件全集；守卫 tests/test_event_surface.py（AST 扫 flowork/ 的 record_event/emit 字符串实参必须∈枚举值集+值唯一）。
+⑤ 公开面扩点 63→67（minor）：DirectoryStore/DirectoryError/OutboxConsumer/IdempotentSink——DB 版目录（directory/ 八文件）与事件消费帮手此前生产零消费、宿主走门面无路；冒烟钉 DirectoryStore(engine.session_factory)→engine.config.org 装配→候选认领跑通；REQUIRES_FLOWORK_API 补齐 contrib/web、contrib 词汇包、numeric 三处＋tests/test_plugin_compat.py 五断言；销 openface §4 挂账。
+⑥ REST ``POST /v2/messages/search``（spec §12 搜索族最后族级缺口；buffer∪subscription 两源合并时间倒序，message_query.list_messages，_first_open_subscription 下沉换 message_service 300 行余量）＋ MCP **resume_instance 第 19 工具**（拍板④：pause 无 resume 不对称，AI 暂停后需人兜底）；快照/文案/spec §13/openface 六处同步。
+⑦ 文档收口：spec §2.1「七种」→「八种」+kind 清单补 wait、§7 标题去过时「当前最大缺口」、§11 任务组补 consult/complete_consult/withdraw、§14 表补 wf_route_decision/wf_designer_draft、TimeoutPolicy 定为「零兼容哲学唯一明文例外」成文（extra=allow 下删字段会更糟）；engine-v1 八处过时表述加注（/api/v1→/v2、ParticipantFunctions 内置、agent_owner、8 工具）；benchmark 三篇结项注；**《engine-v1 空头承诺处置建议》草稿落 docs_research/**（business_object/审计哈希链/任务页/docker/webhook/CLI apply 六项各附量级估计与建议，待拍板记边界 backlog）。
+新增挂账：on_fail 接线（含 NodeBehavior.on_fail 全仓零调用、TokenState.FAILED 零写入——需错误携带节点上下文，错误归因专题）。1039 测试全绿，五道门全过。
