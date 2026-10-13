@@ -11,6 +11,7 @@ from typing import Any
 from flowork.definitions.builtin import UserTaskSpec
 from flowork.engine.context import RuntimeNodeContext
 from flowork.engine.kernel import NoParticipantError
+from flowork.events.domain import DomainEvent
 from flowork.expr.context import expression_functions_of
 from flowork.runtime.behavior import NodeBehavior, NodeContext
 from flowork.tasks.countersign import exit_reached
@@ -137,7 +138,9 @@ class UserTaskBehavior(NodeBehavior):
         """全员自动通过：节点立即完成（复用引擎完成路径）。"""
         assert ctx.token is not None
         ctx.kernel.finish_token(ctx.session, ctx.token, approval_exit="agree")
-        ctx.kernel.record_event("node_exited", {"activity_code": ctx.node.code}, ctx.instance.id)
+        ctx.kernel.record_event(
+            DomainEvent.NODE_EXITED, {"activity_code": ctx.node.code}, ctx.instance.id
+        )
         node = ctx.kernel.definition_of(ctx.session, ctx.instance).node(ctx.node.code)
         assert node is not None
         ctx.kernel.route(ctx.session, ctx.instance, node, ctx.token)

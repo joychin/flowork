@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 
 from flowork.engine.ops import CommandContext
 from flowork.errors import TaskNotAvailableError
+from flowork.events.domain import DomainEvent
 from flowork.persistence.orm import (
     TaskRow,
     TokenRow,
@@ -117,7 +118,7 @@ class TaskCountersignAddMixin:
         ctx.session.flush()
         kernel = self._engine.kernel_for(ctx)
         kernel.record_event(
-            "task_countersigner_added",
+            DomainEvent.TASK_COUNTERSIGNER_ADDED,
             {"task_id": task_id, "users": users, "actor": actor, "comment": comment},
             task.instance_id,
         )

@@ -32,7 +32,9 @@ class TaskRecordsMixin:
 
     MAX_ACTOR_CONTEXT_BYTES = 4096  # spec §5.6：JSON 袋上限，超限拒收
 
-    def record_event(self, name: str, payload: dict[str, Any], instance_id: str | None) -> None:
+    def record_event(
+        self, name: DomainEvent | str, payload: dict[str, Any], instance_id: str | None
+    ) -> None:
         """事件记录由 Kernel 提供。"""
         raise NotImplementedError
 

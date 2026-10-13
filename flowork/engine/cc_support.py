@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from flowork.events.domain import DomainEvent
 from flowork.participants.resolver import resolve_subjects
 
 if TYPE_CHECKING:
@@ -55,7 +56,7 @@ def create_cc_items(ctx: RuntimeNodeContext, spec: CcTaskSpec) -> None:
         )
     if recipients:
         ctx.emit(
-            "cc_created",
+            DomainEvent.CC_CREATED,
             {"activity_code": spec.code, "recipients": recipients},
         )
 

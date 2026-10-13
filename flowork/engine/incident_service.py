@@ -76,7 +76,7 @@ class IncidentMixin:
             if instance is not None and instance.state == InstanceState.RUNNING.value:
                 instance.state = InstanceState.SUSPENDED.value
             kernel.record_event(
-                "incident_raised",
+                DomainEvent.INCIDENT_RAISED,
                 {"message": str(error), "error_class": type(error).__name__},
                 instance_id,
             )
@@ -168,6 +168,12 @@ class IncidentMixin:
                 raise ValueError(f"未知修复动作：{action}（支持 resume/cancel/retry/skip/fail）")
             incident.state = "resolved"
             incident.resolution = action
+            # spec §10 承诺事件（2026-10-13 拍板③补发）：订阅方据此后撤告警/统计
+            self._engine.kernel_for(ctx).record_event(
+                DomainEvent.INCIDENT_RESOLVED,
+                {"incident_id": incident.id, "action": action, "actor": actor},
+                incident.instance_id,
+            )
 
         self._engine.execute(_command)
 
@@ -235,7 +241,7 @@ class IncidentMixin:
                 ctx.session, instance, target, source_activity_code=token.activity_code
             )
             kernel.record_event(
-                "token_moved_by_admin",
+                DomainEvent.TOKEN_MOVED_BY_ADMIN,
                 {"from": token.activity_code, "to": target_activity, "actor": actor},
                 instance.id,
             )

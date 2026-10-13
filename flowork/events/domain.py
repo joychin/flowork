@@ -44,3 +44,21 @@ class DomainEvent(StrEnum):
     TASK_ESCALATED = "task_escalated"
     # —— 变量 I/O（spec §10：仅外部更新命令发射；引擎内部写变量不发——防刷屏）——
     VARIABLES_UPDATED = "variables_updated"
+    # —— 收编批（2026-10-13）：此前以裸字符串实发、不在本枚举的 12 个事件 +
+    # incident_resolved 补发。订阅方按 DomainEvent 编程自此不再漏收。
+    # 注意：ctx.emit 端口对宿主仍是开放事件名（tests/pilot 的
+    # payment_executed 即自定义业务事件），本枚举只承诺「引擎自发事件」全集。
+    SUB_PROCESS_STARTED = "sub_process_started"
+    TASK_ASSIST_CREATED = "task_assist_created"
+    TASK_ASSIST_CANCELLED = "task_assist_cancelled"
+    TASK_CONSULT_CREATED = "task_consult_created"
+    TASK_CONSULT_FINISHED = "task_consult_finished"  # spec §5.1 承诺（A8）
+    TASK_COUNTERSIGNER_ADDED = "task_countersigner_added"
+    TASK_WITHDRAWN = "task_withdrawn"
+    TIMEOUT_WARNED = "timeout_warned"
+    CC_CREATED = "cc_created"
+    NODE_ACTIVATED_BY_ADMIN = "node_activated_by_admin"
+    NODE_CANCELLED_BY_ADMIN = "node_cancelled_by_admin"
+    TOKEN_MOVED_BY_ADMIN = "token_moved_by_admin"
+    PROCESS_FINISHED_BY_ADMIN = "process_finished_by_admin"
+    INCIDENT_RESOLVED = "incident_resolved"  # spec §10 承诺（2026-10-13 拍板③补发）

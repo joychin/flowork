@@ -631,7 +631,9 @@ class ExpressionFunctions(Protocol):     # ✓ CEL 自定义函数来源（4.3�
 
 ## 10. 领域事件
 
-现有 14 个 ✓（process_started/completed/cancelled；node_entered/exited/cancelled/failed；task_created/completed/rejected/claimed/transferred；incident_raised；job_dead_lettered）。【v2】增补 14 个：process_paused / process_resumed / process_terminated / definition_deployed / definition_retired / definition_purged / task_delegated / task_resolved / task_escalated / incident_resolved / timer_fired / instance_deadline_reached【v2.2】 / message_received / message_correlated。【变量 I/O 批，2026-10-08】增补 variables_updated（仅外部变量更新命令发射，payload 含 actor 与逐键改前/改后值）。幂等部署（内容哈希相同）不发 definition_deployed（降噪）。
+现有 14 个 ✓（process_started/completed/cancelled；node_entered/exited/cancelled/failed；task_created/completed/rejected/claimed/transferred；incident_raised；job_dead_lettered）。【v2】增补 14 个：process_paused / process_resumed / process_terminated / definition_deployed / definition_retired / definition_purged / task_escalated / timer_fired / instance_deadline_reached【v2.2】 / message_received / message_correlated / sub_process_started / task_withdrawn / incident_resolved。【变量 I/O 批，2026-10-08】增补 variables_updated（仅外部变量更新命令发射，payload 含 actor 与逐键改前/改后值）。幂等部署（内容哈希相同）不发 definition_deployed（降噪）。
+
+【收编批，2026-10-13】**枚举即全集**：此前 12 个事件以裸字符串实发、不在 `DomainEvent` 枚举（sub_process_started/task_assist_created/task_assist_cancelled/task_consult_created/task_consult_finished/task_countersigner_added/task_withdrawn/timeout_warned/cc_created/node_activated_by_admin/node_cancelled_by_admin/token_moved_by_admin/process_finished_by_admin）——全部入册，守卫测试钉住「引擎代码字符串实参必须 ∈ 枚举值集」。`incident_resolved` 本批起随 resolve_incident 发射（拍板③）；**task_delegated/task_resolved 从本清单划掉**（与 task_transferred、assist/consult 专属事件语义重复，零实现零补发）。端口口径：`ctx.emit` 对宿主仍是开放事件名（自定义业务事件合法，如宿主的 payment_executed），枚举只承诺**引擎自发事件**全集。
 
 - **信封**：CloudEvents 1.0.2——type=事件名，id=outbox 行 id（UUID，消费端按 id 去重），source=`flowork://{engine_id}`，data=事件字段。
 - **交付保证**：事件与业务变更**同一个数据库事务**写入 outbox（transactional outbox，库形态独有优势）；分发为至少一次，消费端需幂等。

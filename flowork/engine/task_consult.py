@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING
 
 from flowork.engine.ops import CommandContext
 from flowork.errors import TaskNotAvailableError
+from flowork.events.domain import DomainEvent
 from flowork.persistence.orm import TaskRow
 from flowork.tasks.models import TaskInfo
 
@@ -95,7 +96,7 @@ class TaskConsultMixin:
             for user in users
         ]
         kernel.record_event(
-            "task_consult_created",
+            DomainEvent.TASK_CONSULT_CREATED,
             {"task_id": task_id, "users": users, "actor": actor, "comment": comment},
             task.instance_id,
         )
@@ -123,7 +124,7 @@ class TaskConsultMixin:
         root = task.root_task_id or task.id
         if not self._open_consults_of(ctx, task.instance_id, root):
             kernel.record_event(
-                "task_consult_finished",
+                DomainEvent.TASK_CONSULT_FINISHED,
                 {"root_task_id": root, "last_task_id": task.id},
                 task.instance_id,
             )

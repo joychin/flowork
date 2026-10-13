@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 
 from flowork.engine.ops import CommandContext
 from flowork.errors import TaskNotAvailableError
+from flowork.events.domain import DomainEvent
 from flowork.persistence.orm import TaskHistoryRow, TokenRow
 from flowork.runtime.lifecycle import InstanceState, TokenState
 from flowork.tasks.models import TaskInfo
@@ -125,7 +126,7 @@ class TaskReworkMixin:
             )
             ctx.session.flush()
             kernel.record_event(
-                "task_withdrawn",
+                DomainEvent.TASK_WITHDRAWN,
                 {
                     "task_id": task_id,
                     "actor": actor,
@@ -146,7 +147,7 @@ class TaskReworkMixin:
             manual_participants={node.code: [history.assignee]},
         )
         kernel.record_event(
-            "task_withdrawn",
+            DomainEvent.TASK_WITHDRAWN,
             {"task_id": task_id, "actor": actor, "comment": comment, "new_token": token.id},
             instance.id,
         )

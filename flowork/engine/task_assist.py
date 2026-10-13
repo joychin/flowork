@@ -112,7 +112,7 @@ class TaskAssistMixin:
             for user in users
         ]
         kernel.record_event(
-            "task_assist_created",
+            DomainEvent.TASK_ASSIST_CREATED,
             {"task_id": task_id, "users": users, "actor": actor, "comment": comment},
             task.instance_id,
         )
@@ -137,7 +137,7 @@ class TaskAssistMixin:
                 actor="system",
             )
             kernel.record_event(
-                "task_assist_cancelled",
+                DomainEvent.TASK_ASSIST_CANCELLED,
                 {"task_id": assist.id, "root_task_id": task.id, "assignee": assist.assignee},
                 assist.instance_id,
             )

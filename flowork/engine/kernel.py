@@ -8,6 +8,7 @@ route（行为给出出边→逐边推进）。节点语义全部由 NodeBehavio
 
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING, Any
 
 from flowork.definitions.definition import ProcessDefinition, load_definition
@@ -94,15 +95,16 @@ class Kernel(TaskRecordsMixin, TokenRecordsMixin):
         cached = self._definition_cache.get(instance.id)
         if cached is not None:
             return cached
-        import json
-
         definition = load_definition(json.loads(instance.definition_snapshot), self.registry)
         self._definition_cache[instance.id] = definition
         return definition
 
     # —— 事件 ——
 
-    def record_event(self, name: str, payload: dict[str, Any], instance_id: str | None) -> None:
+    def record_event(
+        self, name: DomainEvent | str, payload: dict[str, Any], instance_id: str | None
+    ) -> None:
+        """记录领域事件（引擎内部一律传 DomainEvent 成员；端口对宿主开放事件名）。"""
         if self.command_ctx is not None and self.command_ctx.suppress_events:
             return  # 模拟实例（v2.3 A10）：事件不投 outbox（试跑不得惊动订阅方）
         self.events.append((name, payload, instance_id))
@@ -235,9 +237,7 @@ class Kernel(TaskRecordsMixin, TokenRecordsMixin):
         if flow.on_take is not None:
             source_node = self._node(definition, flow.source)
             assert source_node is not None
-            # 声明式钩子统一咽喉（declared_hooks）：模拟跳过 + 未注册/异常＝
-            # 技术故障挂起——此前裸 resolve 直调（UnknownHandler 冒泡零留痕、
-            # 模拟试跑真执行宿主 handler，两处随 2026-10-13 收尾批归一）
+            # 统一咽喉 declared_hooks：模拟跳过 + 未注册/异常＝技术故障（收尾批 2）
             run_declared_hook(
                 RuntimeNodeContext(self, session, instance, source_node, from_token),
                 flow.on_take,

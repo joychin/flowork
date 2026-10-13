@@ -53,7 +53,7 @@ class DeadlineStrategiesMixin:
                 }
                 return
             kernel.record_event(
-                "timeout_warned",
+                DomainEvent.TIMEOUT_WARNED,
                 {"job_id": job.id, "strategy": strategy},
                 job.instance_id,
             )

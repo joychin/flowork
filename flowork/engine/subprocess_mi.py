@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any
 
 from flowork.engine.kernel import EngineExecutionError
 from flowork.errors import DefinitionNotPublishedError
+from flowork.events.domain import DomainEvent
 from flowork.expr.cel import FormulaError, evaluate_formula_value
 from flowork.runtime.lifecycle import FAILED_INSTANCE_STATES, InstanceState
 
@@ -94,11 +95,13 @@ def _create_child(
     ctx.session.add(child)
     ctx.session.flush()
     ctx.kernel.record_event(
-        "process_started",
+        DomainEvent.PROCESS_STARTED,
         {"definition_code": spec.process_code, "parent_instance_id": ctx.instance.id},
         child.id,
     )
-    ctx.kernel.record_event("sub_process_started", {"sub_instance_id": child.id}, ctx.instance.id)
+    ctx.kernel.record_event(
+        DomainEvent.SUB_PROCESS_STARTED, {"sub_instance_id": child.id}, ctx.instance.id
+    )
     start_node = definition.start_node()
     if start_node is None:
         raise DefinitionNotPublishedError(f"子流程 {spec.process_code} 缺少 start 节点")
@@ -211,7 +214,7 @@ def _terminate_running_children(ctx: RuntimeNodeContext, children: list[Any]) ->
         child.state = InstanceState.CANCELLED.value
         child.finished_at = ctx.kernel.config.now()
         ctx.kernel.record_event(
-            "process_cancelled",
+            DomainEvent.PROCESS_CANCELLED,
             {
                 "reason": "multi_instance_completion",
                 "parent_token": ctx.token.id if ctx.token else None,

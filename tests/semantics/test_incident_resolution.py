@@ -129,3 +129,18 @@ def test_unknown_action_rejected():
     instance_id = _bring_to_boom(engine)
     with pytest.raises(ValueError, match="retry/skip/fail"):
         engine.runtime.resolve_incident(_open_incident(engine, instance_id), action="nonsense")
+
+
+def test_resolve_emits_incident_resolved_event():
+    """收编批 4（2026-10-13 拍板③）：resolve 成功发 incident_resolved（spec §10 补发）。"""
+    from sqlalchemy import select
+
+    from flowork.persistence.orm import EventOutboxRow
+
+    engine = _engine_with_failing_action()
+    instance_id = _bring_to_boom(engine)
+    incident_id = _open_incident(engine, instance_id)
+    engine.runtime.resolve_incident(incident_id, "resume", actor="ops")
+    with engine.session_factory() as session:
+        names = [row.event_name for row in session.scalars(select(EventOutboxRow))]
+    assert "incident_resolved" in names

@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 
 from flowork.engine.ops import CommandContext
 from flowork.errors import InstanceNotFoundError
+from flowork.events.domain import DomainEvent
 from flowork.runtime.lifecycle import UNSETTLED_INSTANCE_STATES, TokenState
 
 if TYPE_CHECKING:
@@ -46,7 +47,7 @@ class TaskAdminMixin:
             manual = {activity_code: participants} if participants else None
             token = kernel.activate(ctx.session, instance, node, manual_participants=manual)
             kernel.record_event(
-                "node_activated_by_admin",
+                DomainEvent.NODE_ACTIVATED_BY_ADMIN,
                 {"activity_code": activity_code, "actor": actor},
                 instance_id,
             )
@@ -65,7 +66,7 @@ class TaskAdminMixin:
                 if token.activity_code == activity_code:
                     kernel.cancel_token(ctx.session, token)
             kernel.record_event(
-                "node_cancelled_by_admin",
+                DomainEvent.NODE_CANCELLED_BY_ADMIN,
                 {"activity_code": activity_code, "actor": actor},
                 instance_id,
             )
@@ -92,7 +93,9 @@ class TaskAdminMixin:
                     )
                 kernel.finish_token(ctx.session, token)
             kernel.complete_instance(ctx.session, instance, "completed")
-            kernel.record_event("process_finished_by_admin", {"actor": actor}, instance_id)
+            kernel.record_event(
+                DomainEvent.PROCESS_FINISHED_BY_ADMIN, {"actor": actor}, instance_id
+            )
 
         self._engine.execute(_command)
 
