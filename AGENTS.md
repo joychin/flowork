@@ -676,3 +676,27 @@ celpy 环境转储数 KB 泄漏变量值）。⑥ **文档**：API.md 补 simula
 integration.md actor_context 等列修正；18→19 计数漂移五处。
 **遗留（有意后置）**：designer 样式作用域收口（npm 嵌入形态级，需容器前缀化+视觉走查）/npm 包声明面（peerDependencies
 决策）/readonly 数据源取已发布版（C2 漂移，需产品拍板）/REST response_model 声明/竞速取消 actor 穿透（随重排刀）。
+
+**测试套件完善批（2026-10-14，五批 9 提交 0302652→fdfd987，1160 全绿五道门全过；含三个引擎 fix）**：
+「结构随机但执行照剧本」的补另一半——五批落地：
+① **不变量账本扩容**（invariants.py）：票数账平（approve+disapprove==表决行−撤票，
+vote.py 口径剔咨询行）/已办行↔事件对账（outcome→终态事件映射，consult 每链一次例外）/
+子实例树闭合（parent 存在+无环+父终态⟹子终态）/终态契约（终态⟹事件族存在）；
+组合面 assert_instance_ledger（中途安全）/assert_full_ledger。
+② **随机动作风暴**（storm.py+test_random_storm.py，randomized 默认排除）：
+knot/expense 复杂世界上随机组合 14 类动作，三层 oracle＝available_actions 服务端
+动作表挑合法动作+非法探针必被拒+每步账本；drain 确定性收敛（断言任意风暴都能被办完）；
+改坏计数 DoD 实验第一步即红。
+③ **生成器词汇扩容**（random_gen 拆 random_blocks/random_emit，5→8 种块）：
+countersign（ceil 票数截断）/mi_call（subjects 多子+collect 对齐）/wait（时长|消息）/
+branch 臂可 cc+汇聚 all|plain（any 竞速计划截断）/子定义嵌套分流；Step 扩 advance/
+publish/child 域；100 迭代 DoD+词汇覆盖实证。
+④ **故障注入×恢复矩阵**（world_flows_fault+test_fault_matrix，23 例默认套件）：
+四结构敏感位×resolve 五动作；实证子内/MI 内故障失败命令整体回滚无孤儿、故障单挂父。
+⑤ **时间线长程走查**（test_timeline_journey）：knot 长剧本事件全序钉死
+（预警<人工转办<到时改派<暂停<恢复<完结，冻结窗零事件）+wait 竞速两形态路由。
+**随机件逼出三个引擎缺陷（各自 fix 提交+回归钉子）**：3bda453+e22f36b 扇出两段式
+路由（即时臂盲窗致 all 汇聚双激活幽灵令牌；补丁=any 竞速收尾推迟到完结段+推进门
+下沉 advance_gate.py 守 300 行）｜fdfd987 withdraw 一票一撤（重建待办转走后
+「本人在办」代理失效，二次撤票双发事件账目漂移；事件守卫拒绝）。
+随机件纪律：FLOWORK_RANDOM_ITER 默认 30，DoD 实验 100 迭代双 suite 全绿。
