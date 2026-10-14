@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any, Literal, cast
 
 from flowork.api import NotFoundError, ProcessEngine
-from flowork.contrib.mcp.catalog import ToolSpec
+from flowork.contrib.mcp.catalog import McpToolError, ToolSpec
 
 __all__ = ["runtime_tools"]
 
@@ -16,7 +16,7 @@ def _signal_instance(engine: ProcessEngine, instance_id: str, args: dict[str, An
     engine.runtime.get_instance(instance_id)  # 不存在 → InstanceNotFoundError
     name = args.get("name")
     if not name:
-        raise NotFoundError("name 必填（等待的消息名）")
+        raise McpToolError("name 必填（等待的消息名）")
     subscriptions = [
         row for row in engine.messages.waiting(name=str(name)) if row["instance_id"] == instance_id
     ]
@@ -42,7 +42,7 @@ def runtime_tools(engine: ProcessEngine) -> list[ToolSpec]:
     def start_instance(args: dict[str, Any]) -> Any:
         code = args.get("code")
         if not code:
-            raise NotFoundError("code 必填（流程定义编码）")
+            raise McpToolError("code 必填（流程定义编码）")
         reuse = str(args.get("reuse") or "reject")
         if reuse not in ("reject", "return_existing", "allow_duplicate"):
             raise NotFoundError(f"reuse 不合法：{reuse!r}")
@@ -87,7 +87,7 @@ def runtime_tools(engine: ProcessEngine) -> list[ToolSpec]:
     def update_instance_variables(args: dict[str, Any]) -> Any:
         updates = args.get("updates")
         if not isinstance(updates, dict):
-            raise NotFoundError("updates 必填（{name: value} 合并写）")
+            raise McpToolError("updates 必填（{name: value} 合并写）")
         return runtime.update_variables(
             str(args.get("instance_id") or ""),
             updates,
@@ -98,7 +98,7 @@ def runtime_tools(engine: ProcessEngine) -> list[ToolSpec]:
     def publish_message(args: dict[str, Any]) -> Any:
         name = args.get("name")
         if not name:
-            raise NotFoundError("name 必填")
+            raise McpToolError("name 必填")
         optional: dict[str, Any] = {}
         if args.get("message_id"):
             optional["message_id"] = args["message_id"]

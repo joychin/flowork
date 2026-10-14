@@ -14,12 +14,16 @@ from typing import Any
 
 from mcp.server.lowlevel import Server
 from mcp.server.stdio import stdio_server
-from mcp.types import TextContent, Tool
+from mcp.types import CallToolResult, TextContent, Tool
 
 from flowork.api import EngineConfig, FloworkError, ProcessEngine, StaticOrgDirectory
-from flowork.contrib.mcp.catalog import build_tools, dispatch
+from flowork.contrib.mcp.catalog import (
+    UnknownToolError,
+    build_tools,
+    dispatch,
+)
 
-__all__ = ["build_server", "create_engine"]
+__all__ = ["build_server", "call_tool_result", "create_engine"]
 
 
 def create_engine() -> ProcessEngine:
@@ -29,6 +33,29 @@ def create_engine() -> ProcessEngine:
     if org_path:
         config_kwargs["org"] = StaticOrgDirectory.from_yaml(org_path)
     return ProcessEngine(EngineConfig(**config_kwargs))
+
+
+def _text_of(payload: dict[str, Any]) -> TextContent:
+    return TextContent(type="text", text=json.dumps(payload, ensure_ascii=False, default=str))
+
+
+def call_tool_result(
+    engine: ProcessEngine, name: str, arguments: dict[str, Any] | None
+) -> list[TextContent] | CallToolResult:
+    """dispatch 结果转 MCP 返回（同步可直测，传输壳委托本函数）。
+
+    错误通道统一（review P1-1）：业务/参数错误一律 CallToolResult(isError=True)
+    ＋统一 JSON 体——修前业务错误 isError=False（「调用成功」），AI 客户端基于
+    isError 的错误处理对业务错误完全不触发；三种形状收敛为「isError=True＋JSON」。"""
+    try:
+        result = dispatch(engine, name, arguments)
+    except UnknownToolError as exc:
+        payload = {"error": {"code": "UnknownTool", "message": str(exc), "details": {}}}
+        return CallToolResult(content=[_text_of(payload)], isError=True)
+    except FloworkError as exc:
+        payload = {"error": {"code": type(exc).__name__, "message": str(exc), "details": {}}}
+        return CallToolResult(content=[_text_of(payload)], isError=True)
+    return [_text_of(result)]
 
 
 def build_server(engine: ProcessEngine) -> Server:
@@ -42,14 +69,10 @@ def build_server(engine: ProcessEngine) -> Server:
         ]
 
     @server.call_tool()
-    async def _call_tool(name: str, arguments: dict[str, Any] | None) -> list[TextContent]:
-        try:
-            result = dispatch(engine, name, arguments)
-        except LookupError as exc:
-            result = {"error": {"code": "UnknownTool", "message": str(exc), "details": {}}}
-        except FloworkError as exc:
-            result = {"error": {"code": type(exc).__name__, "message": str(exc), "details": {}}}
-        return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False, default=str))]
+    async def _call_tool(
+        name: str, arguments: dict[str, Any] | None
+    ) -> list[TextContent] | CallToolResult:  # SDK 1.x 两种返回形都收（isError 经后者）
+        return call_tool_result(engine, name, arguments)
 
     return server
 

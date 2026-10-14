@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from flowork.api import ProcessEngine
-from flowork.contrib.mcp.catalog import ToolSpec
+from flowork.contrib.mcp.catalog import McpToolError, ToolSpec
 
 __all__ = ["task_tools"]
 
@@ -16,7 +16,7 @@ def task_tools(engine: ProcessEngine) -> list[ToolSpec]:
     def list_my_tasks(args: dict[str, Any]) -> Any:
         assignee = args.get("assignee")
         if assignee is None:
-            raise LookupError("assignee 必填（裸 id）")
+            raise McpToolError("assignee 必填（裸 id）")
         rows = task.list_tasks(
             instance_id=args.get("instance_id"),
             assignee=str(assignee),
