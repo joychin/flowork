@@ -12,6 +12,7 @@ import json
 from typing import TYPE_CHECKING, Any
 
 from flowork.definitions.definition import ProcessDefinition, load_definition
+from flowork.engine.advance_gate import AdvanceGateMixin
 from flowork.engine.context import RuntimeNodeContext
 from flowork.engine.declared_hooks import run_declared_hook
 from flowork.engine.errors import (
@@ -24,7 +25,6 @@ from flowork.engine.errors import (
     RouteError,
     attribute_node_error,
 )
-from flowork.engine.join_gate import should_release
 from flowork.engine.task_records import TaskRecordsMixin
 from flowork.engine.token_records import TokenRecordsMixin
 from flowork.events.domain import DomainEvent
@@ -35,7 +35,6 @@ from flowork.runtime.registry import HandlerRegistry, NodeRegistry
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
 
-    from flowork.definitions.flow import SequenceFlow
     from flowork.definitions.node import FlowNode
     from flowork.engine.config import EngineConfig
     from flowork.persistence.orm import ProcessInstanceRow, TokenRow
@@ -53,7 +52,7 @@ __all__ = [
 ]
 
 
-class Kernel(TaskRecordsMixin, TokenRecordsMixin):
+class Kernel(AdvanceGateMixin, TaskRecordsMixin, TokenRecordsMixin):
     """单命令内的执行内核（不提交事务；事务由 Command 管线管理）。"""
 
     def __init__(
@@ -151,9 +150,9 @@ class Kernel(TaskRecordsMixin, TokenRecordsMixin):
     ) -> TokenRow:
         """激活节点：建令牌 → node_entered → on_enter → 完成判定。
 
-        defer_completion=True 供 ``route`` 两段式扇出使用：先停靠（建令牌+
-        on_enter），完结判定推迟到兄弟臂令牌建齐之后——即时完结臂（cc/service）
-        若立刻判完结，会在兄弟令牌尚不存在的瞬间触发下游 all 汇聚放行（盲窗）。
+        defer_completion=True 供 ``route`` 两段式扇出：先停靠（令牌+on_enter），
+        完结推迟到兄弟臂令牌建齐后——否则即时完结臂会在兄弟令牌不存在时
+        触发下游 all 汇聚放行（盲窗）。
         """
         try:
             token = self.create_token(
@@ -214,97 +213,29 @@ class Kernel(TaskRecordsMixin, TokenRecordsMixin):
     ) -> None:
         """路由：行为给出出边列表 → on_take 钩子 → 激活目标节点。
 
-        两段式（测试套件完善批 3 发现）：先全部停靠、再逐个判完结。
-        逐边即时处理时，即时完结臂（cc/service）会在兄弟臂令牌创建前的
-        瞬间触发下游 all 汇聚的可达性放行（盲窗）——汇聚被双激活，多出的
-        令牌无人收口（实例已完结仍挂 unfinished）。先建齐扇出令牌，
-        ``should_release`` 的「未完令牌可达」判定即健全。
+        两段式（测试套件完善批 3 发现）：先全部停靠、再逐个判完结。逐边
+        即时处理时，即时完结臂（cc/service）会在兄弟臂令牌创建前的瞬间
+        触发下游 all 汇聚放行（盲窗）——汇聚双激活、多出的令牌无人收口。
+        先建齐扇出令牌，``should_release`` 的可达性判定即健全。
         """
         definition = self.definition_of(session, instance)
         ctx = RuntimeNodeContext(self, session, instance, node, token)
         behavior = behavior_override or self.behavior_of(node)
         outgoing = behavior.get_outgoing(ctx)
-        entered: list[tuple[FlowNode, TokenRow]] = []
+        entered: list[tuple[FlowNode, TokenRow, bool]] = []
         for flow in outgoing:
             target = self._take_flow(session, instance, flow, token, definition)
             if target is not None:
                 entered.append(target)
-        for target_node, target_token in entered:
+        for target_node, target_token, racing_cancel in entered:
+            if racing_cancel:  # any 放行者的竞速收尾，完结前执行（时序见 _advance）
+                self.cancel_racing_arms(session, instance, definition, target_node.code)
             self._maybe_complete(session, instance, target_node, target_token)
-
-    def _take_flow(
-        self,
-        session: Session,
-        instance: ProcessInstanceRow,
-        flow: SequenceFlow,
-        from_token: TokenRow,
-        definition: ProcessDefinition,
-    ) -> tuple[FlowNode, TokenRow] | None:
-        if flow.on_take is not None:
-            source_node = self._node(definition, flow.source)
-            assert source_node is not None
-            # 统一咽喉 declared_hooks：模拟跳过 + 未注册/异常＝技术故障（收尾批 2）
-            run_declared_hook(
-                RuntimeNodeContext(self, session, instance, source_node, from_token),
-                flow.on_take,
-            )
-        target = self._node(definition, flow.target)
-        if target is None:
-            raise RouteError(f"目标节点不存在：{flow.target}")
-        return self._advance(session, instance, target, flow, definition)
-
-    # —— 推进门（对齐行业推进校验与激活处理语义）——
-
-    def _advance(
-        self,
-        session: Session,
-        instance: ProcessInstanceRow,
-        node: FlowNode,
-        flow: SequenceFlow,
-        definition: ProcessDefinition,
-    ) -> tuple[FlowNode, TokenRow] | None:
-        """边到达后的推进判定：any 任一到达即办（缺省）/ all 可达性放行（§2.3）。
-
-        - all：除已停靠本节点的令牌外无任何**未完令牌**可结构可达本节点才放行
-          （条件未命中的臂落定后不再阻塞；旧 settled 令牌不算数，见 join_gate）；
-        - any 且节点已在办：吸收本次到达，不重复激活；
-        - any 放行后：取消仍未完成的兄弟分支（竞速收尾，防迟到到达）。
-        驳回/撤回/管理员等直调 ``activate`` 的路径不经此门。
-        放行时 defer_completion 停靠（route 两段式），返回 (节点, 令牌)。
-        """
-        sources = [f.source for f in definition.incoming(node.code)]
-        if len(sources) > 1:
-            if self._advance_policy_of(node) == "all":
-                unfinished_elsewhere = {
-                    token.activity_code
-                    for token in self.tokens(
-                        session, instance.id, states=(TokenState.UNFINISHED.value,)
-                    )
-                    if token.activity_code != node.code
-                }
-                if not should_release(definition, unfinished_elsewhere, node.code):
-                    return None  # 仍有未完令牌可达，等待其余入边落定
-            else:
-                busy = any(
-                    token.activity_code == node.code
-                    for token in self.tokens(
-                        session, instance.id, states=(TokenState.UNFINISHED.value,)
-                    )
-                )
-                if busy:
-                    return None  # 吸收重复到达（节点已在办）
-                self.cancel_racing_arms(session, instance, definition, node.code)
-        token = self.activate(
-            session, instance, node, source_activity_code=flow.source, defer_completion=True
-        )
-        return node, token
-
-    def _advance_policy_of(self, node: FlowNode) -> str:
-        """节点开始条件（Spec 声明；cc_task 在其 Spec 上覆写恒 any）。缺省 any。"""
-        return getattr(node, "advance_policy", None) or "any"
 
     def _node(self, definition: ProcessDefinition, code: str) -> FlowNode | None:
         return definition.node(code)
 
     # advance_after_task（任务提交后的统一推进，含出口不可达兜底）住
     # TaskRecordsMixin——任务推进域（v2.3 第二十轮迁出，kernel 守 300 行红线）。
+    # 推进门（_take_flow/_advance/_advance_policy_of，any 吸收与竞速/all 放行）
+    # 住 AdvanceGateMixin（engine/advance_gate.py，同因守红线迁出）。

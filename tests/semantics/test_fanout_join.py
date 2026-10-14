@@ -69,9 +69,9 @@ def test_double_instant_arms_single_join_token(engine: ProcessEngine) -> None:
     assert engine.runtime.get_instance(iid).state == "completed"
     merge_tokens = [t for t in engine.history.tokens(iid) if t.activity_code == "merge"]
     assert len(merge_tokens) == 1, "汇聚双激活（幽灵令牌）"
-    assert all(
-        t.state in ("finished", "cancelled") for t in engine.history.tokens(iid)
-    ), "完结实例仍挂未完令牌"
+    assert all(t.state in ("finished", "cancelled") for t in engine.history.tokens(iid)), (
+        "完结实例仍挂未完令牌"
+    )
 
 
 def test_double_service_arms_single_join_token(engine: ProcessEngine) -> None:
