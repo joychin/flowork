@@ -707,7 +707,7 @@ publish/child 域；100 迭代 DoD+词汇覆盖实证。
 ① `cli/walkthrough_core.py` RunObserver 差分观察器（四个留痕面按已见集合 diff：事件 id/路由决策 id/
 待办 id/变量血缘前缀计数——追加型数据面即步单素材）+ 剧本装载校验 + find_task（node+by 定位，
 人匹配 user: 前缀互认）+ perform_step（十动作分派，FloworkError 归一 ScriptError 带步骤上下文）。
-② `cli/walkthrough_view.py` 步单渲染（叙事视角：动作→待办+/待办-→路由（条件公式=求值结果→选中边）→
+② `cli/walkthrough_view.py` 步单渲染（叙事视角：动作→新增/离场→路由（条件公式=求值结果→选中边）→
 变量 before→after（写方·操作人）→事件（载荷摘录三键）；转办离场是换人语义照常报、出结果类动作的被办
 任务不重复报；终点空路由行/事件 None 值/长动作行三处降噪）。
 ③ 剧本模式多场景顺序跑（`examples/04_expense_walkthrough.json`：大额含驳回回退+改额+转办+会签，
@@ -715,7 +715,15 @@ publish/child 域；100 迭代 DoD+词汇覆盖实证。
 ④ `examples/04_expense_claim.json` 费用报销模板（申请人 submit=initiator 起步→经理驳回可回退→
 金额>5000 加财务复核+总监会签严格过半→传阅发起人；严格过半公式避 bare_threshold lint）。
 收束输出=实例状态+流转轨迹表+留痕合计（未走完黄字示剩余待办）。demo/demo-full 迁 cli/demo.py
-（命令名不变，app.py 299→169 守红线余量）。测试 tests/test_cli_walkthrough.py 9 例（两场景全旅程
-步单要素断言/错误三路：节点不在/办理人不符/引擎拒绝/交互 stdin 冒烟+提前收束）。**1169 测试全绿，
-五道门全过**。步单格式=本批核心设计物，后续 web 演练台/任务页办理体验直接复用。
+（命令名不变，app.py 299→169 守红线余量）。**1169 测试全绿，五道门全过**。步单格式=本批核心
+设计物，后续 web 演练台/任务页办理体验直接复用。
+**自审修复批（同日，13 例）**：① 交互模式引擎拒绝只提示续走不再炸会话（脚本模式中止语义不变）；
+② 变量 JSON 三次输错=取消本步动作（原静默按空变量继续办完＝带病落库，最危险一例）；
+③ find_task 会签多待办不给 by 即拒（原静默任取一条=list_tasks 无排序不可复现）；候选池任务
+（assignee 空串）的 by 对错交引擎认领守卫判（CLI 不复制候选判定）；④ claim/unclaim 可见性——
+认领只改 assignee 不换行 id，差分看不见，补「办理人」行现查；⑤ reject 透传 target/variables、
+users 收逗号串形态、剧本场景级字段类型校验、header escape、两字标签对齐（顺带修 {label:<3}
+填充对两字标签多出一空格的断言错位）。挂账不改：events/variable_history limit=2000 截断
+（单会话不可达量级）、variable_history 无平局次键（引擎面可排序 id 与事件 A1 同型，随重排刀）、
+withdraw 不在词表（作用于已办历史行，需历史行入口另立）。**1173 测试全绿，五道门全过**。
 

@@ -24,7 +24,6 @@ from flowork.api import (
 )
 from flowork.cli import walkthrough_view as view
 from flowork.cli.walkthrough_core import (
-    OUTCOME_ACTIONS,
     RunObserver,
     ScriptError,
     find_task,
@@ -118,6 +117,6 @@ def _run_scripted(engine: ProcessEngine, code: str, run: dict[str, Any]) -> None
             actor=step.get("by") or task.assignee,
             detail=step_detail(step),
             facts=observer.drain(),
-            acted_id=task.id if step["action"] in OUTCOME_ACTIONS else None,
+            acted_id=task.id,
         )
     view.print_run_summary(console, engine, instance_id)

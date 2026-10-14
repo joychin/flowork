@@ -17,8 +17,8 @@ from flowork.api import ProcessEngine
 from flowork.cli import walkthrough_view as view
 from flowork.cli.walkthrough_core import (
     KNOWN_ACTIONS,
-    OUTCOME_ACTIONS,
     RunObserver,
+    ScriptError,
     perform_step,
     step_detail,
 )
@@ -70,7 +70,13 @@ def run_interactive(engine: ProcessEngine, code: str, console: Console, start_us
             continue
         task = pending[step.pop("_index")]
         number += 1
-        perform_step(engine, task, step)
+        try:
+            perform_step(engine, task, step)
+        except ScriptError as exc:
+            # 交互模式引擎拒绝＝本次动作未生效，提示后续走；脚本模式才中止
+            number -= 1
+            console.print(f"[red]✗ 动作未生效[/red] {exc}")
+            continue
         view.print_step(
             console,
             number,
@@ -81,7 +87,7 @@ def run_interactive(engine: ProcessEngine, code: str, console: Console, start_us
             actor=step.get("by") or task.assignee,
             detail=step_detail(step),
             facts=observer.drain(),
-            acted_id=task.id if step["action"] in OUTCOME_ACTIONS else None,
+            acted_id=task.id,
         )
     view.print_run_summary(console, engine, instance_id)
 
@@ -102,6 +108,9 @@ def _parse_step(command: str, pending: list[Any]) -> dict[str, Any] | None:
         return None
     step: dict[str, Any] = {"_index": index - 1, "node": task.activity_code, "action": action}
     step["by"] = Prompt.ask("办理人", default=task.assignee or "").strip()
+    if action == "claim" and not step["by"]:
+        print("认领必须给办理人（这是谁在领）")
+        return None
     comment = Prompt.ask("意见（回车跳过）", default="").strip()
     if comment:
         step["comment"] = comment
@@ -111,12 +120,16 @@ def _parse_step(command: str, pending: list[Any]) -> dict[str, Any] | None:
         step["to"] = Prompt.ask("对象人，逗号分隔（必填）").strip()
     if action == "complete":
         variables = _ask_json("提交变量 JSON（回车跳过）")
+        if variables is None:  # 三次都没输对＝放弃，取消本步动作（不许空变量带病落库）
+            print("已取消本次动作")
+            return None
         if variables:
             step["variables"] = variables
     return step
 
 
-def _ask_json(prompt: str) -> dict[str, Any]:
+def _ask_json(prompt: str) -> dict[str, Any] | None:
+    """交互收集一个 JSON 对象；None＝三次未成功放弃（调用方决定是否取消动作）。"""
     for _ in range(3):
         raw = Prompt.ask(prompt, default="").strip()
         if not raw:
@@ -127,4 +140,4 @@ def _ask_json(prompt: str) -> dict[str, Any]:
             print("不是合法 JSON，重试（或直接回车跳过）")
             continue
         return parsed if isinstance(parsed, dict) else {}
-    return {}
+    return None

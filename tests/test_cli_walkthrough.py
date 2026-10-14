@@ -42,11 +42,11 @@ def test_scripted_high_amount_full_journey() -> None:
     assert "task_rejected" in out
     assert "amount: 20000 → 18000（task_output·u_zhang）" in out
     # 转办：旧任务离场、新办理人接棒
-    assert "待办- 财务复核(finance) → u_finance" in out
-    assert "待办+ 财务复核(finance) → u_finance_bak" in out
+    assert "离场 财务复核(finance) → u_finance" in out
+    assert "新增 财务复核(finance) → u_finance_bak" in out
     # 会签两人各一票后走到传阅与终态
-    assert "待办+ 总监会签(cfo) → u_alice" in out
-    assert "待办+ 总监会签(cfo) → u_bob" in out
+    assert "新增 总监会签(cfo) → u_alice" in out
+    assert "新增 总监会签(cfo) → u_bob" in out
     assert "cc_created" in out and "process_completed" in out
 
 
@@ -170,4 +170,118 @@ def test_interactive_quit_leaves_summary(tmp_path: Path) -> None:
     result = _invoke("walkthrough", str(TEMPLATE), stdin=stdin)
     assert result.exit_code == 0, result.output
     assert "未走完" in result.output
+    assert "剩余待办 submit→u_zhang" in result.output
+
+
+def test_ambiguous_node_without_by_rejected(tmp_path: Path) -> None:
+    doc = json.loads(SCRIPT.read_text(encoding="utf-8"))
+    run = doc["runs"][0]
+    run["steps"] = run["steps"][:6]  # 财务复核也办完，cfo 两人待办在途
+    run["steps"].append({"node": "cfo", "action": "complete"})  # 无 by：两人待办必须点名
+    only = tmp_path / "amb.json"
+    only.write_text(json.dumps(doc, ensure_ascii=False), encoding="utf-8")
+    result = _invoke("walkthrough", str(TEMPLATE), "--script", str(only))
+    assert result.exit_code == 1
+    assert "请在步骤里用 by 指定办理人" in result.output
+    assert "u_alice" in result.output and "u_bob" in result.output
+
+
+def _candidate_template(tmp_path: Path) -> Path:
+    template = {
+        "code": "walk_candidate",
+        "name": "候选认领演练",
+        "version": 1,
+        "status": "published",
+        "variables": [],
+        "nodes": [
+            {"code": "start", "name": "发起", "kind": "start"},
+            {
+                "code": "review",
+                "name": "评审",
+                "kind": "user_task",
+                "candidate_users": ["'u_carol'"],
+            },
+            {"code": "end", "name": "结束", "kind": "end"},
+        ],
+        "flows": [
+            {"source": "start", "target": "review"},
+            {"source": "review", "target": "end"},
+        ],
+    }
+    path = tmp_path / "cand.json"
+    path.write_text(json.dumps(template, ensure_ascii=False), encoding="utf-8")
+    return path
+
+
+def test_claim_visible_in_step_output(tmp_path: Path) -> None:
+    template = _candidate_template(tmp_path)
+    script = tmp_path / "cand_walk.json"
+    script.write_text(
+        json.dumps(
+            {
+                "runs": [
+                    {
+                        "steps": [
+                            {"node": "review", "by": "u_carol", "action": "claim"},
+                            {
+                                "node": "review",
+                                "by": "u_carol",
+                                "action": "complete",
+                                "comment": "认领后办理",
+                            },
+                        ]
+                    }
+                ]
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    result = _invoke("walkthrough", str(template), "--script", str(script))
+    assert result.exit_code == 0, result.output
+    out = result.output
+    # 认领不换任务行 id：步单须补「办理人」行，否则认领在叙事里不可见
+    assert "办理人 u_carol（认领后）" in out
+    assert "状态 = completed" in out
+
+
+def test_interactive_engine_rejection_continues(tmp_path: Path) -> None:
+    stdin = "\n".join(
+        [
+            "",  # 起始变量跳过
+            "1 complete",  # submit
+            "",  # 办理人默认 u_zhang
+            "提交",
+            '{"amount": 3000}',
+            "1 add_countersigner",  # manager 已是办理人：给自己加签会被引擎拒
+            "",  # 办理人默认 u_manager
+            "",  # 意见跳过
+            "u_manager",  # 对象人＝自己
+            "q",  # 拒绝后应回到命令行，收束退出
+        ]
+    )
+    result = _invoke("walkthrough", str(TEMPLATE), stdin=stdin)
+    assert result.exit_code == 0, result.output
+    out = result.output
+    assert "动作未生效" in out and "已在会签名单" in out
+    # 拒绝后实例仍在原位（manager 待办未动），收束如实示未走完
+    assert "剩余待办 manager→u_manager" in out
+
+
+def test_interactive_bad_json_thrice_cancels_action() -> None:
+    stdin = "\n".join(
+        [
+            "",  # 起始变量跳过
+            "1 complete",  # submit
+            "",  # 办理人
+            "",  # 意见跳过
+            "{bad",  # 变量 JSON 错 1
+            "{bad",  # 错 2
+            "{bad",  # 错 3 → 放弃＝取消本步动作
+            "q",  # 回命令行收束：submit 仍未办
+        ]
+    )
+    result = _invoke("walkthrough", str(TEMPLATE), stdin=stdin)
+    assert result.exit_code == 0, result.output
+    assert "已取消本次动作" in result.output
     assert "剩余待办 submit→u_zhang" in result.output

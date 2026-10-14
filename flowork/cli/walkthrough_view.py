@@ -13,6 +13,8 @@ from rich.console import Console
 from rich.markup import escape
 from rich.table import Table
 
+from flowork.cli.walkthrough_core import OUTCOME_ACTIONS
+
 _ACTION_ZH = {
     "complete": "办理",
     "reject": "驳回",
@@ -36,10 +38,10 @@ def print_run_header(
     business_key: str | None,
     variables: dict[str, Any],
 ) -> None:
-    key = f"business_key={business_key}，" if business_key else ""
+    key = f"business_key={escape(str(business_key))}，" if business_key else ""
     console.print(
         f"\n[bold]▶ 场景：{escape(name)}[/bold]（{key}实例 {instance_id[:8]}…，"
-        f"起始变量 {variables or '无'}）"
+        f"起始变量 {escape(str(variables)) if variables else '无'}）"
     )
 
 
@@ -63,10 +65,17 @@ def print_step(
     )
     _line(console, "动作", f"{action}{('（' + detail + '）') if detail else ''}", "dim")
     for task in facts.added:
-        _line(console, "待办+", f"{task.name}({task.activity_code}) → {task.assignee}", "green")
+        _line(console, "新增", f"{task.name}({task.activity_code}) → {task.assignee}", "green")
     for task in facts.removed:
-        if task.id != acted_id:  # 被办任务本身不用重复报（动作行已含）
-            _line(console, "待办-", f"{task.name}({task.activity_code}) → {task.assignee}", "red")
+        # 出结果类动作的被办任务自身离场由动作行交代；转办/认领类的离场是换人语义照常报
+        if not (task.id == acted_id and action in OUTCOME_ACTIONS):
+            _line(console, "离场", f"{task.name}({task.activity_code}) → {task.assignee}", "red")
+    if action in ("claim", "unclaim") and acted_id:
+        # 认领只改 assignee 不换行 id，差分看不见——从当前待办现查办理人补一行
+        acted = next((t for t in facts.pending if t.id == acted_id), None)
+        if acted is not None:
+            who = acted.assignee or "（候选池）"
+            _line(console, "办理人", f"{who}（{action_zh}后）", "green")
     for route in facts.routes:
         text = _route_text(route)
         if text:
@@ -121,9 +130,8 @@ def _short(value: Any) -> str:
 
 
 def _line(console: Console, label: str, text: str, style: str) -> None:
-    console.print(
-        f"  [{style}]{label:<3}[/{style}] {escape(text)}", no_wrap=True, overflow="ignore"
-    )
+    # 标签统一两字宽（新增/离场/路由…），定长无需填充；动态内容 escape 防方括号毒化
+    console.print(f"  [{style}]{label}[/{style}] {escape(text)}", no_wrap=True, overflow="ignore")
 
 
 def print_pending(console: Console, tasks: list[Any]) -> None:

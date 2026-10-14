@@ -1,5 +1,5 @@
 {
-  "comment": "费用报销演练剧本：每个场景各发起一个真实实例（缺省内存库，跑完即弃）。step 字段：node=节点编码，by=办理人，action∈complete/reject/transfer/assist/consult/claim/unclaim/add_countersigner，comment/variables/to 随动作可选。",
+  "comment": "费用报销演练剧本：每个场景各发起一个真实实例（缺省内存库，跑完即弃）。step 字段：node=节点编码，by=办理人，action∈complete/reject/transfer/assist/consult/claim/unclaim/add_countersigner，comment/variables 随动作可选，reject 可给 target 指定驳回落点，transfer/assist/consult/add_countersigner 的对象人用 to（逗号分隔）。",
   "runs": [
     {
       "name": "大额报销：驳回回退 → 重报改额 → 财务转办 → 总监会签",

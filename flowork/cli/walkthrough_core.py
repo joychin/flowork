@@ -82,7 +82,7 @@ class RunObserver:
 
 
 def load_script(path: Any) -> dict[str, Any]:
-    """装载并静态校验剧本 JSON（runs 非空、步骤字段齐全）。"""
+    """装载并静态校验剧本 JSON（runs 非空、步骤字段齐全、场景级字段类型）。"""
     import json
 
     try:
@@ -95,6 +95,11 @@ def load_script(path: Any) -> dict[str, Any]:
     for index, run in enumerate(runs, start=1):
         if not isinstance(run, dict) or not isinstance(run.get("steps"), list):
             raise ScriptError(f"剧本第 {index} 个场景缺少 steps 数组")
+        for field_name in ("name", "start_user", "business_key"):
+            if field_name in run and not isinstance(run[field_name], str):
+                raise ScriptError(f"场景 {index} 的 {field_name} 必须是字符串")
+        if "variables" in run and not isinstance(run["variables"], dict):
+            raise ScriptError(f"场景 {index} 的 variables 必须是对象")
         for step in run["steps"]:
             _validate_step(step, index)
     return doc
@@ -120,6 +125,8 @@ def _users_of(step: dict[str, Any]) -> list[str]:
     users = step.get("users")
     if isinstance(users, list) and users:
         return [str(u) for u in users]
+    if isinstance(users, str) and users.strip():  # 逗号串形态容忍
+        return [part.strip() for part in users.split(",") if part.strip()]
     to = step.get("to")
     if isinstance(to, str) and to.strip():
         return [part.strip() for part in to.split(",") if part.strip()]
@@ -131,7 +138,11 @@ def _same_person(left: str, right: str) -> bool:
 
 
 def find_task(engine: ProcessEngine, instance_id: str, step: dict[str, Any]) -> Any:
-    """按 node（必要时加 by 对人）在就绪待办中定位任务；找不到给当前待办提示。"""
+    """按 node（必要时加 by 对人）在就绪待办中定位任务；找不到给当前待办提示。
+
+    节点多条待办而不给 ``by``＝会签等并行场景的任意选择（list_tasks 无排序，
+    结果不可复现）——直接拒绝并点明办理人名单，不许静默任取。
+    """
     pending = engine.task.list_tasks(instance_id=instance_id)
     at_node = [t for t in pending if t.activity_code == step["node"]]
     if not at_node:
@@ -140,10 +151,18 @@ def find_task(engine: ProcessEngine, instance_id: str, step: dict[str, Any]) -> 
     by = step.get("by")
     if by:
         matched = [t for t in at_node if _same_person(t.assignee, by)]
-        if not matched:
+        if matched:
+            at_node = matched
+        elif not any(t.assignee == "" for t in at_node):
             who = "、".join(sorted({t.assignee for t in at_node}))
             raise ScriptError(f"节点 {step['node']} 的待办办理人是 {who}，不是 {by}")
-        at_node = matched
+        # else 候选池任务（未认领，assignee 为空）：by 是否在候选集里交给引擎
+        # 认领守卫（require_candidate）判定，CLI 不复制候选判定逻辑
+    elif len(at_node) > 1:
+        who = "、".join(sorted({t.assignee or "（候选池）" for t in at_node}))
+        raise ScriptError(
+            f"节点 {step['node']} 有 {len(at_node)} 条待办（{who}），请在步骤里用 by 指定办理人"
+        )
     return at_node[0]
 
 
@@ -157,7 +176,13 @@ def perform_step(engine: ProcessEngine, task: Any, step: dict[str, Any]) -> None
         if action == "complete":
             task_svc.complete(task.id, actor, comment=comment, variables=step.get("variables"))
         elif action == "reject":
-            task_svc.reject(task.id, actor, comment=comment)
+            task_svc.reject(
+                task.id,
+                actor,
+                comment=comment,
+                target=step.get("target"),  # 手动指定驳回落点（缺省走节点 reject_target）
+                variables=step.get("variables"),
+            )
         elif action == "transfer":
             task_svc.transfer(task.id, str(step["to"]), actor, comment)
         elif action in ("assist", "consult", "add_countersigner"):
