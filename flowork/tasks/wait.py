@@ -230,13 +230,15 @@ def finish_wait(
             {"activity_code": node.code, "token_id": token.id},  # B4：并行分支可区分
             instance.id,
         )
+        # 路由也在帧内（全仓 review 2026-10-13 批 3 P1-2）：出边条件运行期
+        # 求值错修前 activity_code=None——incident 定位/挂起定位/on_fail 三个
+        # 修复面同时失效。attribute_node_error 只补不覆盖，内层帧不受影响
+        kernel.route(session, instance, node, token, behavior_override=behavior)
     except EngineExecutionError as error:
         from flowork.engine.errors import attribute_node_error
 
         attribute_node_error(error, node.code)
         raise
-
-    kernel.route(session, instance, node, token, behavior_override=behavior)
 
 
 def _functions_of(ctx: RuntimeNodeContext) -> Any:

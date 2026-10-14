@@ -182,10 +182,17 @@ class RejectMixin:
         from flowork.engine.context import RuntimeNodeContext
         from flowork.engine.declared_hooks import run_declared_hook
 
-        run_declared_hook(
-            RuntimeNodeContext(kernel, ctx.session, instance, node, token),
-            node.hooks.on_exit,
-        )
+        try:  # 归因入帧（全仓 review 2026-10-13 批 3 P2-1）：与 wait 路由同族——
+            # 声明式 on_exit 失败（未注册/handler 异常）修前无节点定位、on_fail 不触发
+            run_declared_hook(
+                RuntimeNodeContext(kernel, ctx.session, instance, node, token),
+                node.hooks.on_exit,
+            )
+        except EngineExecutionError as error:
+            from flowork.engine.errors import attribute_node_error
+
+            attribute_node_error(error, node.code)
+            raise
         kernel.finish_token(ctx.session, token, approval_exit="reject")
         # 并行场景：驳回归零——取消其余未完令牌（兄弟分支不再继续）
         unfinished = (TokenState.UNFINISHED.value,)

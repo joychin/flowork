@@ -58,31 +58,31 @@ def run_fail_hooks(
         instance = ctx.session.get(ProcessInstanceRow, instance_id)
         if instance is None or instance.simulated:
             continue
-        token = next(
-            (
-                row
-                for row in kernel.tokens(
-                    ctx.session, instance_id, states=(TokenState.UNFINISHED.value,)
-                )
-                if row.activity_code == activity
-            ),
-            None,
-        )
         node = kernel.definition_of(ctx.session, instance).node(activity)
         if node is None:
             continue
-        # token=None＝节点在本命令内激活后随整笔回滚（无持久令牌）——仍执行，
-        # 钩子以回滚后持久态为现场（典型：service on_enter 即炸）
-        node_ctx: RuntimeNodeContext = RuntimeNodeContext(
-            kernel, ctx.session, instance, node, token
-        )
-        node_ctx.failure = error
-        try:
-            kernel.behavior_of(node).on_fail(node_ctx, error)
-            run_declared_hook(node_ctx, node.hooks.on_fail)
-        except Exception:
-            logger.exception(
-                "on_fail 钩子执行失败（instance=%s node=%s）——不吞故障单，故障单照常落库",
-                instance_id,
-                activity,
+        tokens = [
+            row
+            for row in kernel.tokens(
+                ctx.session, instance_id, states=(TokenState.UNFINISHED.value,)
             )
+            if row.activity_code == activity
+        ]
+        # token=None＝节点在本命令内激活后随整笔回滚（无持久令牌）——仍执行，
+        # 钩子以回滚后持久态为现场（典型：service on_enter 即炸）。
+        # 多令牌逐个执行（全仓 review 2026-10-13 批 3 P2-8：同节点多未完令牌
+        # 仅管理员 activate 可构造，修前只对第一个执行）
+        for token in tokens if tokens else [None]:
+            node_ctx: RuntimeNodeContext = RuntimeNodeContext(
+                kernel, ctx.session, instance, node, token
+            )
+            node_ctx.failure = error
+            try:
+                kernel.behavior_of(node).on_fail(node_ctx, error)
+                run_declared_hook(node_ctx, node.hooks.on_fail)
+            except Exception:
+                logger.exception(
+                    "on_fail 钩子执行失败（instance=%s node=%s）——不吞故障单，故障单照常落库",
+                    instance_id,
+                    activity,
+                )
