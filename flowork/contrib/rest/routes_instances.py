@@ -128,8 +128,11 @@ def signal_waiting_instance(
         correlation_key=key,
         payload=body.get("payload"),
         message_id=body.get("message_id"),
+        instance_id=instance_id,  # 实例定向（P0-2 防串单）：只消费本实例的订阅
     )
     if receipt is None or receipt.get("instance_id") != instance_id:
+        # 定向关联下正常不会进此分支；剩余可达路径＝message_id 已被其他实例
+        # 消费后的幂等回放——回执核验照旧拦截，错误带上实际消费者
         raise RestConflictError(
             f"消息 {name!r} 未被实例 {instance_id} 消费（回执：{receipt or '无人在等'}）"
         )

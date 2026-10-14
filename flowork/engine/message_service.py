@@ -1,14 +1,12 @@
 """消息服务（kernel-v2 spec §7/P1-1）：缓冲、TTL、按关联键匹配订阅。
 
-- ``publish_message``：先到（无 open 订阅）进缓冲（TTL）；命中即关联（FCFS）；
-  message_id 全局唯一防重（重复静默忽略）。
-- ``subscribe``：登记订阅并反查缓冲（消息先到竞态）；命中即完整关联动作
-  （同事务）：matched＋载荷写入（按等待节点 output 映射，缺省全量；input
-  契约 node_output 边界把关）＋ ``message_correlated``＋推进（等待节点）。
-- ``correlate_message``：同步关联（不缓冲）——命中回传签收凭证/无人在等
-  None/重复幂等回放（spec §7.2 配套面，Zeebe correlate 同款）。
-- ``waiting``/``list_messages``：订阅反查与消息检索（运维面）；``signal`` 广播唤醒。
-- 暂停实例不消费（消息落缓冲，恢复补消费）；查询件下沉 engine.message_query（守红线）。
+- ``publish_message``：先到进缓冲（TTL），命中即关联（FCFS）；message_id 全局
+  唯一防重。``subscribe``：登记并反查缓冲（消息先到竞态）；命中即完整关联动作
+  （同事务）：matched＋载荷写入＋ ``message_correlated``＋推进（等待节点）。
+- ``correlate_message``：同步关联（不缓冲）——签收凭证/无人在等 None/幂等回放；
+  ``instance_id`` 定向＝signal 面只消费本实例订阅（review 2026-10-13 防串单）。
+- ``waiting``/``list_messages``：反查与检索（运维面）；``signal`` 广播唤醒。
+- 暂停实例不消费（落缓冲恢复补消费）；查询件下沉 engine.message_query。
 """
 
 from __future__ import annotations
@@ -30,10 +28,6 @@ if TYPE_CHECKING:
 __all__ = ["MessageService"]
 
 DEFAULT_TTL_SECONDS = 86_400
-
-# 裸投影形态 payload.<key>：载荷缺该键 → None（数据缺失≠求值错，对齐
-# _mapping_values 的 _BARE_IDENT 缺键 None 先例）；复合表达式严格求值。
-_BARE_PAYLOAD_FIELD = __import__("re").compile(r"^payload\.([A-Za-z_][A-Za-z0-9_]*)$")
 
 
 class MessageService:
@@ -59,8 +53,7 @@ class MessageService:
         def _command(ctx: CommandContext) -> bool:
             message_id_ = message_id or uuid.uuid4().hex
             self._purge_expired(ctx)
-            # 防重只按 message_id（spec §7）：未消费缓冲 ∪ 已消费订阅的定格记录。
-            # 与 (name, correlation_key) 无关——同一业务键的后续事件是合法输入。
+            # 防重只按 message_id（spec §7）：未消费缓冲 ∪ 已消费定格记录，与关联键无关。
             duplicate = (
                 ctx.session.scalars(
                     select(MessageBufferRow.id).where(MessageBufferRow.message_id == message_id_)
@@ -89,8 +82,8 @@ class MessageService:
                 message_id=message_id_,
             )
 
-            # 在途订阅优先（FCFS）；暂停实例的订阅跳过（全动作拦截——spec §7.2：
-            # 暂停不消费，消息落下一优先级），命中走完整管线（映射+推进）。
+            # 在途订阅优先（FCFS）；暂停实例跳过（spec §7.2 全动作拦截，消息落
+            # 下一优先级），命中走完整管线（映射+推进）。
             from flowork.engine.message_query import first_open_subscription
 
             subscription = first_open_subscription(ctx, name, correlation_key)
@@ -118,7 +111,7 @@ class MessageService:
                     correlation_key=correlation_key,
                     message_id=message_id_,
                     payload=dict(payload or {}),
-                    # TTL 与其他写路径同源（code-review 2026-10 P1-18）：此前墙钟
+                    # TTL 与其他写路径同源（P1-18）：此前墙钟
                     expires_at=self._engine.config.now() + timedelta(seconds=ttl_seconds),
                 )
             )
@@ -172,32 +165,6 @@ class MessageService:
 
         return broadcast_signal(self._engine, name)
 
-    def _resolve_write(
-        self, payload: dict[str, Any], mappings: dict[str, str] | None, node_id: str
-    ) -> dict[str, Any]:
-        """载荷写入集：声明了 output_mappings 按映射白名单，否则全量合并。"""
-        if not mappings:
-            return dict(payload)
-        from flowork.engine.kernel import EngineExecutionError
-        from flowork.expr.cel import FormulaError, evaluate_formula_value
-        from flowork.expr.context import expression_context, expression_functions_of
-
-        context = expression_context({"payload": dict(payload)}, now=self._engine.config.now())
-        functions = expression_functions_of(self._engine.config)
-        write: dict[str, Any] = {}
-        for target, expression in mappings.items():
-            bare = _BARE_PAYLOAD_FIELD.match(expression.strip())
-            if bare is not None and bare.group(1) not in (payload or {}):
-                write[target] = None  # 裸投影缺键：数据缺失≠求值错（spec §7.2）
-                continue
-            try:
-                write[target] = evaluate_formula_value(expression, context, functions=functions)
-            except FormulaError as exc:
-                raise EngineExecutionError(
-                    f"wait {node_id} output_mappings.{target} 求值失败（{expression!r}）：{exc}"
-                ) from exc
-        return write
-
     def correlate_message(
         self,
         name: str,
@@ -205,12 +172,19 @@ class MessageService:
         payload: dict[str, Any] | None = None,
         *,
         message_id: str | None = None,
+        instance_id: str | None = None,
     ) -> dict[str, Any] | None:
-        """同步关联（不缓冲）：命中回传签收凭证，无人在等返回 None（§7.2）。"""
+        """同步关联（不缓冲）：命中回传签收凭证，无人在等返回 None（§7.2）；
+        ``instance_id`` 定向＝只消费本实例订阅（review P0-2 防串单）。"""
         from flowork.engine import message_query as _mq
 
         return _mq.correlate_message(
-            self._engine, name, correlation_key, payload, message_id=message_id
+            self._engine,
+            name,
+            correlation_key,
+            payload,
+            message_id=message_id,
+            instance_id=instance_id,
         )
 
     def waiting(
@@ -257,14 +231,14 @@ class MessageService:
     ) -> None:
         """关联成功（同事务）：matched＋载荷写入（映射或全量，契约边界）＋事件。
 
-        mappings（spec §7 原文「按节点 output 映射写入」）：右侧表达式于消息
-        上下文（payload.* + now）求值，缺键得 None；未声明 → 全量合并兜底
-        （Zeebe 默认同款）。映射求值错＝技术故障（publish 失败，消息不落库）。
+        mappings（spec §7）：右侧表达式于消息上下文（payload.*+now）求值，缺键
+        None；未声明全量合并兜底。映射求值错＝技术故障（publish 失败不落库）。
         """
         from flowork.definitions.contract import validate_input_contract
+        from flowork.engine.message_query import resolve_payload_write
         from flowork.persistence.orm import ProcessInstanceRow
 
-        write = self._resolve_write(payload, mappings, subscription.node_id)
+        write = resolve_payload_write(self._engine.config, payload, mappings, subscription.node_id)
         instance = ctx.session.get(ProcessInstanceRow, subscription.instance_id)
         if instance is not None:
             # touch 先于载荷合并：变量留痕 before 快照须在写入前留存

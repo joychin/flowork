@@ -24,18 +24,26 @@ if TYPE_CHECKING:
 __all__ = ["correlate_message", "first_open_subscription", "list_messages", "waiting"]
 
 
-def first_open_subscription(ctx: CommandContext, name: str, correlation_key: str) -> _SubRow | None:
+def first_open_subscription(
+    ctx: CommandContext,
+    name: str,
+    correlation_key: str,
+    instance_id: str | None = None,
+) -> _SubRow | None:
     """首个可消费的 open 订阅（FCFS；跳过暂停/挂起实例——spec §7.2 暂停
-    拦截 + 拍板 1：挂起对齐暂停，消息落缓冲、故障解决后补消费）。"""
-    rows = ctx.session.scalars(
-        select(MessageSubscriptionRow)
-        .where(
-            MessageSubscriptionRow.name == name,
-            MessageSubscriptionRow.correlation_key == correlation_key,
-            MessageSubscriptionRow.state == "open",
-        )
-        .order_by(MessageSubscriptionRow.created_at)
-    ).all()
+    拦截 + 拍板 1：挂起对齐暂停，消息落缓冲、故障解决后补消费）。
+
+    ``instance_id``（全仓 review 2026-10-13 批 1 P0-2）：实例定向匹配——
+    signal 面只消费本实例的订阅，防同名同 key 多实例时消息被 FCFS 先到的
+    他人实例抢走（副作用落错单）。None 保持全局 FCFS（publish 路径不变）。"""
+    stmt = select(MessageSubscriptionRow).where(
+        MessageSubscriptionRow.name == name,
+        MessageSubscriptionRow.correlation_key == correlation_key,
+        MessageSubscriptionRow.state == "open",
+    )
+    if instance_id is not None:
+        stmt = stmt.where(MessageSubscriptionRow.instance_id == instance_id)
+    rows = ctx.session.scalars(stmt.order_by(MessageSubscriptionRow.created_at)).all()
     for row in rows:
         instance = ctx.session.get(ProcessInstanceRow, row.instance_id)
         if instance is None or instance.state in FROZEN_INSTANCE_STATES:
@@ -51,6 +59,7 @@ def correlate_message(
     payload: dict[str, Any] | None = None,
     *,
     message_id: str | None = None,
+    instance_id: str | None = None,
 ) -> dict[str, Any] | None:
     """同步关联入口（spec §7.2 配套面，Zeebe correlate 端点同款）。
 
@@ -59,6 +68,10 @@ def correlate_message(
     business_key, definition_code}``；无人在等 → None（消息不留存，调用方
     自决重试/报错）；重复 message_id → 回放首次结果（duplicate=True，
     幂等重放不二次消费）。匹配顺序与 publish 一致：在途订阅 → 启动匹配。
+
+    ``instance_id``（实例定向）：只匹配本实例的 open 订阅——signal 面
+    防串单（副作用只落目标实例）；本实例无 open 订阅时**不做启动匹配**
+    （定向语义下启动新实例违背调用意图），直接 None。
     """
 
     def _command(ctx: CommandContext) -> dict[str, Any] | None:
@@ -80,14 +93,16 @@ def correlate_message(
         )
         from flowork.engine.message_flow import hit_subscription
 
-        subscription = first_open_subscription(ctx, name, correlation_key)
+        subscription = first_open_subscription(ctx, name, correlation_key, instance_id)
         if subscription is not None and hit_subscription(
             ctx, engine, subscription, body, message_id=mid
         ):
             return _receipt_of(ctx, subscription, duplicate=False)
         from flowork.engine.message_start import match_start_on_message
 
-        if match_start_on_message(engine, ctx, name, correlation_key, body, mid):
+        if instance_id is None and match_start_on_message(
+            engine, ctx, name, correlation_key, body, mid
+        ):
             started = ctx.session.scalars(
                 select(MessageSubscriptionRow).where(MessageSubscriptionRow.message_id == mid)
             ).first()
@@ -214,3 +229,35 @@ def _receipt_of(ctx: CommandContext, subscription: _SubRow, *, duplicate: bool) 
         "business_key": instance.business_key if instance is not None else None,
         "definition_code": instance.definition_code if instance is not None else None,
     }
+
+
+# 裸投影形态 payload.<key>：载荷缺该键 → None（缺失≠求值错，对齐 _mapping_values）；复合式严格求值。
+_BARE_PAYLOAD_FIELD = __import__("re").compile(r"^payload\.([A-Za-z_][A-Za-z0-9_]*)$")
+
+
+def resolve_payload_write(
+    config: Any, payload: dict[str, Any], mappings: dict[str, str] | None, node_id: str
+) -> dict[str, Any]:
+    """载荷写入集（自 message_service 下沉守红线）：声明了 output_mappings 按
+    映射白名单求值，否则全量合并；裸投影缺键 None（spec §7.2）。"""
+    if not mappings:
+        return dict(payload)
+    from flowork.engine.kernel import EngineExecutionError
+    from flowork.expr.cel import FormulaError, evaluate_formula_value
+    from flowork.expr.context import expression_context, expression_functions_of
+
+    context = expression_context({"payload": dict(payload)}, now=config.now())
+    functions = expression_functions_of(config)
+    write: dict[str, Any] = {}
+    for target, expression in mappings.items():
+        bare = _BARE_PAYLOAD_FIELD.match(expression.strip())
+        if bare is not None and bare.group(1) not in (payload or {}):
+            write[target] = None  # 裸投影缺键：数据缺失≠求值错（spec §7.2）
+            continue
+        try:
+            write[target] = evaluate_formula_value(expression, context, functions=functions)
+        except FormulaError as exc:
+            raise EngineExecutionError(
+                f"wait {node_id} output_mappings.{target} 求值失败（{expression!r}）：{exc}"
+            ) from exc
+    return write

@@ -28,6 +28,7 @@ def _signal_instance(engine: ProcessEngine, instance_id: str, args: dict[str, An
         correlation_key=key,
         payload=args.get("payload"),
         message_id=args.get("message_id"),
+        instance_id=instance_id,  # 实例定向（防串单，与 REST /v2 同语义）
     )
     if receipt is None or receipt.get("instance_id") != instance_id:
         raise NotFoundError(f"消息 {name!r} 未被实例 {instance_id} 消费")
