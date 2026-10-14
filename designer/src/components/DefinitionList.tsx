@@ -2,10 +2,13 @@
 
 import { useState } from 'react'
 import { useStore } from '../store'
+import { designerConfig } from '../config'
 
 export function DefinitionList() {
   const listing = useStore((s) => s.listing)
   const loading = useStore((s) => s.listingLoading)
+  const listingError = useStore((s) => s.listingError)
+  const refreshListing = useStore((s) => s.refreshListing)
   const openDefinition = useStore((s) => s.openDefinition)
   const createDefinition = useStore((s) => s.createDefinition)
   const [creating, setCreating] = useState(false)
@@ -30,7 +33,9 @@ export function DefinitionList() {
           <p className="list-sub">流程定义(ProcessDefinition)草稿 → 校验 → 发布;发布版本不可变。</p>
         </div>
         <div className="spacer" />
-        <button className="btn btn-primary" onClick={() => setCreating(true)}>＋ 新建流程</button>
+        {!designerConfig.readonly() && (
+          <button className="btn btn-primary" onClick={() => setCreating(true)}>＋ 新建流程</button>
+        )}
       </header>
 
       {loading ? (
@@ -52,7 +57,15 @@ export function DefinitionList() {
               <div className="def-card-time">{def.updated_at ? `更新于 ${def.updated_at.replace('T', ' ')}` : ''}</div>
             </button>
           ))}
-          {!listing.length && <div className="empty-hint">还没有流程定义 — 点右上角「新建流程」。</div>}
+          {listingError && !loading && (
+            <div className="empty-hint">
+              后端不可达或请求失败：{listingError}{' '}
+              <button className="btn" onClick={() => void refreshListing()}>重试</button>
+            </div>
+          )}
+          {!listingError && !listing.length && (
+            <div className="empty-hint">还没有流程定义 — 点右上角「新建流程」。</div>
+          )}
         </div>
       )}
 

@@ -15,7 +15,10 @@ type Config = {
   definitionCode: string | null
 }
 
-const config: Config = { apiBase: '', mode: 'edit', definitionCode: null }
+// 缺省 readonly(全仓 review 2026-10-13 批 2 P0-1):宿主嵌入按 README 三行示例
+// 漏传 mode 时必须落在只读审计面——/api 写端点零鉴权(凭证归宿主网关),缺省
+// edit 等于无感开放写路径。仓库开发态由 main.tsx 显式传 'edit'。
+const config: Config = { apiBase: '', mode: 'readonly', definitionCode: null }
 
 export function configureDesigner(
   opts: { apiBase?: string; mode?: DesignerMode; definitionCode?: string | null },

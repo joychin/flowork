@@ -6,6 +6,7 @@ import { Handle, Position, BaseEdge, EdgeLabelRenderer, EdgeText, getSmoothStepP
 import type { EdgeProps, NodeProps } from '@xyflow/react'
 import type { NodeData } from '../adapter'
 import { useStore } from '../store'
+import { designerConfig } from '../config'
 
 export function Icon({ name, size = 14 }: { name?: string; size?: number }) {
   const common = { width: size, height: size, viewBox: '0 0 16 16', fill: 'none' }
@@ -300,6 +301,7 @@ function SmoothEdgeImpl(props: EdgeProps) {
       onClick={() => select({ type: 'edge', id })}
       onPointerDown={onEdgeBodyPointerDown}
       onContextMenu={(e) => {
+        if (designerConfig.readonly()) return // 与 Canvas 两处右键守卫同款（review P0-2）
         e.preventDefault()
         e.stopPropagation()
         select({ type: 'edge', id })

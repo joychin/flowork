@@ -159,8 +159,8 @@ export function toFlowElements(
         hit: hit?.nodes.has(n.code) ?? false,
       } satisfies NodeData,
       style: { width: size.w, height: size.h },
-      draggable: true,
-      selectable: true,
+      // draggable/selectable 留 undefined 跟随画布级开关(nodesDraggable 等)——
+      // RF v12 per-node 显式 true 会架空 readonly 的画布开关(review P0-2)
     }
     cache.nodes.set(n.code, { sig, value: node })
     return node

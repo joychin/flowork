@@ -28,6 +28,8 @@ function Designer() {
       if (readonly) return // 只读审计:编辑类快捷键全部不响应
       const tag = (e.target as HTMLElement | null)?.tagName
       const typing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
+      // Ctrl+Z 在 typing 判定之后(review P1-6):输入框内的文本级撤销不得被
+      // Spec 级 undo 劫持——修前 JSON Tab/公式框里 Cmd+Z 丢弃输入中内容
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
         e.preventDefault()
         e.shiftKey ? redo() : undo()
@@ -42,7 +44,7 @@ function Designer() {
         useStore.getState().setPendingConnect(null)
         return
       }
-      if (typing) return
+      if (typing) return // 文本输入内其余按键不触发画布动作
       if (e.key === 'Delete' || e.key === 'Backspace') {
         e.preventDefault()
         deleteSelection()
@@ -51,7 +53,8 @@ function Designer() {
     window.addEventListener('keydown', onKey)
     // 手动保存模式:有未保存变更时关页/刷新给一次拦截提示
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (useStore.getState().dirty) {
+      // readonly 无写路径不会 dirty;守卫兜底——审计页不弹「未保存」(review P0-2 连带)
+      if (!designerConfig.readonly() && useStore.getState().dirty) {
         e.preventDefault()
         e.returnValue = ''
       }

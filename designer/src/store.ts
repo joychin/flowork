@@ -2,6 +2,7 @@
 
 import { create } from 'zustand'
 import { api } from './api'
+import { designerConfig } from './config'
 import {
   edgeId,
   type DefinitionSummary,
@@ -26,6 +27,8 @@ type StoreState = {
   metaByKind: Record<string, NodeKindMeta>
   listing: DefinitionSummary[]
   listingLoading: boolean
+  /** 后端不可达等加载失败（review P1-4）：修前静默吞错呈现成业务空态还引导新建 */
+  listingError: string | null
   defInfo: { code: string; name: string; draftVersion: number | null; publishedVersion: number | null } | null
   spec: Spec | null
   selection: Selection
@@ -110,6 +113,7 @@ export const useStore = create<Store>((set, get) => ({
   metaByKind: {},
   listing: [],
   listingLoading: true,
+  listingError: null,
   defInfo: null,
   spec: null,
   selection: null,
@@ -131,9 +135,15 @@ export const useStore = create<Store>((set, get) => ({
   future: [],
 
   async bootstrap() {
-    const meta = await api.nodeKinds()
-    const metaByKind = Object.fromEntries(meta.map((m) => [m.kind, m]))
-    set({ meta, metaByKind })
+    try {
+      const meta = await api.nodeKinds()
+      const metaByKind = Object.fromEntries(meta.map((m) => [m.kind, m]))
+      set({ meta, metaByKind })
+    } catch (error) {
+      // nodeKinds 挂（后端不可达/CORS）修前是 unhandled rejection——列表页永久「加载中」
+      set({ listingError: String(error) })
+      return
+    }
     await reloadListing(set)
   },
 
@@ -190,6 +200,11 @@ export const useStore = create<Store>((set, get) => ({
   mutate(fn, opts = {}) {
     const { spec } = get()
     if (!spec) return
+    // readonly 单一咽喉（全仓 review 2026-10-13 批 2 P0-2）：修前只读纪律全靠
+    // UI 隐藏 + RF 画布级开关两道可绕过的防线（adapter 逐节点 draggable:true
+    // 架空画布开关、边交互裸 DOM 直达 store），审计面可被无意改图、模拟拿到
+    // 被改过的 spec——证据失真。守卫收口在此，各直写方法另有同款早退。
+    if (designerConfig.readonly()) return
     const { history = true, keepDryRun = false } = opts
     const draft = structuredClone(spec)
     fn(draft)
@@ -441,8 +456,11 @@ export const useStore = create<Store>((set, get) => ({
   },
 
   async saveNow() {
-    const { spec, defInfo } = get()
+    const { spec, defInfo, saveState } = get()
     if (!spec || !defInfo) return
+    if (designerConfig.readonly()) return // 只读审计无保存路径（防快捷键绕过隐藏按钮）
+    if (saveState === 'saving') return // 在途防重（review P1-2）：Ctrl+S 绕过按钮 disabled，
+    // 两次并发保存各携不同 spec，旧响应后到会把 dirty:false 写回——新改动静默丢失
     set({ saveState: 'saving' })
     try {
       const saved = await api.saveDraft(defInfo.code, spec)
@@ -644,11 +662,13 @@ function layoutSpec(spec: Spec, { force }: { force: boolean }) {
 }
 
 async function reloadListing(set: (partial: Partial<StoreState>) => void) {
-  set({ listingLoading: true })
+  set({ listingLoading: true, listingError: null })
   try {
     set({ listing: await api.listDefinitions(), listingLoading: false })
-  } catch {
-    set({ listingLoading: false })
+  } catch (error) {
+    // 失败≠空态（review P1-4）：修前静默吞错、列表呈现「还没有流程定义」
+    // 引导用户去新建——后端不可达被伪装成业务空态
+    set({ listingLoading: false, listingError: String(error) })
   }
 }
 
