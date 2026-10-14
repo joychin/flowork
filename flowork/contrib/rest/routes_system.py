@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import time
 from typing import Any
 
@@ -19,6 +20,20 @@ from flowork.contrib.rest._common import (
 __all__ = ["register_system_routes"]
 
 _MAX_POLL_SECONDS = 30.0
+
+
+def _int_field(body: dict[str, Any], key: str, default: int, lo: int, hi: int) -> int:
+    """整型入参归一（review P1-4：max="abc" int() 裸炸 500、max=-5 领走全部）。"""
+    raw = body.get(key)
+    if raw is None:
+        return default
+    try:
+        value = int(raw)
+    except (TypeError, ValueError) as exc:
+        raise RestRequestError(f"body.{key} 不合法：{raw!r}") from exc
+    if not lo <= value <= hi:
+        raise RestRequestError(f"body.{key} 越界（{lo}~{hi}）：{value}")
+    return value
 
 
 def _claim_json(claim: JobClaim) -> dict[str, Any]:
@@ -89,13 +104,19 @@ def register_system_routes(app: FastAPI, engine: ProcessEngine) -> None:
             raise RestRequestError(
                 f"request_timeout 不合法：{body.get('request_timeout')!r}"
             ) from exc
+        if not math.isfinite(timeout):
+            # NaN/inf（review P1-1）：min(nan, 30)=nan，monotonic()>=nan 恒 False
+            # ——while 永不退出，每请求占死一个线程池线程（请求级 DoS）
+            raise RestRequestError(f"request_timeout 不合法：{body.get('request_timeout')!r}")
         deadline = time.monotonic() + timeout
         while True:
             claims = worker_jobs.activate_jobs(
                 [str(t) for t in job_types],
                 worker_id=str(worker_id),
-                max=int(body.get("max") or 10),
-                visibility_timeout_seconds=int(body.get("visibility_timeout_seconds") or 300),
+                max=_int_field(body, "max", default=10, lo=1, hi=1000),
+                visibility_timeout_seconds=_int_field(
+                    body, "visibility_timeout_seconds", default=300, lo=1, hi=86_400
+                ),
             )
             if claims or time.monotonic() >= deadline:
                 return {"jobs": [_claim_json(claim) for claim in claims]}
@@ -110,12 +131,26 @@ def register_system_routes(app: FastAPI, engine: ProcessEngine) -> None:
 
     @app.post("/v2/jobs/{job_id}/fail")
     def fail_job(job_id: str, body: dict[str, Any]) -> dict[str, Any]:
+        retries: int | None = None
+        if body.get("retries") is not None:
+            try:
+                retries = int(body["retries"])
+            except (TypeError, ValueError) as exc:
+                raise RestRequestError(f"body.retries 不合法：{body.get('retries')!r}") from exc
+        backoff: float | None = None
+        if body.get("backoff_seconds") is not None:
+            try:
+                backoff = float(body["backoff_seconds"])
+            except (TypeError, ValueError) as exc:
+                raise RestRequestError(
+                    f"body.backoff_seconds 不合法：{body.get('backoff_seconds')!r}"
+                ) from exc
         state = worker_jobs.fail_job(
             job_id,
             worker_id=str(body.get("worker_id") or ""),
             error=str(body.get("error") or ""),
-            retries=body.get("retries"),
-            backoff_seconds=body.get("backoff_seconds"),
+            retries=retries,
+            backoff_seconds=backoff,
         )
         return {"job_id": job_id, "state": state}
 

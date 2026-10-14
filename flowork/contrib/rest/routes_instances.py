@@ -87,12 +87,21 @@ def register_instance_routes(app: FastAPI, engine: ProcessEngine) -> None:
         updates = body.get("updates")
         if not isinstance(updates, dict):
             updates = {k: v for k, v in body.items() if k not in ("actor", "reason")}
-        return runtime.update_variables(
-            instance_id,
-            updates,
-            actor=actor_of(request, body),
-            reason=str(body.get("reason") or ""),
-        )
+        try:
+            return runtime.update_variables(
+                instance_id,
+                updates,
+                actor=actor_of(request, body),
+                reason=str(body.get("reason") or ""),
+            )
+        except NotFoundError as exc:
+            # 终态/暂停拒绝以 InstanceNotFoundError 表达（variable_actions 挂账）：
+            # 实例其实存在——重查区分真 404 与状态冲突 409（review P1-7）
+            try:
+                runtime.get_instance(instance_id)
+            except NotFoundError:
+                raise
+            raise RestConflictError(str(exc)) from exc
 
     @app.get("/v2/instances/{instance_id}/variables/history")
     def variable_history(
@@ -120,7 +129,9 @@ def signal_waiting_instance(
     runtime.get_instance(instance_id)  # 不存在 → InstanceNotFoundError（404）
     name = body.get("name")
     if not name:
-        raise NotFoundError("body.name 必填（等待的消息名）")
+        # 缺必填字段是 422 语义（review P1-6：修前 404+NotFoundError 误导
+        # 「实例/订阅不存在」——同文件 start_instance 缺 code 即 422）
+        raise RestRequestError("body.name 必填（等待的消息名）")
     subscriptions = [
         row for row in engine.messages.waiting(name=str(name)) if row["instance_id"] == instance_id
     ]

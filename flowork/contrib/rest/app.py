@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from flowork.api import EngineConfig, FloworkError, ProcessEngine, StaticOrgDirectory
@@ -42,6 +43,23 @@ def register_rest_routes(app: FastAPI, engine: ProcessEngine) -> None:
     @app.exception_handler(FloworkError)
     async def _flowork_error(_request: Any, exc: FloworkError) -> JSONResponse:
         return JSONResponse(status_code=status_of(exc), content=error_payload(exc))
+
+    @app.exception_handler(RequestValidationError)
+    async def _request_validation_error(_request: Any, exc: Any) -> JSONResponse:
+        # FastAPI 原生 422 的 {"detail": [...]} 形状破坏统一错误体契约
+        # （review P1-5）；转写为 {"error": {...}}，明细进 details.errors
+        from fastapi.encoders import jsonable_encoder
+
+        return JSONResponse(
+            status_code=422,
+            content={
+                "error": {
+                    "code": "RequestValidationError",
+                    "message": "请求参数不合法（缺失/类型错，见 details.errors）",
+                    "details": {"errors": jsonable_encoder(exc.errors())},
+                }
+            },
+        )
 
     register_definition_routes(app, engine)
     register_instance_routes(app, engine)

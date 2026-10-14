@@ -7,7 +7,13 @@ from typing import Any
 from fastapi import FastAPI, Request
 
 from flowork.api import ProcessEngine
-from flowork.contrib.rest._common import actor_of, dump, page_payload, page_request
+from flowork.contrib.rest._common import (
+    RestRequestError,
+    actor_of,
+    dump,
+    page_payload,
+    page_request,
+)
 
 __all__ = ["register_task_routes"]
 
@@ -61,10 +67,15 @@ def register_task_routes(app: FastAPI, engine: ProcessEngine) -> None:
 
     @app.post("/v2/tasks/{task_id}/transfer")
     def transfer(request: Request, task_id: str, body: dict[str, Any]) -> Any:
+        to_user = str(body.get("to_user") or "")
+        if not to_user:
+            # review P1-2：缺 to_user 曾 200 成功并产出 assignee="" 且无候选关联的
+            # 孤儿任务（claim/unclaim/complete 全路被拒、无故障单）——入口拦 422
+            raise RestRequestError("body.to_user 必填（转办目标裸 id）")
         return dump(
             task.transfer(
                 task_id,
-                str(body.get("to_user") or ""),
+                to_user,
                 actor_of(request, body),
                 comment=str(body.get("comment") or ""),
             )
