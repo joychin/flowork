@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from flowork.api import ProcessEngine
-from flowork.contrib.mcp.catalog import McpToolError, ToolSpec
+from flowork.contrib.mcp.catalog import McpToolError, ToolSpec, page_window, require_actor
 
 __all__ = ["task_tools"]
 
@@ -13,30 +13,44 @@ __all__ = ["task_tools"]
 def task_tools(engine: ProcessEngine) -> list[ToolSpec]:
     task = engine.task
 
+    task_states = ("ready", "completed", "cancelled", "")
+
     def list_my_tasks(args: dict[str, Any]) -> Any:
         assignee = args.get("assignee")
         if assignee is None:
             raise McpToolError("assignee 必填（裸 id）")
+        state = args.get("state")
+        state = "ready" if state is None else str(state)
+        if state not in task_states:
+            # review P1-12：修前非法值（如大小写错）静默空列表——AI 误判「无待办」；
+            # ""=查全部（与 REST 透传语义一致，修前被 or "ready" 静默改写）
+            raise McpToolError(
+                f"state 不合法：{state!r}（可选 ready/completed/cancelled；空串=全部）"
+            )
         rows = task.list_tasks(
             instance_id=args.get("instance_id"),
             assignee=str(assignee),
             candidate=args.get("candidate"),
-            state=str(args.get("state") or "ready"),
+            state=state,
         )
-        return [row.model_dump(mode="json") for row in rows]
+        return page_window(args, [row.model_dump(mode="json") for row in rows])
 
     def claim_task(args: dict[str, Any]) -> Any:
-        return task.claim(str(args.get("task_id") or ""), str(args.get("user") or "")).model_dump(
-            mode="json"
-        )
+        user = str(args.get("user") or "")
+        if not user:
+            raise McpToolError("user 必填（认领人裸 id）")
+        return task.claim(str(args.get("task_id") or ""), user).model_dump(mode="json")
 
     def complete_task(args: dict[str, Any]) -> Any:
         variables = args.get("variables")
+        if variables is not None and not isinstance(variables, dict):
+            # review P2-2：修前非 dict 静默丢弃为 None——任务照常办结、变量无声丢失
+            raise McpToolError("variables 必须是 {name: value} 对象")
         result = task.complete(
             str(args.get("task_id") or ""),
-            str(args.get("actor") or "mcp"),
+            require_actor(args),
             comment=str(args.get("comment") or ""),
-            variables=variables if isinstance(variables, dict) else None,
+            variables=variables,
             idempotency_key=args.get("idempotency_key"),
         )
         return result.model_dump(mode="json")
@@ -44,7 +58,7 @@ def task_tools(engine: ProcessEngine) -> list[ToolSpec]:
     def reject_task(args: dict[str, Any]) -> Any:
         result = task.reject(
             str(args.get("task_id") or ""),
-            str(args.get("actor") or "mcp"),
+            require_actor(args),
             comment=str(args.get("comment") or ""),
             target=args.get("target"),
         )
@@ -63,9 +77,15 @@ def task_tools(engine: ProcessEngine) -> list[ToolSpec]:
                 "type": "object",
                 "properties": {
                     "assignee": {"type": "string"},
-                    "state": {"type": "string"},
+                    "state": {
+                        "type": "string",
+                        "enum": ["ready", "completed", "cancelled"],
+                        "description": "省略=ready；空串=全部",
+                    },
                     "candidate": {"type": "string"},
                     "instance_id": {"type": "string"},
+                    "limit": {"type": "integer", "description": "1~500，缺省 50"},
+                    "offset": {"type": "integer", "description": "非负，缺省 0"},
                 },
                 "required": ["assignee"],
             },
@@ -96,7 +116,7 @@ def task_tools(engine: ProcessEngine) -> list[ToolSpec]:
                     "variables": {"type": "object"},
                     "idempotency_key": {"type": "string"},
                 },
-                "required": ["task_id"],
+                "required": ["task_id", "actor"],
             },
             handler=complete_task,
         ),
@@ -111,7 +131,7 @@ def task_tools(engine: ProcessEngine) -> list[ToolSpec]:
                     "comment": {"type": "string"},
                     "target": {"type": "string"},
                 },
-                "required": ["task_id"],
+                "required": ["task_id", "actor"],
             },
             handler=reject_task,
         ),

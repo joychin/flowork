@@ -87,7 +87,10 @@ def main() -> None:
         async with stdio_server() as (read_stream, write_stream):
             await server.run(read_stream, write_stream, server.create_initialization_options())
 
-    anyio.run(_run)
+    try:
+        anyio.run(_run)
+    finally:
+        engine.close()  # stdio EOF 后释放（对齐 REST shutdown hook，review P2-8）
 
 
 if __name__ == "__main__":

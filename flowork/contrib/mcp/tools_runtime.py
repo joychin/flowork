@@ -5,7 +5,13 @@ from __future__ import annotations
 from typing import Any, Literal, cast
 
 from flowork.api import NotFoundError, ProcessEngine
-from flowork.contrib.mcp.catalog import McpToolError, ToolSpec
+from flowork.contrib.mcp.catalog import (
+    McpConflictError,
+    McpToolError,
+    ToolSpec,
+    page_window,
+    require_actor,
+)
 
 __all__ = ["runtime_tools"]
 
@@ -31,7 +37,10 @@ def _signal_instance(engine: ProcessEngine, instance_id: str, args: dict[str, An
         instance_id=instance_id,  # 实例定向（防串单，与 REST /v2 同语义）
     )
     if receipt is None or receipt.get("instance_id") != instance_id:
-        raise NotFoundError(f"消息 {name!r} 未被实例 {instance_id} 消费")
+        # review P1-11：修前 NotFoundError——冲突被标「不存在」，AI 朝错误方向排查
+        raise McpConflictError(
+            f"消息 {name!r} 未被实例 {instance_id} 消费（回执：{receipt or '无人在等'}）"
+        )
     return receipt
 
 
@@ -46,10 +55,11 @@ def runtime_tools(engine: ProcessEngine) -> list[ToolSpec]:
         reuse = str(args.get("reuse") or "reject")
         if reuse not in ("reject", "return_existing", "allow_duplicate"):
             raise NotFoundError(f"reuse 不合法：{reuse!r}")
+        actor = require_actor(args)
         return {
             "instance_id": runtime.start_process(
                 str(code),
-                start_user=str(args.get("start_user") or args.get("actor") or "mcp"),
+                start_user=str(args.get("start_user") or actor),
                 variables=args.get("variables"),
                 business_key=args.get("business_key"),
                 major=args.get("major"),
@@ -73,16 +83,17 @@ def runtime_tools(engine: ProcessEngine) -> list[ToolSpec]:
     def pause_instance(args: dict[str, Any]) -> Any:
         instance_id = str(args.get("instance_id") or "")
         runtime.pause_process(
-            instance_id, str(args.get("actor") or "mcp"), reason=str(args.get("reason") or "")
+            instance_id, require_actor(args), reason=str(args.get("reason") or "")
         )
-        return {"instance_id": instance_id, "state": "paused"}
+        # state 读回而非硬编码（review P2-9：与实际终态一致）
+        return {"instance_id": instance_id, "state": runtime.get_instance(instance_id).state}
 
     def resume_instance(args: dict[str, Any]) -> Any:
         instance_id = str(args.get("instance_id") or "")
         runtime.resume_process(
-            instance_id, str(args.get("actor") or "mcp"), reason=str(args.get("reason") or "")
+            instance_id, require_actor(args), reason=str(args.get("reason") or "")
         )
-        return {"instance_id": instance_id, "state": "running"}
+        return {"instance_id": instance_id, "state": runtime.get_instance(instance_id).state}
 
     def update_instance_variables(args: dict[str, Any]) -> Any:
         updates = args.get("updates")
@@ -91,7 +102,7 @@ def runtime_tools(engine: ProcessEngine) -> list[ToolSpec]:
         return runtime.update_variables(
             str(args.get("instance_id") or ""),
             updates,
-            actor=str(args.get("actor") or "mcp"),
+            actor=require_actor(args),
             reason=str(args.get("reason") or ""),
         )
 
@@ -103,7 +114,10 @@ def runtime_tools(engine: ProcessEngine) -> list[ToolSpec]:
         if args.get("message_id"):
             optional["message_id"] = args["message_id"]
         if args.get("ttl_seconds") is not None:
-            optional["ttl_seconds"] = args["ttl_seconds"]
+            ttl = args["ttl_seconds"]
+            if isinstance(ttl, bool) or not isinstance(ttl, int) or ttl <= 0:
+                raise McpToolError(f"ttl_seconds 不合法（正整数，秒）：{ttl!r}")
+            optional["ttl_seconds"] = ttl
         matched = messages.publish_message(
             str(name),
             correlation_key=str(args.get("correlation_key") or ""),
@@ -113,7 +127,7 @@ def runtime_tools(engine: ProcessEngine) -> list[ToolSpec]:
         return {"name": name, "matched": matched}
 
     def list_incidents(args: dict[str, Any]) -> Any:
-        return runtime.list_incidents(args.get("instance_id"))
+        return page_window(args, runtime.list_incidents(args.get("instance_id")))
 
     def resolve_incident(args: dict[str, Any]) -> Any:
         incident_id = str(args.get("incident_id") or "")
@@ -132,6 +146,7 @@ def runtime_tools(engine: ProcessEngine) -> list[ToolSpec]:
                 "type": "object",
                 "properties": {
                     "code": {"type": "string"},
+                    "actor": {"type": "string"},
                     "start_user": {"type": "string"},
                     "variables": {"type": "object"},
                     "business_key": {"type": "string"},
@@ -143,7 +158,7 @@ def runtime_tools(engine: ProcessEngine) -> list[ToolSpec]:
                         "enum": ["reject", "return_existing", "allow_duplicate"],
                     },
                 },
-                "required": ["code"],
+                "required": ["code", "actor"],
             },
             handler=start_instance,
         ),
@@ -170,6 +185,7 @@ def runtime_tools(engine: ProcessEngine) -> list[ToolSpec]:
                     "message_id": {"type": "string"},
                 },
                 "required": ["instance_id", "name"],
+                # 多实例等同一信号时本工具只消费目标实例（防串单）
             },
             handler=signal_instance,
         ),
@@ -183,7 +199,7 @@ def runtime_tools(engine: ProcessEngine) -> list[ToolSpec]:
                     "actor": {"type": "string"},
                     "reason": {"type": "string"},
                 },
-                "required": ["instance_id"],
+                "required": ["instance_id", "actor"],
             },
             handler=pause_instance,
         ),
@@ -197,7 +213,7 @@ def runtime_tools(engine: ProcessEngine) -> list[ToolSpec]:
                     "actor": {"type": "string"},
                     "reason": {"type": "string"},
                 },
-                "required": ["instance_id"],
+                "required": ["instance_id", "actor"],
             },
             handler=resume_instance,
         ),
@@ -212,7 +228,7 @@ def runtime_tools(engine: ProcessEngine) -> list[ToolSpec]:
                     "actor": {"type": "string"},
                     "reason": {"type": "string"},
                 },
-                "required": ["instance_id", "updates"],
+                "required": ["instance_id", "updates", "actor"],
             },
             handler=update_instance_variables,
         ),
@@ -234,10 +250,14 @@ def runtime_tools(engine: ProcessEngine) -> list[ToolSpec]:
         ),
         ToolSpec(
             name="list_incidents",
-            description="故障单列表（open/resolved，可按实例过滤）",
+            description="故障单列表（open/resolved，可按实例过滤；分页返回 items/total）",
             input_schema={
                 "type": "object",
-                "properties": {"instance_id": {"type": "string"}},
+                "properties": {
+                    "instance_id": {"type": "string"},
+                    "limit": {"type": "integer", "description": "1~500，缺省 50"},
+                    "offset": {"type": "integer", "description": "非负，缺省 0"},
+                },
             },
             handler=list_incidents,
         ),
@@ -254,7 +274,7 @@ def runtime_tools(engine: ProcessEngine) -> list[ToolSpec]:
                     },
                     "actor": {"type": "string"},
                 },
-                "required": ["incident_id"],
+                "required": ["incident_id", "actor"],
             },
             handler=resolve_incident,
         ),

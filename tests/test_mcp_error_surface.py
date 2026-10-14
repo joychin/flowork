@@ -71,7 +71,9 @@ def test_param_error_returns_is_error_true_with_stable_code():
 
 def test_success_path_stays_plain_content():
     engine = _engine()
-    result = call_tool_result(engine, "start_instance", {"code": "mcperr", "start_user": "u1"})
+    result = call_tool_result(
+        engine, "start_instance", {"code": "mcperr", "actor": "u1", "start_user": "u1"}
+    )
     assert not isinstance(result, CallToolResult)  # 正常路径仍为 list[TextContent]
     assert len(result) == 1
 

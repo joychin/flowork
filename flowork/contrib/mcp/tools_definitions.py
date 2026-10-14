@@ -11,7 +11,7 @@ from flowork.api import (
     load_definition,
     simulate_route,
 )
-from flowork.contrib.mcp.catalog import ToolSpec
+from flowork.contrib.mcp.catalog import McpToolError, ToolSpec, page_window, require_actor
 
 __all__ = ["definition_tools"]
 
@@ -54,10 +54,16 @@ def definition_tools(engine: ProcessEngine) -> list[ToolSpec]:
 
     def deploy(args: dict[str, Any]) -> Any:
         definition = _load(engine, args.get("spec"))
+        target_major = args.get("target_major")
+        if target_major is not None and (
+            isinstance(target_major, bool) or not isinstance(target_major, int)
+        ):
+            # review P2-2：修前 "abc" 被静默忽略照常部署新 major
+            raise McpToolError(f"target_major 必须是整数：{target_major!r}")
         verdict = repository.deploy(
             definition,
-            published_by=str(args.get("actor") or "mcp"),
-            target_major=args.get("target_major"),
+            published_by=require_actor(args),
+            target_major=target_major,
             force_major_reason=str(args.get("force_major_reason") or ""),
             allow_minor_reason=str(args.get("allow_minor_reason") or ""),
         )
@@ -67,13 +73,23 @@ def definition_tools(engine: ProcessEngine) -> list[ToolSpec]:
         directory = args.get("directory")
         if not directory:
             raise InvalidDefinitionData("directory 必填（定义 JSON 所在目录）")
+        from pathlib import Path
+
+        if not Path(str(directory)).is_dir():
+            # review P2-9：修前目录不存在静默空对账——拼错路径得到误导性报告
+            raise McpToolError(f"目录不存在：{directory}")
         return repository.definition_drift(str(directory))
 
     def list_definitions(args: dict[str, Any]) -> Any:
-        return repository.list_definitions(
+        latest_only = args.get("latest_only", True)
+        if not isinstance(latest_only, bool):
+            # review P2-1：修前 "false"（字符串）被 bool() 翻转成 True，与意图相反
+            raise McpToolError(f"latest_only 必须是布尔值：{latest_only!r}")
+        rows = repository.list_definitions(
             code_prefix=str(args.get("code_prefix") or ""),
-            latest_only=bool(args.get("latest_only", True)),
+            latest_only=latest_only,
         )
+        return page_window(args, rows)
 
     return [
         ToolSpec(
@@ -111,7 +127,7 @@ def definition_tools(engine: ProcessEngine) -> list[ToolSpec]:
                     "force_major_reason": {"type": "string"},
                     "allow_minor_reason": {"type": "string"},
                 },
-                "required": ["spec"],
+                "required": ["spec", "actor"],
             },
             handler=deploy,
         ),
@@ -127,12 +143,14 @@ def definition_tools(engine: ProcessEngine) -> list[ToolSpec]:
         ),
         ToolSpec(
             name="list_definitions",
-            description="定义清单（默认每 code 只列最高发布版）",
+            description="定义清单（默认每 code 只列最高发布版；分页返回 items/total）",
             input_schema={
                 "type": "object",
                 "properties": {
                     "code_prefix": {"type": "string"},
                     "latest_only": {"type": "boolean"},
+                    "limit": {"type": "integer", "description": "1~500，缺省 50"},
+                    "offset": {"type": "integer", "description": "非负，缺省 0"},
                 },
             },
             handler=list_definitions,
