@@ -147,8 +147,14 @@ class Kernel(TaskRecordsMixin, TokenRecordsMixin):
         source_activity_code: str | None = None,
         reject_flag: bool = False,
         manual_participants: dict[str, list[str]] | None = None,
+        defer_completion: bool = False,
     ) -> TokenRow:
-        """激活节点：建令牌 → node_entered → on_enter → 完成判定。"""
+        """激活节点：建令牌 → node_entered → on_enter → 完成判定。
+
+        defer_completion=True 供 ``route`` 两段式扇出使用：先停靠（建令牌+
+        on_enter），完结判定推迟到兄弟臂令牌建齐之后——即时完结臂（cc/service）
+        若立刻判完结，会在兄弟令牌尚不存在的瞬间触发下游 all 汇聚放行（盲窗）。
+        """
         try:
             token = self.create_token(
                 session,
@@ -166,7 +172,8 @@ class Kernel(TaskRecordsMixin, TokenRecordsMixin):
             ctx = RuntimeNodeContext(self, session, instance, node, token)
             run_declared_hook(ctx, node.hooks.on_enter)  # 声明式先于行为：写变量供行为消费
             self.behavior_of(node).on_enter(ctx)
-            self._maybe_complete(session, instance, node, token)
+            if not defer_completion:
+                self._maybe_complete(session, instance, node, token)
         except EngineExecutionError as error:  # 错误归因（复核批）：挂起可定位节点
             attribute_node_error(error, node.code)
             raise
@@ -205,13 +212,25 @@ class Kernel(TaskRecordsMixin, TokenRecordsMixin):
         *,
         behavior_override: NodeBehavior | None = None,
     ) -> None:
-        """路由：行为给出出边列表 → on_take 钩子 → 激活目标节点。"""
+        """路由：行为给出出边列表 → on_take 钩子 → 激活目标节点。
+
+        两段式（测试套件完善批 3 发现）：先全部停靠、再逐个判完结。
+        逐边即时处理时，即时完结臂（cc/service）会在兄弟臂令牌创建前的
+        瞬间触发下游 all 汇聚的可达性放行（盲窗）——汇聚被双激活，多出的
+        令牌无人收口（实例已完结仍挂 unfinished）。先建齐扇出令牌，
+        ``should_release`` 的「未完令牌可达」判定即健全。
+        """
         definition = self.definition_of(session, instance)
         ctx = RuntimeNodeContext(self, session, instance, node, token)
         behavior = behavior_override or self.behavior_of(node)
         outgoing = behavior.get_outgoing(ctx)
+        entered: list[tuple[FlowNode, TokenRow]] = []
         for flow in outgoing:
-            self._take_flow(session, instance, flow, token, definition)
+            target = self._take_flow(session, instance, flow, token, definition)
+            if target is not None:
+                entered.append(target)
+        for target_node, target_token in entered:
+            self._maybe_complete(session, instance, target_node, target_token)
 
     def _take_flow(
         self,
@@ -220,7 +239,7 @@ class Kernel(TaskRecordsMixin, TokenRecordsMixin):
         flow: SequenceFlow,
         from_token: TokenRow,
         definition: ProcessDefinition,
-    ) -> None:
+    ) -> tuple[FlowNode, TokenRow] | None:
         if flow.on_take is not None:
             source_node = self._node(definition, flow.source)
             assert source_node is not None
@@ -232,7 +251,7 @@ class Kernel(TaskRecordsMixin, TokenRecordsMixin):
         target = self._node(definition, flow.target)
         if target is None:
             raise RouteError(f"目标节点不存在：{flow.target}")
-        self._advance(session, instance, target, flow, definition)
+        return self._advance(session, instance, target, flow, definition)
 
     # —— 推进门（对齐行业推进校验与激活处理语义）——
 
@@ -243,7 +262,7 @@ class Kernel(TaskRecordsMixin, TokenRecordsMixin):
         node: FlowNode,
         flow: SequenceFlow,
         definition: ProcessDefinition,
-    ) -> None:
+    ) -> tuple[FlowNode, TokenRow] | None:
         """边到达后的推进判定：any 任一到达即办（缺省）/ all 可达性放行（§2.3）。
 
         - all：除已停靠本节点的令牌外无任何**未完令牌**可结构可达本节点才放行
@@ -251,6 +270,7 @@ class Kernel(TaskRecordsMixin, TokenRecordsMixin):
         - any 且节点已在办：吸收本次到达，不重复激活；
         - any 放行后：取消仍未完成的兄弟分支（竞速收尾，防迟到到达）。
         驳回/撤回/管理员等直调 ``activate`` 的路径不经此门。
+        放行时 defer_completion 停靠（route 两段式），返回 (节点, 令牌)。
         """
         sources = [f.source for f in definition.incoming(node.code)]
         if len(sources) > 1:
@@ -263,7 +283,7 @@ class Kernel(TaskRecordsMixin, TokenRecordsMixin):
                     if token.activity_code != node.code
                 }
                 if not should_release(definition, unfinished_elsewhere, node.code):
-                    return  # 仍有未完令牌可达，等待其余入边落定
+                    return None  # 仍有未完令牌可达，等待其余入边落定
             else:
                 busy = any(
                     token.activity_code == node.code
@@ -272,9 +292,12 @@ class Kernel(TaskRecordsMixin, TokenRecordsMixin):
                     )
                 )
                 if busy:
-                    return  # 吸收重复到达（节点已在办）
+                    return None  # 吸收重复到达（节点已在办）
                 self.cancel_racing_arms(session, instance, definition, node.code)
-        self.activate(session, instance, node, source_activity_code=flow.source)
+        token = self.activate(
+            session, instance, node, source_activity_code=flow.source, defer_completion=True
+        )
+        return node, token
 
     def _advance_policy_of(self, node: FlowNode) -> str:
         """节点开始条件（Spec 声明；cc_task 在其 Spec 上覆写恒 any）。缺省 any。"""
