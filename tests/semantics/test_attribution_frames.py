@@ -16,9 +16,7 @@ from flowork.errors import FloworkError
 
 
 def _incident_activity(engine: ProcessEngine, instance_id: str) -> str | None:
-    raised = [
-        e for e in engine.history.events(instance_id) if e.event_name == "incident_raised"
-    ]
+    raised = [e for e in engine.history.events(instance_id) if e.event_name == "incident_raised"]
     assert raised, "应有 incident_raised"
     return raised[0].payload.get("activity_code")
 

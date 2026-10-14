@@ -154,7 +154,13 @@ def _evaluate(
     except FormulaError:
         raise
     except Exception as exc:  # CELEvalError / RecursionError 兜底归一
-        raise FormulaError(f"公式求值错误：{formula!r}（{exc}）") from exc
+        # 消息截断（review P1-2）：celpy 的 CELEvalError 字符串自带整个求值环境
+        # 转储（NameContainer repr，数 KB）——有效信息在开头（缺失键名），全文
+        # 透出经 web/REST 错误体既是变量值泄漏面、也让 toast 不可读
+        detail = str(exc)
+        if len(detail) > 300:
+            detail = detail[:300] + "…（求值环境转储已截断）"
+        raise FormulaError(f"公式求值错误：{formula!r}（{detail}）") from exc
 
 
 def evaluate_formula(

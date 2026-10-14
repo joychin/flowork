@@ -34,6 +34,12 @@ def register_audit_routes(app: Any, engine: Any) -> None:
         """
         raw_spec = body.get("spec")
         raw_vars = body.get("variables")
+        if raw_spec is not None and not isinstance(raw_spec, dict):
+            # review P1-1：修前非 dict（字符串/列表）静默回退旧草稿——「当前草稿
+            # 含未保存编辑」是本端点主场景，据以拍板发布的报告可能不是送审内容
+            raise HTTPException(status_code=422, detail="spec 必须是流程定义 JSON 对象")
+        if raw_vars is not None and not isinstance(raw_vars, dict):
+            raise HTTPException(status_code=422, detail="variables 必须是对象")
         variables = raw_vars if isinstance(raw_vars, dict) else None
         if raw_spec is not None or (major is None and revision is None):
             spec = raw_spec if isinstance(raw_spec, dict) else _saved_draft(engine, code)
@@ -52,6 +58,15 @@ def register_audit_routes(app: Any, engine: Any) -> None:
             )
         return asdict(report)
 
+    def _require_instance(instance_id: str) -> None:
+        """子资源统一 404（review P2-1）：内核查询面对不存在实例返回空载荷
+        而非抛错，修前四个子资源端点的 except FloworkError 是死代码、幽灵 id
+        返回 200 空载荷与 detail 的 404 契约不一致。"""
+        try:
+            engine.runtime.get_instance(instance_id)
+        except FloworkError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
     @app.get("/api/instances")
     def instances(
         state: str | None = None,
@@ -60,6 +75,9 @@ def register_audit_routes(app: Any, engine: Any) -> None:
         include_simulated: bool = False,
     ) -> list[dict[str, Any]]:
         """实例列表（审计入口）。默认隔离模拟实例——试跑不进业务视图是语义不是 bug。"""
+        if not 1 <= limit <= 500:
+            # review P2-2：修前 limit=-1 直通 SQL（SQLite 负 LIMIT=无上限全量）
+            raise HTTPException(status_code=422, detail="limit 越界（1~500）")
         return [
             inst.model_dump(mode="json")
             for inst in engine.history.instances(
@@ -88,19 +106,15 @@ def register_audit_routes(app: Any, engine: Any) -> None:
     @app.get("/api/instances/{instance_id}/timeline")
     def timeline(instance_id: str) -> list[dict[str, Any]]:
         """实例流转轨迹：令牌 + 已办 + 事件按时间合并（审批轨迹页数据源）。"""
-        try:
-            entries = engine.history.trace_instance(instance_id)
-        except FloworkError as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        _require_instance(instance_id)
+        entries = engine.history.trace_instance(instance_id)
         return [entry.model_dump(mode="json") for entry in entries]
 
     @app.get("/api/instances/{instance_id}/route-decisions")
     def route_decisions(instance_id: str) -> list[dict[str, Any]]:
         """路由决策审计（F3）：每条条件边为什么这么选 + 当时求值快照。"""
-        try:
-            rows = engine.history.route_decisions(instance_id)
-        except FloworkError as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        _require_instance(instance_id)
+        rows = engine.history.route_decisions(instance_id)
         return [row.model_dump(mode="json") for row in rows]
 
     @app.get("/api/instances/{instance_id}/variable-history")
@@ -108,17 +122,20 @@ def register_audit_routes(app: Any, engine: Any) -> None:
         instance_id: str, name: str | None = None, limit: int = 50, offset: int = 0
     ) -> list[dict[str, Any]]:
         """变量血缘（spec §11）：改前/改后 + 写方归因，倒序可按键过滤。"""
-        try:
-            changes = engine.runtime.variable_history(
-                instance_id, name=name, limit=limit, offset=offset
-            )
-        except FloworkError as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        _require_instance(instance_id)
+        if not 1 <= limit <= 500:
+            raise HTTPException(status_code=422, detail="limit 越界（1~500）")
+        changes = engine.runtime.variable_history(
+            instance_id, name=name, limit=limit, offset=offset
+        )
         return [asdict(change) for change in changes]
 
     @app.get("/api/instances/{instance_id}/tasks")
     def instance_tasks(instance_id: str, offset: int = 0, limit: int = 50) -> dict[str, Any]:
         """实例已办任务（分页）。"""
+        _require_instance(instance_id)
+        if not 1 <= limit <= 500:
+            raise HTTPException(status_code=422, detail="limit 越界（1~500）")
         result: dict[str, Any] = engine.history.paged_tasks(
             instance_id=instance_id, offset=offset, limit=limit
         ).model_dump(mode="json")

@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from pathlib import Path
 from typing import Any
 
@@ -97,7 +98,12 @@ def create_app(db_file: str | Path | None = None, *, seed: bool = True) -> FastA
 
     @app.exception_handler(FloworkError)
     async def _flowork_error(_request: Any, exc: FloworkError) -> JSONResponse:
-        return JSONResponse(status_code=422, content={"detail": str(exc)})
+        # NotFoundError 族 404（review P2-5）：修前一律 422，与 REST /v2 面同错误
+        # 不同状态码——同库同引擎两面消费方要维护两套语义
+        from flowork.api import NotFoundError
+
+        status = 404 if isinstance(exc, NotFoundError) else 422
+        return JSONResponse(status_code=status, content={"detail": str(exc)})
 
     # 预演/试算/词汇目录(dry-run / formula/preview / catalog)在 preview_routes
     register_preview_routes(app, engine)
@@ -138,7 +144,11 @@ def create_app(db_file: str | Path | None = None, *, seed: bool = True) -> FastA
         published_version = _latest_published_version(code)
         if latest["status"] == "draft":
             draft = engine.repository.designer_draft(code)
-            assert draft is not None
+            if draft is None:
+                # review P2-4：latest_row 与 designer_draft 是两次独立事务，中间
+                # 并发 publish 会把 draft 消费掉——回退取已发布内容（publish 竞态
+                # 窗口，修前 assert 炸 500）
+                draft = {"spec": engine.repository.get_definition_json(code), "layout": None}
             # 批 C4 布局分离：草稿存储层 layout 独立成列,响应时合回设计器期望的形状
             spec = {**draft["spec"], "layout": draft.get("layout") or {}}
             return {
@@ -243,7 +253,12 @@ def create_app(db_file: str | Path | None = None, *, seed: bool = True) -> FastA
         engine.close()
 
     if seed:
-        _seed_examples(engine)
+        try:
+            _seed_examples(engine)
+        except sqlite3.OperationalError as exc:
+            # 旧 schema 库裸 OperationalError 无出路（review P2-6）：__getattr__ 搬走
+            # 了炸点没给出路——启动失败须指路迁移
+            raise RuntimeError(f"库 schema 落后（{exc}）——请先运行 alembic upgrade head") from exc
 
     return app
 
