@@ -49,6 +49,9 @@ def archive_auto_pass(
             "task_type": task.task_type,
             "assignee": task.assignee,
             "reason": reason,
+            # actor 入载荷（全仓 review 2026-10-13 批 3 P2-3）：订阅方可区分
+            # 策略代投（system）与管理员强制完成（admin_finish）——历史行本就带
+            "actor": actor,
         },
         task.instance_id,
     )

@@ -44,6 +44,13 @@ class TaskAdminMixin:
 
         def _command(ctx: CommandContext) -> str:
             instance = self._instance(ctx, instance_id)
+            # 终态守卫（全仓 review 2026-10-13 批 3 P2-4）：终态实例上激活会造出
+            # unfinished 令牌+ready 任务（状态与事件面背离、无人收口）——对齐
+            # finish_instance 已有守卫；paused/suspended 按管理手术口径（D2）放行
+            if instance.state in TERMINAL_INSTANCE_STATES:
+                raise InstanceNotFoundError(
+                    f"实例 {instance_id} 已终态（{instance.state}），不可激活节点"
+                )
             ctx.touch(instance)
             kernel = self._engine.kernel_for(ctx)
             node = kernel.definition_of(ctx.session, instance).node(activity_code)
@@ -66,7 +73,14 @@ class TaskAdminMixin:
         结尾一条 node_cancelled_by_admin=动作留痕层——不是重复信号。"""
 
         def _command(ctx: CommandContext) -> None:
-            ctx.touch(self._instance(ctx, instance_id))
+            instance = self._instance(ctx, instance_id)
+            # 终态守卫（同 activate_node，P2-4）：终态实例无未完令牌，本命令只会
+            # 发出无人对应的 node_cancelled_by_admin 动作事件
+            if instance.state in TERMINAL_INSTANCE_STATES:
+                raise InstanceNotFoundError(
+                    f"实例 {instance_id} 已终态（{instance.state}），不可取消节点"
+                )
+            ctx.touch(instance)
             kernel = self._engine.kernel_for(ctx)
             tokens = kernel.tokens(ctx.session, instance_id, states=(TokenState.UNFINISHED.value,))
             for token in tokens:

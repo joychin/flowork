@@ -117,7 +117,8 @@ class TaskCountersignAddMixin:
         token.manual_participants[task.activity_code] = merged
         token.item_count = len(merged)
         ctx.session.flush()
-        kernel = self._engine.kernel_for(ctx)
+        # kernel 复用上方实例（全仓 review 2026-10-13 批 3 P2-9）：重复
+        # kernel_for 会重解析定义 JSON，且后续往 Kernel 加实例内状态即踩坑
         kernel.record_event(
             DomainEvent.TASK_COUNTERSIGNER_ADDED,
             {

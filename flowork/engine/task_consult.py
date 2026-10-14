@@ -38,7 +38,8 @@ class TaskConsultMixin:
     def _assert_participant_room(
         self, ctx: CommandContext, task: TaskRow, users: list[str], *, task_type: str
     ) -> None:
-        """规模护栏由 TaskOpsMixin 提供（MRO 前位，桩被遮蔽）。"""
+        """规模护栏由 TaskAssistMixin 提供（MRO 前位，桩被遮蔽）——
+        提供方以 MRO 实测为准，调整 Mixin 组合顺序前先跑 consult 测试。"""
         raise NotImplementedError
 
     def _ready_task(

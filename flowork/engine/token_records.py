@@ -135,8 +135,10 @@ class TokenRecordsMixin:
         ``actor``（复核批：撤回/终止/驳回等有发起人的调用方穿透传入）——
         事件载荷与已办 ``acted_by`` 归因一致，不再一律记 system。
         """
+        from sqlalchemy import delete as sa_delete
+
         from flowork.events.domain import DomainEvent
-        from flowork.persistence.orm import TaskHistoryRow
+        from flowork.persistence.orm import IdentityLinkRow, TaskHistoryRow
 
         self._notify_cancel(session, token)
 
@@ -157,6 +159,9 @@ class TokenRecordsMixin:
                 )
             )
             session.delete(task)
+            # 候选身份关联随任务清除（全仓 review 2026-10-13 批 3 P2-5：修前只有
+            # remove_instance 清，取消路径留孤儿行）
+            session.execute(sa_delete(IdentityLinkRow).where(IdentityLinkRow.task_id == task.id))
             self.record_event(
                 DomainEvent.TASK_CANCELLED,
                 {
@@ -199,6 +204,9 @@ class TokenRecordsMixin:
         racing = racing_basin(definition, code) - {code}
         for token in self.tokens(session, instance.id, states=(TokenState.UNFINISHED.value,)):
             if token.activity_code in racing:
+                # actor 不传＝记 system（全仓 review 2026-10-13 批 3 P2-2 拍板口径：
+                # 竞速取消是引擎自动语义，非任何人的动作；actor 穿透需改
+                # kernel._advance 全链签名，随重排刀再议）
                 self.cancel_token(session, token, cause="racing")
 
     def _notify_cancel(self, session: Session, token: TokenRow) -> None:

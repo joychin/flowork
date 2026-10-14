@@ -45,6 +45,13 @@ class DeadlineStrategiesMixin:
         task_id = job.payload.get("task_id")
         task = ctx.session.get(TaskRow, task_id) if task_id else None
         if strategy == "notify":
+            instance = ctx.session.get(ProcessInstanceRow, job.instance_id)
+            if instance is not None and instance.state in FROZEN_INSTANCE_STATES:
+                # 冻结推迟（review 2026-10-13 P2-11）：notify 原是唯一不查冻结的
+                # 策略，竞态窗插队的暂停实例会收到预警——与其他策略同款推迟
+                job.state = "scheduled"
+                job.result_payload = {**(job.result_payload or {}), "deferred": instance.state}
+                return
             if task_id and (task is None or task.state != "ready"):
                 # 等待已被终结（auto_approve/reject 先行）：预警不再触发（spec §5.1）
                 job.result_payload = {
@@ -69,11 +76,9 @@ class DeadlineStrategiesMixin:
             job.result_payload = {**(job.result_payload or {}), "skipped": "task already finished"}
             return
         if task.assignee == "":
-            # 候选任务未认领的超时兜底（code-review 2026-10 P1-4）：图纸配置的
-            # 节点级 SLA 不因候选池积压而空洞——system:timeout 代认领后走统一
-            # 执行路径（候选守卫约束的是人；系统代管 claim→act 全程归因可查）。
-            # 修复前一次性 Job 被静默 skip 消费，auto_approve/reassign 等四策略
-            # 对未认领任务全部失效。
+            # 候选任务未认领的超时兜底（P1-4）：图纸配置的节点级 SLA 不因候选
+            # 池积压而空洞——system:timeout 代认领后走统一执行路径（系统代管
+            # claim→act 全程归因可查）。修前一次性 Job 被静默 skip，四策略全失效。
             task.assignee = "system:timeout"
             ctx.session.flush()
         try:

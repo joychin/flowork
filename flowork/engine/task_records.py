@@ -58,7 +58,7 @@ class TaskRecordsMixin:
 
         task = _TaskRow(
             id=_new_id(),
-            # 业务时刻与 due_at/cost_seconds 同源 config.now（P1-10；列 default 仅兜底）
+            # 业务时刻与 due_at/cost_seconds 同源 config.now（P1-10，列 default 兜底）
             created_at=self.config.now(),
             instance_id=instance.id,
             token_id=token.id,
@@ -79,8 +79,8 @@ class TaskRecordsMixin:
                     "activity_code": node.code,
                     "assignee": assignee,
                     "task_type": task_type,
-                    # 键集与克隆路径对齐（2026-10-13 事件 review 复核批）：
-                    # 引擎解析产生无操作人 → None；转办/加签等克隆路径为发起人。
+                    # 键集与克隆路径对齐（2026-10-13 复核批）：引擎解析产生
+                    # 无操作人 → None；转办/加签等克隆路径为发起人。
                     "actor": None,
                 },
                 instance.id,
@@ -113,16 +113,10 @@ class TaskRecordsMixin:
         有组织目录叠加委托替换与 to_admins 兜底，无目录走同一条 CEL 求值路径。
         出口统一守规模护栏（max_participants，spec v2.3）：手动名单与表达式名单同守。
 
-        三条判定（spec §5.5，2026-10-09 B 批「候选槽表达式对齐」）：
-
-        - **指派优先于候选**：取人位解析出人 → 直派（候选槽不参与）；
-        - **声明了候选槽就不走兜底**——候选制下「解析不出具体办理人」是正常态，
-          改走候选槽**求值**（`resolve_candidate_subjects`，与取人位同一求值面）；
-        - **候选求值也空**才回兜底（to_admins / raise）——与未声明候选同一条路。
-
-        第四条（第十八轮）：**单人节点多人＝错误**——未声明 multi_instance 而
-        解析出多名 todo，拒绝宽松并行（`ParticipantCountMismatchError`），
-        多人必须显式声明会签。
+        三条判定（spec §5.5）：指派优先于候选（解析出人即直派）；声明了候选槽就
+        不走兜底（解析不出具体办理人是正常态，改走候选槽求值）；候选求值也空才回
+        兜底。第四条（第十八轮）：单人节点多人＝错误——未声明 multi_instance 而
+        解析出多名 todo 拒绝宽松并行，多人必须显式声明会签。
         """
         from flowork.expr.context import expression_functions_of
         from flowork.participants.resolver import (
@@ -148,9 +142,8 @@ class TaskRecordsMixin:
             assert_participant_limit(
                 len(resolution.todo) + len(resolution.skipped), limit, where=where
             )
-            # manual 名单＝历史定格（加签扩员/驳回复活圈定，code-review 2026-10
-            # P1-5）：不是表达式解析结果，不适用「单人节点多人＝错误」守卫——
-            # 加签过的未声明 multi_instance 节点被驳回复活曾必然挂起
+            # manual 名单＝历史定格（加签扩员/驳回复活圈定，P1-5）：不是表达式
+            # 解析结果，不适用「单人多人＝错误」守卫——加签过的节点复活曾必然挂起
             manual_roster = (
                 bool((getattr(ctx.token, "manual_participants", None) or {}).get(spec.code))
                 if ctx.token is not None
@@ -206,12 +199,10 @@ class TaskRecordsMixin:
             raise EngineExecutionError(f"令牌节点不存在：{token.activity_code}")
         try:  # 错误归因（复核批）：任务提交后的推进失败定位到本节点
             kernel._maybe_complete(session, instance, node, token)
-            # 出口不可达兜底（审计 D4，spec §4.1 第二十轮）：全部待办办结而令牌
-            # 未完（两侧出口公式均未达成）＝技术故障——挂起+故障单，拒绝静默卡死。
-            # kind 知识住行为（code-review 2026-10 P1-7：KIND_USER_TASK 分支违反
-            # 硬约束 2）——owns_pending_tasks 声明「名下有待办域」：call_activity
-            # 等子实例、wait 等消息名下本无待办；串行下一位已在 on_task_completed
-            # （先行于本守卫）派发，不误报。
+            # 出口不可达兜底（审计 D4）：全部待办办结而令牌未完（两侧出口公式均
+            # 未达成）＝技术故障——挂起+故障单，拒绝静默卡死。kind 知识住行为
+            # （P1-7）——owns_pending_tasks 声明「名下有待办域」：子实例/wait 名下
+            # 本无待办；串行下一位已在 on_task_completed 派发，不误报。
             behavior_cls = kernel.registry.behavior_cls(node.kind)
             if (
                 getattr(behavior_cls, "owns_pending_tasks", False)
@@ -296,4 +287,10 @@ class TaskRecordsMixin:
             )
         )
         session.delete(task)
+        # 候选身份关联随任务清除（review 2026-10-13 P2-5，与 cancel_token 同构）
+        from sqlalchemy import delete as sa_delete
+
+        from flowork.persistence.orm import IdentityLinkRow
+
+        session.execute(sa_delete(IdentityLinkRow).where(IdentityLinkRow.task_id == task.id))
         session.flush()
