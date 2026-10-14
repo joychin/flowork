@@ -1,7 +1,4 @@
-"""HistoryService：只读查询（事件 / 已办 / 实例 / 令牌）。
-
-归档导出面拆至 history_archive.py（Mixin 组合，入口类不变）。
-"""
+"""HistoryService：只读查询（事件/已办/实例/令牌）；归档导出拆 history_archive.py。"""
 
 from __future__ import annotations
 
@@ -56,11 +53,17 @@ class HistoryService(ArchiveMixin, TraceMixin):
     def __init__(self, engine: ProcessEngine) -> None:
         self._engine = engine
 
-    def events(self, instance_id: str | None = None, *, limit: int = 200) -> list[EventInfo]:
+    def events(
+        self,
+        instance_id: str | None = None,
+        *,
+        limit: int = 200,
+        offset: int = 0,
+    ) -> list[EventInfo]:  # offset＝REST /v2 分页探测取数用（review P0-1）
+
         def _command(ctx: CommandContext) -> Any:
-            # 全局查询（无实例维度）取最近（P2-7：ASC+limit 曾截「最旧 N 条」）；
-            # 实例维度保持 asc（事件序列可读）。id 为可排序串（时间前缀+nonce+
-            # 计数）——同命令内微秒平局按发射顺序定序（事件 review A1）。
+            # 全局查询取最近（P2-7），实例维度保持 asc（序列可读）；id 为可排序
+            # 串——同命令内微秒平局按发射顺序定序（事件 review A1）。
             if instance_id is None:
                 stmt = select(EventOutboxRow).order_by(
                     EventOutboxRow.occurred_at.desc(), EventOutboxRow.id.desc()
@@ -79,7 +82,7 @@ class HistoryService(ArchiveMixin, TraceMixin):
                     payload=row.payload,
                     occurred_at=row.occurred_at,
                 )
-                for row in ctx.session.scalars(stmt.limit(limit))
+                for row in ctx.session.scalars(stmt.offset(offset).limit(limit))
             ]
 
         result: list[EventInfo] = self._engine.execute(_command)
@@ -142,9 +145,11 @@ class HistoryService(ArchiveMixin, TraceMixin):
         state: str | None = None,
         definition_code: str | None = None,
         limit: int = 100,
+        offset: int = 0,
         include_simulated: bool = False,
     ) -> list[InstanceInfo]:
-        """实例查询（默认隔离模拟实例——试跑不进业务视图，v2.3 A10）。"""
+        """实例查询（默认隔离模拟实例，v2.3 A10）；offset＝REST /v2 分页探测
+        取数用（review P0-1——修前窗口无余量，next_cursor 恒 None 二页不可达）。"""
 
         def _command(ctx: CommandContext) -> Any:
             stmt = select(ProcessInstanceRow).order_by(ProcessInstanceRow.started_at.desc())
@@ -168,7 +173,7 @@ class HistoryService(ArchiveMixin, TraceMixin):
                     parent_id=row.parent_id,
                     simulated=row.simulated,
                 )
-                for row in ctx.session.scalars(stmt.limit(limit))
+                for row in ctx.session.scalars(stmt.offset(offset).limit(limit))
             ]
 
         result: list[InstanceInfo] = self._engine.execute(_command)
@@ -224,10 +229,7 @@ class HistoryService(ArchiveMixin, TraceMixin):
                 stmt.order_by(TaskHistoryRow.created_at.desc()).offset(offset).limit(limit)
             )
             return Page(
-                items=[_history(row) for row in rows],
-                total=total or 0,
-                offset=offset,
-                limit=limit,
+                items=[_history(row) for row in rows], total=total or 0, offset=offset, limit=limit
             )
 
         result: Page = self._engine.execute(_command)

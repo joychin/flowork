@@ -147,5 +147,10 @@ def register_system_routes(app: FastAPI, engine: ProcessEngine) -> None:
     def events_search(body: dict[str, Any]) -> dict[str, Any]:
         flt = body.get("filter") or {}
         offset, limit = page_request(body.get("page"))
-        rows = history.events(flt.get("instance_id"), limit=min(offset + limit, 1000))
-        return page_payload([dump(row) for row in rows], offset, limit)
+        # limit+1 余量探测（review P0-1）：修前 next_cursor 恒 None（同 instances）
+        rows = history.events(flt.get("instance_id"), limit=limit + 1, offset=offset)
+        has_more = len(rows) > limit
+        return {
+            "items": [dump(row) for row in rows[:limit]],
+            "next_cursor": encode_offset(offset + limit) if has_more else None,
+        }

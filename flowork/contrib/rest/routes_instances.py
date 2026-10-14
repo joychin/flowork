@@ -13,14 +13,11 @@ from flowork.contrib.rest._common import (
     actor_of,
     dump,
     encode_offset,
-    page_payload,
     page_request,
     reuse_of,
 )
 
 __all__ = ["register_instance_routes", "signal_waiting_instance"]
-
-_MAX_FETCH = 1000
 
 
 def register_instance_routes(app: FastAPI, engine: ProcessEngine) -> None:
@@ -48,13 +45,20 @@ def register_instance_routes(app: FastAPI, engine: ProcessEngine) -> None:
     def instances_search(body: dict[str, Any]) -> dict[str, Any]:
         flt = body.get("filter") or {}
         offset, limit = page_request(body.get("page"))
+        # limit+1 余量探测（review P0-1）：修前取数窗口恰好 offset+limit，
+        # has_more 恒 False——next_cursor 恒 None，第二页数据不可达
         rows = history.instances(
             state=flt.get("state"),
             definition_code=flt.get("definition_code"),
-            limit=min(offset + limit, _MAX_FETCH),
+            offset=offset,
+            limit=limit + 1,
             include_simulated=bool(flt.get("include_simulated", False)),
         )
-        return page_payload([dump(row) for row in rows], offset, limit)
+        has_more = len(rows) > limit
+        return {
+            "items": [dump(row) for row in rows[:limit]],
+            "next_cursor": encode_offset(offset + limit) if has_more else None,
+        }
 
     def _state_action(action: str) -> None:
         method = getattr(runtime, f"{action}_process")
