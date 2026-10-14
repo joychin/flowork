@@ -700,3 +700,22 @@ publish/child 域；100 迭代 DoD+词汇覆盖实证。
 下沉 advance_gate.py 守 300 行）｜fdfd987 withdraw 一票一撤（重建待办转走后
 「本人在办」代理失效，二次撤票双发事件账目漂移；事件守卫拒绝）。
 随机件纪律：FLOWORK_RANDOM_ITER 默认 30，DoD 实验 100 迭代双 suite 全绿。
+
+**流程演练台批（2026-10-14，CLI walkthrough——用户「模拟真实流程、看得到每一步」想法的落地）**：
+与 simulate（自动跑通、人不在环）互补的「彩排」形态——发起**真实实例**（缺省内存库跑完即弃，
+`--db` 可持久），剧本/交互逐动作推进，每步打印一张「步单」。四件套：
+① `cli/walkthrough_core.py` RunObserver 差分观察器（四个留痕面按已见集合 diff：事件 id/路由决策 id/
+待办 id/变量血缘前缀计数——追加型数据面即步单素材）+ 剧本装载校验 + find_task（node+by 定位，
+人匹配 user: 前缀互认）+ perform_step（十动作分派，FloworkError 归一 ScriptError 带步骤上下文）。
+② `cli/walkthrough_view.py` 步单渲染（叙事视角：动作→待办+/待办-→路由（条件公式=求值结果→选中边）→
+变量 before→after（写方·操作人）→事件（载荷摘录三键）；转办离场是换人语义照常报、出结果类动作的被办
+任务不重复报；终点空路由行/事件 None 值/长动作行三处降噪）。
+③ 剧本模式多场景顺序跑（`examples/04_expense_walkthrough.json`：大额含驳回回退+改额+转办+会签，
+小额默认边直通）+ 交互模式（`序号 动作` 语法，参数逐项提示，s/t/v/q 查状态/时间线/变量/收束）；
+④ `examples/04_expense_claim.json` 费用报销模板（申请人 submit=initiator 起步→经理驳回可回退→
+金额>5000 加财务复核+总监会签严格过半→传阅发起人；严格过半公式避 bare_threshold lint）。
+收束输出=实例状态+流转轨迹表+留痕合计（未走完黄字示剩余待办）。demo/demo-full 迁 cli/demo.py
+（命令名不变，app.py 299→169 守红线余量）。测试 tests/test_cli_walkthrough.py 9 例（两场景全旅程
+步单要素断言/错误三路：节点不在/办理人不符/引擎拒绝/交互 stdin 冒烟+提前收束）。**1169 测试全绿，
+五道门全过**。步单格式=本批核心设计物，后续 web 演练台/任务页办理体验直接复用。
+

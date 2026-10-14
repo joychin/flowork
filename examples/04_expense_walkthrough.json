@@ -1,0 +1,91 @@
+{
+  "comment": "费用报销演练剧本：每个场景各发起一个真实实例（缺省内存库，跑完即弃）。step 字段：node=节点编码，by=办理人，action∈complete/reject/transfer/assist/consult/claim/unclaim/add_countersigner，comment/variables/to 随动作可选。",
+  "runs": [
+    {
+      "name": "大额报销：驳回回退 → 重报改额 → 财务转办 → 总监会签",
+      "business_key": "BX-2026-0001",
+      "start_user": "u_zhang",
+      "steps": [
+        {
+          "node": "submit",
+          "by": "u_zhang",
+          "action": "complete",
+          "comment": "提交报销申请",
+          "variables": {
+            "amount": 20000,
+            "reason": "客户招待"
+          }
+        },
+        {
+          "node": "manager",
+          "by": "u_manager",
+          "action": "reject",
+          "comment": "发票不全，请补充"
+        },
+        {
+          "node": "submit",
+          "by": "u_zhang",
+          "action": "complete",
+          "comment": "已补发票，金额修正为 1.8 万",
+          "variables": {
+            "amount": 18000
+          }
+        },
+        {
+          "node": "manager",
+          "by": "u_manager",
+          "action": "complete",
+          "comment": "材料齐全，同意"
+        },
+        {
+          "node": "finance",
+          "by": "u_finance",
+          "action": "transfer",
+          "to": "u_finance_bak",
+          "comment": "岗位交接"
+        },
+        {
+          "node": "finance",
+          "by": "u_finance_bak",
+          "action": "complete",
+          "comment": "复核通过"
+        },
+        {
+          "node": "cfo",
+          "by": "u_alice",
+          "action": "complete",
+          "comment": "同意"
+        },
+        {
+          "node": "cfo",
+          "by": "u_bob",
+          "action": "complete",
+          "comment": "同意"
+        }
+      ]
+    },
+    {
+      "name": "小额报销：直通（默认边，不加签）",
+      "business_key": "BX-2026-0002",
+      "start_user": "u_zhang",
+      "steps": [
+        {
+          "node": "submit",
+          "by": "u_zhang",
+          "action": "complete",
+          "comment": "办公用品报销",
+          "variables": {
+            "amount": 3000,
+            "reason": "办公用品"
+          }
+        },
+        {
+          "node": "manager",
+          "by": "u_manager",
+          "action": "complete",
+          "comment": "同意"
+        }
+      ]
+    }
+  ]
+}

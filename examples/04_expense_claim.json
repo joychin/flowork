@@ -1,0 +1,116 @@
+{
+  "code": "expense_claim",
+  "name": "费用报销（示例 04：金额分支 + 会签 + 驳回回退）",
+  "version": 1,
+  "status": "published",
+  "variables": [
+    {
+      "name": "amount",
+      "type": "number",
+      "label": "报销金额",
+      "sample": 3000
+    },
+    {
+      "name": "reason",
+      "type": "string",
+      "label": "报销事由",
+      "sample": "办公用品"
+    }
+  ],
+  "nodes": [
+    {
+      "code": "start",
+      "name": "发起",
+      "kind": "start"
+    },
+    {
+      "code": "submit",
+      "name": "填写报销申请",
+      "kind": "user_task",
+      "assignee": "initiator"
+    },
+    {
+      "code": "manager",
+      "name": "部门经理审批",
+      "kind": "user_task",
+      "assignee": "'u_manager'",
+      "reject_target": "submit"
+    },
+    {
+      "code": "route",
+      "name": "金额分流",
+      "kind": "branch",
+      "route_mode": "first_match"
+    },
+    {
+      "code": "finance",
+      "name": "财务复核",
+      "kind": "user_task",
+      "assignee": "'u_finance'",
+      "reject_target": "submit"
+    },
+    {
+      "code": "cfo",
+      "name": "总监会签",
+      "kind": "user_task",
+      "assignees": [
+        "'u_alice'",
+        "'u_bob'"
+      ],
+      "multi_instance": {
+        "mode": "parallel",
+        "approve_exit": "task.approve_count * 100 > task.item_count * 50"
+      },
+      "reject_target": "manager"
+    },
+    {
+      "code": "notify",
+      "name": "结果传阅",
+      "kind": "cc_task",
+      "recipients": [
+        "initiator"
+      ]
+    },
+    {
+      "code": "end",
+      "name": "结束",
+      "kind": "end"
+    }
+  ],
+  "flows": [
+    {
+      "source": "start",
+      "target": "submit"
+    },
+    {
+      "source": "submit",
+      "target": "manager"
+    },
+    {
+      "source": "manager",
+      "target": "route"
+    },
+    {
+      "source": "route",
+      "target": "finance",
+      "condition": "amount > 5000"
+    },
+    {
+      "source": "route",
+      "target": "notify",
+      "is_default": true
+    },
+    {
+      "source": "finance",
+      "target": "cfo"
+    },
+    {
+      "source": "cfo",
+      "target": "notify"
+    },
+    {
+      "source": "notify",
+      "target": "end"
+    }
+  ]
+}

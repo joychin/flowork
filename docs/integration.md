@@ -12,6 +12,9 @@ uv run flowork demo-full                  # 全流程 DoD 演示（事件回放�
 uv run flowork retire <code>              # 定义退役（purge 物理清除 / drift 文件对账）
 uv run flowork instance vars <iid>        # 实例变量面（vars-set 写 / var-history 血缘）
 uv run flowork task claimable <user>      # 我可认领的待办（候选关联：具体人 ∪ 组引用经目录展开）
+uv run flowork walkthrough examples/04_expense_claim.json --script examples/04_expense_walkthrough.json
+                                         # 流程演练台：真实实例逐步走查（每步打印路由决策/变量变化/事件；
+                                         # 缺省内存库跑完即弃，--script 给剧本自动走，不给则交互扮演）
 ```
 
 嵌入使用：`pip install -e .` 后 `from flowork.engine.engine import ProcessEngine`。
