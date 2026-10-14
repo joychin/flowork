@@ -7,6 +7,7 @@
 
 - [README.md](README.md): 项目简介、快速开始、里程碑现状、扩展节点三步法
 - [AGENTS.md](AGENTS.md): 构建/测试命令、包结构地图、硬约束、当前快照（改代码必读）
+- [docs/manual/](docs/manual/README.md): **内核手册（使用者视角，11 章）**——从五分钟跑通到部署与 FAQ；示例全部实跑验证
 - [docs/API.md](docs/API.md): 四服务 + 消息/Job Python API 参考（含扩展点）
 - [docs/integration.md](docs/integration.md): 集成与部署指南（表结构/超时调度/并发模型/运维）
 - [designer/README.md](designer/README.md): 流程设计器前端（架构原则与 API 面）

@@ -65,6 +65,7 @@ cd designer && npm install && npm run dev                                       
 
 ## 更多
 
+- **内核手册**：`docs/manual/`（使用者视角，从五分钟跑通到部署与 FAQ，11 章）
 - 构建约定与包结构：`AGENTS.md`（改代码必读）
 - Python API 参考：`docs/API.md`；集成部署（表结构/超时调度/并发模型）：`docs/integration.md`
 - 文档索引：`llms.txt`
