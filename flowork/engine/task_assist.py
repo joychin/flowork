@@ -1,6 +1,6 @@
 """协办面（TaskService 组合件，入口 engine.task.assist* 不变）。
 
-协办不占票不卡流程（spec §5.1）：主任务终态同事务收口。
+协办不占票不卡流程：主任务终态同事务收口。
 """
 
 from __future__ import annotations
@@ -129,7 +129,7 @@ class TaskAssistMixin:
     def _cancel_assist_tasks(self, ctx: CommandContext, task: TaskRow, actor: str) -> None:
         """主任务终态（complete/reject）同事务收口其令牌下的协办待办。
 
-        协办不占票也不卡流程（spec §5.1）：主任务已出结果，协办意见失去时效，
+        协办不占票也不卡流程：主任务已出结果，协办意见失去时效，
         挂着只会变脏待办——收口落历史 outcome=assist_cancel（归因主任务办理人；
         修前一律记 system，事件缺定位缺 actor）。
         转办不触发（等待未终结，协办随新办理人继续）。

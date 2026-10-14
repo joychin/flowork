@@ -46,7 +46,7 @@ def file_url(path: str | Path) -> str:
 
 
 def url_from_value(value: str | Path) -> str:
-    """路径或完整 URL 归一（spec §14 支持矩阵）。
+    """路径或完整 URL 归一。
 
     值含 ``://`` 视为完整 SQLAlchemy 连接串原样返回（如
     ``postgresql+psycopg://user:pw@host/db``），否则按 SQLite 文件路径包装。

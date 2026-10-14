@@ -55,7 +55,7 @@ def retire(
     db: str = typer.Option("flowork.db", help="SQLite 文件路径或数据库 URL"),
     reason: str = "",
 ) -> None:
-    """retire 定义：不接新实例，在跑跑完（spec §6.2）。"""
+    """retire 定义：不接新实例，在跑跑完。"""
     engine = ProcessEngine(EngineConfig(db_file=db))
     count = engine.repository.retire(code, actor="cli", reason=reason)
     console.print(f"[green]✓[/green] {code} 已 retire（{count} 个已发布版本）")
@@ -80,7 +80,7 @@ def drift(
     directory: Path = typer.Argument(..., help="git 定义目录（*.json）"),
     db: str = typer.Option("flowork.db", help="SQLite 文件路径或数据库 URL"),
 ) -> None:
-    """git 与库对账：未部署/库多余/库落后 三张清单（spec §6.5）。"""
+    """git 与库对账：未部署/库多余/库落后 三张清单。"""
     engine = ProcessEngine(EngineConfig(db_file=db))
     result = engine.repository.definition_drift(str(directory))
     for name, items in result.items():
@@ -118,9 +118,7 @@ def validate(template: Path = typer.Argument(..., help="模板 JSON 文件路径
 def deploy(
     template: Path = typer.Argument(..., help="模板 JSON 文件路径"),
     db: str = typer.Option("flowork.db", help="SQLite 文件路径或数据库 URL"),
-    target_major: int | None = typer.Option(
-        None, help="维护分支：在该 major 最新 revision 上续发（spec §6.2）"
-    ),
+    target_major: int | None = typer.Option(None, help="维护分支：在该 major 最新 revision 上续发"),
     force_major_reason: str = typer.Option(
         "", help="覆盖破坏性判定为 major+1（必须带理由，进事件）"
     ),

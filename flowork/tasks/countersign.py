@@ -1,9 +1,9 @@
-"""会签出口判定：CEL 布尔公式（位点统一收官，spec §4.1/§4.2）。
+"""会签出口判定：CEL 布尔公式（位点统一收官）。
 
 approve_exit / disapprove_exit 为 **CEL 公式**，求值上下文注入 ``task.*``
-会签计数快照（item_count / approve_count / disapprove_count，spec C.4 位点
-相关形状）与实例变量 + ``initiator``；求值错按错误二分包 EngineExecutionError
-（挂起+故障单，§8）。旧专用语法等价翻译（整数乘法，百分比 ceil 精确等价）：
+会签计数快照（item_count / approve_count / disapprove_count）与实例变量
++ ``initiator``；求值错按错误二分包 EngineExecutionError（挂起+故障单）。
+旧专用语法等价翻译（整数乘法，百分比 ceil 精确等价）：
 
 - ``all``      → ``task.approve_count >= task.item_count``
 - ``any``      → ``task.approve_count >= 1``

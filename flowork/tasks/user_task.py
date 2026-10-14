@@ -1,4 +1,4 @@
-"""人工审批节点行为（spec §5）：取人/候选/会签出口/串行换棒。
+"""人工审批节点行为：取人/候选/会签出口/串行换棒。
 
 注册仍由 behaviors.register_builtin_behaviors 统一。
 """
@@ -70,7 +70,7 @@ class UserTaskBehavior(NodeBehavior):
     def _create_claimable_task(self, ctx: RuntimeNodeContext, candidates: list[str]) -> None:
         """有候选（已求值）：生成可认领任务（assignee 置空 + 候选关联）。
 
-        候选关联＝求值后的人 ∪ 组引用，**引用保留不展开**（spec §5.5：候选制下
+        候选关联＝求值后的人 ∪ 组引用，**引用保留不展开**（候选制下
         组引用保留、认领时再展开——明天入组的人能认领明天的待办）；命中判定见
         `tasks.candidates.candidate_hit`。求值在 ``resolve_participants``
         （候选槽与取人位同一 CEL 求值面）。

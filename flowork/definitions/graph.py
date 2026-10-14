@@ -3,7 +3,7 @@
 engine/join_gate 的反向 BFS（上游盆地）下沉至此——definitions 是下层包
 （engine→dependencies 方向合法、反向禁止），运行时 all 汇聚放行判定与
 设计时图级 lint（validator_graph）共用同一份遍历，杜绝镜像漂移：
-**lint 的告警判据必须与运行时放行语义逐字一致**（spec §2.3）。
+**lint 的告警判据必须与运行时放行语义逐字一致**。
 全部纯结构判定，不评条件、不读令牌。
 """
 
@@ -36,7 +36,7 @@ def upstream_basin(definition: ProcessDefinition, node_code: str) -> frozenset[s
 
 
 def racing_basin(definition: ProcessDefinition, node_code: str) -> frozenset[str]:
-    """any 竞速臂判定（spec §2.3）：能到达 ``node_code`` 的节点集合
+    """any 竞速臂判定：能到达 ``node_code`` 的节点集合
     （含自身）——**直接前驱恒计入**；更深的祖先沿图扩展，但**途经其他多入边节点
     即止**（不越过别的汇合域）。
 

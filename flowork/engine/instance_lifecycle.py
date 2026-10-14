@@ -1,4 +1,4 @@
-"""实例生命周期与故障处置（spec §7/§8）：pause/resume/terminate/cancel、
+"""实例生命周期与故障处置：pause/resume/terminate/cancel、
 Incident 五动作、move_token 管理员手术。
 
 RuntimeService 经 mixin 组合（engine.runtime 入口不变）。
@@ -48,7 +48,7 @@ class InstanceLifecycleMixin:
     _engine: ProcessEngine
 
     def pause_process(self, instance_id: str, actor: str, reason: str = "") -> None:
-        """暂停实例（spec §7）：任务不可办、timer 冻结；恢复后按自然时长顺延。"""
+        """暂停实例：任务不可办、timer 冻结；恢复后按自然时长顺延。"""
 
         def _command(ctx: CommandContext) -> Any:
             instance = _load(ctx, instance_id)
@@ -96,7 +96,7 @@ class InstanceLifecycleMixin:
                 {"actor": actor, "reason": reason, "deferred_minutes": paused_minutes},
                 instance_id,
             )
-            # 暂停期间到达的消息（落缓冲）反查：open 订阅补消费（spec §7.2）。
+            # 暂停期间到达的消息（落缓冲）反查：open 订阅补消费。
             from flowork.engine.message_flow import retro_poll_instance
 
             retro_poll_instance(ctx, self._engine, instance)
@@ -108,7 +108,7 @@ class InstanceLifecycleMixin:
         self._engine.execute(_command)
 
     def terminate_process(self, instance_id: str, actor: str, reason: str = "") -> None:
-        """终止实例（spec §7）：管理员强杀——整树撤令牌与待办，终态 terminated。
+        """终止实例：管理员强杀——整树撤令牌与待办，终态 terminated。
 
         级联未结算子实例（含暂停/挂起中的）同置 terminated
         （terminate_cascade——孤儿待办收口，对齐 Camunda/Zeebe 子树终止）。

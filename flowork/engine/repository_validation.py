@@ -23,7 +23,7 @@ class RepositoryValidationMixin:
     _engine: ProcessEngine
 
     def validate(self, definition: ProcessDefinition) -> list[ValidateIssue]:
-        """设计时校验（不落库；组主体×目录、CEL 函数注册表联动，spec §9/§4.3）。"""
+        """设计时校验（不落库；组主体×目录、CEL 函数注册表联动）。"""
         return validate_definition(
             definition,
             self._engine.config.node_registry,

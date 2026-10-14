@@ -1,4 +1,4 @@
-"""等待节点行为（spec §7.2 / wait-node.md §3）：等消息 / 等时长 / 两者竞速。
+"""等待节点行为：等消息 / 等时长 / 两者竞速。
 
 完成只经 :func:`finish_wait` 外部触发（消息命中 / 到时 / 广播唤醒三路统一），
 ``try_complete`` 恒 False；等待结果快照经 ``behavior_override`` 随路由注入
@@ -68,7 +68,7 @@ class WaitBehavior(NodeBehavior):
         self._cleanup(ctx)
 
     def get_outgoing(self, ctx: NodeContext) -> list[SequenceFlow]:
-        """默认路由 + wait 快照注入（求值副本，不落实例变量——spec §7.2）。"""
+        """默认路由 + wait 快照注入（求值副本，不落实例变量）。"""
         from flowork.engine.route_audit import RoutingAudit, persist_route_decision
         from flowork.engine.routing import evaluation_variables, select_outgoing
         from flowork.expr.context import expression_functions_of

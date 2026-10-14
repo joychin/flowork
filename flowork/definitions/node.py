@@ -48,8 +48,8 @@ class MultiInstance(BaseModel):
     """会签（多人参与）配置。
 
     mode：parallel=并签（全员同时待办）/ sequential=串行（逐人待办）。
-    出口为 **CEL 布尔公式**（spec §4.2 位点统一），上下文注入 task.* 会签计数
-    （item_count/approve_count/disapprove_count，spec C.4）；缺省＝全员
+    出口为 **CEL 布尔公式**（位点统一），上下文注入 task.* 会签计数
+    （item_count/approve_count/disapprove_count）；缺省＝全员
     （approve_exit 全员同意 / disapprove_exit 全员否决）。旧专用语法等价：
     "all"→task.approve_count >= task.item_count；">=N%"→整数乘法
     task.approve_count * 100 >= task.item_count * N。
@@ -72,7 +72,7 @@ class TimeoutPolicy(BaseModel):
 
 
 class DeadlineAction(StrEnum):
-    """超时动作五枚举（spec §5.1，对齐 WS-HumanTask escalation 形态）。"""
+    """超时动作五枚举（对齐 WS-HumanTask escalation 形态）。"""
 
     NOTIFY = "notify"
     REASSIGN = "reassign"
@@ -88,10 +88,10 @@ class TaskDeadline(BaseModel):
 
     after_minutes: int = Field(gt=0)
     action: DeadlineAction = DeadlineAction.NOTIFY
-    # reassign 改派目标：CEL 表达式（fire 时求值，task.* 可用——spec §4.2/C.4）
+    # reassign 改派目标：CEL 表达式（fire 时求值，task.* 可用）
     reassign_to: str | None = None
-    # escalate 升级目标：CEL 表达式，*必填*（spec §5.1）——
-    # 引擎不再自带「上级」概念（组织模型归宿主，spec §5.5 分工铁律）；
+    # escalate 升级目标：CEL 表达式，*必填*——
+    # 引擎不再自带「上级」概念（组织模型归宿主，分工铁律）；
     # 科层组织的图纸写法：escalate_to='manager_of(task.assignee)'
     escalate_to: str | None = None
 

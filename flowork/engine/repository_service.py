@@ -1,4 +1,4 @@
-"""RepositoryService：流程定义的部署 / 校验 / 查询（spec §6：deploy 即 publish）。
+"""RepositoryService：流程定义的部署 / 校验 / 查询（deploy 即 publish）。
 
 发布即不可变；实例钉快照；默认不迁移。deploy 事务内、写库前完成破坏性判定
 （R1–R4）；内容哈希与已发布版本相同 → 幂等去重（不产生新版本、不发事件）；
@@ -61,7 +61,7 @@ class RepositoryService(
         """部署定义（新增与更新同一操作；纯数据写入，秒级生效）。
 
         Args:
-            target_major: 维护分支——在该 major 的最新 revision 上续发（spec §6.2）。
+            target_major: 维护分支——在该 major 的最新 revision 上续发。
             force_major_reason / allow_minor_reason: 覆盖破坏性判定，必须带 reason（进事件）。
         """
 
@@ -74,7 +74,7 @@ class RepositoryService(
             assert_valid(
                 definition, self._engine.config.node_registry
             )  # org_configured 联动在 validate()（deploy 保持强校验语义）
-            # 部署期 L3/L4（spec §6）：引用完整性 + 目录实体存在性
+            # 部署期 L3/L4：引用完整性 + 目录实体存在性
             # ——默认 WARNING 留痕（可见优于静默），strict_deploy_validation 升 ERROR 拦发布。
             from flowork.definitions.validator import IssueLevel
             from flowork.definitions.validator_deploy import check_deploy_references
@@ -95,7 +95,7 @@ class RepositoryService(
             content = dump_definition(definition)
             canonical = dump_definition(load_definition(content, self._engine.config.node_registry))
             digest = content_hash_of(canonical)
-            # 哈希按语义字段计算；落库内容补上判定出的版本身份（spec §6.6 审计）
+            # 哈希按语义字段计算；落库内容补上判定出的版本身份
             published = {
                 (row.major, row.revision): row.content_hash
                 for row in ctx.session.scalars(
@@ -122,11 +122,11 @@ class RepositoryService(
                 override_reason=force_major_reason or allow_minor_reason,
             )
             if verdict.identical_to is not None:
-                return verdict  # 幂等去重：不落库、不发事件（降噪，spec §6.4）
+                return verdict  # 幂等去重：不落库、不发事件（降噪）
 
             if base is None:
                 # 新 code 但既有行（如全部 retired）：恢复部署须越过既有最高版本
-                # （spec §6.2 恢复 retired＝重新 deploy 为新版本）
+                # 恢复 retired＝重新 deploy 为新版本
                 from dataclasses import replace as _replace
 
                 existing = ctx.session.execute(
@@ -158,7 +158,7 @@ class RepositoryService(
                 published_at=self._engine.config.now(),
             )
             ctx.session.add(row)
-            # 事件载荷（spec §6.4）：code, major, revision, breaking, triggered_rules,
+            # 事件载荷：code, major, revision, breaking, triggered_rules,
             # content_hash, published_by, is_new_code, override?
             payload = {
                 "code": definition.code,
@@ -185,7 +185,7 @@ class RepositoryService(
     def verdict(
         self, definition: ProcessDefinition, *, target_major: int | None = None
     ) -> VersionVerdict:
-        """版本判定预演（只判定不落库，spec §6.3——AI/CI 先看后果再 deploy）。"""
+        """版本判定预演（只判定不落库——AI/CI 先看后果再 deploy）。"""
 
         def _command(ctx: CommandContext) -> VersionVerdict:
             from sqlalchemy import select

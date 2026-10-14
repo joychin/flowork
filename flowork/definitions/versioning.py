@@ -1,4 +1,4 @@
-"""版本判定（kernel-v2 spec §6.3）：破坏性规则、VersionVerdict、内容哈希。
+"""版本判定：破坏性规则、VersionVerdict、内容哈希。
 
 - 每条规则＝注册式检查器（同节点注册表哲学），默认四条（R1–R4）；
 - deploy 可 force_major/allow_minor 覆盖（必须带 reason，进事件）；
@@ -41,7 +41,7 @@ class TriggeredRule:
 
 @dataclass(frozen=True)
 class VersionVerdict:
-    """deploy 的版本判定报告（spec §6.3 输出契约）。"""
+    """deploy 的版本判定报告。"""
 
     next_major: int
     next_revision: int
@@ -207,7 +207,7 @@ def compute_verdict(
     override: dict[str, str] | None = None
     if override_kind:
         if not override_reason:
-            raise ValueError("覆盖破坏性判定必须带 reason（spec §6.3）")
+            raise ValueError("覆盖破坏性判定必须带 reason")
         override = {"kind": override_kind, "reason": override_reason}
         if override_kind == "force_major":
             breaking = True

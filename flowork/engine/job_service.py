@@ -1,4 +1,4 @@
-"""Job 领取-汇报协议（kernel-v2 spec §5.2）：外部 worker 的租约式执行。
+"""Job 领取-汇报协议：外部 worker 的租约式执行。
 
 对齐 Zeebe 语义：``activate_jobs`` 批量领活（领到即「租」住，写 worker_id +
 lease_until）；干完 ``complete_job``；失败 ``fail_job``（剩余重试次数由 worker
@@ -54,7 +54,7 @@ class JobClaim:
 
 
 class JobService:
-    """外部 worker 的领取-汇报面（spec §11 系统组）。"""
+    """外部 worker 的领取-汇报面。"""
 
     def __init__(self, engine: ProcessEngine) -> None:
         self._engine = engine

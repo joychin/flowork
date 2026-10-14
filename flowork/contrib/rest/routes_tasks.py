@@ -1,4 +1,4 @@
-"""REST /v2 tasks 面：search + 七动作 + anticipate（spec §12）。"""
+"""REST /v2 tasks 面：search + 七动作 + anticipate。"""
 
 from __future__ import annotations
 

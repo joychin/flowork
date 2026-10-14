@@ -1,6 +1,6 @@
 """推进门（kernel 守 300 行红线下沉件）：边到达后的激活判定。
 
-any 任一到达即办（缺省）/ all 可达性放行（§2.3）；any 放行的竞速收尾
+any 任一到达即办（缺省）/ all 可达性放行；any 放行的竞速收尾
 推迟到 route 完结段。语义权威与调用方见 kernel.route。
 """
 
@@ -89,7 +89,7 @@ class AdvanceGateMixin:
         flow: SequenceFlow,
         definition: ProcessDefinition,
     ) -> tuple[FlowNode, TokenRow, bool] | None:
-        """边到达后的推进判定：any 任一到达即办（缺省）/ all 可达性放行（§2.3）。
+        """边到达后的推进判定：any 任一到达即办（缺省）/ all 可达性放行。
 
         - all：除已停靠本节点的令牌外无任何**未完令牌**可结构可达本节点才放行
           （条件未命中的臂落定后不再阻塞；旧 settled 令牌不算数，见 join_gate）；

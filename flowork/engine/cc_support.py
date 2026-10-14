@@ -1,8 +1,8 @@
 """传阅（CcTask）支撑：生成传阅件。已读接口在 M3（TaskService.mark_cc_read）。
 
-recipients 每项为 **CEL 表达式**（spec §4.2 位点统一）：字面人写 ``'u_a'``，
+recipients 每项为 **CEL 表达式**（位点统一）：字面人写 ``'u_a'``，
 发起人写保留标识符 ``initiator``，函数如 ``manager_of(initiator)``。
-求值错按错误二分包 EngineExecutionError（挂起+故障单，§8）。
+求值错按错误二分包 EngineExecutionError（挂起+故障单）。
 """
 
 from __future__ import annotations

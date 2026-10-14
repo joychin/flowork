@@ -38,7 +38,7 @@ def allowed_actions(task: TaskRow) -> list[str]:
     if task.state != "ready":
         return []
     if task.task_type == "assist":
-        return ["complete_assist"]  # 协办只交还意见，不参与推进（spec §5.1）
+        return ["complete_assist"]  # 协办只交还意见，不参与推进
     if task.task_type == "consult":
         return ["complete_consult"]  # 咨询意见任务：只交回意见
     if task.assignee == "":

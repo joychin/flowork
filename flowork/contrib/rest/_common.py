@@ -1,4 +1,4 @@
-"""REST /v2 公共件：actor 归因、offset 游标分页、错误状态映射（设计 §2.2–2.4）。"""
+"""REST /v2 公共件：actor 归因、offset 游标分页、错误状态映射。"""
 
 from __future__ import annotations
 
@@ -113,7 +113,7 @@ def page_payload(items: list[Any], offset: int, limit: int) -> dict[str, Any]:
     return {"items": window, "next_cursor": encode_offset(offset + limit) if has_more else None}
 
 
-# isinstance 链优先；类名兜底表覆盖未在 flowork.api 导出的错误家族（设计 §2.3：
+# isinstance 链优先；类名兜底表覆盖未在 flowork.api 导出的错误家族（
 # 不为错误映射扩公开面）。
 _STATUS_BY_NAME: dict[str, int] = {
     "InputContractError": 422,  # 变量写入校验拒绝（修前漏网全 500）
@@ -157,7 +157,7 @@ def issue_payload(exc: InvalidDefinition) -> dict[str, Any]:
 
 
 def error_payload(exc: FloworkError) -> dict[str, Any]:
-    """统一错误体 {"error": {code, message, details}}（spec §12）。"""
+    """统一错误体 {"error": {code, message, details}}。"""
     details: dict[str, Any] = {}
     if isinstance(exc, InvalidDefinition):
         details.update(issue_payload(exc))

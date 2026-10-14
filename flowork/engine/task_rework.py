@@ -200,17 +200,17 @@ class TaskReworkMixin:
     def _assert_downstream_idle(
         self, ctx: CommandContext, instance: ProcessInstanceRow, activity_code: str
     ) -> None:
-        """撤回下游闸门（spec §5.1 拍板④）。
+        """撤回下游闸门。
 
         本节点正向可达的下游存在**人工进展** → 拒绝撤回（提示改用驳回）——
         否则撤回等于一次没有驳回留痕的隐式整体驳回。进展判据两条：
-        ① 下游存在表决行（表决行口径，spec §5.1——协办/咨询/自动
+        ① 下游存在表决行（表决行口径——协办/咨询/自动
         通过不算进展；branch/cc/service 不产生任务历史天然只统计人工办理）；
         ② 下游**工作节点**（user_task/call_activity）存在已完结令牌——穿透节点
         （branch/cc_task/start/end）的即时完结**不拦**，对齐穿透型节点不拦的行业口径（pilot
         leave 实证：branch 即刻完结曾误拦）；判据②同时覆盖「节点整体完成
         （含出口自动通过）」的进展。判据保守方向：不评条件，未命中分支上的
-        人工进展同样拦截。行业零实现，flowork 首创（delta-industry-benchmark §2）。
+        人工进展同样拦截。行业零实现，flowork 首创。
         """
         from sqlalchemy import select
 

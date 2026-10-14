@@ -28,7 +28,7 @@ def _now() -> datetime:
 class ProcessDefinitionRow(Base):
     """流程定义（发布后不可变：content 为模板 JSON 快照）。
 
-    v2（spec §6/§14）：版本＝code+major+revision（唯一）；draft 取消——deploy 即
+    v2：版本＝code+major+revision（唯一）；draft 取消——deploy 即
     published；retired 不接新实例。breaking＝该版本是否含破坏性变更（判定依据见
     definitions/versioning.py）。content_hash 供幂等去重。
     """
@@ -62,7 +62,7 @@ class ProcessInstanceRow(Base):
     definition_revision: Mapped[int] = mapped_column(Integer, default=1)
     definition_snapshot: Mapped[str] = mapped_column(Text)  # 发起时的模板 JSON（不可变）
     business_key: Mapped[str | None] = mapped_column(String(200), nullable=True)
-    # v2（spec §14/§11）：启动幂等键——有值时与 definition_code 联合唯一
+    # 启动幂等键——有值时与 definition_code 联合唯一
     # （NULL 不参与唯一性，SQLite/PG 多 NULL 共存）
     idempotency_key: Mapped[str | None] = mapped_column(String(200), nullable=True)
     state: Mapped[str] = mapped_column(String(16), default="running")
@@ -74,8 +74,8 @@ class ProcessInstanceRow(Base):
     started_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    paused_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)  # spec §7
-    # （spec §7）：实例时限——发起时物化到期时刻；mark 策略打标（流程继续跑）
+    paused_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # 实例时限——发起时物化到期时刻；mark 策略打标（流程继续跑）
     deadline_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     deadline_marked: Mapped[bool] = mapped_column(Boolean, default=False)
     # 模拟实例（试跑）——service_task 恒 stub、不建任务/传阅/Job、
@@ -140,7 +140,7 @@ class TaskRow(Base):
     # 审批卡片/AI 预审共用载荷
     context_payload: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     root_task_id: Mapped[str | None] = mapped_column(String(36), nullable=True)  # 加签链(M3)
-    # （spec §3.4）：priority 0–100（小→大＝低→高）默认 50；due_at＝首条
+    # priority 0–100（小→大＝低→高）默认 50；due_at＝首条
     # deadline 到期时刻物化（due_before 过滤与排序用）
     priority: Mapped[int] = mapped_column(Integer, default=50)
     due_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -172,7 +172,7 @@ class TaskHistoryRow(Base):
     idempotency_key: Mapped[str | None] = mapped_column(String(100), nullable=True)
     cost_seconds: Mapped[float] = mapped_column(Float, default=0.0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
-    # （spec §5.6）：身份快照——完成事务内经目录端口原样定格（JSON 袋 4KB 上限，内核不解析）
+    # 身份快照——完成事务内经目录端口原样定格（JSON 袋 4KB 上限，内核不解析）
     actor_context: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
 
 
@@ -252,7 +252,7 @@ class JobRow(Base):
     payload: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     result_payload: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     last_error: Mapped[str] = mapped_column(Text, default="")
-    # v2（spec §5.2/§14）：外部 worker 领取-汇报——租约期内他人不可领；到期可重领
+    # 外部 worker 领取-汇报——租约期内他人不可领；到期可重领
     worker_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     lease_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     next_retry_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -271,9 +271,7 @@ class IncidentRow(Base):
     message: Mapped[str] = mapped_column(Text)
     error_class: Mapped[str] = mapped_column(String(100), default="")
     state: Mapped[str] = mapped_column(String(16), default="open")  # open/resolved
-    resolution: Mapped[str] = mapped_column(
-        Text, default=""
-    )  # resume/cancel/retry/skip/fail（spec §8）
+    resolution: Mapped[str] = mapped_column(Text, default="")  # resume/cancel/retry/skip/fail
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 

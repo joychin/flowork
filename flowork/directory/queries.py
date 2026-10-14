@@ -1,6 +1,6 @@
 """目录读面与缓存：OrgDirectoryLike 查询方法 + 进程内读缓存。
 
-缓存策略（engine-v1 01 §2）：目录变更频率极低——读全走 ``_read``，任何写操作
+缓存策略：目录变更频率极低——读全走 ``_read``，任何写操作
 经 ``_write_done`` 全清（写走短事务，全清粒度足够；进程内共享，多副本的副本
 间失效随开放面批次再议）。``delegation_of`` 窗口随时间滑动，不缓存（见
 delegation.py）。本 Mixin 排在组合首位，``users_with_role`` 显式经
@@ -44,7 +44,7 @@ class ReadDirectoryMixin(RoleDirectoryMixin):
     # —— 读：OrgDirectoryLike 面 ——
 
     def is_member(self, user: str, group: str) -> bool:
-        """人→组（spec §9）：role: 按范围化角色、org: 按直属部门；裸名视同角色。"""
+        """人→组：role: 按范围化角色、org: 按直属部门；裸名视同角色。"""
 
         def produce() -> bool:
             kind, name = split_group(group)
@@ -70,7 +70,7 @@ class ReadDirectoryMixin(RoleDirectoryMixin):
         return list(self._read(("subjects_in", group), produce))
 
     def snapshot(self, subject: str) -> dict[str, object]:
-        """身份快照（spec §5.6）：宿主审计策略待接，先返回部门事实。"""
+        """身份快照：宿主审计策略待接，先返回部门事实。"""
 
         def produce() -> dict[str, object]:
             department = self.department_of(subject.removeprefix("user:"))
@@ -88,7 +88,7 @@ class ReadDirectoryMixin(RoleDirectoryMixin):
 
     @property
     def admins(self) -> list[str]:
-        """平台角色 admin 持有人（02-权限模型 §3；兼 to_admins 兜底名单）。"""
+        """平台角色 admin 持有人（兼 to_admins 兜底名单）。"""
         return self.users_with_role("admin")
 
     def user_exists(self, user_id: str) -> bool:
@@ -100,12 +100,12 @@ class ReadDirectoryMixin(RoleDirectoryMixin):
         return self._read(("user_exists", user_id), produce)
 
     def manager_of(self, user_id: str) -> str | None:
-        """转上级（spec §9 丰富面）：人 → 主属部门主管；`org:` → 部门负责人；
+        """转上级（丰富面）：人 → 主属部门主管；`org:` → 部门负责人；
         查无返回 None。
 
         **单跳不递归**——「主管的主管」由宿主在自己的词汇里组合，不进本方法
         （函数的语义只回答「这个主体的问责上级是谁」）。主体一律裸 id
-        （spec §5.4；`agent:` 写法已删、AI 问责链归宿主目录）。
+        （`agent:` 写法已删、AI 问责链归宿主目录）。
         """
         if user_id.startswith("user:"):
             user_id = user_id[5:]

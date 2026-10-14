@@ -1,4 +1,4 @@
-"""任务超时排程：按节点 deadlines 列表创建 timer Job（spec §5.1）。
+"""任务超时排程：按节点 deadlines 列表创建 timer Job。
 
 首条到期时刻物化进 task.due_at（due_before 过滤与排序）；
 auto_approve/auto_reject 终结等待后剩余 Job 因任务已完自然跳过。

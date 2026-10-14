@@ -1,4 +1,4 @@
-"""等待节点设计时规则（validator 编排件的规则组六，spec §7.2 / wait-node.md §6）。
+"""等待节点设计时规则（validator 编排件的规则组六）。
 
 从 validator_rules.py 拆出（单文件 ≤300 行红线；code-review 2026-10 清账批
 达 324 行）。入口符号经 validator_rules 原位再导出，编排方 import 路径不变。
@@ -20,7 +20,7 @@ IssueFn = Callable[..., None]
 
 
 def check_wait_nodes(definition: ProcessDefinition, error: IssueFn) -> None:
-    """等待节点结构规则（spec §7.2 / wait-node.md §6）。"""
+    """等待节点结构规则。"""
     from flowork.expr.cel import FormulaError, collect_references
 
     nodes = {n.code: n for n in definition.nodes}
@@ -35,7 +35,7 @@ def check_wait_nodes(definition: ProcessDefinition, error: IssueFn) -> None:
         if "wait" in idents:
             error(
                 "condition.wait_source",
-                "wait.* 仅等待节点出边条件可用（spec §7.2）",
+                "wait.* 仅等待节点出边条件可用",
                 flow=flow.flow_code(),
             )
     from flowork.definitions.wait_node import wait_fields

@@ -1,13 +1,13 @@
-"""节点事实（expression-dataface §2.2/§2.3/§3）：判断面「现查派生」的只读数据。
+"""节点事实：判断面「现查派生」的只读数据。
 
-两个判断面词汇的数据源：``prev_task``（上一站＝实例内最近一条**表决行**，
-spec §5.1 口径——转办取被转办人的 agree、协办/咨询/自动通过不入列，
+两个判断面词汇的数据源：``prev_task``（上一站＝实例内最近一条**表决行**——
+转办取被转办人的 agree、协办/咨询/自动通过不入列，
 目标场景＝「导致本次流转的任务」）与 ``node("code")``（点名查任意节点的聚合
 事实：轮次/最近轮办理人与耗时/最近轮会签票数，最近轮人物同表决行口径）。
 同一份底层数据（wf_task_history + wf_token）日后也服务查询面（REST/Console），
 口径天然一致。
 
-查无语义（§3）：
+查无语义：
 - ``prev_task`` 查无＝不注入（条件位经 references_identifier 预检按不满足跳过、
   取人位贡献空）；
 - ``node()`` 查无＝**固定形状**（人物字段 null、计数 0）——``==`` 比较自动不满足、
@@ -36,7 +36,7 @@ __all__ = [
     "with_prev_task",
 ]
 
-# 表决行口径（spec §5.1）：审批类 + agree/reject——协办收口行与会签
+# 表决行口径：审批类 + agree/reject——协办收口行与会签
 # 出口的 auto_pass 行落库更晚，此前按「最近 live 行」取会读错人、改路由。
 from flowork.tasks.vote import vote_criteria
 
@@ -85,7 +85,7 @@ def with_prev_task(
 
 
 def instance_facts(instance: Any) -> dict[str, Any]:
-    """实例全局事实（expression-dataface §2）：id / started_at / business_key。
+    """实例全局事实：id / started_at / business_key。
 
     全位点注入的全局词（同 initiator/now）；started_at 保持 datetime
     （naive UTC，与 now 同口径，可直接做时长运算）。
@@ -133,7 +133,7 @@ def node_lookup(
 ) -> Callable[[str], Any]:
     """CEL 函数 ``node("code")`` 的工厂（引擎注入，非宿主词汇）。
 
-    node_calls 非空时回填取值快照（路由审计 §6：重放解释要钉住 node() 读到的值）。
+    node_calls 非空时回填取值快照（重放解释要钉住 node() 读到的值）。
     """
 
     def _node(activity_code: str) -> Any:

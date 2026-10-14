@@ -1,4 +1,4 @@
-"""REST /v2 系统面：messages / jobs（含长轮询）/ incidents / events（spec §12）。"""
+"""REST /v2 系统面：messages / jobs（含长轮询）/ incidents / events。"""
 
 from __future__ import annotations
 
@@ -71,7 +71,7 @@ def register_system_routes(app: FastAPI, engine: ProcessEngine) -> None:
 
     @app.post("/v2/messages/search")
     def messages_search(body: dict[str, Any]) -> dict[str, Any]:
-        """消息检索（spec §12 搜索族补齐）：filter={name?,
+        """消息检索：filter={name?,
         correlation_key?（前缀）, kind: buffer|subscription?, state?（订阅源）}。"""
         flt = body.get("filter") or {}
         offset, limit = page_request(body.get("page"))

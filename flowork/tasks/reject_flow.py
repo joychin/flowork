@@ -106,7 +106,7 @@ class RejectMixin:
         if instance.state == InstanceState.PAUSED.value:
             raise TaskNotAvailableError("实例已暂停，恢复后才可驳回")
         if variables:
-            # input 契约边界（spec §3.2）：驳回携带的 variables 同为任务提交侧输出
+            # input 契约边界：驳回携带的 variables 同为任务提交侧输出
             from flowork.definitions.contract import input_schema_of, validate_input_contract
 
             schema = input_schema_of(instance)
@@ -120,7 +120,7 @@ class RejectMixin:
         assert token is not None
         token.disapprove_count += 1
         kernel.archive_task(ctx.session, task, outcome="reject", comment=comment, actor=actor)
-        self._cancel_assist_tasks(ctx, task, actor)  # 协办随主任务终态同事务收口（spec §5.1）
+        self._cancel_assist_tasks(ctx, task, actor)  # 协办随主任务终态同事务收口
         kernel.record_event(
             DomainEvent.TASK_REJECTED,
             {
@@ -217,7 +217,7 @@ class RejectMixin:
         )
         from sqlalchemy import select
 
-        # 复活圈定「最近一轮」（spec §5.1）：目标节点最近一个已完结令牌
+        # 复活圈定「最近一轮」：目标节点最近一个已完结令牌
         # （token_no 最大、非 unfinished）名下的表决行办理人（口径：
         # 转办取被转办人、协办/咨询/自动通过不入列）——多轮驳回名单不随轮次膨胀；
         # 与主流「重入按定义重新解析」的刻意差异＝复活原办理人（国内审批语义）。

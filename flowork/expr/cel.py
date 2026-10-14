@@ -1,6 +1,6 @@
-"""CEL 公式求值（spec §4.3/§4.1）：全表达式位的运行时实现。
+"""CEL 公式求值：全表达式位的运行时实现。
 
-cel-python（模块名 ``celpy``）执行，决策记录（p0-1-cel-poc.md）的落地缓解四件套：
+cel-python（模块名 ``celpy``）执行的落地缓解四件套：
 **2KB 限长 / 二元运算链 ≤256 项 / 变量序列化 ≤1MB / 全异常归一 FormulaError**
 （celpy 无进程内硬超时——非图灵完备 + 三护栏间接约束，升级路径为子进程隔离）。
 两个入口：``evaluate_formula``（条件位，bool 收敛）与 ``evaluate_formula_value``
@@ -259,7 +259,7 @@ def collect_references(formula: str) -> tuple[set[str], dict[str, set[int]]]:
 def references_identifier(formula: str, name: str) -> bool:
     """公式是否引用标识符 ``name``（静态；编译错返回 False，交由求值路径报错）。
 
-    判断面查无预检用（expression-dataface §3）：如 prev_task 未注入而被引用，
+    判断面查无预检用：如 prev_task 未注入而被引用，
     条件位按不满足跳过、取人位贡献空——温和处理不产生技术故障。
     """
     try:

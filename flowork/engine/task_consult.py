@@ -1,11 +1,11 @@
 """咨询（consult）：前加签的「挂起—拍板」两轮形态。
 
-语义（spec §5.1，行业修正版——不抄 Camunda 7 的 assignee 轮转）：
+语义（行业修正版——不抄 Camunda 7 的 assignee 轮转）：
 - 「先收集意见、原办理人最后拍板」＝派生 ``task_type=consult`` 的**意见任务**
   （独立工作项：独立记录/意见/审计；不建 deadline job、不进会签计数）；
 - **意见不占票**：agree/reject 意见落历史（type=consult 区分），不改
   approve/disapprove 计数、不触发出口——「不占票的加签」走 consult，
-  「占票的加签」走 add_countersigner，两路分流（spec 动作票数块）；
+  「占票的加签」走 add_countersigner，两路分流；
 - **主任务软挂起**：同链存在未完 consult → 主任务（approval 类）不可操作
   （``TaskNotAvailableError：咨询中``），守卫挂 ``_claim_task_action`` 咽喉，
   不引入新任务状态——意见全部交回即自动解禁（复活零成本）；

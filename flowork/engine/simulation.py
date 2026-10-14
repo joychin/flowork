@@ -1,4 +1,4 @@
-"""模拟试跑报告（simulation-dryrun-design.md 第二层）。
+"""模拟试跑报告。
 
 数据源全部现查（facts 同款模式，不预存）：令牌时间线＝wf_token、路由轨迹＝
 wf_route_decision（模拟跑的每一步边判定天然在表里）、stub 清单＝

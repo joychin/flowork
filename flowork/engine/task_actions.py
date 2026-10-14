@@ -145,7 +145,7 @@ class TaskOpsMixin:
     def _assert_operable(
         self, ctx: CommandContext, task: TaskRow, *, action: str | None = None
     ) -> None:
-        """统一守卫：实例态（spec §7）+ 动作表 + 版本抢占复验。
+        """统一守卫：实例态 + 动作表 + 版本抢占复验。
 
         action 传入时按 (状态×类型×认领态) 动作表判定（tasks/actions.py）；不传
         保持仅实例态守卫（withdraw 等特殊路径自带专属守卫）。

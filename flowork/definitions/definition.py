@@ -34,7 +34,7 @@ __all__ = [
 
 
 class DefinitionStatus(StrEnum):
-    """v2（spec §6.2）：draft 取消——deploy 即 publish；retired 不接新实例。"""
+    """draft 取消——deploy 即 publish；retired 不接新实例。"""
 
     PUBLISHED = "published"
     RETIRED = "retired"
@@ -64,13 +64,13 @@ class ProcessVariable(BaseModel):
     label: str = ""
     # dry-run 取样默认值；类型与 type 一致（list 为任意 JSON 数组）
     sample: Any = None
-    # 可检索（spec §14）：仅 string/number/boolean 可标（校验器把关），
+    # 可检索：仅 string/number/boolean 可标（校验器把关），
     # True 时变量值同步进 wf_variable_index
     searchable: bool = False
 
 
 class DeadlineStrategy(StrEnum):
-    """实例时限策略（spec §7）：Temporal Workflow Execution Timeout 同款语义。"""
+    """实例时限策略：Temporal Workflow Execution Timeout 同款语义。"""
 
     MARK = "mark"
     CANCEL = "cancel"
@@ -87,7 +87,7 @@ class InstanceDeadline(BaseModel):
 
 
 class StartMessageDecl(BaseModel):
-    """消息启动声明（spec §7.1）：发布该名消息即发起实例。
+    """消息启动声明：发布该名消息即发起实例。
 
     表达式均求值于**消息上下文**（``payload.*`` + ``now``，实例尚不存在）；
     correlation_key/start_user/business_key 结果须 string。启动订阅＝定义派生：
@@ -118,18 +118,18 @@ class ProcessDefinition(BaseModel):
 
     code: str
     name: str = ""
-    # v2（spec §6）：版本＝code + major + revision；同 code 可对老 major 续发
+    # 版本＝code + major + revision；同 code 可对老 major 续发
     # revision（维护分支）。deploy 时由版本判定覆写，模型默认值仅占位。
     major: int = 1
     revision: int = 1
     status: DefinitionStatus = DefinitionStatus.PUBLISHED
-    # v2（spec §3.2）：input 契约（JSON Schema 2020-12）。None＝无契约；
+    # input 契约（JSON Schema 2020-12）。None＝无契约；
     # 有值时发起/任务提交/节点输出三处边界按 schema 校验。
     input: dict[str, Any] | None = None
-    # （spec §7）：实例级时限——发起时按 after_minutes 物化 deadline_at，
+    # 实例级时限——发起时按 after_minutes 物化 deadline_at，
     # 到点 mark（打标继续跑）/cancel（作废）/terminate（终止）
     deadline: InstanceDeadline | None = None
-    # v2（spec §7.1）：消息启动声明——启动订阅=定义派生（published 即生效）
+    # 消息启动声明——启动订阅=定义派生（published 即生效）
     start_on_message: list[StartMessageDecl] = Field(default_factory=list)
     # SerializeAsAny：节点按实例类型（Spec 子类）序列化，否则子类字段会在 dump 时丢失
     nodes: list[SerializeAsAny[FlowNode]] = Field(default_factory=list)
@@ -166,9 +166,9 @@ def _resolve_node(raw: dict[str, Any], registry: NodeRegistry) -> FlowNode:
 def load_definition(data: dict[str, Any] | str, registry: NodeRegistry) -> ProcessDefinition:
     """从 dict 或 JSON 字符串加载定义：节点经注册表解析为对应 Spec 类。
 
-    旧版兼容（spec §6.2 迁移）：``version`` 字段忽略；``status: draft`` 视同
-    published（draft 已取消，编辑态在 git/设计器本地）。连线条件单轨 CEL
-    （spec §4.1）——不做旧格式翻译（系统早期零兼容，存量已迁移）。
+    旧版兼容：``version`` 字段忽略；``status: draft`` 视同
+    published（draft 已取消，编辑态在 git/设计器本地）。连线条件单轨 CEL——
+    不做旧格式翻译（系统早期零兼容，存量已迁移）。
     """
     if isinstance(data, str):
         try:

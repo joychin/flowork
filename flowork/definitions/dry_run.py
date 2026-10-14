@@ -80,7 +80,7 @@ def simulate_route(
 
     variables = dict(variables)
     variables.setdefault("initiator", "u_initiator")  # 模拟面占位（见 docstring）
-    variables.setdefault("now", utc_now())  # 与运行时同一注入（expression-dataface §2.1）
+    variables.setdefault("now", utc_now())  # 与运行时同一注入
     variables.setdefault(
         "instance", {"id": "i_preview", "started_at": utc_now(), "business_key": None}
     )  # 模拟面无实例：占位形状（与运行时同一注入面）

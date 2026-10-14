@@ -34,7 +34,7 @@ IssueFn = Callable[..., None]
 RESERVED_IDENTIFIERS = reserved_identifiers()
 
 # 各保留词的可用位点（expr.catalog 表驱动）：task.* 仅 reassign/exit 位提供
-# （spec C.4 快照注入位）；initiator/now 全位点。
+# （快照注入位）；initiator/now 全位点。
 RESERVED_POSITIONS = {entry.name: entry.positions for entry in identifier_entries()}
 
 
@@ -51,8 +51,8 @@ def check_variable_references(
     - 公式引用未声明变量 → ERROR（静态检查，K8s CRD 体验）——图纸零声明时
       同样检查：引用非保留标识符即 unknown ERROR（此前的「空声明整体跳过」
       让无 variables 段的图纸把引用错误全部推迟到运行期）；
-      保留词按目录位点放行——``task.*`` 仅超时改派/会签出口位（快照注入位，
-      spec C.4），其余位点引用即错；initiator/now 全位点；
+      保留词按目录位点放行——``task.*`` 仅超时改派/会签出口位（快照注入位），
+      其余位点引用即错；initiator/now 全位点；
     - 公式调用未注册函数：有注册表 → ERROR（含参数个数）；无注册表 → WARNING；
     - 取人/改派位根调用 returns 非 one_user/users → ERROR（谓词误用提前拦）。
     """
@@ -85,7 +85,7 @@ def check_variable_references(
         root_call,
     )
 
-    # 取人位与候选槽的根调用 returns 白名单不同（spec §5.5 槽位表）：
+    # 取人位与候选槽的根调用 returns 白名单不同（槽位表）：
     # assignee/assignees/recipients/reassign 只吃 one_user/users；候选槽额外接受
     # groups/mixed（「混合集自动拆槽」是规范行为，不是误用）。
     subject_returns = {
@@ -93,7 +93,7 @@ def check_variable_references(
         # reassign/escalate fire 时要求单个非空人（jobs/strategies._execute_handover）——
         # 设计期放行 users 曾必炸
         "reassign": frozenset({"one_user"}),
-        # 候选槽（spec §5.5）：多接受组与混合集——「混合集自动拆槽」是规范行为
+        # 候选槽：多接受组与混合集——「混合集自动拆槽」是规范行为
         "candidates": frozenset({"one_user", "users", "groups", "mixed"}),
     }
     for kind, where, expression, _node_code in iter_expression_positions(definition):
@@ -119,7 +119,7 @@ def check_variable_references(
                 error(
                     f"{rule}.{name}_unavailable",
                     f"公式引用 {name}.*：该标识符仅 {'/'.join(sorted(RESERVED_POSITIONS[name]))}"
-                    " 位提供（expression-dataface §2）",
+                    " 位提供",
                     flow=where,
                 )
                 continue

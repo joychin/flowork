@@ -1,4 +1,4 @@
-"""定义生命周期（spec §6.5）：retire/purge/list/definition_drift。
+"""定义生命周期：retire/purge/list/definition_drift。
 
 RepositoryService 经 mixin 组合（engine.repository 入口不变）。
 """
@@ -23,7 +23,7 @@ class DefinitionLifecycleMixin:
 
     _engine: ProcessEngine
 
-    # —— 生命周期（spec §6.5）——
+    # —— 生命周期——
 
     def retire(self, code: str, actor: str = "admin", reason: str = "") -> int:
         """retire：该 code 全部 published 行转 retired（在跑跑完，行保留）。"""
@@ -60,7 +60,7 @@ class DefinitionLifecycleMixin:
             from flowork.persistence.orm import ProcessInstanceRow
 
             if not force:
-                raise ValueError("purge 需要 --force（物理删除不可逆，spec §6.5）")
+                raise ValueError("purge 需要 --force（物理删除不可逆）")
             referenced = (
                 ctx.session.scalars(
                     select(ProcessInstanceRow.id)
@@ -139,7 +139,7 @@ class DefinitionLifecycleMixin:
         return self._engine.execute(_command)
 
     def definition_drift(self, directory: str | Path) -> dict[str, list[dict[str, Any]]]:
-        """git 目录与库对账（spec §6.5）：未部署/库多余/库落后 三张清单。"""
+        """git 目录与库对账：未部署/库多余/库落后 三张清单。"""
         import json as _json
         from pathlib import Path as _Path
 

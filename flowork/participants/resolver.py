@@ -1,4 +1,4 @@
-"""参与者解析管线（单轨 CEL，spec §4.2 位点统一）。
+"""参与者解析管线（单轨 CEL，位点统一）。
 
 管线：手动选人覆盖 → CEL 公式求值 → 委托替换 → 去重策略（自动通过）
 → 无参与者兜底。产出 ``ParticipantResolution(todo, skipped)``：
@@ -6,8 +6,8 @@ skipped 为策略命中者（记 auto_pass 历史并计入同意数）。
 
 assignee/assignees 每项为 **CEL 表达式**：字面人写字符串字面量 ``'u_a'``，
 函数/变量引用如 ``manager_of(initiator)``、``users_with_role("finance")``。
-查无传播（spec §5.5）：表达式求值为 null/空列表时贡献空，不报错；
-求值错（FormulaError）按错误二分包 EngineExecutionError（挂起+故障单，§8）。
+查无传播：表达式求值为 null/空列表时贡献空，不报错；
+求值错（FormulaError）按错误二分包 EngineExecutionError（挂起+故障单）。
 """
 
 from __future__ import annotations
@@ -44,7 +44,7 @@ class ParticipantResolution:
     """解析结果：todo 待办人；skipped 策略命中（自动通过）人；candidates 候选槽求值结果。
 
     candidates 非空＝节点走候选认领制（生成 assignee 空的待办 + 候选关联）；
-    与 todo/skipped 互斥（指派优先于候选，spec §5.5）。
+    与 todo/skipped 互斥（指派优先于候选）。
     """
 
     todo: list[str] = field(default_factory=list)
@@ -85,7 +85,7 @@ def resolve_subjects(
     context = expression_context(variables, start_user=start_user, instance=instance, now=now)
     for expression in expressions:
         if "prev_task" not in context and references_identifier(expression, "prev_task"):
-            continue  # 上一站查无：贡献空（expression-dataface §3，对齐 §5.5）
+            continue  # 上一站查无：贡献空
         try:
             result = evaluate_formula_value(expression, context, functions=functions)
         except FormulaError as exc:
@@ -93,7 +93,7 @@ def resolve_subjects(
                 f"{what}公式求值失败（{where}{expression!r}）：{exc}"
             ) from exc
         if result is None:
-            continue  # 查无传播（spec §5.5）
+            continue  # 查无传播
         if isinstance(result, str):
             pool.append(str(result))
         elif isinstance(result, list):
@@ -143,10 +143,10 @@ def resolve_expression_list(
 ) -> list[str]:
     """一组 CEL 取人表达式求值 → 人/组引用列表（保序去重）。
 
-    取人位判断面接线（expression-dataface §2.2/§2.3）：变量带 prev_task 快照、
+    取人位判断面接线：变量带 prev_task 快照、
     函数表并入 node()——InMemoryNodeContext（无 session）裸跑不受影响。
     取人位（assignee/assignees）与候选槽（candidate_users/candidate_groups）
-    共用本装配——spec §5.5 位点表把两者同列为「取人」位，两套求值面必然漂移。
+    共用本装配——位点表把两者同列为「取人」位，两套求值面必然漂移。
     """
     from flowork.tasks.facts import attach_node, instance_facts, with_prev_task
 
@@ -168,7 +168,7 @@ def resolve_candidate_subjects(
     spec: UserTaskSpec,
     functions: Functions | None = None,
 ) -> list[str]:
-    """候选槽求值（spec §5.5/§16）：candidate_users ∪ candidate_groups 逐表达式求值。
+    """候选槽求值：candidate_users ∪ candidate_groups 逐表达式求值。
 
     与取人位同一求值面（同一装配、同一错误二分、同一查无传播）——差异只在
     调用位点与语义：结果物化为**候选关联**（保留组引用不展开、认领时再展开），
@@ -247,7 +247,7 @@ def fallback_when_empty(
 
 
 def _handlers_of(ctx: RuntimeNodeContext, activity_code: str) -> set[str]:
-    """上一站**表决过**的人（表决行口径，spec §5.1：协办/咨询/
+    """上一站**表决过**的人（表决行口径：协办/咨询/
     转办/自动通过都不算——跳过＝计同意票，成员资格必须严格）。"""
     from sqlalchemy import select
 

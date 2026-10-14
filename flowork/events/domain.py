@@ -29,24 +29,24 @@ class DomainEvent(StrEnum):
     TASK_TRANSFERRED = "task_transferred"
     INCIDENT_RAISED = "incident_raised"
     JOB_DEAD_LETTERED = "job_dead_lettered"
-    # —— v2 定义生命周期（spec §6.4；幂等部署不发 definition_deployed）——
+    # —— v2 定义生命周期（幂等部署不发 definition_deployed）——
     DEFINITION_DEPLOYED = "definition_deployed"
     DEFINITION_RETIRED = "definition_retired"
     DEFINITION_PURGED = "definition_purged"
-    # —— v2 消息/信号（spec §7）——
+    # —— v2 消息/信号——
     MESSAGE_RECEIVED = "message_received"
     MESSAGE_CORRELATED = "message_correlated"
-    # —— v2 实例生命周期（spec §7/§10）——
+    # —— v2 实例生命周期——
     PROCESS_PAUSED = "process_paused"
     PROCESS_RESUMED = "process_resumed"
     PROCESS_TERMINATED = "process_terminated"
     # 挂起/恢复对称：挂起侧此前只有
     # incident_raised（故障单层），实例生命周期层无冻结/解冻信号
     PROCESS_SUSPENDED = "process_suspended"
-    INSTANCE_DEADLINE_REACHED = "instance_deadline_reached"  # （spec §10）
-    TIMER_FIRED = "timer_fired"  # spec §7 定时器行承诺事件；等待节点到时首发
+    INSTANCE_DEADLINE_REACHED = "instance_deadline_reached"
+    TIMER_FIRED = "timer_fired"  # 等待节点到时首发
     TASK_ESCALATED = "task_escalated"
-    # —— 变量 I/O（spec §10：仅外部更新命令发射；引擎内部写变量不发——防刷屏）——
+    # —— 变量 I/O（仅外部更新命令发射；引擎内部写变量不发——防刷屏）——
     VARIABLES_UPDATED = "variables_updated"
     # —— 收编：此前以裸字符串实发、不在本枚举的 12 个事件 +
     # incident_resolved 补发。订阅方按 DomainEvent 编程自此不再漏收。
@@ -59,7 +59,7 @@ class DomainEvent(StrEnum):
     TASK_ASSIST_CREATED = "task_assist_created"
     TASK_ASSIST_CANCELLED = "task_assist_cancelled"
     TASK_CONSULT_CREATED = "task_consult_created"
-    TASK_CONSULT_FINISHED = "task_consult_finished"  # spec §5.1 承诺
+    TASK_CONSULT_FINISHED = "task_consult_finished"
     TASK_COUNTERSIGNER_ADDED = "task_countersigner_added"
     TASK_WITHDRAWN = "task_withdrawn"
     TIMEOUT_WARNED = "timeout_warned"
@@ -73,7 +73,7 @@ class DomainEvent(StrEnum):
     NODE_CANCELLED_BY_ADMIN = "node_cancelled_by_admin"
     TOKEN_MOVED_BY_ADMIN = "token_moved_by_admin"
     PROCESS_FINISHED_BY_ADMIN = "process_finished_by_admin"
-    INCIDENT_RESOLVED = "incident_resolved"  # spec §10 承诺
+    INCIDENT_RESOLVED = "incident_resolved"
     # —— 取消族/补齐信号：cancel_token 统一咽喉（逐任务发 task_cancelled、
     # 节点级 node_cancelled 带 by=原因）；auto_pass 四处归档发 task_auto_passed；
     # 认领/协办完成对称补齐。node_failed 已删（全仓零发射，节点故障的真实

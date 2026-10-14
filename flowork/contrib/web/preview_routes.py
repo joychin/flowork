@@ -87,7 +87,7 @@ def register_preview_routes(app: Any, engine: Any) -> None:
 
     @app.get("/api/catalog")
     def catalog() -> dict[str, Any]:
-        """表达式词汇目录（expression-dataface §5）：保留词 + 引擎注入函数。
+        """表达式词汇目录：保留词 + 引擎注入函数。
 
         每条带类型/中文标签/可用位点/备注；前端公式编辑器按位点过滤后点选插入，
         与 validator 静态检查同一份权威（expr/catalog）。宿主自定义函数（SPI 注册）

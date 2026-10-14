@@ -1,4 +1,4 @@
-"""审批委托（engine-v1 01 §5）：org_delegation 表 + 查询面。
+"""审批委托：org_delegation 表 + 查询面。
 
 语义：``delegate_from`` 在 ``[since, until]`` 窗口内的待办转给 ``delegate_to``
 （resolver 的 ``resolve_with_delegation`` 单跳替换，不递归）；窗口端点 None=

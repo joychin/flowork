@@ -9,7 +9,7 @@ validator_conditions（合法性）与 validator_references（引用/函数对�
 既有 import 路径不变。
 
 **候选槽**：`candidate_users` / `candidate_groups` 与取人位
-同列（spec §5.5 槽位表），kind=`candidates`——与 `subjects` 只差**接受的返回类型**
+同列（槽位表），kind=`candidates`——与 `subjects` 只差**接受的返回类型**
 （多接受 groups/mixed，见 validator_references 的 returns 对位）。
 """
 

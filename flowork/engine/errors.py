@@ -1,6 +1,6 @@
 """引擎执行错误族与错误归因。
 
-全部为「技术故障」语义（spec §8 错误二分）：命令管线捕获后回滚整笔命令、
+全部为「技术故障」语义（错误二分）：命令管线捕获后回滚整笔命令、
 独立事务记 Incident 并挂起实例。兼容面：kernel 模块对错误族显式再导出
 （``__all__``），既有 ``from flowork.engine.kernel import EngineExecutionError``
 等函数级导入不受影响。

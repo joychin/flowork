@@ -1,4 +1,4 @@
-"""outbox 消费器（kernel-v2 spec §10）：至少一次分发＋按 id 幂等。
+"""outbox 消费器：至少一次分发＋按 id 幂等。
 
 - ``OutboxConsumer.poll()``：取未送达行（``ORDER BY (occurred_at, id)``＝事件
   全序，id 为可排序串，见 ProcessEngine.next_event_id）→ 包装 CloudEvents

@@ -1,4 +1,4 @@
-"""等待节点定义（spec §7.2，wait-node.md v3）：等消息 / 等时长 / 两者竞速。
+"""等待节点定义：等消息 / 等时长 / 两者竞速。
 
 从 builtin.py 拆出独立模块（单文件 ≤300 行红线）。三模式合一的行业先例是
 Conductor WAIT 任务（定长延迟 / 等到某时刻 / 等外部信号）；等待与关联对标
@@ -56,7 +56,7 @@ class WaitSpec(FlowNode):
 
     kind: Literal["wait"] = KIND_WAIT
     message: WaitMessage | None = None
-    # 载荷→变量映射（spec §7 原文「与人工任务完成的写入路径同一条」）：
+    # 载荷→变量映射（与人工任务完成的写入路径同一条）：
     # 右侧表达式于消息上下文（payload.* + now）求值，缺键得 None；
     # 未声明 → 全量合并兜底（Zeebe 默认同款）。
     output_mappings: dict[str, str] = Field(default_factory=dict)

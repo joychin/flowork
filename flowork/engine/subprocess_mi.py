@@ -1,4 +1,4 @@
-"""多实例子流程（multi-instance-call-design.md——Zeebe 契约）。
+"""多实例子流程（Zeebe 契约）。
 
 共享件经延迟导入
 （``_mapping_values``/``_children_of``）防环。契约三件套：

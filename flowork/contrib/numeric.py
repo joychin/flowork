@@ -2,8 +2,8 @@
 
 celpy 0.5.0 没有全局 ``abs/max/min/split/sort/sum``（只有列表方法 ``.min()``
 ``.reduce()``）——审批域条件的四类主战场（标量/字符串/时间差/集合谓词）之外
-的偶发散件由本包补齐。内核保持零内置（「内核只保语法、词汇归宿主」哲学，
-spec §9），宿主一行挂上::
+的偶发散件由本包补齐。内核保持零内置（「内核只保语法、词汇归宿主」哲学），
+宿主一行挂上::
 
     from flowork import contrib
     config = EngineConfig(expression_functions=contrib.numeric_vocabulary())
@@ -32,7 +32,7 @@ from flowork.contrib._registry import FixedFunctions
 
 __all__ = ["numeric_vocabulary"]
 
-# 兼容声明（词汇包；openface-plugin-design §4）：依赖的门面契约版本；
+# 兼容声明（词汇包）：依赖的门面契约版本；
 # tests/test_plugin_compat.py 断言 ≤ flowork.api.API_VERSION。
 REQUIRES_FLOWORK_API = "1"
 

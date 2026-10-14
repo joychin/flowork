@@ -30,7 +30,7 @@ class TaskRecordsMixin:
     config: EngineConfig
     engine: Any
 
-    MAX_ACTOR_CONTEXT_BYTES = 4096  # spec §5.6：JSON 袋上限，超限拒收
+    MAX_ACTOR_CONTEXT_BYTES = 4096  # JSON 袋上限，超限拒收
 
     def record_event(
         self, name: DomainEvent | str, payload: dict[str, Any], instance_id: str | None
@@ -109,11 +109,11 @@ class TaskRecordsMixin:
     def resolve_participants(self, ctx: RuntimeNodeContext, spec: UserTaskSpec) -> Any:
         """参与者解析入口：返回 ParticipantResolution（todo/skipped/candidates）。
 
-        单轨 CEL（spec §4.2）：函数表自 EngineConfig.expression_functions 拍平；
+        单轨 CEL：函数表自 EngineConfig.expression_functions 拍平；
         有组织目录叠加委托替换与 to_admins 兜底，无目录走同一条 CEL 求值路径。
         出口统一守规模护栏（max_participants）：手动名单与表达式名单同守。
 
-        三条判定（spec §5.5）：指派优先于候选（解析出人即直派）；声明了候选槽就
+        三条判定：指派优先于候选（解析出人即直派）；声明了候选槽就
         不走兜底（解析不出具体办理人是正常态，改走候选槽求值）；候选求值也空才回
         兜底。第四条：单人节点多人＝错误——未声明 multi_instance 而
         解析出多名 todo 拒绝宽松并行，多人必须显式声明会签。
@@ -168,7 +168,7 @@ class TaskRecordsMixin:
         return resolution  # 空结果：行为层报「没有可用参与者」
 
     def handled_assignees(self, session: Session, token_id: str) -> list[str]:
-        """令牌下轮次已消耗的人（轮次消耗行口径，spec §5.1）。
+        """令牌下轮次已消耗的人（轮次消耗行口径）。
 
         审批类行：transfer（轮次被转手）/auto_pass（被策略跳过）也算消耗，
         不重派；协办/咨询行不算——此前会吞掉串行会签的下一棒（无声死锁）。
@@ -213,7 +213,7 @@ class TaskRecordsMixin:
                     f"会签出口不可达：节点 {node.code} 全部待办已办结"
                     f"（item_count={token.item_count}, approve={token.approve_count},"
                     f" disapprove={token.disapprove_count}）而两侧出口公式均未达成"
-                    "——按技术故障挂起（spec §4.1）；处置：管理员手术或终态"
+                    "——按技术故障挂起；处置：管理员手术或终态"
                 )
         except EngineExecutionError as error:
             attribute_node_error(error, node.code)
@@ -223,7 +223,7 @@ class TaskRecordsMixin:
         """身份快照：完成事务内经目录端口定格操作者当时的岗位/角色/部门。
 
         目录未配置（裸跑/单测）→ {}；内核不解析、不校验、不理解内容——
-        存什么、存多细是宿主的审计策略（spec §5.6）。
+        存什么、存多细是宿主的审计策略。
         """
         import json as _json
 

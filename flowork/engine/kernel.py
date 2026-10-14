@@ -109,9 +109,7 @@ class Kernel(AdvanceGateMixin, TaskRecordsMixin, TokenRecordsMixin):
             # 或改用 cancel；cancel/terminate 不拦，级联砍树对暂停子照常结算）
             from flowork.errors import TaskNotAvailableError
 
-            raise TaskNotAvailableError(
-                "实例已暂停，不可直接完成——先 resume 或改用 cancel（spec §7）"
-            )
+            raise TaskNotAvailableError("实例已暂停，不可直接完成——先 resume 或改用 cancel")
         if instance.state in UNSETTLED_INSTANCE_STATES:
             instance.state = end_status
             instance.finished_at = self.config.now()

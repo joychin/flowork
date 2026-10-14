@@ -17,7 +17,7 @@ __all__ = ["TARGET_FIELDS", "check_deadlines", "deadline_positions"]
 IssueFn = Callable[..., None]
 
 # 超时动作的 CEL 目标字段（结构校验与位点遍历共用一份知识）：两个动作的目标
-# 都由图纸给出——取人语义归宿主（spec §5.5 分工铁律）；科层组织写法
+# 都由图纸给出——取人语义归宿主（分工铁律）；科层组织写法
 # 'manager_of(task.assignee)'。
 TARGET_FIELDS = ("reassign_to", "escalate_to")
 
@@ -48,7 +48,7 @@ def deadline_positions(node: Any) -> Iterator[tuple[str, str]]:
 
 
 def check_deadlines(definition: ProcessDefinition, error: IssueFn) -> None:
-    """超时动作列表（spec §5.1/C.5；escalate_to 必填）。"""
+    """超时动作列表（escalate_to 必填）。"""
     for node in definition.nodes:
         deadlines = list(getattr(node, "deadlines", None) or [])
         if len(deadlines) > _MAX_DEADLINES:
@@ -61,7 +61,7 @@ def check_deadlines(definition: ProcessDefinition, error: IssueFn) -> None:
             deadline = _normalize(raw)
             field = _REQUIRED_TARGET.get(str(deadline.action))
             if field and not getattr(deadline, field, None):
-                # 引擎不含组织模型（spec §5.5）：升级目标必须由图纸给出——
+                # 引擎不含组织模型：升级目标必须由图纸给出——
                 # 缺失＝设计期错误，而非等超时触发才出故障单。
                 hint = "，如 manager_of(task.assignee)" if field == "escalate_to" else ""
                 error(

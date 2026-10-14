@@ -1,4 +1,4 @@
-"""声明式钩子执行（spec §2.6 层 1）：节点级 hooks 与连线 on_take 的统一咽喉。
+"""声明式钩子执行：节点级 hooks 与连线 on_take 的统一咽喉。
 
 此前 ``FlowNode.hooks`` 被 pydantic 收下但引擎零读取——图纸声明静默失效、
 校验零告警（实证：注入 hooks 后 handler 调用 0 次）。
@@ -11,7 +11,7 @@
   部署期 L3 校验（validator_deploy 的 node.hooks/flow.on_take handler_unknown，
   WARNING、strict 升 ERROR）双保险——「先部署后注册」仍是合法模式，运行期
   兜底保证漏网定义失败可见；
-- **handler 异常包引擎错误**（对齐 ServiceTaskBehavior 的 spec §8 语义）。
+- **handler 异常包引擎错误**（对齐 ServiceTaskBehavior 的语义）。
 
 执行次序：on_enter 先于行为钩子（handler 写 ctx.variables 供行为与完成判定
 消费）；on_exit 后于行为钩子、先于 finish_token；on_cancel 先于行为钩子。
@@ -37,7 +37,7 @@ def run_declared_hook(ctx: RuntimeNodeContext, ref: HandlerRef | None) -> None:
     """执行一处声明式钩子；未声明（None）与模拟实例直接跳过。
 
     未注册与 handler 自身异常都归一为 EngineExecutionError——命令管线挂起
-    实例并落故障单（spec §8 技术故障），宿主不再拿到裸异常零留痕。
+    实例并落故障单（技术故障），宿主不再拿到裸异常零留痕。
     """
     from flowork.engine.kernel import EngineExecutionError
 

@@ -1,4 +1,4 @@
-"""父实例终态的子树级联（kernel-v2 spec §7）。
+"""父实例终态的子树级联。
 
 terminate/cancel 收口为「砍树」：父实例进入终态时，未结算子实例（含暂停/
 挂起中的）递归同置终态——孤儿待办是用户可见 bug（多实例子流程下会放大），
@@ -6,7 +6,7 @@ terminate/cancel 收口为「砍树」：父实例进入终态时，未结算子
 cancel_process、实例时限策略（jobs/strategies cancel/terminate）。
 
 MI 提前收工（subprocess_mi._terminate_running_children）不走本件：那是完成
-语义的「提前下班」（paused/suspended 子属管理员域不动，spec §8.3），不是
+语义的「提前下班」（paused/suspended 子属管理员域不动），不是
 管理员砍树——树一旦被砍，暂停中的子同样随树终态。
 """
 

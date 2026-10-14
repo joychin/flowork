@@ -1,4 +1,4 @@
-"""v2 新增表（kernel-v2 spec §14）：设计器草稿/消息缓冲·订阅/变量索引。
+"""v2 新增表：设计器草稿/消息缓冲·订阅/变量索引。
 
 与 orm.py 共享同一 Base 元数据（orm.py 尾部再导出，建表入口不变）。
 """
@@ -15,7 +15,7 @@ from flowork.persistence.orm import Base, _now
 
 
 class DesignerDraftRow(Base):
-    """设计器工作副本（spec §6.2：编辑态在设计器本地——不进引擎定义生命周期表）。
+    """设计器工作副本（编辑态在设计器本地——不进引擎定义生命周期表）。
 
     seq＝每 code 单调递增的保存序号（设计器显示的 draft_version）；open＝是否
     待发布（发布即消费，seq 保留以延续编号）。layout＝画布坐标（与语义内容
@@ -35,9 +35,9 @@ class DesignerDraftRow(Base):
 
 
 class MessageBufferRow(Base):
-    """消息缓冲区（spec §7）：先到的消息在此等订阅出现；TTL 过期清理。
+    """消息缓冲区：先到的消息在此等订阅出现；TTL 过期清理。
 
-    message_id 全局唯一防重（消费端至多收到一次，spec §7）；correlation_key
+    message_id 全局唯一防重（消费端至多收到一次）；correlation_key
     为**求值后**的键值（CEL 求值发生在等待节点登记订阅时）。
     """
 
@@ -57,7 +57,7 @@ class MessageBufferRow(Base):
 
 
 class MessageSubscriptionRow(Base):
-    """消息订阅（spec §7）：等待方登记 (name, correlation_key)；state open/matched。
+    """消息订阅：等待方登记 (name, correlation_key)；state open/matched。
 
     节点离开（完成/取消/实例终止）即关（close_subscriptions）；暂停期间保持。
     """
@@ -78,7 +78,7 @@ class MessageSubscriptionRow(Base):
 
 
 class VariableIndexRow(Base):
-    """变量索引（spec §14）：searchable 变量值随命令同事务同步，供实例检索。
+    """变量索引：searchable 变量值随命令同事务同步，供实例检索。
 
     string/boolean → value_text；number → value_num（布尔不入数值槽）。
     """
@@ -94,7 +94,7 @@ class VariableIndexRow(Base):
 
 
 class VariableHistoryRow(Base):
-    """变量留痕（变量 I/O 批，spec §14）：全写方逐键改前/改后，追加只写。
+    """变量留痕（变量 I/O 批）：全写方逐键改前/改后，追加只写。
 
     命令尾 diff 产生（值相等跳过）；source=external_update / task_output /
     task_reject / engine（发起·钩子·消息·映射）。old_value=None 表示新建键（birth）。
@@ -115,12 +115,12 @@ class VariableHistoryRow(Base):
 
 
 class RouteDecisionRow(Base):
-    """路由决策审计（expression-dataface §6）：一次 select_outgoing 一行。
+    """路由决策审计：一次 select_outgoing 一行。
 
     edges=[{flow,formula,result}]（result ∈ true/false/no_fact 查无跳过）；
     selected=最终激活的 flow_code；snapshot={now,prev_task,node:{code:facts}}
     （求值时刻钉住的取值，重放解释用）。求值失败不落行——故障单消息已含
-    公式与错误（spec §8 错误二分）。
+    公式与错误（错误二分）。
     """
 
     __tablename__ = "wf_route_decision"

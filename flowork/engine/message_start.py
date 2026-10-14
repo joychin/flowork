@@ -1,4 +1,4 @@
-"""start_on_message 启动匹配（spec §7.1）：publish 的第三优先级分支。
+"""start_on_message 启动匹配：publish 的第三优先级分支。
 
 在途节点订阅优先（``MessageService.publish`` 既有 FCFS）→ 本模块启动匹配 →
 缓冲。启动订阅＝定义派生：published 定义即生效、retire 即失效（查询即匹配，

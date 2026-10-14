@@ -1,12 +1,11 @@
-"""路由决策审计（expression-dataface §6）：select_outgoing 的旁路记录。
+"""路由决策审计：select_outgoing 的旁路记录。
 
 判断面开放后「当时为什么走这条边」必须可回答：每次路由决策一行
 （wf_route_decision），edges 逐条件边记录公式与结果（true/false/no_fact 查无
 跳过），selected 记录最终激活的连线，snapshot 钉住关键取值（now/prev_task/
-node() 引用值，由 routing 求值后回填）——重放解释与事实一致性验收
-（§9 F 组）的依据。
+node() 引用值，由 routing 求值后回填）——重放解释与事实一致性验收的依据。
 
-求值失败不落行：错误二分（spec §8）下故障单消息已含公式与错误原文。
+求值失败不落行：错误二分下故障单消息已含公式与错误原文。
 仅真实路由记录（behavior/branch/incident 三入口）；anticipate 预判与
 dry-run 模拟面为只读预演，不产生审计。
 """

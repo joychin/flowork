@@ -46,7 +46,7 @@ def create_app(db_file: str | Path | None = None, *, seed: bool = True) -> FastA
     """创建应用。``db_file`` 缺省取 FLOWORK_DB 环境变量，再缺省 designer.db。
 
     ``FLOWORK_DB`` 可给 SQLite 文件路径，也可给完整数据库 URL（如
-    ``postgresql+psycopg://user:pw@host/db``，spec §14 支持矩阵）。超时 Job
+    ``postgresql+psycopg://user:pw@host/db``）。超时 Job
     调度默认随应用启动（多副本部署也安全：tick 内 CAS 认领，同一 Job 只会被
     一个副本执行）。环境变量：``FLOWORK_JOBS=off`` 关闭内置调度（改用外部
     定时器调 ``flowork tick``）；``FLOWORK_JOB_INTERVAL`` 轮询间隔秒数（默认 30）。

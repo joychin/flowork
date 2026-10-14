@@ -6,7 +6,7 @@
 - first_match（条件分支 route_mode=FIRST_MATCH）：按声明顺序取第一条为真的条件边；
   全不中走默认边，再不中把"非默认无条件边"视为兜底；仍无 → RouteError。
 
-CEL 词汇接线（spec §4.3/§9）：``functions`` 自 EngineConfig.expression_functions
+CEL 词汇接线：``functions`` 自 EngineConfig.expression_functions
 拍平而来（expr.context.expression_functions_of），可选透传至 expr.cel；
 ``initiator`` 为求值保留标识符。
 """
@@ -43,9 +43,9 @@ def evaluation_variables(
     """构造求值上下文（expr.context.expression_context 的实例版薄包装）。
 
     显式声明同名变量时以声明为准（setdefault）；实例无 start_user 时缺省。
-    带 session 时注入 ``prev_task`` 上一站快照（expression-dataface §2.2，
+    带 session 时注入 ``prev_task`` 上一站快照（
     查无＝不注入，引用预检在 select_outgoing 内温和跳过）。
-    ``instance`` 全局事实（id/started_at/business_key）恒注入（§2，全位点）。
+    ``instance`` 全局事实（id/started_at/business_key）恒注入（全位点）。
     ``now`` 必须由引擎位点显式传入（``EngineConfig.now``——时钟统一：
     FakeClock 下条件求值与任务时限同源）；缺省墙钟仅供无引擎装配面。
     """
@@ -73,7 +73,7 @@ def select_outgoing(
     *,
     audit: RoutingAudit | None = None,
 ) -> list[SequenceFlow]:
-    """按模式计算应激活的出边集合；带 audit 时旁路记录本次决策（expression-dataface §6）。"""
+    """按模式计算应激活的出边集合；带 audit 时旁路记录本次决策。"""
     selected = _select(outgoing, variables, mode, functions, audit)
     if audit is not None:
         audit.source = outgoing[0].source if outgoing else ""
@@ -127,7 +127,7 @@ def _match_in_order(
 ) -> list[SequenceFlow]:
     """按声明顺序求值条件边（单轨 CEL），返回为真者。
 
-    求值错（FormulaError）按错误二分归**技术故障**（spec §8）：包成
+    求值错（FormulaError）按错误二分归**技术故障**：包成
     EngineExecutionError → 命令管线挂起实例 + 故障单。
     """
     matched: list[SequenceFlow] = []
@@ -136,7 +136,7 @@ def _match_in_order(
         if "prev_task" not in variables and references_identifier(flow.condition, "prev_task"):
             if audit is not None:
                 audit.record_edge(flow.flow_code(), flow.condition, "no_fact")
-            continue  # 上一站查无：条件按不满足（expression-dataface §3，温和跳过）
+            continue  # 上一站查无：条件按不满足（温和跳过）
         try:
             hit = evaluate_condition(flow.condition, variables, functions=functions)
         except FormulaError as exc:

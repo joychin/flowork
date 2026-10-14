@@ -1,6 +1,6 @@
 """加签面（TaskService 组合件，入口 engine.task.add_countersigner 不变）。
 
-加签人各占一票（spec §5.1）；重复加签整笔回拒；克隆任务独立满档
+加签人各占一票；重复加签整笔回拒；克隆任务独立满档
 deadline；规模护栏与 assist/consult 同守。
 """
 

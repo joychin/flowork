@@ -1,4 +1,4 @@
-"""CloudEvents 1.0.2 信封（kernel-v2 spec §10）。
+"""CloudEvents 1.0.2 信封。
 
 - type＝事件名；id＝outbox 行 id（可排序唯一串，消费端按 id 去重）；
   source＝``flowork://{engine_id}``；data＝事件字段。

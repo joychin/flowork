@@ -1,4 +1,4 @@
-"""实例变量外部读写（变量 I/O 批，kernel-v2 spec §11 / variable-io-api.md）。
+"""实例变量外部读写（变量 I/O 批）。
 
 RuntimeService 组合件：外部受控改值（三门槛：白名单/类型/终态）、只读值全集、
 血缘查询。生效语义：不触发路由重算，只影响后续求值位点；已走分支不倒带。
@@ -94,7 +94,7 @@ class VariableActionsMixin:
         """外部受控改值（PATCH 合并写，不提供删键）。返回更新后的变量全集。
 
         归因与留痕：write_source=external_update——命令尾 diff 落 wf_variable_history
-        并发射 variables_updated（引擎内部写方不发事件，spec §10）。
+        并发射 variables_updated（引擎内部写方不发事件）。
         """
 
         def _command(ctx: CommandContext) -> dict[str, Any]:
@@ -106,7 +106,7 @@ class VariableActionsMixin:
                     f"实例已终态（{instance.state}），不可外部更新变量：{instance_id}"
                 )
             if instance.state == InstanceState.PAUSED.value:
-                # 暂停＝冻结快照（spec §7）：取证期间不可写；
+                # 暂停＝冻结快照：取证期间不可写；
                 # 修数据路径＝resume → 改 → 再 pause
                 raise InstanceNotFoundError(
                     f"实例已暂停（冻结快照），不可外部更新变量：{instance_id}"

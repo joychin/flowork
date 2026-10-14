@@ -1,4 +1,4 @@
-"""设计器工作副本支撑（spec §6.2）：wf_designer_draft 表的读写与发布衔接。
+"""设计器工作副本支撑：wf_designer_draft 表的读写与发布衔接。
 
 RepositoryService 经 mixin 组合（engine.repository 入口不变）；编辑态在设计器
 本地，独立于引擎定义生命周期表（draft 已取消）。

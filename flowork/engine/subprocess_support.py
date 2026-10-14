@@ -2,7 +2,7 @@
 
 子实例在同一事务内内联启动（避免嵌套命令）；子实例完结时由
 ``resume_parent_if_waiting`` 回写父流程：完成父令牌并推进路由。
-映射值为 **CEL 表达式**（spec §4.2）：输入映射在父上下文求值，输出映射在
+映射值为 **CEL 表达式**：输入映射在父上下文求值，输出映射在
 子上下文求值；裸变量名是 CEL 子集（同名直传零迁移）。
 """
 
@@ -172,7 +172,7 @@ def sub_process_finished(ctx: RuntimeNodeContext, spec: CallActivitySpec) -> boo
             outputs = _mapping_values("输出映射", spec.output_mappings, ctx, child)
             for target, value in outputs.items():
                 ctx.variables[target] = value
-    # input 契约边界③：节点输出映射后父变量全集仍须满足契约（spec §3.2）
+    # input 契约边界③：节点输出映射后父变量全集仍须满足契约
     import json
 
     from flowork.definitions.contract import validate_input_contract

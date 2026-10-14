@@ -1,6 +1,6 @@
 """MCP 19 工具目录：ToolSpec 注册与 dispatch（传输无关，纯同步）。
 
-设计（openface-plugin-design.md §3）：catalog 层可脱离 stdio 直接测试；
+设计：catalog 层可脱离 stdio 直接测试；
 server.py 只做 mcp lowlevel Server 传输壳。全部内核访问经 flowork.api。
 """
 
@@ -80,7 +80,7 @@ _TOOLS_CACHE: weakref.WeakKeyDictionary[ProcessEngine, list[ToolSpec]] = weakref
 
 
 def build_tools(engine: ProcessEngine) -> list[ToolSpec]:
-    """装配 19 工具（spec §13 清单；重名即装配错误）。
+    """装配 19 工具（重名即装配错误）。
 
     进程内缓存：修前 dispatch 每次重建 19 个闭包、未知工具
     路径重建两次——engine 生命周期内工具面不变，WeakKeyDictionary 随引擎回收。"""

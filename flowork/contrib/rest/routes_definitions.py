@@ -1,4 +1,4 @@
-"""REST /v2 definitions 面：search / deploy / get / retire（spec §12；purge 仅 CLI）。"""
+"""REST /v2 definitions 面：search / deploy / get / retire（purge 仅 CLI）。"""
 
 from __future__ import annotations
 

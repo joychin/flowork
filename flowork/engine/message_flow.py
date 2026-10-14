@@ -1,4 +1,4 @@
-"""消息流转 session 级共用件（spec §7/§7.2）：订阅登记/命中推进/广播/恢复反查。
+"""消息流转 session 级共用件：订阅登记/命中推进/广播/恢复反查。
 
 从 message_service.py 拆出（单文件 ≤300 行红线）。三个入口都以 CommandContext
 + engine 为参（命令内复用，不经 engine.execute 二次开命令）：
@@ -8,7 +8,7 @@
 - ``hit_subscription``：命中 open 订阅的完整动作——按节点 output_mappings
   关联（缺省全量合并）→ 推进等待令牌（finish_wait，同事务）；暂停拦截把门；
 - ``retro_poll_instance``：实例恢复后 open 订阅补消费（暂停期间消息落缓冲的
-  语义闭环，spec §7.2 暂停=全动作拦截）；
+  语义闭环，暂停=全动作拦截）；
 - ``broadcast_signal``：signal 公开面的命令体。
 """
 
@@ -229,10 +229,10 @@ def emit_message_event(
 
 
 def broadcast_signal(engine: ProcessEngine, name: str) -> int:
-    """广播唤醒：matched 所有在等该名字的 open 订阅，不带数据（spec §7）。
+    """广播唤醒：matched 所有在等该名字的 open 订阅，不带数据。
 
     每条订阅走 hit_subscription 完整管线：
-    等待节点经 finish_wait 推进（spec §7.2 三路收口的第三路，signal 唤醒
+    等待节点经 finish_wait 推进（三路收口的第三路，signal 唤醒
     wait.message_id 恒 null）；宿主纯订阅仅关联定格；暂停实例的订阅跳过
     （全动作拦截，保持 open 由恢复反查补消费）。
     """

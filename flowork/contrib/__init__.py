@@ -8,7 +8,7 @@
     from flowork import contrib
     config = EngineConfig(
         org=org,
-        expression_functions=contrib.cel_vocabulary(org),  # 全表达式位共用（spec §4.2）
+        expression_functions=contrib.cel_vocabulary(org),  # 全表达式位共用
     )
 
 位点统一（原「两处注册面」已收敛为一）：条件位与取人位同一套词汇——
@@ -16,10 +16,10 @@
   吃 ``org:`` 返回部门负责人；吃 ``role:`` 报错；查无返回 null（None 传播）。
 - ``users_with_role(string) → users``：角色直接成员（subjects_in("role:…")）。
 - ``users_in_org(string) → users``：部门直接成员（subjects_in("org:…")）——
-  取人位按部门展开的唯一写法（组引用只属于候选槽，spec §5.5）。
+  取人位按部门展开的唯一写法（组引用只属于候选槽）。
 - ``has_role(one_user, string) → bool``：谓词（条件位使用，取人位会被拒）。
-查无一律返回 None/空，不抛异常（None/空传播契约，spec §5.5）；目录未配置报
-ContribDirectoryMissing——技术故障留给故障单（第 8 章错误二分）。
+查无一律返回 None/空，不抛异常（None/空传播契约）；目录未配置报
+ContribDirectoryMissing——技术故障留给故障单（错误二分）。
 CEL 面的函数是**纯读闭包**（无 ctx、无副作用——路由决策只属于引擎+条件求值）。
 
 返回值经注册面统一抬升到 CEL 值域（``_registry._lift``）：宿主写函数时按
@@ -43,7 +43,7 @@ if TYPE_CHECKING:
 
 __all__ = ["ContribDirectoryMissing", "cel_vocabulary", "numeric_vocabulary"]
 
-# 兼容声明（词汇包 cel_vocabulary/numeric_vocabulary；openface-plugin-design §4）：
+# 兼容声明（词汇包 cel_vocabulary/numeric_vocabulary）：
 # 依赖的门面契约版本；tests/test_plugin_compat.py 断言 ≤ flowork.api.API_VERSION。
 REQUIRES_FLOWORK_API = "1"
 
@@ -56,7 +56,7 @@ def cel_vocabulary(org: OrgDirectoryLike) -> ExpressionFunctions:
     """三个 org 词汇的 CEL 注册面（闭包持有目录端口）。
 
     函数纯读：只调 OrgDirectory 四方法，无 ctx、不写变量、无副作用；
-    查无一律返回 null/空（None/空传播契约，spec §5.5）。
+    查无一律返回 null/空（None/空传播契约）。
     """
 
     def manager_of(user: str) -> str | None:

@@ -1,8 +1,8 @@
-"""input 契约三边界校验（kernel-v2 spec §3.2）。
+"""input 契约三边界校验。
 
 定义顶层 ``input``＝JSON Schema（2020-12）强制契约：发起实例、人工任务提交
 output、节点输出映射，三处边界按 schema 校验，不合格**直接拒绝**（报错不入库，
-业务失败不产生故障单，spec §8）。None＝无契约，零约束（存量流程不受影响）。
+业务失败不产生故障单）。None＝无契约，零约束（存量流程不受影响）。
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ __all__ = ["InputContractError", "input_schema_of", "validate_input_contract"]
 
 
 class InputContractError(FloworkError):
-    """input 契约校验失败（边界拒收，spec §8 业务失败——不产生故障单）。"""
+    """input 契约校验失败（边界拒收，业务失败——不产生故障单）。"""
 
 
 def input_schema_of(instance: Any) -> dict[str, Any] | None:

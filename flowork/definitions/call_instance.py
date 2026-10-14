@@ -1,4 +1,4 @@
-"""多实例子流程配置（multi-instance-call-design.md）。
+"""多实例子流程配置。
 
 Zeebe inputCollection/outputCollection 契约：subjects 逐个解析＝每人一个子实例；
 输出按 index 对齐聚合（未写 null 占位）；空集合＝节点立即完成（等价 skip）。
@@ -13,7 +13,7 @@ __all__ = ["CallInstanceConfig"]
 
 
 class CallInstanceConfig(BaseModel):
-    """call_activity.multi_instance（spec §2.5）。"""
+    """call_activity.multi_instance。"""
 
     model_config = ConfigDict(extra="forbid")
 

@@ -40,7 +40,7 @@ def check_variables_and_org(
     *,
     org_configured: bool | None = None,
 ) -> None:
-    """变量声明检查 + 参与者槽位语义 + 组主体与目录配置的关系（spec §9）。"""
+    """变量声明检查 + 参与者槽位语义 + 组主体与目录配置的关系。"""
 
     # —— 槽位组合互斥：候选命中走单任务认领制，
     # —— multi_instance（并行/串行会签语义）被静默忽略（item_count=1）——图纸
@@ -69,7 +69,7 @@ def check_variables_and_org(
                 node=variable.name,
             )
 
-    # —— 人员位组引用：组引用只属于候选槽（spec §5.5「两个槽不可拍平」）
+    # —— 人员位组引用：组引用只属于候选槽（「两个槽不可拍平」）
     # —— subjects/reassign 位写 role:/org: 字面量＝想按角色/部门取人写错了位置，
     # 运行期会变成没人能办的死待办；设计期直接拦（ERROR）。
     from flowork.definitions.validator_deploy import string_literals
@@ -85,7 +85,7 @@ def check_variables_and_org(
                 f"人员位 {where} 出现组引用 {refs}——组引用只在候选槽"
                 "（candidate_groups）有意义；按角色/部门展开请写 "
                 "users_with_role(...) / users_in_org(...)，或改用候选池"
-                "（认领时展开，spec §5.5）",
+                "（认领时展开）",
                 node=node_code,
             )
 
@@ -120,7 +120,7 @@ def check_variables_and_org(
                 warning(
                     "participant.group_without_directory",
                     f"图纸使用组主体 {prefixed} 而组织目录未配置：组待办将无人能认领"
-                    "（EngineConfig.org / 目录见 spec §9）",
+                    "（配置 EngineConfig.org）",
                     node=node.code,
                 )
 
@@ -178,7 +178,7 @@ def check_advance_policy(
     definition: ProcessDefinition,
     warning: IssueFn,
 ) -> None:
-    """多入边节点的开始条件提示（spec §2.3）。"""
+    """多入边节点的开始条件提示。"""
     for node in definition.nodes:
         if len(definition.incoming(node.code)) < 2:
             continue
@@ -189,5 +189,5 @@ def check_advance_policy(
                 "节点有多条入边但未设置开始条件（缺省按「任一到达即开始」执行）",
                 node=node.code,
             )
-        # 「all 挂条件分支臂」不再告警：spec §2.3 可达性放行下未命中臂不阻塞
-        # （包容网关映射 = branch + all 汇聚，见 spec §2.4）
+        # 「all 挂条件分支臂」不再告警：可达性放行下未命中臂不阻塞
+        # （包容网关映射 = branch + all 汇聚）

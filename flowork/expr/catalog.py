@@ -1,10 +1,10 @@
-"""表达式词汇目录（expression-dataface §5）：一份目录，三消费方。
+"""表达式词汇目录：一份目录，三消费方。
 
 消费方：① ``definitions.validator_conditions``（保留词与位点白名单表驱动，
 规则不再硬编码 frozenset）；② 设计器变量树（分组下拉）；③ 目录下发
 （REST /v2 批登记端点；``FunctionSignature.label`` 为函数条目同一目的）。
 
-目录即版本承诺（expression-dataface §5）：加字段=小版本；改语义/删条目=
+目录即版本承诺：加字段=小版本；改语义/删条目=
 破坏性变更（R2 级，major+1）。本模块纯数据、零依赖（expr 叶子模块防环）。
 
 位点词汇（与 ``validator_positions.iter_expression_positions`` 的 kind 一致）：
@@ -68,7 +68,7 @@ class FunctionEntry:
     note: str = ""
 
 
-# 判断面词汇 v1（expression-dataface §2）：instance.* 已入册（全位点全局词）。
+# 判断面词汇 v1：instance.* 已入册（全位点全局词）。
 IDENTIFIER_CATALOG: tuple[IdentifierEntry, ...] = (
     IdentifierEntry(
         name="initiator",
@@ -141,7 +141,7 @@ IDENTIFIER_CATALOG: tuple[IdentifierEntry, ...] = (
         label="等待结果",
         positions=frozenset({"condition"}),
         note="result=matched(消息到了)|elapsed(时间到了)；message_name/message_id"
-        "（signal 广播唤醒与纯延时=null）；仅等待节点出边条件可用（spec §7.2）",
+        "（signal 广播唤醒与纯延时=null）；仅等待节点出边条件可用",
     ),
 )
 

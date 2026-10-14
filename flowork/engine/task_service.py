@@ -64,7 +64,7 @@ class TaskService(
     ) -> list[TaskInfo]:
         """查询待办（默认 ready；state=None 查全部）。
 
-        ``candidate``＝「我可认领的待办」（spec §12 过滤维度里的 candidate）：候选
+        ``candidate``＝「我可认领的待办」（候选过滤维度）：候选
         关联含具体人（``user:`` 前缀与裸 id 互认）与组引用（认领时展开，有目录才
         命中）。``assignee=""`` 是显式条件＝尚未认领（候选池口径，与 candidate
         组合即「我可认领且仍在池中」）；``None`` 才是不筛。
@@ -162,7 +162,7 @@ class TaskService(
         if task.assignee == "":
             raise TaskNotAvailableError("候选任务需先 claim 认领")
         if variables:
-            # input 契约边界②：任务提交 output 后变量全集仍须满足契约（spec §3.2）
+            # input 契约边界②：任务提交 output 后变量全集仍须满足契约
             from flowork.definitions.contract import input_schema_of, validate_input_contract
 
             schema = input_schema_of(instance)
@@ -199,7 +199,7 @@ class TaskService(
             actor=actor,
             idempotency_key=idempotency_key,
         )
-        self._cancel_assist_tasks(ctx, task, actor)  # 协办随主任务终态同事务收口（spec §5.1）
+        self._cancel_assist_tasks(ctx, task, actor)  # 协办随主任务终态同事务收口
         node = kernel.definition_of(ctx.session, instance).node(task.activity_code)
         assert node is not None, f"任务节点不存在：{task.activity_code}"
         behavior = kernel.behavior_of(node)

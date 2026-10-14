@@ -66,7 +66,7 @@ class RoleAssignmentRow(Base):
 
 
 class DelegationRow(Base):
-    """审批委托（engine-v1 01 §5）：from 在 [since, until] 窗口内待办转 to。
+    """审批委托：from 在 [since, until] 窗口内待办转 to。
 
     单跳不递归（A→B、B→C 时 A 的待办只到 B）；窗口端点 None=该侧无限。
     """

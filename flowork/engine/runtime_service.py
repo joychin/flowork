@@ -48,9 +48,9 @@ class RuntimeService(InstanceLifecycleMixin, IncidentMixin, VariableActionsMixin
             start_user: 发起人（公式保留标识符 ``initiator`` 解析为此值）。
             variables: 流程变量（表单数据/路由条件依据）。
             business_key: 业务关联键（如订单号），供外部对账。
-            major/revision: 显式钉版本启动（spec §6.2）；缺省＝启动事务内
+            major/revision: 显式钉版本启动；缺省＝启动事务内
                 SELECT 最新 published（deploy 前旧版、之后新版，变更边界＝deploy 时刻）。
-            idempotency_key/reuse: 启动幂等三策略（spec §11）——reject（撞 key 报
+            idempotency_key/reuse: 启动幂等三策略——reject（撞 key 报
                 DuplicateStartError，默认）/ return_existing（返回已有实例）/
                 allow_duplicate（明示放弃幂等）。key 与 definition_code 联合唯一，
                 并发撞车由唯一索引兜底后按策略收口。
@@ -139,7 +139,7 @@ class RuntimeService(InstanceLifecycleMixin, IncidentMixin, VariableActionsMixin
         else:
             snapshot = self._engine.repository.get_definition_json(code, major, revision)
             definition = self._engine.repository.get_definition(code, major, revision)
-        # input 契约边界①：发起时按 schema 拒收（spec §3.2，报错不入库）
+        # input 契约边界①：发起时按 schema 拒收（报错不入库）
         from flowork.definitions.contract import validate_input_contract
 
         validate_input_contract(definition.input, dict(variables or {}), boundary="start")
@@ -166,7 +166,7 @@ class RuntimeService(InstanceLifecycleMixin, IncidentMixin, VariableActionsMixin
             ctx.suppress_events = True
         # 变量留痕：出生 before 显式播种为空——发起变量记 birth 行（old=None）
         ctx.variable_before[instance.id] = {}
-        # （spec §7）：实例时限物化——按 after_minutes 折算 deadline_at（自然时间）
+        # 实例时限物化——按 after_minutes 折算 deadline_at（自然时间）
         if definition.deadline is not None:
             from datetime import timedelta
 
@@ -203,7 +203,7 @@ class RuntimeService(InstanceLifecycleMixin, IncidentMixin, VariableActionsMixin
             "start_user": start_user,
             "business_key": business_key,
         }
-        if start_message is not None:  # 消息启动（spec §7.1）：归因可追溯
+        if start_message is not None:  # 消息启动：归因可追溯
             started_payload["start_message"] = start_message
         kernel.record_event(DomainEvent.PROCESS_STARTED, started_payload, instance.id)
         start_node = definition.start_node()

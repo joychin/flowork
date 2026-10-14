@@ -97,7 +97,7 @@ class BranchSpec(FlowNode):
 
 
 class UserTaskSpec(FlowNode):
-    """人工审批节点。四个取人字段每项为 CEL 表达式（spec §4.2/§5.5 位点统一）：
+    """人工审批节点。四个取人字段每项为 CEL 表达式（位点统一）：
     字面人写 ``'u_a'``，发起人为保留标识符 ``initiator``，取人函数如
     ``manager_of(initiator)``（词汇经 EngineConfig.expression_functions 注册）。
 
@@ -125,7 +125,7 @@ class UserTaskSpec(FlowNode):
     auto_pass_participated: bool = False
     no_participant_policy: str = "raise"  # raise / to_admins
     timeout: TimeoutPolicy | None = None
-    # （spec §5.1）：超时动作列表（多级预警/改派/升级/自动通过·驳回），
+    # 超时动作列表（多级预警/改派/升级/自动通过·驳回），
     # 同节点上限 8 条（validator 把关）；旧 timeout 为其退化形态
     deadlines: list[TaskDeadline] = Field(default_factory=list)
 

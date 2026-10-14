@@ -1,6 +1,6 @@
 """REST /v2 传输面：对外集成面（设计器内部面见 contrib/web，三面互不复用）。
 
-装配两形态（openface-plugin-design.md §2.6）：
+装配两形态：
 - ``create_app()``：独立进程——FLOWORK_DB / FLOWORK_ORG / FLOWORK_JOBS 语义同 web；
 - ``register_rest_routes(app, engine)``：宿主自带引擎与鉴权时，把 /v2 挂进既有 FastAPI。
 

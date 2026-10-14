@@ -1,9 +1,9 @@
 """审计数据面：整图模拟 / 实例只读 / 版本面。
 
 ``register_audit_routes(app,
-engine)`` 挂端点，无独立状态。资源命名与参数风格对齐 kernel-v2 spec §12 已定稿
+engine)`` 挂端点，无独立状态。资源命名与参数风格对齐已定稿
 的 /v2 面（``GET /definitions/{code}?major=&revision=`` 同义）；全部只读（除模拟
-外零副作用），模拟走内核 simulated 实例（隔离语义见 simulation-dryrun-design）。
+外零副作用），模拟走内核 simulated 实例。
 """
 
 from __future__ import annotations
@@ -121,7 +121,7 @@ def register_audit_routes(app: Any, engine: Any) -> None:
     def variable_history(
         instance_id: str, name: str | None = None, limit: int = 50, offset: int = 0
     ) -> list[dict[str, Any]]:
-        """变量血缘（spec §11）：改前/改后 + 写方归因，倒序可按键过滤。"""
+        """变量血缘：改前/改后 + 写方归因，倒序可按键过滤。"""
         _require_instance(instance_id)
         if not 1 <= limit <= 500:
             raise HTTPException(status_code=422, detail="limit 越界（1~500）")
@@ -151,7 +151,7 @@ def register_audit_routes(app: Any, engine: Any) -> None:
 
     @app.get("/api/definitions/{code}/versions/{major}")
     def version_detail(code: str, major: int, revision: int | None = None) -> dict[str, Any]:
-        """按版本取已发布 spec（spec §12 ``GET /definitions/{code}?major=`` 同义；
+        """按版本取已发布 spec（与 ``GET /definitions/{code}?major=`` 同义；
         只读模式没有草稿，本端点是 readonly 视图的数据前提）。"""
         try:
             spec: dict[str, Any] = engine.repository.get_definition_json(code, major, revision)

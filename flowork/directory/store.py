@@ -1,6 +1,6 @@
 """持久化目录：部门树 + 用户写面与组合根。
 
-语义对齐 docs/product/engine-v1/01-身份与组织模型.md §2：
+语义：
 - manager_of(user) = user 主属部门的 manager_user_id（部门属性，非用户属性）；
 - users_with_role 范围解析见 roles.py（子树→逐级向上→全局，最近命中层胜出）；
 - 委托读写见 delegation.py；读面（含缓存）见 queries.py；
@@ -58,7 +58,7 @@ class DirectoryStore(ReadDirectoryMixin, DelegationDirectoryMixin):
             OrgUnitRow.metadata.create_all(bind)  # 幂等：org_* 表挂共享元数据
 
     def _write_done(self) -> None:
-        """写后全清读缓存（engine-v1 01 §2：目录变更频率极低，全清粒度足够）。"""
+        """写后全清读缓存（目录变更频率极低，全清粒度足够）。"""
         self._cache.clear()
 
     # —— 写：部门 ——

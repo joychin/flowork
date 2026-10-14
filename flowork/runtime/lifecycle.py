@@ -1,6 +1,6 @@
 """运行时状态枚举与生命周期契约。
 
-契约（《节点抽象与扩展设计》§4，全引擎唯一状态机）::
+契约（全引擎唯一状态机）::
 
     token 到达
        │
@@ -44,7 +44,7 @@ class InstanceState(StrEnum):
     """流程实例状态。"""
 
     RUNNING = "running"
-    PAUSED = "paused"  # v2（spec §7）：人工暂停——timer 冻结、任务不可办，恢复后顺延
+    PAUSED = "paused"  # 人工暂停——timer 冻结、任务不可办，恢复后顺延
     TERMINATED = "terminated"  # v2：终止（管理员强杀，终态；与业务取消 cancelled 区分）
     COMPLETED = "completed"
     CANCELLED = "cancelled"

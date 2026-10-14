@@ -1,9 +1,9 @@
-"""部署期引用校验（L3+L4——spec §6/设计稿 deploy-validation-design.md）。
+"""部署期引用校验（L3+L4）。
 
 与纯设计时校验（validator*.py，无 I/O）分居：本模块**要查库/查注册表/查目录**，
 只由 ``RepositoryService.deploy`` 在事务内调用（设计时 validate() 不跑这两层）。
 
-分层与级别（行业依据 delta-industry-benchmark §11：组织实体引用部署期全行业
+分层与级别（行业依据：组织实体引用部署期全行业
 不校验——flowork 自持目录有能力做，但默认只 WARNING，strict 可升 ERROR）：
 
 - **L3 定义内引用**：

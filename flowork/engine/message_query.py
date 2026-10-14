@@ -1,9 +1,9 @@
-"""消息查询与同步关联面（spec §7.2 配套面）：correlate_message / waiting / 检索。
+"""消息查询与同步关联面：correlate_message / waiting / 检索。
 
 流转件（订阅/命中/广播）
 在 message_flow.py。correlate 对标 Zeebe correlate 端点——「发布方想知道
 消息被谁消费」的同步答案；waiting 为等待实例反查（运维刚需）；
-list_messages 为消息检索（spec §12 messages/search 数据源）。
+list_messages 为消息检索。
 """
 
 from __future__ import annotations
@@ -30,8 +30,8 @@ def first_open_subscription(
     correlation_key: str,
     instance_id: str | None = None,
 ) -> _SubRow | None:
-    """首个可消费的 open 订阅（FCFS；跳过暂停/挂起实例——spec §7.2 暂停
-    拦截 + 挂起对齐暂停，消息落缓冲、故障解决后补消费）。
+    """首个可消费的 open 订阅（FCFS；跳过暂停/挂起实例——暂停拦截 + 挂起对齐暂停，
+    消息落缓冲、故障解决后补消费）。
 
     ``instance_id``：实例定向匹配——
     signal 面只消费本实例的订阅，防同名同 key 多实例时消息被 FCFS 先到的
@@ -61,7 +61,7 @@ def correlate_message(
     message_id: str | None = None,
     instance_id: str | None = None,
 ) -> dict[str, Any] | None:
-    """同步关联入口（spec §7.2 配套面，Zeebe correlate 端点同款）。
+    """同步关联入口（Zeebe correlate 端点同款）。
 
     **不缓冲**：首个可消费 open 订阅（跳过暂停实例）→ 关联+推进，回传
     签收凭证 ``{matched, duplicate, instance_id, node_id, message_name,
@@ -157,7 +157,7 @@ def list_messages(
     offset: int = 0,
     limit: int = 50,
 ) -> list[dict[str, Any]]:
-    """消息检索（spec §12 messages/search 数据源）。
+    """消息检索。
 
     两源合并按时间倒序：buffer（未消费缓冲，TTL 内）∪ subscription（订阅行
     ——open=在等 / matched=已消费定格）。correlation_key 前缀匹配；kind 收窄
@@ -239,7 +239,7 @@ def resolve_payload_write(
     config: Any, payload: dict[str, Any], mappings: dict[str, str] | None, node_id: str
 ) -> dict[str, Any]:
     """载荷写入集（自 message_service 下沉守红线）：声明了 output_mappings 按
-    映射白名单求值，否则全量合并；裸投影缺键 None（spec §7.2）。"""
+    映射白名单求值，否则全量合并；裸投影缺键 None。"""
     if not mappings:
         return dict(payload)
     from flowork.engine.kernel import EngineExecutionError
@@ -252,7 +252,7 @@ def resolve_payload_write(
     for target, expression in mappings.items():
         bare = _BARE_PAYLOAD_FIELD.match(expression.strip())
         if bare is not None and bare.group(1) not in (payload or {}):
-            write[target] = None  # 裸投影缺键：数据缺失≠求值错（spec §7.2）
+            write[target] = None  # 裸投影缺键：数据缺失≠求值错
             continue
         try:
             write[target] = evaluate_formula_value(expression, context, functions=functions)

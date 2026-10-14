@@ -1,10 +1,10 @@
-"""表达式求值上下文构造（spec §4.3/C.4 + expression-dataface §2.1）：
+"""表达式求值上下文构造：
 全表达式位共用的唯一装配入口。
 
-变量命名空间（spec §4.3 / expression-dataface §2）：``input.*``（契约入参，
+变量命名空间：``input.*``（契约入参，
 存法由调用方约定）、``vars``（实例变量，现状拍平存）、``initiator``（发起人
-Subject 保留标识符）、``task``（任务快照，超时改派/会签出口位，spec C.4
-固定形状）、``now``（求值时刻，引擎统一时钟注入）。
+Subject 保留标识符）、``task``（任务快照，超时改派/会签出口位的固定形状）、
+``now``（求值时刻，引擎统一时钟注入）。
 函数表拍平（``expression_functions_of``）也住这里——expr 是叶子模块，
 engine/participants/tasks 各面引用无环；保留词清单的权威在 ``expr.catalog``。
 """
@@ -35,11 +35,11 @@ def expression_context(
     FakeClock 下条件求值、任务时限与路由审计同源）；缺省墙钟仅供无引擎的
     装配面（dry-run 静态预检、web 公式试算——「试算此刻」语义）。
     上下文在求值前装配一次、组内多条公式共用——因此
-    **一次求值钉一个时刻**（expression-dataface 验收 E5）。
+    **一次求值钉一个时刻**。
     ``prev_task`` 仅条件/取人位注入（上一站快照，查无＝不注入，调用方预检温和跳过）。
     ``instance`` 为实例全局事实（id/started_at/business_key，全位点；快照由
     ``tasks.facts.instance_facts`` 构造，模拟面注入占位形状）。
-    task 快照做防御性副本——spec C.4 固定形状（task.id / task.assignee /
+    task 快照做防御性副本——固定形状（task.id / task.assignee /
     task.outcome），活任务（超时触发时）outcome 为 None。
     """
     payload = dict(variables)

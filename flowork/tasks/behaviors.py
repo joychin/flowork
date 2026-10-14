@@ -100,7 +100,7 @@ class ServiceTaskBehavior(NodeBehavior):
         except EngineExecutionError:
             raise
         except Exception as exc:
-            # 技术故障→故障单（spec §8）：原始异常包成引擎错误，命令管线挂起实例
+            # 技术故障→故障单：原始异常包成引擎错误，命令管线挂起实例
             raise EngineExecutionError(
                 f"service_task {spec.code} 动作 {spec.action!r} 执行失败：{exc}"
             ) from exc

@@ -83,7 +83,7 @@ class HistoryService(ArchiveMixin, TraceMixin):
         return result
 
     def route_decisions(self, instance_id: str) -> list[RouteDecisionInfo]:
-        """路由决策审计（expression-dataface §6）：重放解释用，按时间正序。"""
+        """路由决策审计：重放解释用，按时间正序。"""
         from flowork.persistence.orm_v2 import RouteDecisionRow
 
         def _command(ctx: CommandContext) -> Any:

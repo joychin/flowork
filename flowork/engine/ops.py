@@ -83,7 +83,7 @@ class CommandContext:
 
 
 def _sync_variable_index(ctx: CommandContext) -> None:
-    """变量索引同步（spec §14）：触及实例的 searchable 变量同事务重写。"""
+    """变量索引同步：触及实例的 searchable 变量同事务重写。"""
     from flowork.persistence.orm import ProcessInstanceRow
     from flowork.persistence.variable_index import sync_variable_index
 
@@ -94,11 +94,11 @@ def _sync_variable_index(ctx: CommandContext) -> None:
 
 
 def _sync_variable_history(ctx: CommandContext) -> None:
-    """变量留痕（变量 I/O 批，spec §14）：触及实例逐键 diff → wf_variable_history。
+    """变量留痕（变量 I/O 批）：触及实例逐键 diff → wf_variable_history。
 
     全写方覆盖（发起/任务提交/钩子/消息/映射/外部命令），值相等跳过；
     仅外部更新命令（write_source=external_update）追发 variables_updated 事件
-    （spec §10：引擎内部写变量不发——防刷屏，血缘走表）。
+    （引擎内部写变量不发——防刷屏，血缘走表）。
     """
     import uuid
 
@@ -197,7 +197,7 @@ def _run_once(engine: ProcessEngine, command: Callable[[CommandContext], T]) -> 
     except RecursionError as error:
         # 深直通链推进递归栈溢出（实测约 7 帧/节点、直通链 200 节点崩）：归一技术故障，
         # 与其他引擎错误同管线（挂起+故障单；start 阶段整笔回滚时与「首节点失败」同语义）。
-        # 兄弟 except 不互捕，需显式记录后再抛。迭代化根治挂账内核重排刀（§15）。
+        # 兄弟 except 不互捕，需显式记录后再抛。迭代化根治挂账内核重排刀。
         converted = EngineExecutionError(
             "流程推进深度超限（深直通链递归栈溢出），建议拆分子流程——"
             "设计期 graph.flow.large 告警可提前提示"

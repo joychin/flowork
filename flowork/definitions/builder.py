@@ -114,7 +114,7 @@ class FlowBuilder:
         timeout: dict[str, Any] | None = None,
         **fields: Any,
     ) -> FlowBuilder:
-        """等待节点（spec §7.2）：等消息 / 等时长 / 两者竞速，先到者决定走向。"""
+        """等待节点：等消息 / 等时长 / 两者竞速，先到者决定走向。"""
         payload: dict[str, Any] = {}
         if message is not None:
             payload["message"] = message

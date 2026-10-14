@@ -53,7 +53,7 @@ class DeadlineStrategiesMixin:
                 job.result_payload = {**(job.result_payload or {}), "deferred": instance.state}
                 return
             if task_id and (task is None or task.state != "ready"):
-                # 等待已被终结（auto_approve/reject 先行）：预警不再触发（spec §5.1）
+                # 等待已被终结（auto_approve/reject 先行）：预警不再触发
                 job.result_payload = {
                     **(job.result_payload or {}),
                     "skipped": "task already finished",
@@ -104,7 +104,7 @@ class DeadlineStrategiesMixin:
             job.result_payload = {**(job.result_payload or {}), "skipped": str(exc)}
 
     def _apply_wait_timeout(self, ctx: CommandContext, job: JobRow, kernel: Any) -> None:
-        """等待节点到时（spec §7.2）：订阅置 elapsed 留痕 → timer_fired → 推进。
+        """等待节点到时：订阅置 elapsed 留痕 → timer_fired → 推进。
 
         竞速仲裁零新代码：命中先落则订阅已 matched、令牌已完结——按跳过结案
         （不重试不死信）；到时先落则订阅行置 elapsed（waiting 反查只看 open、
@@ -153,7 +153,7 @@ class DeadlineStrategiesMixin:
         finish_wait(kernel, ctx.session, instance, token, result="elapsed")
 
     def _apply_instance_deadline(self, ctx: CommandContext, job: JobRow, kernel: Any) -> None:
-        """实例时限到点（spec §7）：mark 打标继续跑 / cancel 作废 / terminate 终止。"""
+        """实例时限到点：mark 打标继续跑 / cancel 作废 / terminate 终止。"""
         strategy = job.payload.get("strategy", "mark")
         instance = ctx.session.get(ProcessInstanceRow, job.instance_id)
         if instance is None or instance.state in TERMINAL_INSTANCE_STATES:
@@ -211,9 +211,9 @@ class DeadlineStrategiesMixin:
     ) -> None:
         """reassign / escalate：两条都是**图纸给的 CEL 目标**。
 
-        取人语义归宿主（spec §5.5 分工铁律）——引擎不含「上级」概念，escalate 的
+        取人语义归宿主（分工铁律）——引擎不含「上级」概念，escalate 的
         目标由 `escalate_to` 表达式给出（科层组织写 `'manager_of(task.assignee)'`）。
-        两者共用求值契约（fire 时求值、task.* 快照注入，spec §4.2/C.4），差别只在
+        两者共用求值契约（fire 时求值、task.* 快照注入），差别只在
         审计事件：escalate 记 TASK_ESCALATED（升级语义），reassign 不记。
         """
         from flowork.expr.cel import FormulaError, evaluate_formula_value
@@ -224,7 +224,7 @@ class DeadlineStrategiesMixin:
         expression = str(job.payload.get(field) or "")
         if not expression:
             raise EngineExecutionError(f"{strategy} deadline 缺少目标（{field}，job={job.id}）")
-        # fire 时求值（spec §4.2/C.4）：task.* 快照取当前任务行，活任务 outcome=null
+        # fire 时求值：task.* 快照取当前任务行，活任务 outcome=null
         instance = ctx.session.get(ProcessInstanceRow, job.instance_id)
         if instance is None:
             raise EngineExecutionError(f"{strategy} 实例不存在（job={job.id}）")

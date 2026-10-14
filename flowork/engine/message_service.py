@@ -1,4 +1,4 @@
-"""消息服务（kernel-v2 spec §7）：缓冲、TTL、按关联键匹配订阅。
+"""消息服务：缓冲、TTL、按关联键匹配订阅。
 
 - ``publish_message``：先到进缓冲（TTL），命中即关联（FCFS）；message_id 全局
   唯一防重。``subscribe``：登记并反查缓冲（消息先到竞态）；命中即完整关联动作
@@ -31,7 +31,7 @@ DEFAULT_TTL_SECONDS = 86_400
 
 
 class MessageService:
-    """消息/信号的发布-订阅-关联（spec §7）。"""
+    """消息/信号的发布-订阅-关联。"""
 
     def __init__(self, engine: ProcessEngine) -> None:
         self._engine = engine
@@ -53,7 +53,7 @@ class MessageService:
         def _command(ctx: CommandContext) -> bool:
             message_id_ = message_id or uuid.uuid4().hex
             self._purge_expired(ctx)
-            # 防重只按 message_id（spec §7）：未消费缓冲 ∪ 已消费定格记录，与关联键无关。
+            # 防重只按 message_id：未消费缓冲 ∪ 已消费定格记录，与关联键无关。
             duplicate = (
                 ctx.session.scalars(
                     select(MessageBufferRow.id).where(MessageBufferRow.message_id == message_id_)
@@ -82,7 +82,7 @@ class MessageService:
                 message_id=message_id_,
             )
 
-            # 在途订阅优先（FCFS）；暂停实例跳过（spec §7.2 全动作拦截，消息落
+            # 在途订阅优先（FCFS）；暂停实例跳过（全动作拦截，消息落
             # 下一优先级），命中走完整管线（映射+推进）。
             from flowork.engine.message_query import first_open_subscription
 
@@ -95,7 +95,7 @@ class MessageService:
                 ):
                     return True
 
-            # 启动匹配（spec §7.1，第三优先级）：在途订阅未消费 → 查定义派生的
+            # 启动匹配（第三优先级）：在途订阅未消费 → 查定义派生的
             # 启动订阅；命中即同事务发起实例并定格 message_id（不回溯缓冲）。
             from flowork.engine.message_start import match_start_on_message
 
@@ -127,7 +127,7 @@ class MessageService:
         name: str,
         correlation_key: str = "",
     ) -> bool:
-        """登记订阅；命中缓冲区未过期消息立即关联（消息先到竞态，spec §7）。"""
+        """登记订阅；命中缓冲区未过期消息立即关联（消息先到竞态）。"""
 
         def _command(ctx: CommandContext) -> bool:
             from flowork.engine.message_flow import subscribe_open
@@ -145,7 +145,7 @@ class MessageService:
         return self._engine.execute(_command)
 
     def close_subscriptions(self, instance_id: str, *, node_id: str | None = None) -> int:
-        """节点离开/实例终止时关闭订阅（spec §7 生命周期）。"""
+        """节点离开/实例终止时关闭订阅。"""
 
         def _command(ctx: CommandContext) -> int:
             stmt = delete(MessageSubscriptionRow).where(
@@ -160,7 +160,7 @@ class MessageService:
         return self._engine.execute(_command)
 
     def signal(self, name: str) -> int:
-        """广播唤醒（spec §7）：matched 所有在等该名字的 open 订阅，不带数据。"""
+        """广播唤醒：matched 所有在等该名字的 open 订阅，不带数据。"""
         from flowork.engine.message_flow import broadcast_signal
 
         return broadcast_signal(self._engine, name)
@@ -174,7 +174,7 @@ class MessageService:
         message_id: str | None = None,
         instance_id: str | None = None,
     ) -> dict[str, Any] | None:
-        """同步关联（不缓冲）：命中回传签收凭证，无人在等返回 None（§7.2）；
+        """同步关联（不缓冲）：命中回传签收凭证，无人在等返回 None；
         ``instance_id`` 定向＝只消费本实例订阅（防串单）。"""
         from flowork.engine import message_query as _mq
 
@@ -205,7 +205,7 @@ class MessageService:
         offset: int = 0,
         limit: int = 50,
     ) -> list[dict[str, Any]]:
-        """消息检索（spec §12 messages/search 数据源；缓冲∪订阅行，见 message_query）。"""
+        """消息检索（缓冲∪订阅行，见 message_query）。"""
         from flowork.engine import message_query as _mq
 
         return _mq.list_messages(
@@ -231,7 +231,7 @@ class MessageService:
     ) -> None:
         """关联成功（同事务）：matched＋载荷写入（映射或全量，契约边界）＋事件。
 
-        mappings（spec §7）：右侧表达式于消息上下文（payload.*+now）求值，缺键
+        mappings：右侧表达式于消息上下文（payload.*+now）求值，缺键
         None；未声明全量合并兜底。映射求值错＝技术故障（publish 失败不落库）。
         """
         from flowork.definitions.contract import validate_input_contract

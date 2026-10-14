@@ -1,4 +1,4 @@
-"""REST /v2 instances 面：发起/搜索/动作/实例级 signal/变量（spec §12 + 补缺发起端点）。"""
+"""REST /v2 instances 面：发起/搜索/动作/实例级 signal/变量（含补缺发起端点）。"""
 
 from __future__ import annotations
 
@@ -124,7 +124,7 @@ def register_instance_routes(app: FastAPI, engine: ProcessEngine) -> None:
 def signal_waiting_instance(
     engine: ProcessEngine, instance_id: str, body: dict[str, Any]
 ) -> dict[str, Any]:
-    """实例级 signal：按本实例 open 订阅的 (name, key) 同步关联，回执核验防串单（设计 §2.4）。"""
+    """实例级 signal：按本实例 open 订阅的 (name, key) 同步关联，回执核验防串单。"""
     runtime = engine.runtime
     runtime.get_instance(instance_id)  # 不存在 → InstanceNotFoundError（404）
     name = body.get("name")

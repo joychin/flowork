@@ -4,7 +4,7 @@
 本组把运行时 join gate 的可达性遍历镜像到设计时（共用
 :mod:`flowork.definitions.graph`，判据同源）。两条规则均为 WARNING——
 不影响发布拦截面，且与运行时语义严格对齐：**不复活**已移除的
-``advance.all_conditional_arm`` 判据（spec §2.3 可达性放行下，条件未命中臂
+``advance.all_conditional_arm`` 判据（可达性放行下，条件未命中臂
 会落定放行，不构成死锁）。
 
 - ``graph.subgraph.no_exit``：从 start 可达、但沿连线到不了任何 end 的节点

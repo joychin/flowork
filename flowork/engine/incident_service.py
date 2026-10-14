@@ -1,5 +1,5 @@
 """故障单（Incident）：记录、清单、五动作处置、move_token 管理员手术
-（spec §8 错误二分）。RuntimeService 经 mixin 组合，入口不变。
+（错误二分）。RuntimeService 经 mixin 组合，入口不变。
 """
 
 from __future__ import annotations
@@ -147,7 +147,7 @@ class IncidentMixin:
     def resolve_incident(
         self, incident_id: str, action: str = "resume", actor: str = "admin"
     ) -> None:
-        """修复 Incident（spec §8，根因没修好允许复发）。
+        """修复 Incident（根因没修好允许复发）。
 
         - resume：恢复运行（轻症——外部环境已恢复）；
         - cancel：取消实例（业务侧放弃）；
@@ -206,7 +206,7 @@ class IncidentMixin:
                 raise ValueError(f"未知修复动作：{action}（支持 resume/cancel/retry/skip/fail）")
             incident.state = "resolved"
             incident.resolution = action
-            # spec §10 承诺事件：订阅方据此后撤告警/统计
+            # 订阅方据此后撤告警/统计
             self._engine.kernel_for(ctx).record_event(
                 DomainEvent.INCIDENT_RESOLVED,
                 {"incident_id": incident.id, "action": action, "actor": actor},
@@ -273,7 +273,7 @@ class IncidentMixin:
         state: str | None = None,
         include_simulated: bool = False,
     ) -> list[InstanceInfo]:
-        """实例清单（可按定义版本过滤——「多少在跑实例钉旧版」的查询，spec §6.5）。
+        """实例清单（可按定义版本过滤——「多少在跑实例钉旧版」的查询）。
 
         模拟实例默认排除（与 history 面对齐——
         「模拟一等公民但默认被查询面隔离」）。"""

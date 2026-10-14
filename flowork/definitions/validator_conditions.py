@@ -1,7 +1,7 @@
 """条件与节点语义校验规则（validator 编排件的规则组二）。
 
-节点语义 / 表达式合法性 / **CEL 静态检查薄层**（spec §4.3）。
-位点统一（§4.2）：静态检查覆盖全部表达式位——连线条件、取人（assignee/
+节点语义 / 表达式合法性 / **CEL 静态检查薄层**。
+位点统一：静态检查覆盖全部表达式位——连线条件、取人（assignee/
 assignees/recipients）、超时改派（reassign_to）、子流程映射值；各公式经
 ``expr.cel`` 编译 + ``collect_references`` 收集，对照已声明变量与
 ExpressionFunctions 注册表签名。未声明变量 ERROR（K8s CRD 体验）、未注册函数
@@ -193,7 +193,7 @@ def check_start_on_message(
     *,
     expression_functions: ExpressionFunctions | None = None,
 ) -> None:
-    """start_on_message 声明校验（spec §7.1）：name 必填、表达式编译与函数对照。
+    """start_on_message 声明校验：name 必填、表达式编译与函数对照。
 
     变量引用不查——消息上下文的 payload 形状消息侧才知（同 mapping_output
     先例）；correlation/start_user/business_key 运行期须 string（运行期把关）。
@@ -241,8 +241,7 @@ def check_start_on_message(
                 if name in engine_fns:
                     error(
                         "start_on_message.function.position",
-                        f"{field} 调用 {name}(...)：消息上下文无节点事实"
-                        f"（payload.*+now，spec §7.1）",
+                        f"{field} 调用 {name}(...)：消息上下文无节点事实（payload.*+now）",
                         node=where,
                     )
                     continue
