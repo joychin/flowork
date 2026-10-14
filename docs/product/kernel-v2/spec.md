@@ -649,6 +649,8 @@ class ExpressionFunctions(Protocol):     # ✓ CEL 自定义函数来源（4.3�
 - **两级事件语义（成文）**：状态层（process_completed/cancelled/terminated、node_entered/cancelled）回答「流程现在什么样」且是终态契约三件套；动作层（`*_by_admin`）回答「谁动了手术」——同一操作两层各自完整，终态唯一化会破坏「终态 ∈ 三件套」订阅契约，不做。`process_finished_by_admin` 补 `end_status`。
 - **缺位信号**：`sub_process_completed`（父侧子完成信号——先落事件再判唤醒，挂起期唤醒落空也留痕；载荷 sub_instance_id/child_definition_code/end_status/parent_node；MI 逐子与级联终止同点覆盖）；`process_suspended`（incident 挂起与 process_paused 对称，带 incident_id+activity_code）；`process_resumed` 补到 incident resume/retry/skip 三路（incident_resolved 保留为故障单生命周期层）。`node_cancelled.by` 统一语义标签（级联缺省 `instance_terminated/cancelled`，MI 传 `multi_instance_completion`）。枚举 45 个成员。
 
+**补点名（2026-10-14 review 批——此前 §10 只逐字点名 36/45，其余以族称带过，读者无法从本文重建全集）**：上文未逐字点名的 9 个为 `task_assist_created` / `task_assist_cancelled` / `task_consult_created` / `task_consult_finished` / `task_countersigner_added` / `cc_created` / `node_activated_by_admin` / `node_cancelled_by_admin` / `token_moved_by_admin`。已删除成员（勿再订阅）：`task_delegated`、`task_resolved`（与 task_transferred/assist/consult 语义重复）、`node_failed`（零发射删除）。
+
 - **信封**：CloudEvents 1.0.2——type=事件名，id=outbox 行 id（可排序唯一串，消费端按 id 去重），source=`flowork://{engine_id}`，data=事件字段。
 - **交付保证**：事件与业务变更**同一个数据库事务**写入 outbox（transactional outbox，库形态独有优势）；分发为至少一次，消费端需幂等（IdempotentSink 为进程内参考实现；消费器无 SKIP LOCKED/CAS，多副本同跑会重复投递——跨进程去重由业务侧落库幂等兜底）。
 - **不发什么**：引擎内部写变量不发事件（防刷屏——任务提交/钩子/映射的变量变更走 wf_variable_history 留痕表，见 14 章；血缘查询可得）；外部变量更新命令例外，发 variables_updated（低频高关注）；传阅已读不发（查询可得）。
@@ -711,8 +713,8 @@ class ExpressionFunctions(Protocol):     # ✓ CEL 自定义函数来源（4.3�
 | wf_message_subscription（新表） | instance_id, node_id, name, correlation_key, state(open/matched) |
 | wf_variable_index（新表） | instance_id, name, value_text, value_num |
 | wf_variable_history（新表，变量 I/O 批 2026-10-08） | instance_id, name, old_value, new_value, source, acted_by, created_at；追加只写，全写方覆盖（任务提交/钩子/外部命令），命令尾 diff 产生，值相等跳过 |
-| wf_route_decision（新表，F3 路由审计 2026-10-08） | instance_id, node_id, edges JSON（逐条件边 result），selected, snapshot JSON；无条件路由也落行 |
-| wf_designer_draft（新表，设计器批 C4 2026-10-11） | code, content（语义）, layout（画布，读写拆合）, published_versions；草稿与发布版独立 |
+| wf_route_decision（新表，F3 路由审计 2026-10-08） | id（可排序串，2026-10-14 review 批）, instance_id, token_id, source_activity, mode, edges JSON（逐条件边 result）, selected JSON, snapshot JSON, created_at；无条件路由也落行 |
+| wf_designer_draft（新表，设计器批 C4 2026-10-11） | code, name, content（语义）, seq, open, layout（画布，读写拆合）, updated_at；published_versions 是 RepositoryService 方法非列 |
 
 迁移走 Alembic 基线（与多副本欠账合并排期）。
 
@@ -951,6 +953,17 @@ Zeebe inputCollection/outputCollection 契约实装（multi-instance-call-design
 6. **测试**：+17 例（late_arrival 3/pause_admin_surface 5/exit_unreachable 6/m4 裸 id 语义升级/wait 夹具改写），905 全绿；存量修补＝examples 七模板与 13 测试文件补变量声明（纯增量）。
 
 **第二十轮随批条款（乙类 B1–B9，审计已定行为补成文）**：① first_match 并列命中＝flows 数组声明序取第一条真边（重部署按新序；§2.4）。② 驳回侧剩余待办撤销＝outcome auto_pass＋文案「节点已否决」＋cause_token_id（不复用 approve 侧 on_exit；§5.1）。③ 驳回归零＝取消**全实例**未完令牌（不限兄弟臂、不评条件），已完臂成果保留、复活后汇合靠 join_gate 不重跑（§5.1）。④ 驳回到发起人：重提任务只带固定提示不带驳回 comment；实例变量不清（显式携带才合并）（§5.1）。⑤ 复活新任务 created_at/deadline 全部重算，活任务行不带 cause_token_id（关联查历史侧）；会签计数按 token 隔离从零起步（§5.1）。⑥ 子流程内驳回性以子实例为界（传父节点码＝断言失败），不终止子实例、父 call 持续等待（§5.3）。⑦ 委托只在取人解析时刻判窗替换，窗口结束已派待办不归还、无回扫（§5.4）。⑧ move_token 直调 activate 绕过 all 放行门（现状保持）；挂起实例上 move 后实例仍 suspended 不自动恢复（§2.3/§11）。⑨ 候选制一张共享待办 item_count=1，谁认领谁办理计一票（§5.5）。
+
+### 第二十一轮（2026-10-14，全仓 review 修复批——四份报告 docs_research/，12+ 提交）
+
+来源：全仓 review 四批（开放面 REST+MCP 深读 / designer+web / 修复代码回归审查 / 横切专项），6 P0+15 P1 全部实证修复；本条录语义级变更（行为级细节见各提交与 docs_research/ 四报告）。
+
+1. **故障单×实例状态交叉守卫（§8）**：resolve(resume/retry) 仅接受 suspended——修前 terminate 不联动关单，对残存 open 单可把**已终止实例复活为 running**（零未完令牌永久卡死）；paused 指路 resume_process。terminate/cancel 级联**整树联动关闭 open 故障单**（resolution=`instance_{end_status}` 非五动作标签；resolve 自身 cancel/fail 传 close_incidents=False 防事件双发）。skip 对终态实例拒绝（防僵尸令牌）。
+2. **correlate 实例定向（§7.2）**：`correlate_message` 增 `instance_id` 参数——signal 面（REST/MCP）只消费本实例的 open 订阅，**防串单**：修前全局 FCFS 下两实例等同 (name,key)，对 B 发 signal 会把消息消费给 A（回执核验只防误报成功、防不住副作用落错单）。定向模式不做启动匹配；publish 路径（全局 FCFS）零变化。
+3. **withdraw 重复撤回守卫（§5.1）**：本人在本节点已有在办待办即拒绝第二次撤回——修前双击/重试产出双令牌双待办，其一永久无人收口。按「本人在办」判定而非按节点（并行会签他人的在办不拦合法撤票）。
+4. **错误归因帧补口**：wait 收口的路由调用与驳回的声明式 on_exit 入归因帧（修前 activity_code=None——incident 定位/挂起定位/on_fail 三面同时失效）；on_fail 多令牌逐个执行。
+5. **开放面契约（§12/§13 对应面）**：REST instances/events 分页 limit+1 探测（修前 next_cursor 恒 None 第二页不可达）；InputContractError→422；NaN/数值字段归一 422；RequestValidationError 统一错误体；transfer 缺 to_user 422（孤儿任务根除）；update_variables 终态拒改 409（挂账兑现）。MCP：业务错误 isError=True 统一 JSON；McpToolError/UnknownToolError/McpConflictError 三分类；写工具 actor 必填（兑现本设计 §127 承诺）；三查询工具分页；state 白名单。
+6. **物理与文档**：wf_event_outbox (occurred_at,id) 复合索引（迁移 0006）；wf_route_decision id 改可排序串（修前随机 UUID——路由轨迹顺序随机）；instances/paged_tasks 列表 id 次键。spec §10 补 9 成员点名、§14 列名修正；API.md/integration.md 计数与漂移收口。
 
 ## 附录 C：类型清单（须提前定义的全集）
 

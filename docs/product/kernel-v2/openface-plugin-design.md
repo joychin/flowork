@@ -82,12 +82,18 @@ JobStateError→409`、`DefinitionError→422`（`InvalidDefinition` 的 issues 
 ### 2.4 actor 归因与实例级 signal
 
 - actor：`X-Flowork-Actor` 头（缺省 `rest`），body `actor` 可覆盖；**鉴权不在范围**
-  （engine-v1 02：权限归宿主，既定裁定）。
+  （engine-v1 02：权限归宿主，既定裁定）。**安全警示（2026-10-14 review 批）**：
+  body.actor 优先于头——网关若以头为权威身份注入，必须同时剥离请求体里的
+  `actor` 键，否则客户端可伪造归因。
 - signal（实例级唤醒）：内核原语是名字域广播/关联，无实例域 signal——映射为「按本实例
   open 订阅的 (name, correlation_key) 做同步关联（`correlate_message`），回执
   `instance_id` 必须等于目标实例，不等或无回执 409；无订阅 404」。body 可显式给
-  correlation_key / payload / message_id；回执核验保证不串单。MCP `signal_instance`
-  同此语义。
+  correlation_key / payload / message_id。**串单口径修正（2026-10-14 review 批）**：
+  「回执核验防串单」原文不准——核验只防误报成功，防不住副作用（修前消息被全局
+  FCFS 先到的他人实例消费并推进，signal 才报 409）。修后 `correlate_message` 增
+  `instance_id` 实例定向：signal 面只消费本实例订阅，副作用不可能落错单；回执
+  核验保留为并发兜底（message_id 已被他人消费的幂等回放仍 409）。MCP
+  `signal_instance` 同此语义。
 
 ### 2.5 过滤维度现状（诚实清单）
 

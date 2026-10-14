@@ -23,7 +23,7 @@ uv run flowork task claimable <user>      # 我可认领的待办（候选关联
 | 表 | 内容 |
 |---|---|
 | wf_process_definition | 定义（code+major+revision、content_hash、发布后不可变） |
-| wf_process_instance | 实例（definition_snapshot 快照；version 乐观锁；deadline_at/actor_context） |
+| wf_process_instance | 实例（definition_snapshot 快照；version 乐观锁；deadline_at；simulated=模拟隔离；parent_index=MI 迭代序——actor_context 在 wf_task_history 非本表） |
 | wf_token | 令牌（三计数：item/approve/disapprove；reject_flag） |
 | wf_task / wf_task_history | 待办（活表）/ 已办（append-only，驳回复活不删不改历史） |
 | wf_cc_task | 传阅件（含已读） |
@@ -146,7 +146,7 @@ FLOWORK_TEST_PG_URL=postgresql+psycopg://... uv run pytest -m needs_postgres   #
   # 或挂进宿主 FastAPI：from flowork.contrib.rest import register_rest_routes; register_rest_routes(app, engine)
   ```
 
-- **AI（MCP，已落地）**：`flowork/contrib/mcp`——18 工具（清单=kernel-v2 spec §13），
+- **AI（MCP，已落地）**：`flowork/contrib/mcp`——19 工具（清单=kernel-v2 spec §13），
   全 typed、幂等键、行动提示式返回；AI 与人共用同一待办/办理面（引擎不区分主体类型）。
 
   ```bash

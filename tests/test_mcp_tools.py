@@ -1,4 +1,4 @@
-"""MCP 18 工具 dispatch 行为测试（openface-plugin-design.md §7）：传输层之下直接执行。"""
+"""MCP 19 工具 dispatch 行为测试（openface-plugin-design.md §7）：传输层之下直接执行。"""
 
 from __future__ import annotations
 

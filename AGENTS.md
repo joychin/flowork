@@ -44,7 +44,7 @@ flowork/
 │                  queries 读缓存/audit 写审计/store/orm）
 ├── cli/           CLI 投影面（运维+用户面）——只准走 flowork.api（静态纪律测试守卫）
 ├── contrib/       官方插件包：词汇插件(cel/numeric) + 三传输面（web/ 设计器内部面、
-│                  rest/ 对外 /v2 集成面、mcp/ AI 18 工具面）——全经 flowork.api
+│                  rest/ 对外 /v2 集成面、mcp/ AI 19 工具面）——全经 flowork.api
 │                  ——内核禁止 import 它；插件只准经 flowork.api 用内核（双向铁律）
 ├── clock.py       时间戳统一 naive UTC 的唯一出口
 ├── errors.py      异常体系
@@ -655,3 +655,24 @@ ctx.token 可为 None——「节点在失败命令内激活后整笔回滚」�
 （FAILED 态涉汇聚/复活语义属重设计）；钩子异常不吞故障单；模拟实例不执行（A10）——顺带修掉
 「模拟实例失败产孤儿故障单」旧洞（_record_incident 补模拟守卫）。1088 全绿，五道门全过。
 **至此事件 review 全链路（review→复核→续修→终章，13+1 提交）彻底闭环，账面零挂账。**
+
+**全仓 review 修复批（2026-10-13/14，四份报告 docs_research/*review-2026-10.md；14 提交 36d3984→本批，1130 全绿五道门全过）**：
+上次全内核 review（2026-10-10）之后新落的代码（REST/MCP 开放面、designer+web 审计面、事件修复批自身）经四批深 review
+（6 P0+15 P1+~40 P2，全部实验实证+主会话亲读复核），P0/P1 全修复：
+① **内核**：resolve(resume/retry) 终态/暂停守卫+terminate/cancel 级联联动关 open 故障单（终态实例复活根除，
+`instance_{end_status}` 联动标签，resolve 自身 cancel/fail 传 close_incidents=False 防双发）｜withdraw 重复撤回守卫
+（按「本人在办」不按节点——并行会签撤票不拦）｜wait route/reject on_exit 归因入帧（activity_code=None 三面失效根除，
+红绿验证）｜correlate_message 增 instance_id 实例定向——signal 防串单（修前全局 FCFS 会把消息消费给先到的他人实例，
+副作用落错单；publish 路径零变化）｜事件复合索引 ix_event_order（迁移 0006）/route_decision 可排序 id（修前路由轨迹
+顺序随机）/实例已办列表 id 次键。② **REST**：instances/events 分页 +1 探测（next_cursor 恒 None 二页不可达根除）｜
+InputContractError 422｜NaN 死循环（DoS）/transfer 孤儿任务/数值字段裸 500/统一错误体/终态 409 五件输入校验组。③ **MCP**：
+isError=True 统一错误 JSON｜McpToolError/UnknownToolError/McpConflictError 三分类｜**写工具 actor 必填**（兑现 openface
+承诺）｜三查询工具分页（返回 items/total）｜state 白名单/参数预检组｜dispatch WeakKeyDictionary 缓存。④ **designer**：
+缺省 mode 改 readonly（原 edit 与拍板相反）/store.mutate 写咽喉守卫+adapter 逐节点硬编码删除（readonly 架空根除）/
+新建入口隐藏/saveNow 防重/Ctrl+Z 让位输入框/bootstrap 吞错呈现。⑤ **web+内核**：simulate 非 dict spec 422（修前静默
+测旧草稿）/子资源统一 404/limit 界/404 映射/assert 竞态回退/迁移提示；cel.py FormulaError 消息截断 300 字符（修前
+celpy 环境转储数 KB 泄漏变量值）。⑥ **文档**：API.md 补 simulate/consult/list_messages/list_jobs+manager_of 纯人
+语义+19 工具；spec §10 补 9 成员点名/§14 列名修正/附录第二十一轮；openface §2.4 串单口径修正+actor 剥离警示；
+integration.md actor_context 等列修正；18→19 计数漂移五处。
+**遗留（有意后置）**：designer 样式作用域收口（npm 嵌入形态级，需容器前缀化+视觉走查）/npm 包声明面（peerDependencies
+决策）/readonly 数据源取已发布版（C2 漂移，需产品拍板）/REST response_model 声明/竞速取消 actor 穿透（随重排刀）。

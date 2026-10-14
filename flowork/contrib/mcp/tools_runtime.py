@@ -1,4 +1,4 @@
-"""MCP 运行时组工具：实例发起/查询/signal/pause、变量、消息、故障单（8 个）。"""
+"""MCP 运行时组工具：实例发起/查询/signal/pause、变量、消息、故障单（9 个）。"""
 
 from __future__ import annotations
 

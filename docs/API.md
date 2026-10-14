@@ -49,6 +49,8 @@ engine.close()
 | `update_variables(instance_id, updates, *, actor, reason="") -> dict` | 外部受控改值（PATCH 合并；白名单=声明∪input schema∪既有键、保留键拒、类型对位、≤256KB、终态拒；发 variables_updated） |
 | `variables_of(instance_id) -> dict` | 变量值全集（只读，含运行期键） |
 | `variable_history(instance_id, *, name=None, limit=50, offset=0)` | 变量血缘（改前/改后+写方归因，倒序；引擎与外部全写方留痕） |
+| `simulate(code, *, spec=None, variables=None, major=None, revision=None) -> SimulationReport` | 整图模拟试跑（A10，一等公民）：真跑定义——终态/令牌时间线/stub 清单/卡点/路由轨迹；`spec=` 草稿直通（证据先于发布），隔离语义（事件不投 outbox、不建 Job、失败不产故障单）|
+| `list_instances(*, definition_code=None, major=None, revision=None, state=None, include_simulated=False)` | 实例清单（可按定义版本过滤——「多少在跑实例钉旧版」查询） |
 
 ## TaskService（任务，`engine.task`）
 
@@ -63,6 +65,7 @@ engine.close()
 | `assist(task_id, users, actor)` / `complete_assist(task_id, actor)` | 协办（不推进流程） |
 | `list_cc_tasks(*, recipient=None, instance_id=None)` / `mark_cc_read(cc_id, user)` | 传阅 |
 | `add_countersigner(task_id, users, actor)` | 加签（item_count 联动） |
+| `consult(task_id, users, actor)` / `complete_consult(task_id, actor)` | 咨询（A8）：先收意见、原办理人拍板——意见任务不占票，未收齐前主任务全动作被拦 |
 | `withdraw(task_id, actor)` | 撤回已办（取消下游、原人重办） |
 | `activate_node(instance_id, activity_code, actor, participants=None)` / `cancel_node(...)` | 管理员激活/取消节点 |
 | `finish_instance(instance_id, actor)` / `remove_instance(instance_id, actor)` | 强制完成（终态守卫；令牌补发 node_exited；process_completed+process_finished_by_admin 两级事件）/ 删除实例（运行时数据按全树删；事件只删**已送达**行，未投递保留待消费） |
@@ -88,7 +91,8 @@ engine.close()
 | 方法 | 说明 |
 |---|---|
 | `publish_message(name, correlation_key="", payload=None, *, message_id=None, ttl_seconds=...) -> bool` | 发布消息：命中 open 订阅立即关联（True）；否则入缓冲（False）；message_id 幂等防重。等待节点（wait kind）命中即推进（按节点 output_mappings 写载荷，缺省全量合并）；暂停实例的订阅不消费 |
-| `correlate_message(name, correlation_key="", payload=None, *, message_id=None) -> dict \| None` | **同步关联（不缓冲，spec §7.2）**：命中回传签收凭证 `{matched, duplicate, instance_id, node_id, message_name, business_key, definition_code}` 并推进；无人在等返回 None（消息不留存）；重复 message_id 幂等回放首次结果（duplicate=True） |
+| `correlate_message(name, correlation_key="", payload=None, *, message_id=None, instance_id=None) -> dict \| None` | **同步关联（不缓冲，spec §7.2）**：命中回传签收凭证 `{matched, duplicate, instance_id, node_id, message_name, business_key, definition_code}` 并推进；无人在等返回 None（消息不留存）；重复 message_id 幂等回放首次结果（duplicate=True）。`instance_id` 实例定向＝signal 面只消费本实例订阅（防串单；定向时不做启动匹配） |
+| `list_messages(*, name=None, correlation_key=None, kind=None, state=None, offset=0, limit=50)` | 消息检索（spec §12 messages/search 数据源；未消费缓冲∪已消费订阅两源合并，时间倒序） |
 | `subscribe(instance_id, token_id, node_id, name, correlation_key="") -> bool` | 登记订阅；命中缓冲未过期消息立即关联（先到竞态） |
 | `signal(name) -> int` | 广播信号（唤醒全部同名订阅） |
 | `waiting(name=None, correlation_key=None) -> list[dict]` | 等待实例反查（open 订阅）：实例/节点/消息名/关联键/流程/业务键/等待起时——运维面；CLI `flowork message waiting` |
@@ -108,12 +112,13 @@ Worker 面（service_task mode=worker，`engine.worker_jobs`）：
 | `create_worker_job(*, job_type, instance_id, payload=None, max_retries=3) -> str` | 引擎侧落外部执行 Job |
 | `activate_jobs(job_types, *, worker_id, max=10, visibility_timeout_seconds=300) -> list[JobClaim]` | 批量领活（租约制：领到即租住，到期未交货可被重领） |
 | `complete_job(job_id, *, worker_id, output)` / `fail_job(job_id, *, worker_id, error, retry_delay_seconds=...)` | 交货 / 失败（易主交货抛 JobStateError） |
+| `list_jobs(*, state=None, job_type=None, instance_id=None, offset=0, limit=50)` | Job 查询（REST /v2/jobs/search 数据源） |
 
 ## 扩展点
 
 - **自定义节点**：`FlowNode` 子类（Spec）+ `NodeBehavior` 子类 + `config.node_registry.register(kind, spec, behavior)`。
 - **声明式钩子**：节点 `hooks={"on_exit": {"handler": "name", "params": {...}}}` + `engine.register_handler("name", fn)`。
-- **表达式函数（全位点 CEL 词汇）**：经 `ExpressionFunctions` 端口注册（必须带 FunctionSignature 签名，纯读闭包无 ctx）；一行挂官方词汇：`config.expression_functions = contrib.cel_vocabulary(org)`（manager_of/users_with_role/has_role——`manager_of` 对 AI 代理的 id 返回其负责人 owner）。取人/传阅/改派+升级/连线条件/子流程映射共用同一注册面。
+- **表达式函数（全位点 CEL 词汇）**：经 `ExpressionFunctions` 端口注册（必须带 FunctionSignature 签名，纯读闭包无 ctx）；一行挂官方词汇：`config.expression_functions = contrib.cel_vocabulary(org)`（manager_of/users_with_role/users_in_org/has_role——四词汇；`manager_of` 为纯人语义：人→部门主管、`org:`→部门负责人，查无返回 None）。取人/传阅/改派+升级/连线条件/子流程映射共用同一注册面。
 - **判断面事实**：公式可用 `now`/`prev_task`/`node("code")`（引擎注入，词汇目录见 spec §4.3/C.4，权威在 `expr/catalog.py`）。
 - **事件消费**：消费 `wf_event_outbox`（CloudEvents 信封，按 id 幂等；`from flowork.api import OutboxConsumer, IdempotentSink, DomainEvent` 为官方帮手——至少一次分发 + 按 id 幂等去重 + 引擎自发事件全集枚举，2026-10-13 起在门面上）。口径：投递序＝`(occurred_at, id)` 事件全序；事件表默认即审计历史（`purge_delivered` 缺省不清理，显式传 `retention_days` 才删）；消费器无 SKIP LOCKED——多副本同跑会重复投递（契约内），跨进程去重由业务侧落库幂等兜底；`history_level=activity` 只记 process_/node_/incident_ 前缀事件。
 
@@ -125,11 +130,14 @@ Worker 面（service_task mode=worker，`engine.worker_jobs`）：
   实例/任务动作、变量三端点、anticipate、messages、jobs（长轮询 activate）。独立进程
   `uvicorn flowork.contrib.rest.app:app` 或 `register_rest_routes(app, engine)` 挂载。
   快照守卫 `tests/test_rest_api_surface.py`。
-- **MCP**（`flowork/contrib/mcp`）：spec §13 的 18 工具（validate/deploy/dry_run/
-  definition_drift/list_definitions/start/query/signal/pause_instance/update_variables/
+- **MCP**（`flowork/contrib/mcp`）：spec §13 的 19 工具（validate/deploy/dry_run/
+  definition_drift/list_definitions/start/query/signal/pause/resume/update_variables/
   publish_message/list_my_tasks/claim/complete/reject/anticipate/list_incidents/
   resolve_incident）。stdio：`python -m flowork.contrib.mcp.server`。快照守卫
-  `tests/test_mcp_tool_surface.py`。
+  `tests/test_mcp_tool_surface.py`。错误通道：业务/参数错误一律
+  `CallToolResult(isError=True)`＋统一 `{"error":{code,message,details}}` JSON 体；
+  写工具 `actor` 必填（裸 id，无缺省）；三个查询工具带 limit/offset 分页
+  （返回 `{items,total,offset,limit}`）。
 
 门面契约版本 `flowork.api.API_VERSION`（当前 "1"）：增符号=minor（同步快照）、
 删/改名=major；插件以 `REQUIRES_FLOWORK_API` 声明依赖版本。
