@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeVar
 
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 
 from flowork.engine.history_archive import ArchiveMixin
@@ -28,11 +29,6 @@ if TYPE_CHECKING:
 
 __all__ = ["HistoryService", "Page", "TraceEntry"]
 
-
-from typing import TypeVar
-
-from pydantic import BaseModel, ConfigDict
-
 T = TypeVar("T")
 
 
@@ -40,7 +36,6 @@ class Page(BaseModel):
     """分页结果。"""
 
     model_config = ConfigDict(extra="forbid")
-
     items: list[Any]
     total: int
     offset: int = 0
@@ -62,8 +57,7 @@ class HistoryService(ArchiveMixin, TraceMixin):
     ) -> list[EventInfo]:  # offset＝REST /v2 分页探测取数用（review P0-1）
 
         def _command(ctx: CommandContext) -> Any:
-            # 全局查询取最近（P2-7），实例维度保持 asc（序列可读）；id 为可排序
-            # 串——同命令内微秒平局按发射顺序定序（事件 review A1）。
+            # 全局取最近（P2-7），实例维度 asc（可读）；微秒平局按可排序 id 定序（A1）。
             if instance_id is None:
                 stmt = select(EventOutboxRow).order_by(
                     EventOutboxRow.occurred_at.desc(), EventOutboxRow.id.desc()
@@ -96,7 +90,8 @@ class HistoryService(ArchiveMixin, TraceMixin):
             stmt = (
                 select(RouteDecisionRow)
                 .where(RouteDecisionRow.instance_id == instance_id)
-                .order_by(RouteDecisionRow.created_at)
+                # (created_at, id) 次键（web P1-3）：一次命令多行平局按可排序 id 定序
+                .order_by(RouteDecisionRow.created_at, RouteDecisionRow.id)
             )
             return [
                 RouteDecisionInfo(
@@ -124,11 +119,12 @@ class HistoryService(ArchiveMixin, TraceMixin):
         limit: int = 200,
     ) -> list[TaskHistoryInfo]:
         def _command(ctx: CommandContext) -> Any:
+            # 全局/按人查询取最近（P2-7）；实例维度保持 asc
             order = (
                 TaskHistoryRow.created_at.desc()
                 if instance_id is None and assignee is None
                 else TaskHistoryRow.created_at
-            )  # 全局/按人查询取最近（P2-7）；实例维度保持 asc
+            )
             stmt = select(TaskHistoryRow).order_by(order)
             if instance_id:
                 stmt = stmt.where(TaskHistoryRow.instance_id == instance_id)
@@ -148,11 +144,13 @@ class HistoryService(ArchiveMixin, TraceMixin):
         offset: int = 0,
         include_simulated: bool = False,
     ) -> list[InstanceInfo]:
-        """实例查询（默认隔离模拟实例，v2.3 A10）；offset＝REST /v2 分页探测
-        取数用（review P0-1——修前窗口无余量，next_cursor 恒 None 二页不可达）。"""
+        """实例查询（默认隔离模拟实例，v2.3 A10）；offset＝REST 分页探测用（review P0-1）。"""
 
         def _command(ctx: CommandContext) -> Any:
-            stmt = select(ProcessInstanceRow).order_by(ProcessInstanceRow.started_at.desc())
+            # id 次键（web P2-8）：同秒启动平局下翻页可能重漏行
+            stmt = select(ProcessInstanceRow).order_by(
+                ProcessInstanceRow.started_at.desc(), ProcessInstanceRow.id
+            )
             if not include_simulated:
                 stmt = stmt.where(ProcessInstanceRow.simulated.is_(False))
             if state:
@@ -226,7 +224,9 @@ class HistoryService(ArchiveMixin, TraceMixin):
                 stmt = stmt.where(TaskHistoryRow.instance_id == instance_id)
             total = ctx.session.scalar(select(func.count()).select_from(stmt.subquery()))
             rows = ctx.session.scalars(
-                stmt.order_by(TaskHistoryRow.created_at.desc()).offset(offset).limit(limit)
+                stmt.order_by(TaskHistoryRow.created_at.desc(), TaskHistoryRow.id)
+                .offset(offset)
+                .limit(limit)
             )
             return Page(
                 items=[_history(row) for row in rows], total=total or 0, offset=offset, limit=limit

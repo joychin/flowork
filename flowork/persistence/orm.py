@@ -191,6 +191,10 @@ class EventOutboxRow(Base):
     __table_args__ = (
         Index("ix_event_instance", "instance_id"),
         Index("ix_event_delivered", "delivered_at"),
+        # 全序排序契约的物理承载（review 批 4 O-1）：事件默认永久保留，全局
+        # events 查询与消费器取批的 (occurred_at, id) 排序在百万行级是第一个
+        # 退化点——零行为变化纯索引
+        Index("ix_event_order", "occurred_at", "id"),
     )
 
     # 可排序唯一串（32 hex），不再是随机 UUID——同微秒平局按它定序

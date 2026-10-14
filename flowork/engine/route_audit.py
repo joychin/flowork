@@ -13,7 +13,8 @@ dry-run 模拟面为只读预演，不产生审计。
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
+from itertools import count
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -68,6 +69,20 @@ def snapshot_of(variables: dict[str, Any], node_calls: dict[str, Any]) -> dict[s
     return snapshot
 
 
+# 可排序行 id（review P1-3/web P2 同批）：修前随机 UUID——模拟报告的路由
+# 轨迹按 id 排序 12 次跑出 12 种顺序（事件面 A1 同根问题，路由审计行漏掉）。
+# 时间前缀+进程内计数+pid 混入（多进程同微秒防主键冲突）。
+_RD_COUNTER = count()
+
+
+def _sortable_row_id() -> str:
+    import os
+    from datetime import datetime
+
+    usec = int(datetime.now(UTC).timestamp() * 1_000_000)
+    return f"{usec:013x}{os.getpid() % 0xFFFF:04x}{next(_RD_COUNTER):08x}"
+
+
 def persist_route_decision(
     session: Session,
     instance_id: str,
@@ -75,13 +90,11 @@ def persist_route_decision(
     audit: RoutingAudit,
 ) -> None:
     """落一行路由决策（与路由同事务；由 behavior/branch/incident 三入口调用）。"""
-    import uuid
-
     from flowork.persistence.orm_v2 import RouteDecisionRow
 
     session.add(
         RouteDecisionRow(
-            id=uuid.uuid4().hex,
+            id=_sortable_row_id(),
             instance_id=instance_id,
             token_id=token_id,
             source_activity=audit.source,
