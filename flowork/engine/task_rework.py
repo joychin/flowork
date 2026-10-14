@@ -98,6 +98,22 @@ class TaskReworkMixin:
                 f"节点 {history.activity_code} 已有你的在办待办（上次撤回已生效），"
                 f"不能重复撤回：{own_live.id}"
             )
+        # 一票一撤（动作风暴 DoD seed=20261078 发现）：上述「本人在办」是代理
+        # 判据，重建待办被转走/办结后即失效——同一 agree 行可被二次撤回，票数
+        # 二次回退（计数被 max(0,·) 钳住但 task_withdrawn 双发）账目漂移。
+        # 事件守卫：该任务已有 task_withdrawn 留痕 → 拒绝（撤回只可一次）。
+        from flowork.persistence.orm import EventOutboxRow
+
+        withdrawn_before = ctx.session.scalars(
+            select(EventOutboxRow).where(
+                EventOutboxRow.instance_id == instance.id,
+                EventOutboxRow.event_name == DomainEvent.TASK_WITHDRAWN.value,
+            )
+        ).all()
+        if any(row.payload.get("task_id") == task_id for row in withdrawn_before):
+            raise TaskNotAvailableError(
+                f"该票已撤回过（一票只可撤一次，重建待办转走亦然）：{task_id}"
+            )
         # 只取消下游盆内的未完令牌（code-review 2026-10 P0-3）：此前的「取消全部
         # 未完」在含并行分叉的图上会把仍在办理的兄弟分支一并砍掉——兄弟令牌不在
         # 本节点下游、闸门不拦，其审批人待办被静默作废；拍板④「取消全部与只取消

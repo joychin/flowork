@@ -114,3 +114,23 @@ def test_parallel_countersign_withdraw_not_blocked_by_peers():
     engine.task.complete(rebuilt_v1.id, actor="v1")
     engine.task.complete(_live_tasks(engine, instance_id, "cs")[0].id, actor="v2")
     assert engine.runtime.get_instance(instance_id).state == "completed"
+
+
+def test_withdraw_once_per_vote_even_if_rebuilt_task_moved():
+    """一票一撤（动作风暴 DoD seed=20261078 发现）：重建待办被转走后，
+    「本人在办」代理失效，同一 agree 行二次撤回会二次回退计数+双发
+    task_withdrawn（票数账不平）。修后：事件守卫拒绝，账目平衡。"""
+    engine = _countersign_engine()
+    instance_id = engine.runtime.start_process("wd_cs", start_user="u0")
+    tasks = engine.task.list_tasks(instance_id=instance_id)
+    first = next(t for t in tasks if t.assignee == "v1")
+    engine.task.complete(first.id, actor="v1")  # v1 投同意
+    engine.task.withdraw(first.id, actor="v1")  # 撤票 → 同令牌重建 v1 待办
+    rebuilt = next(t for t in engine.task.list_tasks(instance_id=instance_id) if t.assignee == "v1")
+    engine.task.transfer(rebuilt.id, to_user="v9", actor="v1")  # 重建待办转走，代理失效
+    with pytest.raises(TaskNotAvailableError, match="一票只可撤一次"):
+        engine.task.withdraw(first.id, actor="v1")
+    token = engine.history.tokens(instance_id)[0]
+    withdrawn = [e for e in engine.history.events(instance_id) if e.event_name == "task_withdrawn"]
+    assert len(withdrawn) == 1, "同一票的 task_withdrawn 只可一次"
+    assert token.approve_count == 0, "票数回退恰一次"
