@@ -1,7 +1,6 @@
-"""故障修复动作 resume/retry 的挂起恢复共享体（自 incident_service.py 拆出守
-300 行红线，拆法同 incident_skip.py）。
+"""故障修复动作 resume/retry 的挂起恢复共享体。
 
-状态守卫（全仓 review 2026-10-13 P0-1）：仅 suspended 可恢复——修前
+状态守卫：仅 suspended 可恢复——修前
 terminate 不联动关单，对残存 open 单 resolve(resume) 可把已终止实例复活为
 running（零未完令牌永久卡死）；paused 实例走本路径会绕过 pause 恢复语义
 （timer 顺延/缓冲补消费全跳过）。
@@ -46,9 +45,9 @@ def resume_from_suspension(
         )
     ctx.touch(instance)
     instance.state = InstanceState.RUNNING.value
-    # 拍板 1：挂起期消息落缓冲——恢复后补消费（对齐 resume_process）
+    # 挂起期消息落缓冲——恢复后补消费（对齐 resume_process）
     retro_poll_instance(ctx, engine, instance)
-    # 挂起期间到达的子实例完结补推进（2026-10-13 事件 review 复核批）：
+    # 挂起期间到达的子实例完结补推进：
     # 修前只补消息——父恢复后等待子节点永久卡住
     advance_unfinished_tokens(engine, ctx, instance)
     engine.kernel_for(ctx).record_event(

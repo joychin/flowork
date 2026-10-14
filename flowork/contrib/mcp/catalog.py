@@ -28,17 +28,17 @@ __all__ = [
 
 class McpToolError(FloworkError):
     """工具层参数错误（缺必填/非法枚举/类型不符）——区别于内核业务错误
-    （review P1-8：修前用 LookupError 表达被传输壳误标 UnknownTool）。"""
+    （修前用 LookupError 表达被传输壳误标 UnknownTool）。"""
 
 
 class McpConflictError(FloworkError):
     """并发冲突（signal 回执被他人实例抢走等）——对齐 REST 409 语义
-    （review P1-11：修前与「不存在」同码，AI 会朝错误方向排查）。"""
+    （修前与「不存在」同码，AI 会朝错误方向排查）。"""
 
 
 def require_actor(args: dict[str, Any]) -> str:
     """写工具 actor 必填（openface 设计「写工具 actor 必填入参」承诺；
-    review P1-3：修前缺省 "mcp" 使审计归因退化为常量）。"""
+    修前缺省 "mcp" 使审计归因退化为常量）。"""
     actor = str(args.get("actor") or "")
     if not actor:
         raise McpToolError("actor 必填（裸 id——写操作归因不留缺省）")
@@ -46,7 +46,7 @@ def require_actor(args: dict[str, Any]) -> str:
 
 
 def page_window(args: dict[str, Any], rows: list[Any]) -> dict[str, Any]:
-    """查询工具分页切片（review P1-10：修前三个查询工具无上限，单响应
+    """查询工具分页切片（修前三个查询工具无上限，单响应
     可撑爆 AI 上下文且无缓解手段）。"""
     limit = args.get("limit", 50)
     offset = args.get("offset", 0)
@@ -82,7 +82,7 @@ _TOOLS_CACHE: weakref.WeakKeyDictionary[ProcessEngine, list[ToolSpec]] = weakref
 def build_tools(engine: ProcessEngine) -> list[ToolSpec]:
     """装配 19 工具（spec §13 清单；重名即装配错误）。
 
-    进程内缓存（review P2-7）：修前 dispatch 每次重建 19 个闭包、未知工具
+    进程内缓存：修前 dispatch 每次重建 19 个闭包、未知工具
     路径重建两次——engine 生命周期内工具面不变，WeakKeyDictionary 随引擎回收。"""
     cached = _TOOLS_CACHE.get(engine)
     if cached is not None:

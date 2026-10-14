@@ -64,13 +64,13 @@ class ProcessVariable(BaseModel):
     label: str = ""
     # dry-run 取样默认值；类型与 type 一致（list 为任意 JSON 数组）
     sample: Any = None
-    # 可检索（v2 R2/P1-5）：仅 string/number/boolean 可标（校验器把关），
+    # 可检索（spec §14）：仅 string/number/boolean 可标（校验器把关），
     # True 时变量值同步进 wf_variable_index
     searchable: bool = False
 
 
 class DeadlineStrategy(StrEnum):
-    """实例时限策略（v2.2 spec §7）：Temporal Workflow Execution Timeout 同款语义。"""
+    """实例时限策略（spec §7）：Temporal Workflow Execution Timeout 同款语义。"""
 
     MARK = "mark"
     CANCEL = "cancel"
@@ -124,9 +124,9 @@ class ProcessDefinition(BaseModel):
     revision: int = 1
     status: DefinitionStatus = DefinitionStatus.PUBLISHED
     # v2（spec §3.2）：input 契约（JSON Schema 2020-12）。None＝无契约；
-    # 有值时发起/任务提交/节点输出三处边界按 schema 校验（P0-6）。
+    # 有值时发起/任务提交/节点输出三处边界按 schema 校验。
     input: dict[str, Any] | None = None
-    # v2.2（spec §7）：实例级时限——发起时按 after_minutes 物化 deadline_at，
+    # （spec §7）：实例级时限——发起时按 after_minutes 物化 deadline_at，
     # 到点 mark（打标继续跑）/cancel（作废）/terminate（终止）
     deadline: InstanceDeadline | None = None
     # v2（spec §7.1）：消息启动声明——启动订阅=定义派生（published 即生效）
@@ -166,9 +166,9 @@ def _resolve_node(raw: dict[str, Any], registry: NodeRegistry) -> FlowNode:
 def load_definition(data: dict[str, Any] | str, registry: NodeRegistry) -> ProcessDefinition:
     """从 dict 或 JSON 字符串加载定义：节点经注册表解析为对应 Spec 类。
 
-    旧版兼容（v2 §6.2 迁移）：``version`` 字段忽略；``status: draft`` 视同
+    旧版兼容（spec §6.2 迁移）：``version`` 字段忽略；``status: draft`` 视同
     published（draft 已取消，编辑态在 git/设计器本地）。连线条件单轨 CEL
-    （spec §4.1 v2.3）——不做旧格式翻译（系统早期零兼容，存量已迁移）。
+    （spec §4.1）——不做旧格式翻译（系统早期零兼容，存量已迁移）。
     """
     if isinstance(data, str):
         try:
@@ -188,7 +188,7 @@ def load_definition(data: dict[str, Any] | str, registry: NodeRegistry) -> Proce
     try:
         return ProcessDefinition.model_validate({**data, "nodes": resolved_nodes})
     except ValidationError as exc:
-        # 非法顶层键/形状错此前裸抛 pydantic 异常——web 层变 500 非 422（P2-18）
+        # 非法顶层键/形状错此前裸抛 pydantic 异常——web 层变 500 非 422
         raise InvalidDefinitionData(f"定义结构不合法：{exc}") from exc
 
 

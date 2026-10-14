@@ -46,8 +46,8 @@ def register_rest_routes(app: FastAPI, engine: ProcessEngine) -> None:
 
     @app.exception_handler(RequestValidationError)
     async def _request_validation_error(_request: Any, exc: Any) -> JSONResponse:
-        # FastAPI 原生 422 的 {"detail": [...]} 形状破坏统一错误体契约
-        # （review P1-5）；转写为 {"error": {...}}，明细进 details.errors
+        # FastAPI 原生 422 的 {"detail": [...]} 形状破坏统一错误体契约；
+        # 转写为 {"error": {...}}，明细进 details.errors
         from fastapi.encoders import jsonable_encoder
 
         return JSONResponse(

@@ -44,7 +44,7 @@ class TaskAdminMixin:
 
         def _command(ctx: CommandContext) -> str:
             instance = self._instance(ctx, instance_id)
-            # 终态守卫（全仓 review 2026-10-13 批 3 P2-4）：终态实例上激活会造出
+            # 终态守卫：终态实例上激活会造出
             # unfinished 令牌+ready 任务（状态与事件面背离、无人收口）——对齐
             # finish_instance 已有守卫；paused/suspended 按管理手术口径（D2）放行
             if instance.state in TERMINAL_INSTANCE_STATES:
@@ -69,12 +69,12 @@ class TaskAdminMixin:
     def cancel_node(self, instance_id: str, activity_code: str, actor: str) -> None:
         """管理员取消指定节点的全部未完令牌。
 
-        两级事件（复核批成文）：逐令牌 node_cancelled(by=admin, actor)=状态层；
+        两级事件：逐令牌 node_cancelled(by=admin, actor)=状态层；
         结尾一条 node_cancelled_by_admin=动作留痕层——不是重复信号。"""
 
         def _command(ctx: CommandContext) -> None:
             instance = self._instance(ctx, instance_id)
-            # 终态守卫（同 activate_node，P2-4）：终态实例无未完令牌，本命令只会
+            # 终态守卫（同 activate_node）：终态实例无未完令牌，本命令只会
             # 发出无人对应的 node_cancelled_by_admin 动作事件
             if instance.state in TERMINAL_INSTANCE_STATES:
                 raise InstanceNotFoundError(
@@ -99,9 +99,9 @@ class TaskAdminMixin:
 
         def _command(ctx: CommandContext) -> None:
             instance = self._instance(ctx, instance_id)
-            # 终态守卫（2026-10-13 事件 review 复核批）：complete_instance 对终态
+            # 终态守卫：complete_instance 对终态
             # 静默跳过但本命令事件无条件发——修前对已终态实例再调会发假
-            # process_finished_by_admin（与 cancel/terminate 已修的 P1-2 同类）
+            # process_finished_by_admin（与 cancel/terminate 同类）
             if instance.state in TERMINAL_INSTANCE_STATES:
                 raise InstanceNotFoundError(
                     f"实例 {instance_id} 已终态（{instance.state}），不可强制完成"
@@ -123,7 +123,7 @@ class TaskAdminMixin:
                         reason="admin_finish",
                     )
                 kernel.finish_token(ctx.session, token)
-                # node_exited 补发（2026-10-13 事件 review 复核批）：订阅方按
+                # node_exited 补发：订阅方按
                 # entered/exited 配对重建节点历史——修前该路径令牌有进无出
                 kernel.record_event(
                     DomainEvent.NODE_EXITED,
@@ -131,7 +131,7 @@ class TaskAdminMixin:
                     instance_id,
                 )
             kernel.complete_instance(ctx.session, instance, "completed")
-            # 两级事件（复核批成文）：process_completed=状态事实（终态契约三件
+            # 两级事件：process_completed=状态事实（终态契约三件
             # 套之一），本事件=管理动作留痕（end_status 标明落点）——不是双终态
             kernel.record_event(
                 DomainEvent.PROCESS_FINISHED_BY_ADMIN,
@@ -144,11 +144,11 @@ class TaskAdminMixin:
     def remove_instance(self, instance_id: str, actor: str) -> None:
         """删除实例及其全部运行时数据（含身份关联/Job/Incident，不可恢复）。
 
-        有未结算子实例时拒绝（code-review 2026-10 P1-13）：先 terminate 级联
+        有未结算子实例时拒绝：先 terminate 级联
         （或等子实例终态）再删——直接删父会留下继续运行的孤儿子实例，父子
-        关系断裂不可恢复。v2 四表（变量索引/变量历史/路由审计/消息订阅）
+        关系断裂不可恢复。这四张表（变量索引/变量历史/路由审计/消息订阅）
         与实例同删——此前残留成永久孤儿行（wait 订阅行令 waiting 反查失真）。
-        整树删除（2026-10-13 事件 review 复核批）：运行时数据按全树 id 删
+        整树删除：运行时数据按全树 id 删
         （修前只按根 id——已结算子孙的任务/令牌/审计残留孤儿行）；outbox
         只删已送达行，**未投递行保留待消费**（修前整删——订阅方丢事件、
         审计链断裂）。
@@ -196,7 +196,7 @@ class TaskAdminMixin:
                     f"实例 {instance_id} 存在未结算子实例（{len(unsettled)} 个）"
                     "——先 terminate 级联或等子实例终态，再删除"
                 )
-            # 整树 id 集（复核批）：运行时数据逐实例同删——修前只按根 id，
+            # 整树 id 集：运行时数据逐实例同删——修前只按根 id，
             # 已结算子孙的任务/令牌/审计/事件残留孤儿行（与 docstring 相悖）
             tree_ids = [instance_id] + [row.id for row in descendants]
             # 身份关联经 task_id 挂靠，先于任务删除
@@ -219,7 +219,7 @@ class TaskAdminMixin:
                 MessageSubscriptionRow,
             ):
                 ctx.session.execute(delete(row_type).where(row_type.instance_id.in_(tree_ids)))
-            # outbox 只删已送达行（复核批）：未投递行保留待消费——事件是跨实例
+            # outbox 只删已送达行：未投递行保留待消费——事件是跨实例
             # 的审计事实，整删会让订阅方永远收不到已发生的事
             ctx.session.execute(
                 delete(EventOutboxRow).where(

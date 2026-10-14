@@ -1,9 +1,9 @@
 """消息查询与同步关联面（spec §7.2 配套面）：correlate_message / waiting / 检索。
 
-从 message_service.py 拆出（单文件 ≤300 行红线）；流转件（订阅/命中/广播）
+流转件（订阅/命中/广播）
 在 message_flow.py。correlate 对标 Zeebe correlate 端点——「发布方想知道
 消息被谁消费」的同步答案；waiting 为等待实例反查（运维刚需）；
-list_messages 为消息检索（收尾批 6，spec §12 messages/search 数据源）。
+list_messages 为消息检索（spec §12 messages/search 数据源）。
 """
 
 from __future__ import annotations
@@ -31,9 +31,9 @@ def first_open_subscription(
     instance_id: str | None = None,
 ) -> _SubRow | None:
     """首个可消费的 open 订阅（FCFS；跳过暂停/挂起实例——spec §7.2 暂停
-    拦截 + 拍板 1：挂起对齐暂停，消息落缓冲、故障解决后补消费）。
+    拦截 + 挂起对齐暂停，消息落缓冲、故障解决后补消费）。
 
-    ``instance_id``（全仓 review 2026-10-13 批 1 P0-2）：实例定向匹配——
+    ``instance_id``：实例定向匹配——
     signal 面只消费本实例的订阅，防同名同 key 多实例时消息被 FCFS 先到的
     他人实例抢走（副作用落错单）。None 保持全局 FCFS（publish 路径不变）。"""
     stmt = select(MessageSubscriptionRow).where(
@@ -83,7 +83,7 @@ def correlate_message(
         ).first()
         if stamped is not None:
             return _receipt_of(ctx, stamped, duplicate=True)  # 已消费：幂等回放
-        # 到达事实先落事件（事件 review A3 三路统一；correlate 无缓冲分支，
+        # 到达事实先落事件（三路统一；correlate 无缓冲分支，
         # 此前该入口零 received）——重复 message_id 回放不算新到达，不发。
         from flowork.engine.message_flow import emit_message_event
         from flowork.events.domain import DomainEvent
@@ -157,7 +157,7 @@ def list_messages(
     offset: int = 0,
     limit: int = 50,
 ) -> list[dict[str, Any]]:
-    """消息检索（收尾批 6，spec §12 messages/search 数据源）。
+    """消息检索（spec §12 messages/search 数据源）。
 
     两源合并按时间倒序：buffer（未消费缓冲，TTL 内）∪ subscription（订阅行
     ——open=在等 / matched=已消费定格）。correlation_key 前缀匹配；kind 收窄

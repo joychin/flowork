@@ -1,7 +1,6 @@
 """协办面（TaskService 组合件，入口 engine.task.assist* 不变）。
 
-从 task_actions.py 拆出（单文件 ≤300 行红线；code-review 2026-10 P1-16
-护栏批达 312 行）。协办不占票不卡流程（spec §5.1）：主任务终态同事务收口。
+协办不占票不卡流程（spec §5.1）：主任务终态同事务收口。
 """
 
 from __future__ import annotations
@@ -76,7 +75,7 @@ class TaskAssistMixin:
     def _assert_participant_room(
         self, ctx: CommandContext, task: TaskRow, users: list[str], *, task_type: str
     ) -> None:
-        """规模护栏（code-review 2026-10 P1-16）：assist/consult 与加签同守——
+        """规模护栏：assist/consult 与加签同守——
         同根在办同型任务＋本次请求超 max_participants 即整笔拒绝（None＝不设防）。"""
         limit = self._engine.config.max_participants
         if limit is None:
@@ -131,8 +130,8 @@ class TaskAssistMixin:
         """主任务终态（complete/reject）同事务收口其令牌下的协办待办。
 
         协办不占票也不卡流程（spec §5.1）：主任务已出结果，协办意见失去时效，
-        挂着只会变脏待办——收口落历史 outcome=assist_cancel（归因主任务办理人，
-        2026-10-13 事件 review 复核批：修前一律记 system，事件缺定位缺 actor）。
+        挂着只会变脏待办——收口落历史 outcome=assist_cancel（归因主任务办理人；
+        修前一律记 system，事件缺定位缺 actor）。
         转办不触发（等待未终结，协办随新办理人继续）。
         """
         kernel = self._engine.kernel_for(ctx)
@@ -166,7 +165,7 @@ class TaskAssistMixin:
             ctx.touch(self._instance(ctx, task.instance_id))
             kernel = self._engine.kernel_for(ctx)
             kernel.archive_task(ctx.session, task, outcome="assist", comment=comment, actor=actor)
-            # 对称补齐（事件 review A7）：协办有 created/cancelled、完成无事件
+            # 对称补齐：协办有 created/cancelled、完成无事件
             kernel.record_event(
                 DomainEvent.TASK_ASSIST_FINISHED,
                 {

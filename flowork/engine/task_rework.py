@@ -1,7 +1,6 @@
 """撤回面（TaskService 组合件，入口 engine.task.withdraw 不变）。
 
-加签拆至 task_countersign_add.py、协办拆至 task_assist.py（本文件曾三合一
-超红线）；本文件保留撤回（含拍板 3 同令牌撤票重建）。
+加签拆至 task_countersign_add.py、协办拆至 task_assist.py；本文件保留撤回（含同令牌撤票重建）。
 """
 
 from __future__ import annotations
@@ -80,7 +79,7 @@ class TaskReworkMixin:
         ctx.touch(instance)
         kernel = self._engine.kernel_for(ctx)
         self._assert_downstream_idle(ctx, instance, history.activity_code)
-        # 重复撤回守卫（全仓 review 2026-10-13 批 3 P1-1）：本人在本节点已有
+        # 重复撤回守卫：本人在本节点已有
         # 在办待办＝上次撤回已生效（重建任务未办），再撤会产生双令牌双待办
         # （其一永久无人收口）。只认本人在办——并行会签他人的任务同节点在办
         # 不拦合法撤票。
@@ -114,7 +113,7 @@ class TaskReworkMixin:
             raise TaskNotAvailableError(
                 f"该票已撤回过（一票只可撤一次，重建待办转走亦然）：{task_id}"
             )
-        # 只取消下游盆内的未完令牌（code-review 2026-10 P0-3）：此前的「取消全部
+        # 只取消下游盆内的未完令牌：此前的「取消全部
         # 未完」在含并行分叉的图上会把仍在办理的兄弟分支一并砍掉——兄弟令牌不在
         # 本节点下游、闸门不拦，其审批人待办被静默作废；拍板④「取消全部与只取消
         # 下游等价」只在无并行分叉时成立，不能当不变量。串行图全部未完令牌本就
@@ -129,7 +128,7 @@ class TaskReworkMixin:
 
         node = definition.node(history.activity_code)
         assert node is not None
-        # 撤回分流（拍板 3 方案 A 实证深化）：原令牌仍在该节点未完结（并行会签
+        # 撤回分流（同令牌撤票）：原令牌仍在该节点未完结（并行会签
         # 出口未达成）→ 撤票回退计数 + 同令牌重建待办——实证修复前该场景建第二
         # 令牌：撤回的票仍算数（原令牌 approve 不回退）、双令牌双推进（下游出现
         # 重复待办）。原令牌已完结（单任务节点）→ 既有路径：新令牌重建。
@@ -168,7 +167,7 @@ class TaskReworkMixin:
                     "comment": comment,
                     "token_id": original_token.id,
                     "vote_retracted": True,
-                    "new_token": None,  # 键集与重建分支对齐（2026-10-13 事件 review 复核批）
+                    "new_token": None,  # 键集与重建分支对齐
                 },
                 instance.id,
             )
@@ -201,11 +200,11 @@ class TaskReworkMixin:
     def _assert_downstream_idle(
         self, ctx: CommandContext, instance: ProcessInstanceRow, activity_code: str
     ) -> None:
-        """撤回下游闸门（v2.3 第二批 A2，spec §5.1 拍板④）。
+        """撤回下游闸门（spec §5.1 拍板④）。
 
         本节点正向可达的下游存在**人工进展** → 拒绝撤回（提示改用驳回）——
         否则撤回等于一次没有驳回留痕的隐式整体驳回。进展判据两条：
-        ① 下游存在表决行（表决行口径，spec §5.1 第十九轮——协办/咨询/自动
+        ① 下游存在表决行（表决行口径，spec §5.1——协办/咨询/自动
         通过不算进展；branch/cc/service 不产生任务历史天然只统计人工办理）；
         ② 下游**工作节点**（user_task/call_activity）存在已完结令牌——穿透节点
         （branch/cc_task/start/end）的即时完结**不拦**，对齐穿透型节点不拦的行业口径（pilot

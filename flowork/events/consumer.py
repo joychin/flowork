@@ -1,4 +1,4 @@
-"""outbox 消费器（kernel-v2 spec §10/P0-3）：至少一次分发＋按 id 幂等。
+"""outbox 消费器（kernel-v2 spec §10）：至少一次分发＋按 id 幂等。
 
 - ``OutboxConsumer.poll()``：取未送达行（``ORDER BY (occurred_at, id)``＝事件
   全序，id 为可排序串，见 ProcessEngine.next_event_id）→ 包装 CloudEvents
@@ -8,7 +8,7 @@
 - ``IdempotentSink``：按信封 id 去重的消费端装饰器（有界记忆集，进程内）——
   重发不重算。
 - ``purge_delivered()``：缺省不清理（事件表默认即审计历史）；显式传
-  ``retention_days`` 才删已送达旧行（事件 review C1 拍板，2026-10-13）。
+  ``retention_days`` 才删已送达旧行。
 """
 
 from __future__ import annotations
@@ -48,7 +48,7 @@ class IdempotentSink:
     def __call__(self, envelope: dict[str, Any]) -> None:
         raw_id = envelope.get("id")
         if raw_id is None:
-            self._emit(envelope)  # 缺 id：去重不可判定，放行（P2-21，不再共享 'None' 键）
+            self._emit(envelope)  # 缺 id：去重不可判定，放行（不再共享 'None' 键）
             return
         event_id = str(raw_id)
         if event_id in self._seen:
@@ -105,7 +105,7 @@ class OutboxConsumer:
     def purge_delivered(self, *, retention_days: int | None = None) -> int:
         """删除已送达且超过保留期的行；**缺省 None＝不清理**。
 
-        保留口径（2026-10-13 事件 review C1 拍板「默认永久保留」）：事件表
+        保留口径（默认永久保留）：事件表
         兼任审计历史（events/trace/REST 搜索面的数据源），默认清理会静默删
         审计；宿主确要清理须显式传 ``retention_days``（参考值
         DEFAULT_RETENTION_DAYS=90）。注意 remove_instance 连实例事件（含未

@@ -1,4 +1,4 @@
-"""审批委托（M-A 收口，engine-v1 01 §5）：org_delegation 表 + 查询面。
+"""审批委托（engine-v1 01 §5）：org_delegation 表 + 查询面。
 
 语义：``delegate_from`` 在 ``[since, until]`` 窗口内的待办转给 ``delegate_to``
 （resolver 的 ``resolve_with_delegation`` 单跳替换，不递归）；窗口端点 None=
@@ -114,7 +114,7 @@ class DelegationDirectoryMixin:
     def delegation_of(self, user_id: str, when: datetime | None = None) -> str | None:
         """窗口内最新一条有效委托的受托人；无则 None。
 
-        窗口判定下推 SQL（code-review 2026-10 P2-22）：此前固定取最近 50 条
+        窗口判定下推 SQL：此前固定取最近 50 条
         再内存过滤——历史攒多后当前窗口内的委托可能排在 50 名之外被静默
         漏掉（表现为「委托没生效」）。下推后命中的至多一行，无截断面。
         """
@@ -135,7 +135,7 @@ class DelegationDirectoryMixin:
 
     def delegations_of(self, user_id: str) -> list[DelegationInfo]:
         """该用户全部委托（含已撤销，倒序）——管理/展示查询面（按人取全，
-        P2-22：截断会让管理面看不见旧委托）。"""
+        截断会让管理面看不见旧委托）。"""
         with self._factory() as session:
             rows = session.scalars(
                 select(DelegationRow)

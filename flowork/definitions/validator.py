@@ -3,8 +3,8 @@
 不抛异常：返回 ``list[ValidateIssue]``，由调用方（CLI/发布服务）决定渲染与拦截；
 存在 ERROR 级问题时禁止发布（``assert_valid``）。
 规则实现拆至 validator_rules.py（结构类）、validator_conditions.py（条件/语义类）、
-validator_references.py（变量引用细查）与 validator_graph.py（图级 lint，
-能力补足 P0-3），入口函数与 issue 类型不变。
+validator_references.py（变量引用细查）与 validator_graph.py（图级 lint），
+入口函数与 issue 类型不变。
 """
 
 from __future__ import annotations

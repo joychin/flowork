@@ -1,6 +1,6 @@
-"""CEL 公式求值（kernel-v2 §4.3/§4.1）：全表达式位的运行时实现。
+"""CEL 公式求值（spec §4.3/§4.1）：全表达式位的运行时实现。
 
-cel-python（模块名 ``celpy``）执行，P0-1 决策记录的落地缓解四件套：
+cel-python（模块名 ``celpy``）执行，决策记录（p0-1-cel-poc.md）的落地缓解四件套：
 **2KB 限长 / 二元运算链 ≤256 项 / 变量序列化 ≤1MB / 全异常归一 FormulaError**
 （celpy 无进程内硬超时——非图灵完备 + 三护栏间接约束，升级路径为子进程隔离）。
 两个入口：``evaluate_formula``（条件位，bool 收敛）与 ``evaluate_formula_value``
@@ -43,7 +43,7 @@ MAX_VARIABLE_BYTES = 1024 * 1024
 # CEL 内建全局函数（celpy base_functions + comprehension 宏）：静态检查免检名单——
 # 未注册又不在名单内的函数调用才报「未知函数」（validator 侧使用）。
 # 注意 celpy 的真名是 startsWith/endsWith（camelCase），contains/bool/list/null_type
-# 亦是全局可调内建（能力补足 P0-2 批修正，此前 starts/ends 为误写）。
+# 亦是全局可调内建。
 CEL_BUILTIN_FUNCTIONS = frozenset(
     {
         "size",
@@ -154,7 +154,7 @@ def _evaluate(
     except FormulaError:
         raise
     except Exception as exc:  # CELEvalError / RecursionError 兜底归一
-        # 消息截断（review P1-2）：celpy 的 CELEvalError 字符串自带整个求值环境
+        # 消息截断：celpy 的 CELEvalError 字符串自带整个求值环境
         # 转储（NameContainer repr，数 KB）——有效信息在开头（缺失键名），全文
         # 透出经 web/REST 错误体既是变量值泄漏面、也让 toast 不可读
         detail = str(exc)

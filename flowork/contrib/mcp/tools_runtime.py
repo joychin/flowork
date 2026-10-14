@@ -37,7 +37,7 @@ def _signal_instance(engine: ProcessEngine, instance_id: str, args: dict[str, An
         instance_id=instance_id,  # 实例定向（防串单，与 REST /v2 同语义）
     )
     if receipt is None or receipt.get("instance_id") != instance_id:
-        # review P1-11：修前 NotFoundError——冲突被标「不存在」，AI 朝错误方向排查
+        # 修前 NotFoundError——冲突被标「不存在」，AI 朝错误方向排查
         raise McpConflictError(
             f"消息 {name!r} 未被实例 {instance_id} 消费（回执：{receipt or '无人在等'}）"
         )
@@ -85,7 +85,7 @@ def runtime_tools(engine: ProcessEngine) -> list[ToolSpec]:
         runtime.pause_process(
             instance_id, require_actor(args), reason=str(args.get("reason") or "")
         )
-        # state 读回而非硬编码（review P2-9：与实际终态一致）
+        # state 读回而非硬编码（与实际终态一致）
         return {"instance_id": instance_id, "state": runtime.get_instance(instance_id).state}
 
     def resume_instance(args: dict[str, Any]) -> Any:

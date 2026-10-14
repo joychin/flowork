@@ -1,6 +1,6 @@
-"""咨询（consult，v2.3 第三批 A8）：前加签的「挂起—拍板」两轮形态。
+"""咨询（consult）：前加签的「挂起—拍板」两轮形态。
 
-语义（spec §5.1，行业修正版——不抄 C7 的 assignee 轮转）：
+语义（spec §5.1，行业修正版——不抄 Camunda 7 的 assignee 轮转）：
 - 「先收集意见、原办理人最后拍板」＝派生 ``task_type=consult`` 的**意见任务**
   （独立工作项：独立记录/意见/审计；不建 deadline job、不进会签计数）；
 - **意见不占票**：agree/reject 意见落历史（type=consult 区分），不改
@@ -89,7 +89,7 @@ class TaskConsultMixin:
         self, ctx: CommandContext, task_id: str, users: list[str], actor: str, comment: str
     ) -> list[TaskInfo]:
         task = self._ready_task(ctx, task_id, action="consult")
-        self._assert_participant_room(ctx, task, users, task_type="consult")  # P1-16
+        self._assert_participant_room(ctx, task, users, task_type="consult")
         ctx.touch(self._instance(ctx, task.instance_id))
         kernel = self._engine.kernel_for(ctx)
         root = task.root_task_id or task.id
@@ -138,7 +138,7 @@ class TaskConsultMixin:
                 {
                     "root_task_id": root,
                     "last_task_id": task.id,
-                    "activity_code": task.activity_code,  # 2026-10-13 事件 review 复核批
+                    "activity_code": task.activity_code,
                     "actor": actor,
                     "opinion": opinion,
                 },

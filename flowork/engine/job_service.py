@@ -1,4 +1,4 @@
-"""Job 领取-汇报协议（kernel-v2 spec §5.2/P1-2）：外部 worker 的租约式执行。
+"""Job 领取-汇报协议（kernel-v2 spec §5.2）：外部 worker 的租约式执行。
 
 对齐 Zeebe 语义：``activate_jobs`` 批量领活（领到即「租」住，写 worker_id +
 lease_until）；干完 ``complete_job``；失败 ``fail_job``（剩余重试次数由 worker
@@ -77,7 +77,7 @@ class JobService:
                     job_type=job_type,
                     job_kind="worker",
                     state="scheduled",
-                    created_at=self._engine.config.now(),  # P1-11：与 run_at 同钟
+                    created_at=self._engine.config.now(),  # 与 run_at 同钟
                     run_at=self._engine.config.now(),
                     max_retries=max_retries,
                     instance_id=instance_id,
@@ -100,7 +100,7 @@ class JobService:
         """批量领活：领到即租住（worker_id + lease_until）；到期未交货可被重领。"""
 
         def _command(ctx: CommandContext) -> list[JobClaim]:
-            moment = self._engine.config.now()  # 统一时钟（第十四轮）：租约与调度同源
+            moment = self._engine.config.now()  # 统一时钟：租约与调度同源
             # 可领＝已到 run_at（退避生效，P2-4 对齐内部 tick 口径）且未持有
             # （scheduled 且无租约），或租约到期（leased 且 lease_until<now）
             claimable = (JobRow.lease_until.is_(None)) | (JobRow.lease_until < moment)
@@ -166,7 +166,7 @@ class JobService:
         """
 
         def _command(ctx: CommandContext) -> str:
-            moment = self._engine.config.now()  # 统一时钟（第十四轮）：退避与租约同源
+            moment = self._engine.config.now()  # 统一时钟：退避与租约同源
             job = self._leased_by(ctx.session, job_id, worker_id)
             job.last_error = error
             job.retry_count += 1

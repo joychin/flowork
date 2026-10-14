@@ -1,9 +1,9 @@
-"""任务动作表（v2.3 第二批 A1）：按 (state × task_type × 认领态) 声明可用动作。
+"""任务动作表：按 (state × task_type × 认领态) 声明可用动作。
 
 形态对齐 jBPM 的 (操作 × 状态) 声明表——**不是**节点级配置（行业对拍：BPMN 无
 此位置，主流引擎不做节点级动作白名单；个别 SaaS 的节点级动作白名单属孤例）。
 分组借 Camunda 8 的动词切分：work＝出结果（改变令牌推进），dispatch＝改派类
-（转移办理权）。本表是**引擎自己的事实面**：谁能做属宿主权限（M-A/插件），
+（转移办理权）。本表是**引擎自己的事实面**：谁能做属宿主权限（插件），
 表只回答「这个任务当前允许哪些动作」。
 
 消费点：① ``TaskInfo.available_actions`` 服务端算完下发（主流引擎均无此面——
@@ -40,7 +40,7 @@ def allowed_actions(task: TaskRow) -> list[str]:
     if task.task_type == "assist":
         return ["complete_assist"]  # 协办只交还意见，不参与推进（spec §5.1）
     if task.task_type == "consult":
-        return ["complete_consult"]  # 咨询意见任务：只交回意见（v2.3 A8）
+        return ["complete_consult"]  # 咨询意见任务：只交回意见
     if task.assignee == "":
         return ["claim"]  # 候选任务：先认领（complete 须 assignee 已固定）
     return list(_ASSIGNED_ACTIONS)

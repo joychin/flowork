@@ -53,7 +53,7 @@ class NodeContext:
 
 
 class NodeBehavior:
-    # 「名下有待办域」行为契约（D4 出口兜卫依据；code-review 2026-10 P1-7
+    # 「名下有待办域」行为契约（出口不可达兜底的判据依据；
     # kind 行为化——引擎核心不再出现节点 kind 分支）
     owns_pending_tasks = False
     """节点行为基类：钩子全部有默认空实现，按需覆写。
@@ -65,7 +65,7 @@ class NodeBehavior:
     不得改变路由（路由决策只属于 get_outgoing + 条件求值 + 引擎）。
     """
 
-    # v2.3 A10：本类节点在真实运行中执行外部副作用（handler/外部调用）——
+    # 本类节点在真实运行中执行外部副作用（handler/外部调用）——
     # 模拟试跑恒 stub（绝不执行），报告据此列 stub 清单。kind 知识住在行为里。
     performs_external_work: bool = False
 

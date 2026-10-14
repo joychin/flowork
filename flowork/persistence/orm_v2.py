@@ -15,11 +15,11 @@ from flowork.persistence.orm import Base, _now
 
 
 class DesignerDraftRow(Base):
-    """设计器工作副本（v2 §6.2：编辑态在设计器本地——不进引擎定义生命周期表）。
+    """设计器工作副本（spec §6.2：编辑态在设计器本地——不进引擎定义生命周期表）。
 
     seq＝每 code 单调递增的保存序号（设计器显示的 draft_version）；open＝是否
-    待发布（发布即消费，seq 保留以延续编号）。layout＝画布坐标（设计器插件计划
-    批 C4：与语义内容分离存储——content 不再混入展示坐标；旧行惰性迁移，见
+    待发布（发布即消费，seq 保留以延续编号）。layout＝画布坐标（与语义内容
+    分离存储——content 不再混入展示坐标；旧行惰性迁移，见
     designer_drafts.designer_draft）。
     """
 
@@ -35,7 +35,7 @@ class DesignerDraftRow(Base):
 
 
 class MessageBufferRow(Base):
-    """消息缓冲区（v2 §7）：先到的消息在此等订阅出现；TTL 过期清理。
+    """消息缓冲区（spec §7）：先到的消息在此等订阅出现；TTL 过期清理。
 
     message_id 全局唯一防重（消费端至多收到一次，spec §7）；correlation_key
     为**求值后**的键值（CEL 求值发生在等待节点登记订阅时）。
@@ -57,7 +57,7 @@ class MessageBufferRow(Base):
 
 
 class MessageSubscriptionRow(Base):
-    """消息订阅（v2 §7）：等待方登记 (name, correlation_key)；state open/matched。
+    """消息订阅（spec §7）：等待方登记 (name, correlation_key)；state open/matched。
 
     节点离开（完成/取消/实例终止）即关（close_subscriptions）；暂停期间保持。
     """
@@ -78,7 +78,7 @@ class MessageSubscriptionRow(Base):
 
 
 class VariableIndexRow(Base):
-    """变量索引（v2 §14/P1-5）：searchable 变量值随命令同事务同步，供实例检索。
+    """变量索引（spec §14）：searchable 变量值随命令同事务同步，供实例检索。
 
     string/boolean → value_text；number → value_num（布尔不入数值槽）。
     """
@@ -115,7 +115,7 @@ class VariableHistoryRow(Base):
 
 
 class RouteDecisionRow(Base):
-    """路由决策审计（expression-dataface §6/F3）：一次 select_outgoing 一行。
+    """路由决策审计（expression-dataface §6）：一次 select_outgoing 一行。
 
     edges=[{flow,formula,result}]（result ∈ true/false/no_fact 查无跳过）；
     selected=最终激活的 flow_code；snapshot={now,prev_task,node:{code:facts}}

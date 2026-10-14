@@ -54,7 +54,7 @@ def semantic_diff(base: ProcessDefinition, target: ProcessDefinition) -> list[di
         target_dump = target_node.model_dump()
         base_dump.pop("name", None)
         target_dump.pop("name", None)
-        # v2.2 等价归一：旧 timeout 与 deadlines 列表互为退化形态，比较生效列表
+        # 等价归一：旧 timeout 与 deadlines 列表互为退化形态，比较生效列表
         if base_dump.get("kind") == "user_task":
             from flowork.definitions.node import effective_deadlines
 
@@ -122,7 +122,7 @@ def semantic_diff(base: ProcessDefinition, target: ProcessDefinition) -> list[di
         base_var, target_var = base_vars[name], target_vars[name]
         base_dump = base_var.model_dump()
         target_dump = target_var.model_dump()
-        watched = ("type", "label", "sample", "searchable")  # P2-16：searchable 翻转＝R2
+        watched = ("type", "label", "sample", "searchable")  # searchable 翻转＝R2
         fields = sorted(k for k in watched if base_dump.get(k) != target_dump.get(k))
         if fields:
             detail = f"修改流程变量 {name}：{', '.join(fields)}"

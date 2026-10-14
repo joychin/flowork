@@ -1,7 +1,7 @@
 """结构规则（validator 编排件的规则组二）：唯一性 / kind 注册 / 端点 / 可达性 /
-平行重边（拍板 5 方案 A）。
+平行重边。
 
-从 validator_rules.py 拆出（单文件 ≤300 行红线）。入口符号经 validator_rules
+入口符号经 validator_rules
 原位再导出，编排方 import 路径不变。
 """
 
@@ -62,7 +62,7 @@ def check_structure(
         if node.kind == KIND_END and definition.outgoing(node.code):
             error("structure.end.outgoing", "end 节点不允许有出边", node=node.code)
 
-    # —— 平行重边（拍板 5 方案 A）：同一对节点多条连线＝改版对比与破坏性
+    # —— 平行重边：同一对节点多条连线＝改版对比与破坏性
     # —— 判定的半盲形态（diff/R4 按 source→target 建键只见一条）——设计期
     # —— 禁止；多条件到同一目标用多条不同 source 或改条件表达式。
     edge_pairs: dict[tuple[str, str], str] = {}
@@ -112,7 +112,7 @@ def check_structure(
             if node.code not in reachable:
                 warning("structure.node.unreachable", "节点从 start 不可达", node=node.code)
 
-    # —— 会签出口字段错位（第十九轮走查发现）：approve_exit/disapprove_exit 写在
+    # —— 会签出口字段错位：approve_exit/disapprove_exit 写在
     # —— 节点顶层会被 extra 袋静默收下，而行为只读 multi_instance 内同名字段——
     # —— 出口公式零告警失效、静默回退全票。设计期拦下并指路（可见优于静默）。
     for node in definition.nodes:

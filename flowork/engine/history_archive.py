@@ -63,8 +63,8 @@ class ArchiveMixin:
                 "tokens": rows(TokenRow, TokenRow.token_no),
                 "task_history": rows(TaskHistoryRow, TaskHistoryRow.created_at),
                 "cc_items": rows(CcItemRow, CcItemRow.created_at),
-                # 事件带 id 次键（全仓 review 2026-10-13 批 3 P2-6）：同微秒平局
-                # 按可排序 id 定序——对齐 A1 事件全序契约（consumer/history 同款）
+                # 事件带 id 次键：同微秒平局
+                # 按可排序 id 定序——对齐事件全序契约（consumer/history 同款）
                 "events": rows(EventOutboxRow, EventOutboxRow.occurred_at, EventOutboxRow.id),
             }
 

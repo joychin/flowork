@@ -1,4 +1,4 @@
-"""定义生命周期（v2 spec §6.5）：retire/purge/list/definition_drift。
+"""定义生命周期（spec §6.5）：retire/purge/list/definition_drift。
 
 RepositoryService 经 mixin 组合（engine.repository 入口不变）。
 """
@@ -23,7 +23,7 @@ class DefinitionLifecycleMixin:
 
     _engine: ProcessEngine
 
-    # —— 生命周期（spec §6.5/P1-6）——
+    # —— 生命周期（spec §6.5）——
 
     def retire(self, code: str, actor: str = "admin", reason: str = "") -> int:
         """retire：该 code 全部 published 行转 retired（在跑跑完，行保留）。"""

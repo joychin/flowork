@@ -1,4 +1,4 @@
-"""条件求值（单轨，kernel-v2 §4.1）：CEL 公式经 ``expr.cel`` 求值。
+"""条件求值（单轨，spec §4.1）：CEL 公式经 ``expr.cel`` 求值。
 
 结构化条件组（groups）已退役（零兼容，存量已迁移）。求值错（FormulaError）
 由 engine.routing 统一包成 EngineExecutionError（技术故障：挂起 + 故障单，spec §8）。

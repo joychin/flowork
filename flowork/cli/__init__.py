@@ -1,1 +1,1 @@
-"""命令行（M1 起逐步提供 init/validate/run）。"""
+"""命令行（init/validate/run 等逐步提供）。"""

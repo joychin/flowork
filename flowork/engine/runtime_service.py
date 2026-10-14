@@ -130,7 +130,7 @@ class RuntimeService(InstanceLifecycleMixin, IncidentMixin, VariableActionsMixin
                 return existing
 
         if spec is not None:
-            # 草稿直通（设计器插件计划 A1）：不落定义表，版本列记草稿占位 (0, 0)——
+            # 草稿直通：不落定义表，版本列记草稿占位 (0, 0)——
             # 仅供 simulate 消费（真实实例仍只能来自已发布定义，start_process 不开放 spec）
             from flowork.definitions.definition import load_definition
 
@@ -153,7 +153,7 @@ class RuntimeService(InstanceLifecycleMixin, IncidentMixin, VariableActionsMixin
             # allow_duplicate＝明示放弃幂等：不落 key（联合唯一索引下同 key 只能一行）
             idempotency_key=idempotency_key if reuse != "allow_duplicate" else None,
             state="running",
-            # 业务时刻单源 config.now（P1-11：与 updated_at/finished_at/deadline_at 同钟）
+            # 业务时刻单源 config.now（与 updated_at/finished_at/deadline_at 同钟）
             started_at=self._engine.config.now(),
             start_user=start_user,
             variables=dict(variables or {}),
@@ -162,11 +162,11 @@ class RuntimeService(InstanceLifecycleMixin, IncidentMixin, VariableActionsMixin
             simulated=simulated,
         )
         ctx.session.add(instance)
-        if simulated:  # v2.3 A10：模拟静默（事件不投 outbox；不建实例时限 Job）
+        if simulated:  # 模拟静默（事件不投 outbox；不建实例时限 Job）
             ctx.suppress_events = True
         # 变量留痕：出生 before 显式播种为空——发起变量记 birth 行（old=None）
         ctx.variable_before[instance.id] = {}
-        # v2.2（spec §7）：实例时限物化——按 after_minutes 折算 deadline_at（自然时间）
+        # （spec §7）：实例时限物化——按 after_minutes 折算 deadline_at（自然时间）
         if definition.deadline is not None:
             from datetime import timedelta
 
@@ -186,7 +186,7 @@ class RuntimeService(InstanceLifecycleMixin, IncidentMixin, VariableActionsMixin
                     id=_uuid.uuid4().hex,
                     job_type="timer",
                     state="scheduled",
-                    created_at=self._engine.config.now(),  # P1-11：与 run_at 同钟
+                    created_at=self._engine.config.now(),  # 与 run_at 同钟
                     run_at=instance.deadline_at,
                     instance_id=instance.id,
                     payload={
@@ -198,7 +198,7 @@ class RuntimeService(InstanceLifecycleMixin, IncidentMixin, VariableActionsMixin
         kernel = self._engine.kernel_for(ctx)
         started_payload: dict[str, Any] = {
             "definition_code": code,
-            "major": instance.definition_major,  # B4：实例钉的版本事件面可见
+            "major": instance.definition_major,  # 实例钉的版本事件面可见
             "revision": instance.definition_revision,
             "start_user": start_user,
             "business_key": business_key,
@@ -222,12 +222,12 @@ class RuntimeService(InstanceLifecycleMixin, IncidentMixin, VariableActionsMixin
         revision: int | None = None,
         spec: dict[str, Any] | None = None,
     ) -> Any:
-        """整图试跑（v2.3 A10）：模拟启动并自动推到卡点/终态，返回 SimulationReport。
+        """整图试跑：模拟启动并自动推到卡点/终态，返回 SimulationReport。
 
         条件边按初始变量**真求值**；service_task 恒 stub、wait 冻结为卡点、
         事件不投 outbox——报告复用路由审计（wf_route_decision）+ 令牌时间线。
 
-        ``spec``（设计器插件计划 A1 草稿直通）：传入定义 JSON 则**不查库**，按
+        ``spec``（草稿直通）：传入定义 JSON 则**不查库**，按
         草稿内容模拟——证据先于发布（AI 改完草稿 → 人模拟 → 拍板发布）。
         实例行版本列记草稿占位 (0, 0)，隔离语义与发布版模拟完全一致；
         major/revision 与 spec 互斥（spec 优先）。

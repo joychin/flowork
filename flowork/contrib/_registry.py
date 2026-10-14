@@ -1,6 +1,6 @@
 """contrib 内部共享件：固定注册表的 ExpressionFunctions 实现 + 返回值抬升。
 
-**返回值抬升（CEL 值域适配，2026-10-09 实测缝）**：函数按 CEL 词汇声明返回
+**返回值抬升（CEL 值域适配）**：函数按 CEL 词汇声明返回
 类型（``bool``/``users``/``one_user``…，spec §5.5），Python 侧自然返回值却是
 原生 ``bool``/``str``/``list``——而 celpy 的运算符重载按 CEL 类型分派，原生
 bool 进不了 ``!has_role(...)`` 与 ``cond ? a : b``（实测报

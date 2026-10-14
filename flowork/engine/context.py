@@ -42,7 +42,7 @@ class RuntimeNodeContext(NodeContext):
         self.instance = instance
         self.token = token
         self._logs: list[str] = []
-        # on_fail 载体（复核批·终章）：仅故障单事务的 run_fail_hooks 置值——
+        # on_fail 载体：仅故障单事务的 run_fail_hooks 置值——
         # 声明式 on_fail handler 签名统一 (ctx, params)，错误从这里取
         # （行为层 on_fail(ctx, error) 直接收参数，不经此字段）
         self.failure: BaseException | None = None

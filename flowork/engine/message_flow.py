@@ -97,7 +97,7 @@ def hit_subscription(
 ) -> bool:
     """命中 open 订阅的完整动作：关联（含映射）→ 推进等待令牌（同事务）。
 
-    暂停/挂起拦截（既有全动作拦截原则；拍板 1 方案 A：挂起与暂停对齐）：
+    暂停/挂起拦截（既有全动作拦截原则；挂起与暂停对齐）：
     实例 paused/suspended 不消费，返回 False——publish 侧消息继续走下一
     优先级（落缓冲，故障解决后补消费）；令牌已被取消/完结（竞速败者）
     同样返回 False，命中事实不重复作用。
@@ -217,7 +217,7 @@ def emit_message_event(
 ) -> None:
     """消息面事件发射（MESSAGE_RECEIVED 等的薄包装）。
 
-    message_received 三路统一先发（事件 review A3）：立即关联/消息启动/入缓冲
+    message_received 三路统一先发：立即关联/消息启动/入缓冲
     都发（带 message_id，防重追踪不断链）——此前仅缓冲分支发，名不副实。
     """
     kernel = engine.kernel_for(ctx)
@@ -231,7 +231,7 @@ def emit_message_event(
 def broadcast_signal(engine: ProcessEngine, name: str) -> int:
     """广播唤醒：matched 所有在等该名字的 open 订阅，不带数据（spec §7）。
 
-    每条订阅走 hit_subscription 完整管线（内核 code-review 2026-10 P0-1）：
+    每条订阅走 hit_subscription 完整管线：
     等待节点经 finish_wait 推进（spec §7.2 三路收口的第三路，signal 唤醒
     wait.message_id 恒 null）；宿主纯订阅仅关联定格；暂停实例的订阅跳过
     （全动作拦截，保持 open 由恢复反查补消费）。

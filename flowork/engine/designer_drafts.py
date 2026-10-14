@@ -1,4 +1,4 @@
-"""设计器工作副本支撑（v2 §6.2）：wf_designer_draft 表的读写与发布衔接。
+"""设计器工作副本支撑（spec §6.2）：wf_designer_draft 表的读写与发布衔接。
 
 RepositoryService 经 mixin 组合（engine.repository 入口不变）；编辑态在设计器
 本地，独立于引擎定义生命周期表（draft 已取消）。
@@ -33,7 +33,7 @@ class DesignerDraftSupportMixin:
     def update_draft(self, definition: ProcessDefinition) -> int:
         """保存设计器工作副本：就地覆盖，seq 单调递增。返回草稿序号。
 
-        批 C4 布局分离：画布坐标（layout）拆到独立列，content 只存语义 JSON
+        布局分离：画布坐标（layout）拆到独立列，content 只存语义 JSON
         ——定义导出/Git 镜像不再被展示坐标污染。
         """
         from flowork.definitions.definition import dump_definition
@@ -72,7 +72,7 @@ class DesignerDraftSupportMixin:
     def designer_draft(self, code: str) -> dict[str, Any] | None:
         """取待发布（open）的工作副本：{code, name, seq, spec, layout}；无则 None。
 
-        spec 不含 layout（批 C4 分离存储）；旧行（layout 列为 NULL）从 content
+        spec 不含 layout（布局分离存储）；旧行（layout 列为 NULL）从 content
         惰性提取，首次保存后落新格式。
         """
         from flowork.persistence.orm import DesignerDraftRow as _Draft
@@ -151,7 +151,7 @@ class DesignerDraftSupportMixin:
         return result
 
     def published_versions(self, code: str) -> list[dict[str, Any]]:
-        """某 code 的已发布版本列表（新→旧；设计器插件计划 A4 版本面数据源）。"""
+        """某 code 的已发布版本列表（新→旧）。"""
         from sqlalchemy import select
 
         from flowork.persistence.orm import ProcessDefinitionRow as _Row

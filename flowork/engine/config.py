@@ -14,7 +14,7 @@ from flowork.persistence.db import url_from_value
 from flowork.runtime.registry import NodeRegistry, create_registry
 from flowork.spi.ports import ExpressionFunctions
 
-HistoryLevel = str  # none / activity / audit / full（M6 起生效，当前默认 full）
+HistoryLevel = str  # none / activity / audit / full（当前默认 full）
 
 
 def _system_now() -> datetime:
@@ -28,7 +28,7 @@ class EngineConfig:
     Attributes:
         db_url: SQLAlchemy 连接串，默认内存 SQLite（测试友好）。
         node_registry: 节点注册表；默认内置类型，可传入自定义注册表。
-        history_level: 历史事件写入粒度（M6 生效）。
+        history_level: 历史事件写入粒度。
         max_node_loops: 单节点最大完成次数（死循环守卫）。
         max_participants: 单节点参与者规模上限（会签名单/传阅接收人；加签后名单同守）。
             缺省 None＝不设防（内核不替宿主选数值）；显式配置后超限＝拒绝
@@ -41,7 +41,7 @@ class EngineConfig:
     history_level: HistoryLevel = "full"
     max_node_loops: int = 50
     max_participants: int | None = None
-    # v2.3 第三批 A11：部署期 L3/L4（引用完整性/目录实体存在性）默认 WARNING；
+    # 部署期 L3/L4（引用完整性/目录实体存在性）默认 WARNING；
     # True 时升 ERROR 拦发布（fail-fast 部署）。
     strict_deploy_validation: bool = False
     lock_retries: int = 3
@@ -64,9 +64,9 @@ def resolve_db_url(config: EngineConfig) -> str:
 
 
 def should_record_event(config: EngineConfig, event: DomainEvent | str) -> bool:
-    """历史分级过滤（M6 完整生效；当前 full/audit 全记）。
+    """历史分级过滤（当前 full/audit 全记）。
 
-    activity 档白名单＝process_/node_/incident_ 前缀（事件 review C2，2026-10-13：
+    activity 档白名单＝process_/node_/incident_ 前缀（
     incidents 是故障告警信号，不再被该档静默吞掉；task_*/message_*/definition_*
     等仍只在 audit/full 档记录——选 activity 的宿主拿不到任务级事件）。
     """

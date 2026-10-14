@@ -119,13 +119,13 @@ class UserTaskSpec(FlowNode):
     )
     multi_instance: MultiInstance | None = None
     reject_target: str | None = None
-    # —— 参与者策略（M4）：命中者自动通过（auto_pass 历史并计入同意数）——
+    # —— 参与者策略：命中者自动通过（auto_pass 历史并计入同意数）——
     auto_pass_originator: bool = False
     auto_pass_previous: bool = False
     auto_pass_participated: bool = False
     no_participant_policy: str = "raise"  # raise / to_admins
     timeout: TimeoutPolicy | None = None
-    # v2.2（spec §5.1）：超时动作列表（多级预警/改派/升级/自动通过·驳回），
+    # （spec §5.1）：超时动作列表（多级预警/改派/升级/自动通过·驳回），
     # 同节点上限 8 条（validator 把关）；旧 timeout 为其退化形态
     deadlines: list[TaskDeadline] = Field(default_factory=list)
 
@@ -143,8 +143,8 @@ class CallActivitySpec(FlowNode):
 
     kind: Literal["call_activity"] = KIND_CALL_ACTIVITY
     process_code: str = ""
-    binding: Literal["latest", "deployment"] = "latest"  # A11：deployment=部署时须已发布
-    multi_instance: CallInstanceConfig | None = None  # A9 多实例（每人一子实例，index 聚合）
+    binding: Literal["latest", "deployment"] = "latest"  # deployment=部署时须已发布
+    multi_instance: CallInstanceConfig | None = None  # 多实例（每人一子实例，index 聚合）
     is_synchronous: bool = True
     input_mappings: dict[str, str] = Field(default_factory=dict)
     output_mappings: dict[str, str] = Field(default_factory=dict)

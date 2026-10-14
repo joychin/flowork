@@ -1,7 +1,7 @@
-"""父实例终态的子树级联（kernel-v2 spec §7，v2.3 第十四轮）。
+"""父实例终态的子树级联（kernel-v2 spec §7）。
 
 terminate/cancel 收口为「砍树」：父实例进入终态时，未结算子实例（含暂停/
-挂起中的）递归同置终态——孤儿待办是用户可见 bug（A9 多实例子流程后面变大），
+挂起中的）递归同置终态——孤儿待办是用户可见 bug（多实例子流程下会放大），
 对齐 Camunda/Zeebe 子树终止。三入口共用：RuntimeService.terminate_process /
 cancel_process、实例时限策略（jobs/strategies cancel/terminate）。
 
@@ -48,7 +48,7 @@ def cascade_terminate(
     ``resume_parent_if_waiting`` 只在「父令牌仍 unfinished」时推进父侧，
     先撤令牌保证子终态不会误唤醒任何中间层父（与正常完成路径互斥）。
     根实例的 complete 与终态事件由调用方收尾（携带本函数返回的级联清单）。
-    ``cause``＝node_cancelled.by 覆盖值（2026-10-13 事件 review 复核批：by
+    ``cause``＝node_cancelled.by 覆盖值（by
     统一语义标签——缺省 ``instance_{end_status}``，MI 收工传
     multi_instance_completion；修前混传终态值与标签两套口径）。
     """
@@ -78,7 +78,7 @@ def cascade_terminate(
             descendants.append(row)
             frontier.append(row.id)
     # 2) 整树撤令牌（根 + 后代）：cancel_token 经行为取消钩子（wait 关订阅删 Job）；
-    #    逐节点 node_cancelled(by=cause 标签)+task_cancelled 由咽喉统一发（A4）
+    #    逐节点 node_cancelled(by=cause 标签)+task_cancelled 由咽喉统一发
     cancel_cause = cause or f"instance_{end_status}"
     for instance in [root, *descendants]:
         for token in kernel.tokens(ctx.session, instance.id, states=(TokenState.UNFINISHED.value,)):
@@ -97,7 +97,7 @@ def cascade_terminate(
             {"actor": actor, "reason": reason, "cascade_from": root.id},
             child.id,
         )
-    # 4) 整树联动关闭 open 故障单（全仓 review 2026-10-13 P0-1）：实例已死，
+    # 4) 整树联动关闭 open 故障单：实例已死，
     #    open 单若留着，resolve(resume) 可把终态实例复活为 running。resolution
     #    记 instance_{end_status} 标明联动关闭（非五动作处置）。resolve 的
     #    cancel/fail 动作传 close_incidents=False——由 resolve 自身收口，避免

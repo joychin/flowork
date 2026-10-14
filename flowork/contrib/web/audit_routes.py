@@ -1,6 +1,6 @@
-"""审计数据面（设计器插件计划批 A）：整图模拟 / 实例只读 / 版本面。
+"""审计数据面：整图模拟 / 实例只读 / 版本面。
 
-从 app.py 拆出（300 行红线，preview_routes 先例）；``register_audit_routes(app,
+``register_audit_routes(app,
 engine)`` 挂端点，无独立状态。资源命名与参数风格对齐 kernel-v2 spec §12 已定稿
 的 /v2 面（``GET /definitions/{code}?major=&revision=`` 同义）；全部只读（除模拟
 外零副作用），模拟走内核 simulated 实例（隔离语义见 simulation-dryrun-design）。
@@ -26,7 +26,7 @@ def register_audit_routes(app: Any, engine: Any) -> None:
     def simulate(
         code: str, body: dict[str, Any], major: int | None = None, revision: int | None = None
     ) -> dict[str, Any]:
-        """整图模拟（批 A1，草稿主场景）：证据先于发布。
+        """整图模拟（草稿主场景）：证据先于发布。
 
         body：``{"spec": 定义 JSON（可选——缺省取已保存草稿）, "variables": 样例}``。
         携带 spec 或取草稿时走**草稿直通**（不落定义表，模拟前强制设计期校验，
@@ -35,7 +35,7 @@ def register_audit_routes(app: Any, engine: Any) -> None:
         raw_spec = body.get("spec")
         raw_vars = body.get("variables")
         if raw_spec is not None and not isinstance(raw_spec, dict):
-            # review P1-1：修前非 dict（字符串/列表）静默回退旧草稿——「当前草稿
+            # 修前非 dict（字符串/列表）静默回退旧草稿——「当前草稿
             # 含未保存编辑」是本端点主场景，据以拍板发布的报告可能不是送审内容
             raise HTTPException(status_code=422, detail="spec 必须是流程定义 JSON 对象")
         if raw_vars is not None and not isinstance(raw_vars, dict):
@@ -59,7 +59,7 @@ def register_audit_routes(app: Any, engine: Any) -> None:
         return asdict(report)
 
     def _require_instance(instance_id: str) -> None:
-        """子资源统一 404（review P2-1）：内核查询面对不存在实例返回空载荷
+        """子资源统一 404：内核查询面对不存在实例返回空载荷
         而非抛错，修前四个子资源端点的 except FloworkError 是死代码、幽灵 id
         返回 200 空载荷与 detail 的 404 契约不一致。"""
         try:
@@ -76,7 +76,7 @@ def register_audit_routes(app: Any, engine: Any) -> None:
     ) -> list[dict[str, Any]]:
         """实例列表（审计入口）。默认隔离模拟实例——试跑不进业务视图是语义不是 bug。"""
         if not 1 <= limit <= 500:
-            # review P2-2：修前 limit=-1 直通 SQL（SQLite 负 LIMIT=无上限全量）
+            # 修前 limit=-1 直通 SQL（SQLite 负 LIMIT=无上限全量）
             raise HTTPException(status_code=422, detail="limit 越界（1~500）")
         return [
             inst.model_dump(mode="json")
@@ -112,7 +112,7 @@ def register_audit_routes(app: Any, engine: Any) -> None:
 
     @app.get("/api/instances/{instance_id}/route-decisions")
     def route_decisions(instance_id: str) -> list[dict[str, Any]]:
-        """路由决策审计（F3）：每条条件边为什么这么选 + 当时求值快照。"""
+        """路由决策审计：每条条件边为什么这么选 + 当时求值快照。"""
         _require_instance(instance_id)
         rows = engine.history.route_decisions(instance_id)
         return [row.model_dump(mode="json") for row in rows]
@@ -152,7 +152,7 @@ def register_audit_routes(app: Any, engine: Any) -> None:
     @app.get("/api/definitions/{code}/versions/{major}")
     def version_detail(code: str, major: int, revision: int | None = None) -> dict[str, Any]:
         """按版本取已发布 spec（spec §12 ``GET /definitions/{code}?major=`` 同义；
-        只读模式（C2）没有草稿，本端点是 readonly 视图的数据前提）。"""
+        只读模式没有草稿，本端点是 readonly 视图的数据前提）。"""
         try:
             spec: dict[str, Any] = engine.repository.get_definition_json(code, major, revision)
         except FloworkError as exc:

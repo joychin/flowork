@@ -53,7 +53,7 @@ class JobScheduler(DeadlineStrategiesMixin):
         moment = now or self._engine.config.now()
 
         def _collect(ctx: CommandContext) -> list[str]:
-            # 暂停与挂起期 timer 冻结（spec §7；code-review 2026-10 P0-5：挂起
+            # 暂停与挂起期 timer 冻结（spec §7；挂起
             # 实例的时限曾被照常认领、被「skip」结案永久吞掉——冻结至故障解决，
             # 恢复后到点仍触发）
             frozen_ids = select(ProcessInstanceRow.id).where(
@@ -101,8 +101,7 @@ class JobScheduler(DeadlineStrategiesMixin):
                 self._mark_failure(ctx, job, exc, moment)
             else:
                 if job.state == "scheduled":
-                    # 策略显式回置 scheduled＝冻结期/咨询期推迟不消费
-                    # （code-review 2026-10 P1-12/P2-12）：保持 scheduled，
+                    # 策略显式回置 scheduled＝冻结期/咨询期推迟不消费——保持 scheduled，
                     # 由解冻/咨询交回后的 tick 触发，不记 finished_at
                     return True
                 job.state = "done"

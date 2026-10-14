@@ -1,8 +1,7 @@
 """超时动作校验（validator 编排件的规则组五）：结构规则 + CEL 目标位遍历。
 
-从 validator_rules.py / validator_conditions.py 合并至此（单文件 ≤300 行红线）
-——超时动作的全部校验知识住一处：动作列表上限、目标必填（reassign_to /
-escalate_to，v2.3 第十四轮起 escalate 亦必填）、两目标的表达式位点产出。
+超时动作的全部校验知识住一处：动作列表上限、目标必填（reassign_to 与
+escalate_to 均必填）、两目标的表达式位点产出。
 """
 
 from __future__ import annotations
@@ -38,7 +37,7 @@ def _normalize(raw: Any) -> Any:
 def deadline_positions(node: Any) -> Iterator[tuple[str, str]]:
     """某节点的全部超时表达式位：yield (where, expression)。
 
-    dict 袋静默 getattr None＝零校验（code-review 2026-10 P1-15）——先归一。
+    dict 袋静默 getattr None＝零校验——先归一。
     """
     for index, raw in enumerate(getattr(node, "deadlines", None) or []):
         deadline = _normalize(raw)
@@ -49,7 +48,7 @@ def deadline_positions(node: Any) -> Iterator[tuple[str, str]]:
 
 
 def check_deadlines(definition: ProcessDefinition, error: IssueFn) -> None:
-    """超时动作列表（v2.2 §5.1/C.5；escalate_to 必填＝v2.3 第十四轮）。"""
+    """超时动作列表（spec §5.1/C.5；escalate_to 必填）。"""
     for node in definition.nodes:
         deadlines = list(getattr(node, "deadlines", None) or [])
         if len(deadlines) > _MAX_DEADLINES:

@@ -95,7 +95,7 @@ class RejectMixin:
             raise TaskNotAvailableError(f"任务不可驳回（不存在或已处理）：{task_id}")
         from flowork.tasks.actions import assert_action_allowed
 
-        assert_action_allowed("reject", task)  # 动作表守卫（v2.3 A1：状态×类型×认领态）
+        assert_action_allowed("reject", task)  # 动作表守卫（状态×类型×认领态）
         instance = self._instance(ctx, task.instance_id)
         self._claim_task_action(ctx, task, instance)  # 版本抢占+复验（关双 outcome 竞态窗）
         # 变量留痕归因：驳回携带的 variables 与驳回复活路径写变量记 task_reject
@@ -129,7 +129,7 @@ class RejectMixin:
                 "task_type": task.task_type,
                 "assignee": task.assignee,
                 "actor": actor,
-                "comment": comment,  # 事件 review B2：驳回理由进事件
+                "comment": comment,  # 驳回理由进事件
             },
             instance.id,
         )
@@ -144,7 +144,7 @@ class RejectMixin:
         from flowork.tasks.facts import instance_facts
 
         expr = mi.disapprove_exit if mi is not None else "task.disapprove_count >= 1"
-        try:  # 错误归因（复核批）：驳回出口求值失败定位到本节点
+        try:  # 错误归因：驳回出口求值失败定位到本节点
             exit_hit = exit_reached(
                 expr,
                 side="disapprove",
@@ -155,7 +155,7 @@ class RejectMixin:
                 start_user=instance.start_user,
                 functions=expression_functions_of(self._engine.config),
                 instance=instance_facts(instance),
-                now=self._engine.config.now(),  # 第十五轮时钟统一：与办理侧出口同一时钟
+                now=self._engine.config.now(),  # 与办理侧出口同一时钟
             )
         except EngineExecutionError as error:
             from flowork.engine.errors import attribute_node_error
@@ -176,13 +176,13 @@ class RejectMixin:
         if not reject_target:
             raise RejectTargetMissing(f"任务 {task_id} 无可用驳回目标")
         token.approval_exit = "reject"
-        # 声明式 on_exit 补齐（2026-10-13 事件 review 复核批）：修前驳回路径
+        # 声明式 on_exit 补齐：修前驳回路径
         # 静默跳过宿主钩子。行为侧 on_exit 的剩余待办撤销已由下方 node_rejected
         # 归档等价实现，此处只补声明式（加行为钩子会双归档）
         from flowork.engine.context import RuntimeNodeContext
         from flowork.engine.declared_hooks import run_declared_hook
 
-        try:  # 归因入帧（全仓 review 2026-10-13 批 3 P2-1）：与 wait 路由同族——
+        try:  # 归因入帧：与 wait 路由同族——
             # 声明式 on_exit 失败（未注册/handler 异常）修前无节点定位、on_fail 不触发
             run_declared_hook(
                 RuntimeNodeContext(kernel, ctx.session, instance, node, token),
@@ -217,8 +217,8 @@ class RejectMixin:
         )
         from sqlalchemy import select
 
-        # 复活圈定「最近一轮」（spec §5.1 v2.3）：目标节点最近一个已完结令牌
-        # （token_no 最大、非 unfinished）名下的表决行办理人（第十九轮口径：
+        # 复活圈定「最近一轮」（spec §5.1）：目标节点最近一个已完结令牌
+        # （token_no 最大、非 unfinished）名下的表决行办理人（口径：
         # 转办取被转办人、协办/咨询/自动通过不入列）——多轮驳回名单不随轮次膨胀；
         # 与主流「重入按定义重新解析」的刻意差异＝复活原办理人（国内审批语义）。
         latest_settled = (

@@ -1,4 +1,4 @@
-"""auto_pass 归档统一咽喉（2026-10-13 事件 review A6）。
+"""auto_pass 归档统一咽喉。
 
 四处 auto_pass 归档（参与者策略命中/会签出口达成/节点已否决/管理员强制完成）
 此前零事件——消费者无从知道「谁被自动通过」；且策略命中者是「建了即归档」的
@@ -49,7 +49,7 @@ def archive_auto_pass(
             "task_type": task.task_type,
             "assignee": task.assignee,
             "reason": reason,
-            # actor 入载荷（全仓 review 2026-10-13 批 3 P2-3）：订阅方可区分
+            # actor 入载荷：订阅方可区分
             # 策略代投（system）与管理员强制完成（admin_finish）——历史行本就带
             "actor": actor,
         },

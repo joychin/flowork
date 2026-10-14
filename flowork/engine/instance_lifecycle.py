@@ -1,4 +1,4 @@
-"""实例生命周期与故障处置（v2 spec §7/§8）：pause/resume/terminate/cancel、
+"""实例生命周期与故障处置（spec §7/§8）：pause/resume/terminate/cancel、
 Incident 五动作、move_token 管理员手术。
 
 RuntimeService 经 mixin 组合（engine.runtime 入口不变）。
@@ -31,8 +31,8 @@ def advance_unfinished_tokens(
     冻结期间到达的子实例完结不会唤醒父（resume_parent_if_waiting 在父非
     running 时直接 return、不留补偿）——恢复后逐未完令牌问行为 try_complete
     （kind 无关：等待中的 CallActivity 子实例已全部结算即放行；user_task/
-    wait 等行为自判 no-op）。暂停恢复（code-review 2026-10 P0-2）与故障恢复
-    （2026-10-13 事件 review 复核批：挂起期间子完成，父 resume 后永久卡住）
+    wait 等行为自判 no-op）。暂停恢复与故障恢复
+    （挂起期间子完成，父 resume 后永久卡住）
     共用本补偿。
     """
     from flowork.runtime.lifecycle import TokenState
@@ -101,7 +101,7 @@ class InstanceLifecycleMixin:
 
             retro_poll_instance(ctx, self._engine, instance)
 
-            # 冻结期间到达的子实例完结补推进（code-review 2026-10 P0-2），
+            # 冻结期间到达的子实例完结补推进，
             # 与故障恢复共用补偿（见 advance_unfinished_tokens）。
             advance_unfinished_tokens(self._engine, ctx, instance)
 
@@ -110,7 +110,7 @@ class InstanceLifecycleMixin:
     def terminate_process(self, instance_id: str, actor: str, reason: str = "") -> None:
         """终止实例（spec §7）：管理员强杀——整树撤令牌与待办，终态 terminated。
 
-        第十四轮：级联未结算子实例（含暂停/挂起中的）同置 terminated
+        级联未结算子实例（含暂停/挂起中的）同置 terminated
         （terminate_cascade——孤儿待办收口，对齐 Camunda/Zeebe 子树终止）。
         """
         self._engine.execute(
@@ -126,7 +126,7 @@ class InstanceLifecycleMixin:
         reason: str,
         close_incidents: bool = True,
     ) -> None:
-        """终止的命令体内联体（code-review 2026-10 P2-5）：供 resolve_incident
+        """终止的命令体内联体：供 resolve_incident
         在同一事务内调用——嵌套 engine.execute 曾把 incident 已 resolved 与实例
         终态拆进两笔事务，中间崩溃＝实例还跑、单子永闭。"""
         instance = _load(ctx, instance_id)
@@ -153,7 +153,7 @@ class InstanceLifecycleMixin:
         )
 
     def cancel_process(self, instance_id: str, actor: str, reason: str = "") -> None:
-        """取消实例：整树撤销未完令牌与待办（子实例级联 cancelled，第十四轮）。"""
+        """取消实例：整树撤销未完令牌与待办（子实例级联 cancelled）。"""
         self._engine.execute(
             lambda ctx: self._cancel_in_ctx(ctx, instance_id, actor=actor, reason=reason)
         )
@@ -167,10 +167,10 @@ class InstanceLifecycleMixin:
         reason: str,
         close_incidents: bool = True,
     ) -> None:
-        """取消的命令体内联体（同 _terminate_in_ctx，P2-5）。"""
+        """取消的命令体内联体（同 _terminate_in_ctx）。"""
         instance = _load(ctx, instance_id)
         if instance.state in TERMINAL_INSTANCE_STATES:
-            # 终态守卫（code-review 2026-10 P1-2）：对齐 terminate_process——
+            # 终态守卫：对齐 terminate_process——
             # complete_instance 对终态静默跳过，但本命令的取消事件无条件发，
             # 曾对 completed 实例发出假 process_cancelled（状态与事件背离）
             raise InstanceNotFoundError(f"实例 {instance_id} 已终态（{instance.state}），不可取消")

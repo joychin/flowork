@@ -1,10 +1,10 @@
-"""消息服务（kernel-v2 spec §7/P1-1）：缓冲、TTL、按关联键匹配订阅。
+"""消息服务（kernel-v2 spec §7）：缓冲、TTL、按关联键匹配订阅。
 
 - ``publish_message``：先到进缓冲（TTL），命中即关联（FCFS）；message_id 全局
   唯一防重。``subscribe``：登记并反查缓冲（消息先到竞态）；命中即完整关联动作
   （同事务）：matched＋载荷写入＋ ``message_correlated``＋推进（等待节点）。
 - ``correlate_message``：同步关联（不缓冲）——签收凭证/无人在等 None/幂等回放；
-  ``instance_id`` 定向＝signal 面只消费本实例订阅（review 2026-10-13 防串单）。
+  ``instance_id`` 定向＝signal 面只消费本实例订阅。
 - ``waiting``/``list_messages``：反查与检索（运维面）；``signal`` 广播唤醒。
 - 暂停实例不消费（落缓冲恢复补消费）；查询件下沉 engine.message_query。
 """
@@ -69,7 +69,7 @@ class MessageService:
             if duplicate:
                 return False
 
-            # 到达事实先落事件（事件 review A3 三路统一，语义见方法 docstring）
+            # 到达事实先落事件（语义见方法 docstring）
             from flowork.engine.message_flow import emit_message_event
 
             emit_message_event(
@@ -111,7 +111,7 @@ class MessageService:
                     correlation_key=correlation_key,
                     message_id=message_id_,
                     payload=dict(payload or {}),
-                    # TTL 与其他写路径同源（P1-18）：此前墙钟
+                    # TTL 与其他写路径同源：此前墙钟
                     expires_at=self._engine.config.now() + timedelta(seconds=ttl_seconds),
                 )
             )
@@ -175,7 +175,7 @@ class MessageService:
         instance_id: str | None = None,
     ) -> dict[str, Any] | None:
         """同步关联（不缓冲）：命中回传签收凭证，无人在等返回 None（§7.2）；
-        ``instance_id`` 定向＝只消费本实例订阅（review P0-2 防串单）。"""
+        ``instance_id`` 定向＝只消费本实例订阅（防串单）。"""
         from flowork.engine import message_query as _mq
 
         return _mq.correlate_message(

@@ -89,7 +89,7 @@ class Kernel(AdvanceGateMixin, TaskRecordsMixin, TokenRecordsMixin):
     ) -> None:
         """记录领域事件（引擎内部一律传 DomainEvent 成员；端口对宿主开放事件名）。"""
         if self.command_ctx is not None and self.command_ctx.suppress_events:
-            return  # 模拟实例（v2.3 A10）：事件不投 outbox（试跑不得惊动订阅方）
+            return  # 模拟实例：事件不投 outbox（试跑不得惊动订阅方）
         self.events.append((name, payload, instance_id))
         if instance_id and self.command_ctx is not None:
             self.command_ctx.instances_touched.add(instance_id)
@@ -105,19 +105,19 @@ class Kernel(AdvanceGateMixin, TaskRecordsMixin, TokenRecordsMixin):
             instance.state == InstanceState.PAUSED.value
             and end_status == InstanceState.COMPLETED.value
         ):
-            # 暂停不可直接「完成」（审计 D2：终态跃迁只从运行态走——清档请 resume
+            # 暂停不可直接「完成」（终态跃迁只从运行态走——清档请 resume
             # 或改用 cancel；cancel/terminate 不拦，级联砍树对暂停子照常结算）
             from flowork.errors import TaskNotAvailableError
 
             raise TaskNotAvailableError(
-                "实例已暂停，不可直接完成——先 resume 或改用 cancel（spec §7 第二十轮）"
+                "实例已暂停，不可直接完成——先 resume 或改用 cancel（spec §7）"
             )
         if instance.state in UNSETTLED_INSTANCE_STATES:
             instance.state = end_status
             instance.finished_at = self.config.now()
             session.flush()
             if end_status == InstanceState.COMPLETED.value:
-                # 仅 completed 在此发事件（code-review 2026-10 P2-1）：cancelled/
+                # 仅 completed 在此发事件：cancelled/
                 # terminated 由调用方独占（带 actor/reason/cascade 溯源）——
                 # 此前终止路径双发假 cancelled（状态与事件序列矛盾）
                 self.record_event(
@@ -165,7 +165,7 @@ class Kernel(AdvanceGateMixin, TaskRecordsMixin, TokenRecordsMixin):
             )
             self.record_event(
                 DomainEvent.NODE_ENTERED,
-                {"activity_code": node.code, "token_id": token.id},  # B4：并行分支可区分
+                {"activity_code": node.code, "token_id": token.id},  # 并行分支可区分
                 instance.id,
             )
             ctx = RuntimeNodeContext(self, session, instance, node, token)
@@ -173,7 +173,7 @@ class Kernel(AdvanceGateMixin, TaskRecordsMixin, TokenRecordsMixin):
             self.behavior_of(node).on_enter(ctx)
             if not defer_completion:
                 self._maybe_complete(session, instance, node, token)
-        except EngineExecutionError as error:  # 错误归因（复核批）：挂起可定位节点
+        except EngineExecutionError as error:  # 错误归因：挂起可定位节点
             attribute_node_error(error, node.code)
             raise
         return token
@@ -197,7 +197,7 @@ class Kernel(AdvanceGateMixin, TaskRecordsMixin, TokenRecordsMixin):
         self.finish_token(session, token, approval_exit=token.approval_exit)
         self.record_event(
             DomainEvent.NODE_EXITED,
-            {"activity_code": node.code, "token_id": token.id},  # B4：并行分支可区分
+            {"activity_code": node.code, "token_id": token.id},  # 并行分支可区分
             instance.id,
         )
         self.route(session, instance, node, token)
@@ -236,6 +236,6 @@ class Kernel(AdvanceGateMixin, TaskRecordsMixin, TokenRecordsMixin):
         return definition.node(code)
 
     # advance_after_task（任务提交后的统一推进，含出口不可达兜底）住
-    # TaskRecordsMixin——任务推进域（v2.3 第二十轮迁出，kernel 守 300 行红线）。
+    # TaskRecordsMixin——任务推进域。
     # 推进门（_take_flow/_advance/_advance_policy_of，any 吸收与竞速/all 放行）
-    # 住 AdvanceGateMixin（engine/advance_gate.py，同因守红线迁出）。
+    # 住 AdvanceGateMixin（engine/advance_gate.py）。

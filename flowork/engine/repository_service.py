@@ -1,4 +1,4 @@
-"""RepositoryService：流程定义的部署 / 校验 / 查询（v2 §6：deploy 即 publish）。
+"""RepositoryService：流程定义的部署 / 校验 / 查询（spec §6：deploy 即 publish）。
 
 发布即不可变；实例钉快照；默认不迁移。deploy 事务内、写库前完成破坏性判定
 （R1–R4）；内容哈希与已发布版本相同 → 幂等去重（不产生新版本、不发事件）；
@@ -74,7 +74,7 @@ class RepositoryService(
             assert_valid(
                 definition, self._engine.config.node_registry
             )  # org_configured 联动在 validate()（deploy 保持强校验语义）
-            # 部署期 L3/L4（v2.3 第三批 A11，spec §6）：引用完整性 + 目录实体存在性
+            # 部署期 L3/L4（spec §6）：引用完整性 + 目录实体存在性
             # ——默认 WARNING 留痕（可见优于静默），strict_deploy_validation 升 ERROR 拦发布。
             from flowork.definitions.validator import IssueLevel
             from flowork.definitions.validator_deploy import check_deploy_references

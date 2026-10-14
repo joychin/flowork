@@ -44,7 +44,7 @@ def call_tool_result(
 ) -> list[TextContent] | CallToolResult:
     """dispatch 结果转 MCP 返回（同步可直测，传输壳委托本函数）。
 
-    错误通道统一（review P1-1）：业务/参数错误一律 CallToolResult(isError=True)
+    错误通道统一：业务/参数错误一律 CallToolResult(isError=True)
     ＋统一 JSON 体——修前业务错误 isError=False（「调用成功」），AI 客户端基于
     isError 的错误处理对业务错误完全不触发；三种形状收敛为「isError=True＋JSON」。"""
     try:
@@ -90,7 +90,7 @@ def main() -> None:
     try:
         anyio.run(_run)
     finally:
-        engine.close()  # stdio EOF 后释放（对齐 REST shutdown hook，review P2-8）
+        engine.close()  # stdio EOF 后释放（对齐 REST shutdown hook）
 
 
 if __name__ == "__main__":

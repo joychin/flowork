@@ -7,7 +7,7 @@
 
 对齐 Flowable InclusiveGatewayActivityBehavior（静态可达性＋活跃执行扫描）；
 驳回归零、管理员 move_token 等直调 ``activate`` 的路径不经本门（语义保持）。
-遍历实现下沉 :mod:`flowork.definitions.graph`（能力补足 P0-3）——设计时图级
+遍历实现住 :mod:`flowork.definitions.graph`——设计时图级
 lint 与本门同源，杜绝镜像漂移；定义不可变，若 profile 需要可再按定义内容键
 缓存（spec §2.3 实现提示）。
 """

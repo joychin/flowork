@@ -9,7 +9,7 @@
 
 位点词汇（与 ``validator_positions.iter_expression_positions`` 的 kind 一致）：
 condition（连线条件）/ subjects（取人 assignee·assignees·recipients）/
-candidates（候选槽 candidate_users·candidate_groups，2026-10-09 B 批——目录按
+candidates（候选槽 candidate_users·candidate_groups——目录按
 subjects 登记、查询前经 lookup_kind 归一，两槽共享取人词汇）/
 reassign（超时改派/升级）/ exit（会签出口）/ mapping_input·mapping_output（子流程映射，
 后者亦承载等待节点 output 映射——同款子上下文语义）/
@@ -111,7 +111,7 @@ IDENTIFIER_CATALOG: tuple[IdentifierEntry, ...] = (
         type="subject",
         label="当前迭代主体",
         positions=frozenset({"mapping_input"}),
-        note="多实例子流程（A9）：fan-out 第 k 个 subject——输入映射按子求值时注入，"
+        note="多实例子流程：fan-out 第 k 个 subject——输入映射按子求值时注入，"
         "如 input_mappings={'dept': 'subject'}＝每子拿自己的切片",
     ),
     IdentifierEntry(
@@ -119,7 +119,7 @@ IDENTIFIER_CATALOG: tuple[IdentifierEntry, ...] = (
         type="int",
         label="子实例总数",
         positions=frozenset({"completion"}),
-        note="多实例子流程完成公式的三计数（A9）：child_total=计划数",
+        note="多实例子流程完成公式的三计数：child_total=计划数",
     ),
     IdentifierEntry(
         name="child_completed",

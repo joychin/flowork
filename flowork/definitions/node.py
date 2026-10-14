@@ -63,7 +63,7 @@ class MultiInstance(BaseModel):
 
 
 class TimeoutPolicy(BaseModel):
-    """超时策略（旧形态，v2.2 由 deadlines 列表取代；validate/diff 兼容读取）。"""
+    """超时策略（旧形态，由 deadlines 列表取代；validate/diff 兼容读取）。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -72,7 +72,7 @@ class TimeoutPolicy(BaseModel):
 
 
 class DeadlineAction(StrEnum):
-    """超时动作五枚举（v2.2 spec §5.1，对齐 WS-HumanTask escalation 形态）。"""
+    """超时动作五枚举（spec §5.1，对齐 WS-HumanTask escalation 形态）。"""
 
     NOTIFY = "notify"
     REASSIGN = "reassign"
@@ -90,7 +90,7 @@ class TaskDeadline(BaseModel):
     action: DeadlineAction = DeadlineAction.NOTIFY
     # reassign 改派目标：CEL 表达式（fire 时求值，task.* 可用——spec §4.2/C.4）
     reassign_to: str | None = None
-    # escalate 升级目标：CEL 表达式，*必填*（v2.3 第十四轮，spec §5.1）——
+    # escalate 升级目标：CEL 表达式，*必填*（spec §5.1）——
     # 引擎不再自带「上级」概念（组织模型归宿主，spec §5.5 分工铁律）；
     # 科层组织的图纸写法：escalate_to='manager_of(task.assignee)'
     escalate_to: str | None = None

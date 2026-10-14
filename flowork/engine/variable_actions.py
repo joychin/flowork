@@ -106,7 +106,7 @@ class VariableActionsMixin:
                     f"实例已终态（{instance.state}），不可外部更新变量：{instance_id}"
                 )
             if instance.state == InstanceState.PAUSED.value:
-                # 暂停＝冻结快照（审计 D2，spec §7 第二十轮）：取证期间不可写；
+                # 暂停＝冻结快照（spec §7）：取证期间不可写；
                 # 修数据路径＝resume → 改 → 再 pause
                 raise InstanceNotFoundError(
                     f"实例已暂停（冻结快照），不可外部更新变量：{instance_id}"

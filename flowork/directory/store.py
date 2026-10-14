@@ -1,4 +1,4 @@
-"""持久化目录（M-A）：部门树 + 用户写面与组合根。
+"""持久化目录：部门树 + 用户写面与组合根。
 
 语义对齐 docs/product/engine-v1/01-身份与组织模型.md §2：
 - manager_of(user) = user 主属部门的 manager_user_id（部门属性，非用户属性）；

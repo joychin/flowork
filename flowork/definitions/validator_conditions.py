@@ -1,6 +1,6 @@
 """条件与节点语义校验规则（validator 编排件的规则组二）。
 
-节点语义 / 表达式合法性 / **CEL 静态检查薄层**（kernel-v2 §4.3）。
+节点语义 / 表达式合法性 / **CEL 静态检查薄层**（spec §4.3）。
 位点统一（§4.2）：静态检查覆盖全部表达式位——连线条件、取人（assignee/
 assignees/recipients）、超时改派（reassign_to）、子流程映射值；各公式经
 ``expr.cel`` 编译 + ``collect_references`` 收集，对照已声明变量与
@@ -8,7 +8,7 @@ ExpressionFunctions 注册表签名。未声明变量 ERROR（K8s CRD 体验）�
 有注册表 ERROR / 无注册表 WARNING（诚实分级，照 org_configured 先例）；
 取人/改派位根调用另做 returns 类型对位（谓词 bool 误用即拦）。
 变量引用细查拆至 validator_references.py（规则组三）；位点遍历（含候选槽
-candidates kind，2026-10-09 B 批）拆至 validator_positions.py——本文件经导入使用，
+candidates kind）拆至 validator_positions.py——本文件经导入使用，
 不做第二份清单（两份必然漂移：候选位语法检查就会漏）。
 """
 
@@ -95,7 +95,7 @@ def check_condition_legality(
     warning: IssueFn,
 ) -> None:
     """表达式合法性（全位点）：空公式、长度上限、编译与护栏、分支臂缺条件、
-    出口公式的裸数字门槛提示（审计 D4，第二十轮）。"""
+    出口公式的裸数字门槛提示。"""
     from flowork.expr.cel import FormulaError, collect_references
 
     nodes = {n.code: n for n in definition.nodes}

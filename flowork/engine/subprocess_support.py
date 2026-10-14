@@ -58,7 +58,7 @@ def _mapping_values(
 
     裸标识符直传且键缺失 → None（数据缺失≠求值错：子实例被管理员修复直达
     终态等场景，对齐旧 ``.get`` 直传语义）；其余表达式（运算/函数/字段选择）严格。
-    extra＝额外注入标识符（A9 多实例：当前迭代的 ``subject``）。
+    extra＝额外注入标识符（多实例：当前迭代的 ``subject``）。
     """
     config = ctx.kernel.engine.config if ctx.kernel.engine else None
     from flowork.tasks.facts import instance_facts
@@ -90,7 +90,7 @@ def _mapping_values(
 def start_sub_process(ctx: RuntimeNodeContext, spec: CallActivitySpec) -> None:
     """在同一事务内启动子流程实例（输入映射：子变量 ← 父上下文求值）。
 
-    多实例（A9）：subjects 逐个解析＝每人一个子实例（index 记 parent_index），
+    多实例：subjects 逐个解析＝每人一个子实例（index 记 parent_index），
     输入映射按子求值并注入 ``subject``；空集合＝零子实例（sub_process_finished
     立即放行＝Zeebe skip 语义）。
     """
@@ -123,12 +123,12 @@ def start_sub_process(ctx: RuntimeNodeContext, spec: CallActivitySpec) -> None:
         definition_revision=row.revision,
         definition_snapshot=row.content,
         state=InstanceState.RUNNING.value,
-        started_at=ctx.kernel.config.now(),  # P1-11：业务时刻单源
+        started_at=ctx.kernel.config.now(),  # 业务时刻单源
         start_user=ctx.instance.start_user,
         variables=dict(input_variables),
         parent_id=ctx.instance.id,
         parent_token_id=ctx.token.id,
-        simulated=ctx.instance.simulated,  # v2.3 A10：模拟递归传播
+        simulated=ctx.instance.simulated,  # 模拟递归传播
     )
     ctx.session.add(child)
     ctx.session.flush()
@@ -141,7 +141,7 @@ def start_sub_process(ctx: RuntimeNodeContext, spec: CallActivitySpec) -> None:
         DomainEvent.SUB_PROCESS_STARTED,
         {
             "sub_instance_id": child.id,
-            "child_definition_code": spec.process_code,  # B4：订阅方免反查
+            "child_definition_code": spec.process_code,  # 订阅方免反查
             "parent_node": ctx.node.code,
         },
         ctx.instance.id,
@@ -185,7 +185,7 @@ def sub_process_finished(ctx: RuntimeNodeContext, spec: CallActivitySpec) -> boo
 def resume_parent_if_waiting(kernel: Kernel, session: Session, child: ProcessInstanceRow) -> None:
     """子实例完结后，唤醒等待中的父 CallActivity 令牌。
 
-    先落 ``sub_process_completed``（复核批）：父侧子完成信号——无论父此刻
+    先落 ``sub_process_completed``：父侧子完成信号——无论父此刻
     能否被唤醒（挂起/暂停期唤醒落空）都留痕，修前父侧订阅方对子实例完结
     完全失明（只有 sub_process_started，没有完成侧）。
     """

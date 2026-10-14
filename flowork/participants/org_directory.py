@@ -28,7 +28,7 @@ __all__ = ["OrgConfigError", "OrgDirectory", "OrgDirectoryLike", "split_group"]
 class OrgDirectoryLike(Protocol):
     """引擎消费的目录查询面：静态 OrgDirectory 与持久化 DirectoryStore 均满足。
 
-    v2.1（spec §9）：前四个方法（is_member/subjects_in/manager_of/snapshot）为引擎
+    （spec §9）：前四个方法（is_member/subjects_in/manager_of/snapshot）为引擎
     必需的最小面——关系判断（人→组）与身份定格是引擎自己的行为；其余为宿主函数
     （flowork.contrib）与既有解析管线使用的丰富面，实现方可按需退化。
     """
@@ -105,7 +105,7 @@ class OrgDirectory:
             admins=[str(a) for a in data.get("admins", [])],
         )
 
-    # —— 查询：v2.1 引擎必需四方法（spec §9）——
+    # —— 查询：引擎必需四方法（spec §9）——
 
     def is_member(self, user: str, group: str) -> bool:
         """人→组：``role:{name}`` 按角色、``org:{code}`` 按直属部门；裸名视同角色。"""
@@ -132,7 +132,7 @@ class OrgDirectory:
         AI 代理 → 本实现**没有 agent 表**（静态目录只描述人），任何 agent id
         返回 None；要 agent 问责链请用持久化目录（DirectoryStore，其
         manager_of 走 owner）或宿主自实现。单跳不递归（spec §9 丰富面口径）。
-        主体一律裸 id：`agent:` 写法已零兼容删除（2026-10-10 第十六轮）。
+        主体一律裸 id：`agent:` 写法已零兼容删除。
         """
         if user_id.startswith("org:"):
             return self.department_head(user_id[4:])

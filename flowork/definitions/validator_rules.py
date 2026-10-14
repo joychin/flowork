@@ -42,7 +42,7 @@ def check_variables_and_org(
 ) -> None:
     """变量声明检查 + 参与者槽位语义 + 组主体与目录配置的关系（spec §9）。"""
 
-    # —— 槽位组合互斥（code-review 2026-10 P2-13）：候选命中走单任务认领制，
+    # —— 槽位组合互斥：候选命中走单任务认领制，
     # —— multi_instance（并行/串行会签语义）被静默忽略（item_count=1）——图纸
     # —— 声明的会签形态全部丢失且零告警。设计期拦下并指路两条正路。
     for node in definition.nodes:
@@ -69,7 +69,7 @@ def check_variables_and_org(
                 node=variable.name,
             )
 
-    # —— 人员位组引用（第十八轮）：组引用只属于候选槽（spec §5.5「两个槽不可拍平」）
+    # —— 人员位组引用：组引用只属于候选槽（spec §5.5「两个槽不可拍平」）
     # —— subjects/reassign 位写 role:/org: 字面量＝想按角色/部门取人写错了位置，
     # 运行期会变成没人能办的死待办；设计期直接拦（ERROR）。
     from flowork.definitions.validator_deploy import string_literals
@@ -89,7 +89,7 @@ def check_variables_and_org(
                 node=node_code,
             )
 
-    # —— 候选组必须显式前缀（拍板 6 方案 A，code-review 2026-10）：判定侧
+    # —— 候选组必须显式前缀：判定侧
     # —— 裸名只按人解释，组槽位写裸组名会静默失效（无人能认领）——设计期拦下。
     from flowork.definitions.validator_deploy import string_literals as _sl
 
@@ -109,7 +109,7 @@ def check_variables_and_org(
     if org_configured is False:
         for node in definition.nodes:
             groups = list(getattr(node, "candidate_groups", None) or [])
-            # 候选槽是 CEL 表达式（B 批位点统一）——组引用写在字符串字面量里
+            # 候选槽是 CEL 表达式——组引用写在字符串字面量里
             # （"'role:finance'"），取字面量再判前缀；string_literals 宿 validator_deploy，
             # 函数内延迟导入避免 validator → rules → deploy → validator 模块环。
             from flowork.definitions.validator_deploy import string_literals
@@ -189,5 +189,5 @@ def check_advance_policy(
                 "节点有多条入边但未设置开始条件（缺省按「任一到达即开始」执行）",
                 node=node.code,
             )
-        # 「all 挂条件分支臂」不再告警：v2 §2.3 可达性放行下未命中臂不阻塞
+        # 「all 挂条件分支臂」不再告警：spec §2.3 可达性放行下未命中臂不阻塞
         # （包容网关映射 = branch + all 汇聚，见 spec §2.4）

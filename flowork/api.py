@@ -7,7 +7,7 @@
 约束（对 AI 与外部宿主同样生效）：
 - 内核模块重排（spec §15 重构刀）只准重排内部件，本门面的路径与符号名冻结；
 - 新增符号须同步 tests/test_api_surface.py 快照（快照红=显式扩面）；
-- 删除或改名符号为破坏性变更，走 major 版本（spec P0-4）。
+- 删除或改名符号为破坏性变更，走 major 版本（spec §6.3）。
 
 API_VERSION：门面契约版本（openface-plugin-design.md §4）。增符号=minor（同步
 快照即可）；删/改名=major。插件以 REQUIRES_FLOWORK_API 声明依赖的门面版本，
@@ -36,7 +36,7 @@ from flowork.definitions.validator import (
     validate_definition,
 )
 
-# 目录持久化实现（收尾批 5 扩面）：DB 版目录此前仓内仅 tests 可达，宿主
+# 目录持久化实现：DB 版目录此前仓内仅 tests 可达，宿主
 # 走门面无路——DirectoryStore(engine.session_factory) 构造后挂 EngineConfig.org。
 from flowork.directory import DirectoryError, DirectoryStore
 from flowork.engine.config import EngineConfig
@@ -61,10 +61,10 @@ from flowork.errors import (
     UnknownNodeKind,
 )
 
-# 事件消费帮手（收尾批 5 扩面）与事件名枚举（事件面修复批扩点）：outbox
+# 事件消费帮手与事件名枚举：outbox
 # 只写不消费的现状下，宿主消费侧的至少一次分发 + 按 id 幂等去重参考实现
 # （spec §10）；DomainEvent＝引擎自发事件全集（「枚举即全集」，按枚举编程
-# 的订阅方入口上公开面——事件面修复批 C6）。
+# 的订阅方入口上公开面）。
 from flowork.events.consumer import IdempotentSink, OutboxConsumer
 from flowork.events.domain import DomainEvent
 from flowork.expr.catalog import (
@@ -79,8 +79,8 @@ from flowork.expr.context import expression_functions_of
 
 # 目录协议与实现：OrgDirectoryLike＝引擎消费的目录协议（EngineConfig.org 类型，
 # spec §9 四方法最小面）；StaticOrgDirectory＝participants 的 yaml 静态实现类。
-# spi.ports 的同名四方法死协议（与 OrgDirectoryLike 重复且零消费）随
-# 2026-10-12 死符号收口批删除——公开面不再有同名歧义。
+# spi.ports 的同名四方法死协议已删除（与 OrgDirectoryLike 重复且零消费）
+# ——公开面不再有同名歧义。
 from flowork.participants.org_directory import OrgDirectory as StaticOrgDirectory
 from flowork.participants.org_directory import OrgDirectoryLike
 from flowork.runtime.behavior import InMemoryNodeContext, NodeBehavior, NodeContext

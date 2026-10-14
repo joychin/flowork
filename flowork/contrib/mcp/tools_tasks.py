@@ -22,7 +22,7 @@ def task_tools(engine: ProcessEngine) -> list[ToolSpec]:
         state = args.get("state")
         state = "ready" if state is None else str(state)
         if state not in task_states:
-            # review P1-12：修前非法值（如大小写错）静默空列表——AI 误判「无待办」；
+            # 修前非法值（如大小写错）静默空列表——AI 误判「无待办」；
             # ""=查全部（与 REST 透传语义一致，修前被 or "ready" 静默改写）
             raise McpToolError(
                 f"state 不合法：{state!r}（可选 ready/completed/cancelled；空串=全部）"
@@ -44,7 +44,7 @@ def task_tools(engine: ProcessEngine) -> list[ToolSpec]:
     def complete_task(args: dict[str, Any]) -> Any:
         variables = args.get("variables")
         if variables is not None and not isinstance(variables, dict):
-            # review P2-2：修前非 dict 静默丢弃为 None——任务照常办结、变量无声丢失
+            # 修前非 dict 静默丢弃为 None——任务照常办结、变量无声丢失
             raise McpToolError("variables 必须是 {name: value} 对象")
         result = task.complete(
             str(args.get("task_id") or ""),

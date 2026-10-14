@@ -23,7 +23,7 @@ _MAX_POLL_SECONDS = 30.0
 
 
 def _int_field(body: dict[str, Any], key: str, default: int, lo: int, hi: int) -> int:
-    """整型入参归一（review P1-4：max="abc" int() 裸炸 500、max=-5 领走全部）。"""
+    """整型入参归一（max="abc" int() 裸炸 500、max=-5 领走全部）。"""
     raw = body.get(key)
     if raw is None:
         return default
@@ -71,7 +71,7 @@ def register_system_routes(app: FastAPI, engine: ProcessEngine) -> None:
 
     @app.post("/v2/messages/search")
     def messages_search(body: dict[str, Any]) -> dict[str, Any]:
-        """消息检索（收尾批 6，spec §12 搜索族补齐）：filter={name?,
+        """消息检索（spec §12 搜索族补齐）：filter={name?,
         correlation_key?（前缀）, kind: buffer|subscription?, state?（订阅源）}。"""
         flt = body.get("filter") or {}
         offset, limit = page_request(body.get("page"))
@@ -105,7 +105,7 @@ def register_system_routes(app: FastAPI, engine: ProcessEngine) -> None:
                 f"request_timeout 不合法：{body.get('request_timeout')!r}"
             ) from exc
         if not math.isfinite(timeout):
-            # NaN/inf（review P1-1）：min(nan, 30)=nan，monotonic()>=nan 恒 False
+            # NaN/inf：min(nan, 30)=nan，monotonic()>=nan 恒 False
             # ——while 永不退出，每请求占死一个线程池线程（请求级 DoS）
             raise RestRequestError(f"request_timeout 不合法：{body.get('request_timeout')!r}")
         deadline = time.monotonic() + timeout
@@ -182,7 +182,7 @@ def register_system_routes(app: FastAPI, engine: ProcessEngine) -> None:
     def events_search(body: dict[str, Any]) -> dict[str, Any]:
         flt = body.get("filter") or {}
         offset, limit = page_request(body.get("page"))
-        # limit+1 余量探测（review P0-1）：修前 next_cursor 恒 None（同 instances）
+        # limit+1 余量探测：修前 next_cursor 恒 None（同 instances）
         rows = history.events(flt.get("instance_id"), limit=limit + 1, offset=offset)
         has_more = len(rows) > limit
         return {

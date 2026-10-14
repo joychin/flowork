@@ -1,5 +1,5 @@
 """故障单（Incident）：记录、清单、五动作处置、move_token 管理员手术
-（v2 spec §8 错误二分 / P1-4）。RuntimeService 经 mixin 组合，入口不变。
+（spec §8 错误二分）。RuntimeService 经 mixin 组合，入口不变。
 """
 
 from __future__ import annotations
@@ -59,7 +59,7 @@ class IncidentMixin:
         """由宿主类提供（InstanceLifecycleMixin.terminate_process）。"""
         raise NotImplementedError
 
-    # —— Incident（M5）——;
+    # —— Incident ——;
 
     def _record_incident(self, instance_ids: list[str], error: Exception) -> None:
         """引擎错误 → Incident 落库 + 实例挂起（独立命令）。"""
@@ -79,7 +79,7 @@ class IncidentMixin:
         for instance_id in instance_ids:
             instance = ctx.session.get(ProcessInstanceRow, instance_id)
             if instance is not None and instance.simulated:
-                continue  # 模拟实例不落故障单（A10 隔离；修前模拟失败产孤儿故障单）
+                continue  # 模拟实例不落故障单（修前模拟失败产孤儿故障单）
             real_ids.append(instance_id)
             incident_id = _uuid.uuid4().hex
             ctx.session.add(
@@ -93,7 +93,7 @@ class IncidentMixin:
             if instance is not None and instance.state == InstanceState.RUNNING.value:
                 instance.state = InstanceState.SUSPENDED.value
                 kernel.record_event(
-                    DomainEvent.PROCESS_SUSPENDED,  # 挂起/暂停对称（复核批）
+                    DomainEvent.PROCESS_SUSPENDED,  # 挂起/暂停对称
                     {
                         "incident_id": incident_id,
                         "activity_code": getattr(error, "activity_code", None),
@@ -103,8 +103,8 @@ class IncidentMixin:
             kernel.record_event(
                 DomainEvent.INCIDENT_RAISED,
                 {
-                    "incident_id": incident_id,  # B3：与 incident_resolved 可配对
-                    # 错误归因（2026-10-13 事件 review 复核批）：节点作用域帧标注
+                    "incident_id": incident_id,  # 与 incident_resolved 可配对
+                    # 错误归因：节点作用域帧标注
                     # 的定位——修前订阅方只能解析 message 文本猜节点
                     "activity_code": getattr(error, "activity_code", None),
                     "message": str(error),
@@ -112,7 +112,7 @@ class IncidentMixin:
                 },
                 instance_id,
             )
-        # on_fail 接线（复核批·终章）：故障单落库同事务执行失败钩子——
+        # on_fail 接线：故障单落库同事务执行失败钩子——
         # 行为 on_fail(ctx, error) + 声明式 hooks.on_fail（错误经 ctx.failure）
         from flowork.engine.fail_hooks import run_fail_hooks
 
@@ -147,7 +147,7 @@ class IncidentMixin:
     def resolve_incident(
         self, incident_id: str, action: str = "resume", actor: str = "admin"
     ) -> None:
-        """修复 Incident（spec §8/P1-4，根因没修好允许复发）。
+        """修复 Incident（spec §8，根因没修好允许复发）。
 
         - resume：恢复运行（轻症——外部环境已恢复）；
         - cancel：取消实例（业务侧放弃）；
@@ -206,7 +206,7 @@ class IncidentMixin:
                 raise ValueError(f"未知修复动作：{action}（支持 resume/cancel/retry/skip/fail）")
             incident.state = "resolved"
             incident.resolution = action
-            # spec §10 承诺事件（2026-10-13 拍板③补发）：订阅方据此后撤告警/统计
+            # spec §10 承诺事件：订阅方据此后撤告警/统计
             self._engine.kernel_for(ctx).record_event(
                 DomainEvent.INCIDENT_RESOLVED,
                 {"incident_id": incident.id, "action": action, "actor": actor},
@@ -275,8 +275,8 @@ class IncidentMixin:
     ) -> list[InstanceInfo]:
         """实例清单（可按定义版本过滤——「多少在跑实例钉旧版」的查询，spec §6.5）。
 
-        模拟实例默认排除（code-review 2026-10 P2-2，与 history 面对齐——
-        spec A10「模拟一等公民但默认被查询面隔离」）。"""
+        模拟实例默认排除（与 history 面对齐——
+        「模拟一等公民但默认被查询面隔离」）。"""
 
         def _command(ctx: CommandContext) -> Any:
             stmt = select(ProcessInstanceRow).order_by(ProcessInstanceRow.started_at.desc())

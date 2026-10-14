@@ -1,4 +1,4 @@
-"""会签出口判定：CEL 布尔公式（位点统一收官，kernel-v2 §4.1/§4.2）。
+"""会签出口判定：CEL 布尔公式（位点统一收官，spec §4.1/§4.2）。
 
 approve_exit / disapprove_exit 为 **CEL 公式**，求值上下文注入 ``task.*``
 会签计数快照（item_count / approve_count / disapprove_count，spec C.4 位点
@@ -45,7 +45,7 @@ def exit_reached(
 
     ``instance`` 全局事实可选注入（variables 已携带时免传——anticipate 经
     evaluation_variables 自动带上）。``now`` 必须由引擎位点显式传入
-    （``EngineConfig.now``——第十四轮时钟统一）。
+    （``EngineConfig.now``）。
     """
     if not expr:
         done = approve_count if side == "approve" else disapprove_count

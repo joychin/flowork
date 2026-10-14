@@ -1,8 +1,7 @@
 """加签面（TaskService 组合件，入口 engine.task.add_countersigner 不变）。
 
-从 task_rework.py 拆出（单文件 ≤300 行红线；拍板 3 批达 302 行）。
-加签人各占一票（spec §5.1）；重复加签整笔回拒（P1-1）；克隆任务独立满档
-deadline（P2-9）；规模护栏与 assist/consult 同守（P1-16）。
+加签人各占一票（spec §5.1）；重复加签整笔回拒；克隆任务独立满档
+deadline；规模护栏与 assist/consult 同守。
 """
 
 from __future__ import annotations
@@ -106,8 +105,8 @@ class TaskCountersignAddMixin:
             )
         existing = list((token.manual_participants or {}).get(task.activity_code, []))
         merged = list(dict.fromkeys([*base_participants, *existing, *users]))
-        # 规模护栏（spec v2.3）：加签是调用方请求——超限拒绝整笔（回滚），实例不挂起；
-        # limit 缺省 None＝不设防（第十八轮：内核不替宿主选数值）
+        # 规模护栏：加签是调用方请求——超限拒绝整笔（回滚），实例不挂起；
+        # limit 缺省 None＝不设防（内核不替宿主选数值）
         limit = self._engine.config.max_participants
         if limit is not None and len(merged) > limit:
             raise TaskNotAvailableError(
@@ -117,7 +116,7 @@ class TaskCountersignAddMixin:
         token.manual_participants[task.activity_code] = merged
         token.item_count = len(merged)
         ctx.session.flush()
-        # kernel 复用上方实例（全仓 review 2026-10-13 批 3 P2-9）：重复
+        # kernel 复用上方实例：重复
         # kernel_for 会重解析定义 JSON，且后续往 Kernel 加实例内状态即踩坑
         kernel.record_event(
             DomainEvent.TASK_COUNTERSIGNER_ADDED,
@@ -131,7 +130,7 @@ class TaskCountersignAddMixin:
             task.instance_id,
         )
         root = task.root_task_id or task.id
-        # 重复加签守卫（code-review 2026-10 P1-1）：同令牌已有 ready 任务的人
+        # 重复加签守卫：同令牌已有 ready 任务的人
         # 再被加签＝一人两票（item_count 不随重复增加），出口提前达成、其余
         # 成员被 auto_pass 从未参与。整笔回拒不部分生效（对齐 max_participants
         # 「拒绝而非截断」口径）；user: 前缀写法与裸 id 视同一人。
@@ -156,7 +155,7 @@ class TaskCountersignAddMixin:
         created = [
             self._clone_task(ctx, task, assignee=user, operator=actor, root=root) for user in users
         ]
-        # 加签人同样进 SLA（code-review 2026-10 P2-9）：克隆任务此前零 timer 零
+        # 加签人同样进 SLA：克隆任务此前零 timer 零
         # due_at——加签人不办则会签节点无限期悬挂。新票人按并行会签同款独立满档。
         if isinstance(node, UserTaskSpec):
             from flowork.engine.context import RuntimeNodeContext

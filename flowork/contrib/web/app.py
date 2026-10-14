@@ -56,7 +56,7 @@ def create_app(db_file: str | Path | None = None, *, seed: bool = True) -> FastA
     db_path = db_file or os.environ.get("FLOWORK_DB", "designer.db")
     config_kwargs: dict[str, Any] = {"db_file": db_path}
     org_path = os.environ.get("FLOWORK_ORG")
-    if org_path:  # 批 D1：目录只读下发面(FLOWORK_ORG=组织 yaml,同 org_directory 约定)
+    if org_path:  # 目录只读下发面(FLOWORK_ORG=组织 yaml,同 org_directory 约定)
         from flowork.api import StaticOrgDirectory
 
         config_kwargs["org"] = StaticOrgDirectory.from_yaml(org_path)
@@ -72,7 +72,7 @@ def create_app(db_file: str | Path | None = None, *, seed: bool = True) -> FastA
         allow_headers=["*"],
     )
 
-    # 插件库托管（批 C1 单进程 demo 模式）：designer/dist-lib 存在时挂载——
+    # 插件库托管（单进程 demo 模式）：designer/dist-lib 存在时挂载——
     # 先 `npm run build:lib`，再起服务即得 /designer-demo 只读嵌入示例页
     lib_dir = Path(__file__).resolve().parent.parent.parent.parent / "designer" / "dist-lib"
     if lib_dir.is_dir():
@@ -98,7 +98,7 @@ def create_app(db_file: str | Path | None = None, *, seed: bool = True) -> FastA
 
     @app.exception_handler(FloworkError)
     async def _flowork_error(_request: Any, exc: FloworkError) -> JSONResponse:
-        # NotFoundError 族 404（review P2-5）：修前一律 422，与 REST /v2 面同错误
+        # NotFoundError 族 404：修前一律 422，与 REST /v2 面同错误
         # 不同状态码——同库同引擎两面消费方要维护两套语义
         from flowork.api import NotFoundError
 
@@ -107,9 +107,9 @@ def create_app(db_file: str | Path | None = None, *, seed: bool = True) -> FastA
 
     # 预演/试算/词汇目录(dry-run / formula/preview / catalog)在 preview_routes
     register_preview_routes(app, engine)
-    # 审计数据面（模拟 / 实例只读 / 版本）在 audit_routes（设计器插件计划批 A）
+    # 审计数据面（模拟 / 实例只读 / 版本）在 audit_routes
     register_audit_routes(app, engine)
-    # 元数据下发面（handler 名录 / 目录摘要）在 meta_routes（设计器插件计划批 D）
+    # 元数据下发面（handler 名录 / 目录摘要）在 meta_routes
     register_meta_routes(app, engine)
 
     @app.get("/api/health")
@@ -145,11 +145,11 @@ def create_app(db_file: str | Path | None = None, *, seed: bool = True) -> FastA
         if latest["status"] == "draft":
             draft = engine.repository.designer_draft(code)
             if draft is None:
-                # review P2-4：latest_row 与 designer_draft 是两次独立事务，中间
+                # latest_row 与 designer_draft 是两次独立事务，中间
                 # 并发 publish 会把 draft 消费掉——回退取已发布内容（publish 竞态
                 # 窗口，修前 assert 炸 500）
                 draft = {"spec": engine.repository.get_definition_json(code), "layout": None}
-            # 批 C4 布局分离：草稿存储层 layout 独立成列,响应时合回设计器期望的形状
+            # 布局分离：草稿存储层 layout 独立成列,响应时合回设计器期望的形状
             spec = {**draft["spec"], "layout": draft.get("layout") or {}}
             return {
                 "code": code,
@@ -200,7 +200,7 @@ def create_app(db_file: str | Path | None = None, *, seed: bool = True) -> FastA
             "version": verdict.next_major,
             "revision": verdict.next_revision,
             "breaking": verdict.breaking,
-            # 版本判定全貌（批 A3）：破坏性明细在 triggered_rules（breaking 只是布尔）；
+            # 版本判定全貌：破坏性明细在 triggered_rules（breaking 只是布尔）；
             # identical_to 非 None ＝ 内容与该已发布版本相同（幂等去重，未落库）
             "triggered_rules": payload["triggered_rules"],
             "identical_to": payload["identical_to"],
@@ -211,7 +211,7 @@ def create_app(db_file: str | Path | None = None, *, seed: bool = True) -> FastA
     def validate(body: dict[str, Any], deploy: bool = False) -> dict[str, Any]:
         """设计时校验（不落库）。body 即模板 JSON。
 
-        ``?deploy=true`` 追加部署期校验预演（A11 编辑期前移）：L3 引用完整性 +
+        ``?deploy=true`` 追加部署期校验预演（编辑期前移）：L3 引用完整性 +
         L4 目录实体存在性，把「点发布才炸」提前到编辑期以 WARNING 呈现。
         """
         definition = parse_spec(engine, body)
@@ -256,7 +256,7 @@ def create_app(db_file: str | Path | None = None, *, seed: bool = True) -> FastA
         try:
             _seed_examples(engine)
         except sqlite3.OperationalError as exc:
-            # 旧 schema 库裸 OperationalError 无出路（review P2-6）：__getattr__ 搬走
+            # 旧 schema 库裸 OperationalError 无出路：__getattr__ 搬走
             # 了炸点没给出路——启动失败须指路迁移
             raise RuntimeError(f"库 schema 落后（{exc}）——请先运行 alembic upgrade head") from exc
 

@@ -1,4 +1,4 @@
-"""anticipate 只读预判（v2.2 spec §11/P1-9）：AI 原生差异点 API。
+"""anticipate 只读预判（spec §11）：AI 原生差异点 API。
 
 独立模块（TaskService 经 mixin 组合，engine.task.anticipate 入口不变）。
 """
@@ -26,7 +26,7 @@ class AnticipateMixin:
         """由宿主类提供（TaskOpsMixin._instance）。"""
         raise NotImplementedError
 
-    # —— 只读预判（v2.2 spec §11/P1-9）——
+    # —— 只读预判（spec §11）——
 
     def anticipate(self, task_id: str, outcome: str = "agree") -> AnticipateResult:
         """预判「照此提交后节点是否出、实例是否完」——纯读，不落库不改状态。

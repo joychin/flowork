@@ -1,4 +1,4 @@
-"""路由决策审计（expression-dataface §6/F3）：select_outgoing 的旁路记录。
+"""路由决策审计（expression-dataface §6）：select_outgoing 的旁路记录。
 
 判断面开放后「当时为什么走这条边」必须可回答：每次路由决策一行
 （wf_route_decision），edges 逐条件边记录公式与结果（true/false/no_fact 查无
@@ -69,8 +69,8 @@ def snapshot_of(variables: dict[str, Any], node_calls: dict[str, Any]) -> dict[s
     return snapshot
 
 
-# 可排序行 id（review P1-3/web P2 同批）：修前随机 UUID——模拟报告的路由
-# 轨迹按 id 排序 12 次跑出 12 种顺序（事件面 A1 同根问题，路由审计行漏掉）。
+# 可排序行 id：修前随机 UUID——模拟报告的路由
+# 轨迹按 id 排序 12 次跑出 12 种顺序（与事件 id 同根问题，路由审计行漏掉）。
 # 时间前缀+进程内计数+pid 混入（多进程同微秒防主键冲突）。
 _RD_COUNTER = count()
 

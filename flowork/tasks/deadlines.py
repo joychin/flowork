@@ -1,4 +1,4 @@
-"""任务超时排程：按节点 deadlines 列表创建 timer Job（v2.2 spec §5.1）。
+"""任务超时排程：按节点 deadlines 列表创建 timer Job（spec §5.1）。
 
 首条到期时刻物化进 task.due_at（due_before 过滤与排序）；
 auto_approve/auto_reject 终结等待后剩余 Job 因任务已完自然跳过。
@@ -31,7 +31,7 @@ def carry_deadline_jobs(session: Any, old: TaskRow, new: TaskRow) -> None:
 
 
 def carry_deadline_jobs_of(session: Any, old_task_id: str, instance_id: str, new: TaskRow) -> None:
-    """换棒形态的 carry（code-review 2026-10 P1-3）：旧任务已归档删除，按 id 寻 Job。"""
+    """换棒形态的 carry：旧任务已归档删除，按 id 寻 Job。"""
     _carry(session, old_task_id, instance_id, new)
 
 
@@ -59,7 +59,7 @@ def _carry(session: Any, old_task_id: str, instance_id: str, new: TaskRow) -> No
                 id=uuid.uuid4().hex,
                 job_type="timer",
                 state="scheduled",
-                created_at=job.created_at,  # P1-11：carry 保持原钟源
+                created_at=job.created_at,  # carry 保持原钟源
                 run_at=job.run_at,
                 instance_id=job.instance_id,
                 payload=payload,
@@ -90,7 +90,7 @@ def schedule_deadline_jobs(ctx: RuntimeNodeContext, spec: UserTaskSpec, task_id:
                 id=uuid.uuid4().hex,
                 job_type="timer",
                 state="scheduled",
-                created_at=now,  # P1-11：与 run_at 同钟
+                created_at=now,  # 与 run_at 同钟
                 run_at=now + timedelta(minutes=deadline.after_minutes),
                 instance_id=ctx.instance.id,
                 payload={

@@ -1,4 +1,4 @@
-"""参与者解析管线（单轨 CEL，kernel-v2 §4.2 位点统一）。
+"""参与者解析管线（单轨 CEL，spec §4.2 位点统一）。
 
 管线：手动选人覆盖 → CEL 公式求值 → 委托替换 → 去重策略（自动通过）
 → 无参与者兜底。产出 ``ParticipantResolution(todo, skipped)``：
@@ -44,7 +44,7 @@ class ParticipantResolution:
     """解析结果：todo 待办人；skipped 策略命中（自动通过）人；candidates 候选槽求值结果。
 
     candidates 非空＝节点走候选认领制（生成 assignee 空的待办 + 候选关联）；
-    与 todo/skipped 互斥（指派优先于候选，spec §5.5/B 批）。
+    与 todo/skipped 互斥（指派优先于候选，spec §5.5）。
     """
 
     todo: list[str] = field(default_factory=list)
@@ -53,7 +53,7 @@ class ParticipantResolution:
 
 
 def assert_participant_limit(count: int, limit: int | None, *, where: str) -> None:
-    """参与者规模护栏：超限拒绝（技术故障），绝不静默截断（spec v2.3 第八轮）。"""
+    """参与者规模护栏：超限拒绝（技术故障），绝不静默截断。"""
     if limit is not None and count > limit:
         raise ParticipantLimitError(
             f"{where}解析出 {count} 名参与者，超过上限 {limit}（EngineConfig.max_participants）"
@@ -78,7 +78,7 @@ def resolve_subjects(
     语义同取人位：null/空＝查无传播；str/list[str]＝单人/多人；其他类型报错。
     label 为错误消息里的位置标注（如节点码）；what 为错误措辞（取人/传阅接收人）。
     ``instance`` 全局事实（id/started_at/business_key）可选注入，调用方持实例行时传。
-    ``now`` 必须由引擎位点显式传入（``EngineConfig.now``——第十四轮时钟统一）。
+    ``now`` 必须由引擎位点显式传入（``EngineConfig.now``）。
     """
     where = f"{label}：" if label else ""
     pool: list[str] = []
@@ -210,7 +210,7 @@ def _delegation_replace(
 ) -> tuple[list[str], dict[str, str]]:
     """委托替换：返回（替换后待办人, 委托人→受托人映射）。
 
-    now＝引擎统一时钟（code-review 2026-10 P1-9）：窗口判定与同时刻的路由/
+    now＝引擎统一时钟：窗口判定与同时刻的路由/
     时限/审计同源，修复前走墙钟（FakeClock 下委托生效/失效与其他位点分叉）。
     """
     replaced: list[str] = []
@@ -247,7 +247,7 @@ def fallback_when_empty(
 
 
 def _handlers_of(ctx: RuntimeNodeContext, activity_code: str) -> set[str]:
-    """上一站**表决过**的人（表决行口径，spec §5.1 第十九轮：协办/咨询/
+    """上一站**表决过**的人（表决行口径，spec §5.1：协办/咨询/
     转办/自动通过都不算——跳过＝计同意票，成员资格必须严格）。"""
     from sqlalchemy import select
 

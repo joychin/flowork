@@ -69,7 +69,7 @@ class AdvanceGateMixin:
 
             source_node = definition.node(flow.source)
             assert source_node is not None
-            # 统一咽喉 declared_hooks：模拟跳过 + 未注册/异常＝技术故障（收尾批 2）
+            # 统一咽喉 declared_hooks：模拟跳过 + 未注册/异常＝技术故障
             run_declared_hook(
                 RuntimeNodeContext(
                     cast("Kernel", self), session, instance, source_node, from_token

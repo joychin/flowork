@@ -1,4 +1,4 @@
-"""任务操作集核心（M3）：认领 / 转办 + 共享助手。
+"""任务操作集核心：认领 / 转办 + 共享助手。
 
 以 Mixin 形式并入 TaskService（保持四服务 API：engine.task.*）。
 传阅/协办/加签撤回/管理员操作拆至 task_cc.py / task_assist.py / task_rework.py /
@@ -71,13 +71,13 @@ class TaskOpsMixin:
             raise TaskNotAvailableError(f"任务不可取消认领：{task_id}")
         self._assert_operable(ctx, task)
         if not candidate_links(ctx.session, task_id):
-            # 直派任务没有候选池可回（code-review 2026-10 P0-4）：置空后 claim 需
+            # 直派任务没有候选池可回：置空后 claim 需
             # 命中候选、complete 需先认领——任务将永久无人能办且不出故障单
             raise TaskNotAvailableError(f"任务 {task_id} 为直接指派（无候选池），不可取消认领")
         ctx.touch(self._instance(ctx, task.instance_id))
         task.assignee = ""
         ctx.session.flush()
-        # 对称补齐（事件 review A7）：claim 有事件、unclaim 无——候选池回流
+        # 对称补齐：claim 有事件、unclaim 无——候选池回流
         # 对订阅方不可见。assignee 记取消认领人（回池前状态）。
         kernel = self._engine.kernel_for(ctx)
         kernel.record_event(
@@ -145,7 +145,7 @@ class TaskOpsMixin:
     def _assert_operable(
         self, ctx: CommandContext, task: TaskRow, *, action: str | None = None
     ) -> None:
-        """统一守卫：实例态（spec §7）+ 动作表（v2.3 A1）+ 版本抢占复验。
+        """统一守卫：实例态（spec §7）+ 动作表 + 版本抢占复验。
 
         action 传入时按 (状态×类型×认领态) 动作表判定（tasks/actions.py）；不传
         保持仅实例态守卫（withdraw 等特殊路径自带专属守卫）。
@@ -172,7 +172,7 @@ class TaskOpsMixin:
 
         from flowork.engine.task_consult import assert_no_open_consults
 
-        assert_no_open_consults(ctx, task)  # 咨询软挂起（v2.3 A8）
+        assert_no_open_consults(ctx, task)  # 咨询软挂起
         ctx.touch(instance)
         ctx.session.flush()
         ctx.session.expire(task)
@@ -196,7 +196,7 @@ class TaskOpsMixin:
         import uuid
 
         new_task = TaskRow(
-            created_at=self._engine.config.now(),  # P1-10：与原任务同源时钟
+            created_at=self._engine.config.now(),  # 与原任务同源时钟
             id=uuid.uuid4().hex,
             instance_id=task.instance_id,
             token_id=task.token_id,
@@ -204,13 +204,13 @@ class TaskOpsMixin:
             name=task.name,
             assignee=assignee,
             task_type=task_type or task.task_type,
-            priority=task.priority,  # P2-8：转办/加签/协办后优先级不回落默认
+            priority=task.priority,  # 转办/加签/协办后优先级不回落默认
             context_payload=dict(task.context_payload),
             root_task_id=root,
         )
         ctx.session.add(new_task)
         ctx.session.flush()
-        # actor=发起克隆的人（2026-10-13 事件 review 复核批：修前误记被指派人）
+        # actor=发起克隆的人（修前误记被指派人）
         self._emit_task_event(ctx, DomainEvent.TASK_CREATED, new_task, operator)
         return new_task
 
@@ -234,7 +234,7 @@ class TaskOpsMixin:
     def _emit_task_event(
         self, ctx: CommandContext, event: DomainEvent, task: TaskRow, actor: str
     ) -> None:
-        """任务事件统一载荷（事件 review B1）：全部带 activity_code/task_type。
+        """任务事件统一载荷：全部带 activity_code/task_type。
 
         此前该面只有 task_id/assignee/actor——消费者定位节点须反查历史表，
         且转办克隆的 task_created 与主路径形状不一致；统一后同名事件同形。

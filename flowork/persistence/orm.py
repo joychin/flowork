@@ -1,8 +1,8 @@
 """SQLAlchemy ORM 模型：flowork 运行时表。
 
-M1 建 6 张表：wf_process_definition / wf_process_instance / wf_token /
-wf_task / wf_task_history / wf_event_outbox；后续里程碑按需增表
-（wf_identity_link、wf_cc_task 于 M3，wf_job、wf_incident 于 M5）。
+运行时表：wf_process_definition / wf_process_instance / wf_token /
+wf_task / wf_task_history / wf_event_outbox，以及 wf_identity_link、
+wf_cc_task、wf_job、wf_incident；v2 表见 orm_v2。
 """
 
 from __future__ import annotations
@@ -68,20 +68,20 @@ class ProcessInstanceRow(Base):
     state: Mapped[str] = mapped_column(String(16), default="running")
     start_user: Mapped[str] = mapped_column(String(64))
     variables: Mapped[dict[str, Any]] = mapped_column(MutableDict.as_mutable(JSON), default=dict)
-    parent_id: Mapped[str | None] = mapped_column(String(36), nullable=True)  # M5 子流程
+    parent_id: Mapped[str | None] = mapped_column(String(36), nullable=True)  # 子流程
     parent_token_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     version: Mapped[int] = mapped_column(Integer, default=1)  # 乐观锁（ORM version_id）
     started_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    paused_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)  # v2 §7
-    # v2.2（spec §7）：实例时限——发起时物化到期时刻；mark 策略打标（流程继续跑）
+    paused_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)  # spec §7
+    # （spec §7）：实例时限——发起时物化到期时刻；mark 策略打标（流程继续跑）
     deadline_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     deadline_marked: Mapped[bool] = mapped_column(Boolean, default=False)
-    # v2.3 第三批 A10：模拟实例（试跑）——service_task 恒 stub、不建任务/传阅/Job、
+    # 模拟实例（试跑）——service_task 恒 stub、不建任务/传阅/Job、
     # 事件不投 outbox（CommandContext.suppress_events）；查询面默认隔离（可含）
     simulated: Mapped[bool] = mapped_column(Boolean, default=False)
-    # v2.3 第四批 A9：多实例子流程的迭代序号（index 对齐聚合的锚；单子/非子流程为 None）
+    # 多实例子流程的迭代序号（index 对齐聚合的锚；单子/非子流程为 None）
     parent_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     __table_args__ = (
@@ -112,7 +112,7 @@ class TokenRow(Base):
     disapprove_count: Mapped[int] = mapped_column(Integer, default=0)
     reject_flag: Mapped[bool] = mapped_column(Boolean, default=False)  # 驳回产生
     approval_exit: Mapped[str | None] = mapped_column(String(16), nullable=True)
-    # 手动选人（M3+），MutableDict 追踪原地变更
+    # 手动选人；MutableDict 追踪原地变更
     manual_participants: Mapped[dict[str, Any]] = mapped_column(
         MutableDict.as_mutable(JSON), default=dict
     )
@@ -140,7 +140,7 @@ class TaskRow(Base):
     # 审批卡片/AI 预审共用载荷
     context_payload: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     root_task_id: Mapped[str | None] = mapped_column(String(36), nullable=True)  # 加签链(M3)
-    # v2.2（spec §3.4）：priority 0–100（小→大＝低→高）默认 50；due_at＝首条
+    # （spec §3.4）：priority 0–100（小→大＝低→高）默认 50；due_at＝首条
     # deadline 到期时刻物化（due_before 过滤与排序用）
     priority: Mapped[int] = mapped_column(Integer, default=50)
     due_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -172,19 +172,19 @@ class TaskHistoryRow(Base):
     idempotency_key: Mapped[str | None] = mapped_column(String(100), nullable=True)
     cost_seconds: Mapped[float] = mapped_column(Float, default=0.0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
-    # v2.1（spec §5.6）：身份快照——完成事务内经目录端口原样定格（JSON 袋 4KB 上限，内核不解析）
+    # （spec §5.6）：身份快照——完成事务内经目录端口原样定格（JSON 袋 4KB 上限，内核不解析）
     actor_context: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
 
 
 class EventOutboxRow(Base):
     """领域事件（outbox）：单事务内与业务变更一起落库，后续消息/UI/MCP 统一消费。
 
-    delivered_at（v2 P0-3）：消费器送达标记——None＝未送达；至少一次语义下
+    delivered_at：消费器送达标记——None＝未送达；至少一次语义下
     送达后崩溃可能重发，消费端须按 id（CloudEvents envelope id＝本行 id）幂等。
-    排序契约（2026-10-13 事件 review A1）：``ORDER BY (occurred_at, id)`` 即
+    排序契约：``ORDER BY (occurred_at, id)`` 即
     事件全序——id 为可排序串（时间前缀+引擎 nonce+进程内计数，见
     ProcessEngine.next_event_id）；occurred_at 由命令管线统一取 ``config.now()``
-    （列 default 仅兜底，正常路径不触发——时钟同源见 A2）。
+    （列 default 仅兜底，正常路径不触发）。
     """
 
     __tablename__ = "wf_event_outbox"
@@ -207,7 +207,7 @@ class EventOutboxRow(Base):
 
 
 class CcItemRow(Base):
-    """传阅件（M1 建表；已读接口 M3）。"""
+    """传阅件（另提供已读接口）。"""
 
     __tablename__ = "wf_cc_task"
     __table_args__ = (Index("ix_cc_instance", "instance_id"),)
@@ -273,7 +273,7 @@ class IncidentRow(Base):
     state: Mapped[str] = mapped_column(String(16), default="open")  # open/resolved
     resolution: Mapped[str] = mapped_column(
         Text, default=""
-    )  # resume/cancel/retry/skip/fail（v2 §8）
+    )  # resume/cancel/retry/skip/fail（spec §8）
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 

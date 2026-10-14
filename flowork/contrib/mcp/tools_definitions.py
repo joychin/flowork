@@ -58,7 +58,7 @@ def definition_tools(engine: ProcessEngine) -> list[ToolSpec]:
         if target_major is not None and (
             isinstance(target_major, bool) or not isinstance(target_major, int)
         ):
-            # review P2-2：修前 "abc" 被静默忽略照常部署新 major
+            # 修前 "abc" 被静默忽略照常部署新 major
             raise McpToolError(f"target_major 必须是整数：{target_major!r}")
         verdict = repository.deploy(
             definition,
@@ -76,14 +76,14 @@ def definition_tools(engine: ProcessEngine) -> list[ToolSpec]:
         from pathlib import Path
 
         if not Path(str(directory)).is_dir():
-            # review P2-9：修前目录不存在静默空对账——拼错路径得到误导性报告
+            # 修前目录不存在静默空对账——拼错路径得到误导性报告
             raise McpToolError(f"目录不存在：{directory}")
         return repository.definition_drift(str(directory))
 
     def list_definitions(args: dict[str, Any]) -> Any:
         latest_only = args.get("latest_only", True)
         if not isinstance(latest_only, bool):
-            # review P2-1：修前 "false"（字符串）被 bool() 翻转成 True，与意图相反
+            # 修前 "false"（字符串）被 bool() 翻转成 True，与意图相反
             raise McpToolError(f"latest_only 必须是布尔值：{latest_only!r}")
         rows = repository.list_definitions(
             code_prefix=str(args.get("code_prefix") or ""),

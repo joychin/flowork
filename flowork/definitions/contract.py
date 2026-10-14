@@ -1,4 +1,4 @@
-"""input 契约三边界校验（kernel-v2 spec §3.2/P0-6）。
+"""input 契约三边界校验（kernel-v2 spec §3.2）。
 
 定义顶层 ``input``＝JSON Schema（2020-12）强制契约：发起实例、人工任务提交
 output、节点输出映射，三处边界按 schema 校验，不合格**直接拒绝**（报错不入库，

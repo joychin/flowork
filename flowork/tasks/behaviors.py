@@ -84,13 +84,13 @@ class EndBehavior(NodeBehavior):
 class ServiceTaskBehavior(NodeBehavior):
     """系统节点：执行 HandlerRegistry 中注册的动作。"""
 
-    performs_external_work = True  # 模拟试跑恒 stub（v2.3 A10）
+    performs_external_work = True  # 模拟试跑恒 stub
 
     def on_enter(self, ctx: NodeContext) -> None:
         assert isinstance(ctx, RuntimeNodeContext)
         spec = self.spec
         assert isinstance(spec, ServiceTaskSpec)
-        if ctx.instance.simulated:  # v2.3 A10：stub（行业共识：模拟绝不执行外部副作用）
+        if ctx.instance.simulated:  # stub（行业共识：模拟绝不执行外部副作用）
             return
         if not spec.action:
             return
@@ -127,7 +127,7 @@ class CallActivityBehavior(NodeBehavior):
 
 
 class CcTaskBehavior(NodeBehavior):
-    """传阅节点：进入即生成传阅件并完成（M3 提供已读接口）。"""
+    """传阅节点：进入即生成传阅件并完成（另提供已读接口）。"""
 
     def on_enter(self, ctx: NodeContext) -> None:
         from flowork.engine.cc_support import create_cc_items
@@ -135,5 +135,5 @@ class CcTaskBehavior(NodeBehavior):
         assert isinstance(ctx, RuntimeNodeContext)
         spec = self.spec
         assert isinstance(spec, CcTaskSpec)
-        if not ctx.instance.simulated:  # v2.3 A10：模拟不建传阅件
+        if not ctx.instance.simulated:  # 模拟不建传阅件
             create_cc_items(ctx, spec)

@@ -38,7 +38,7 @@ class WaitBehavior(NodeBehavior):
         assert isinstance(ctx, RuntimeNodeContext)
         spec = self.spec
         assert isinstance(spec, WaitSpec)
-        if ctx.instance.simulated:  # v2.3 A10：模拟冻结（不订阅不建 Job）——卡点即报告发现
+        if ctx.instance.simulated:  # 模拟冻结（不订阅不建 Job）——卡点即报告发现
             return
         if spec.message is not None:
             assert ctx.token is not None
@@ -176,7 +176,7 @@ def schedule_wait_job(ctx: RuntimeNodeContext, spec: WaitSpec) -> None:
             id=uuid.uuid4().hex,
             job_type="timer",
             state="scheduled",
-            created_at=ctx.kernel.config.now(),  # P1-11：与 run_at 同钟
+            created_at=ctx.kernel.config.now(),  # 与 run_at 同钟
             run_at=ctx.kernel.config.now() + timedelta(minutes=spec.timeout.after_minutes),
             instance_id=ctx.instance.id,
             payload={
@@ -217,9 +217,9 @@ def finish_wait(
         "message_id": message_id,
     }
     ctx = RuntimeNodeContext(kernel, session, instance, node, token)
-    try:  # 错误归因（复核批）：等待收口失败定位到等待节点
+    try:  # 错误归因：等待收口失败定位到等待节点
         behavior.on_exit(ctx)
-        # 声明式 on_exit 补齐（2026-10-13 事件 review 复核批）：三路收口（命中/
+        # 声明式 on_exit 补齐：三路收口（命中/
         # 到时/广播）与内核完成路径同契约，修前静默跳过宿主钩子
         from flowork.engine.declared_hooks import run_declared_hook
 
@@ -227,10 +227,10 @@ def finish_wait(
         kernel.finish_token(session, token, approval_exit=token.approval_exit)
         kernel.record_event(
             DomainEvent.NODE_EXITED,
-            {"activity_code": node.code, "token_id": token.id},  # B4：并行分支可区分
+            {"activity_code": node.code, "token_id": token.id},  # 并行分支可区分
             instance.id,
         )
-        # 路由也在帧内（全仓 review 2026-10-13 批 3 P1-2）：出边条件运行期
+        # 路由也在帧内：出边条件运行期
         # 求值错修前 activity_code=None——incident 定位/挂起定位/on_fail 三个
         # 修复面同时失效。attribute_node_error 只补不覆盖，内层帧不受影响
         kernel.route(session, instance, node, token, behavior_override=behavior)
@@ -248,5 +248,5 @@ def _functions_of(ctx: RuntimeNodeContext) -> Any:
     engine = getattr(ctx.kernel, "engine", None)
     functions = expression_functions_of(engine.config if engine else None)
     # node() 判断面在 correlation 位可用（catalog 位点承诺）——装配对齐
-    # （code-review 2026-10 P1-8：目录放行、求值面未装配，fire 时必挂起）
+    # （目录放行、求值面未装配，fire 时必挂起）
     return attach_node(functions, ctx.session, ctx.instance.id)

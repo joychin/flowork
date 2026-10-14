@@ -8,7 +8,7 @@
 
 CEL 词汇接线（spec §4.3/§9）：``functions`` 自 EngineConfig.expression_functions
 拍平而来（expr.context.expression_functions_of），可选透传至 expr.cel；
-``initiator`` 为求值保留标识符（P0-1 决策）。
+``initiator`` 为求值保留标识符。
 """
 
 from __future__ import annotations
@@ -46,7 +46,7 @@ def evaluation_variables(
     带 session 时注入 ``prev_task`` 上一站快照（expression-dataface §2.2，
     查无＝不注入，引用预检在 select_outgoing 内温和跳过）。
     ``instance`` 全局事实（id/started_at/business_key）恒注入（§2，全位点）。
-    ``now`` 必须由引擎位点显式传入（``EngineConfig.now``——第十四轮时钟统一：
+    ``now`` 必须由引擎位点显式传入（``EngineConfig.now``——时钟统一：
     FakeClock 下条件求值与任务时限同源）；缺省墙钟仅供无引擎装配面。
     """
     prev_task = None
@@ -73,7 +73,7 @@ def select_outgoing(
     *,
     audit: RoutingAudit | None = None,
 ) -> list[SequenceFlow]:
-    """按模式计算应激活的出边集合；带 audit 时旁路记录本次决策（§6/F3）。"""
+    """按模式计算应激活的出边集合；带 audit 时旁路记录本次决策（expression-dataface §6）。"""
     selected = _select(outgoing, variables, mode, functions, audit)
     if audit is not None:
         audit.source = outgoing[0].source if outgoing else ""

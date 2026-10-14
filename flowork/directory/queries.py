@@ -1,4 +1,4 @@
-"""目录读面与缓存（M-A 收口）：OrgDirectoryLike 查询方法 + 进程内读缓存。
+"""目录读面与缓存：OrgDirectoryLike 查询方法 + 进程内读缓存。
 
 缓存策略（engine-v1 01 §2）：目录变更频率极低——读全走 ``_read``，任何写操作
 经 ``_write_done`` 全清（写走短事务，全清粒度足够；进程内共享，多副本的副本
@@ -105,8 +105,7 @@ class ReadDirectoryMixin(RoleDirectoryMixin):
 
         **单跳不递归**——「主管的主管」由宿主在自己的词汇里组合，不进本方法
         （函数的语义只回答「这个主体的问责上级是谁」）。主体一律裸 id
-        （spec §5.4；`agent:` 写法已删、AI 问责链归宿主目录——2026-10-10
-        第十六/十七轮）。
+        （spec §5.4；`agent:` 写法已删、AI 问责链归宿主目录）。
         """
         if user_id.startswith("user:"):
             user_id = user_id[5:]

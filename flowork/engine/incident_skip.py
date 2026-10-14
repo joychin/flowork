@@ -1,8 +1,8 @@
-"""故障修复动作 skip 的手术实现（自 incident_service.py 拆出守 300 行红线）。
+"""故障修复动作 skip 的手术实现。
 
 跳过故障节点：未完令牌视为完成，按条件路由激活后继（管理员手术，绕放行门）。
-事件面：node_cancelled/task_cancelled 由 cancel_token 咽喉统一发（by=incident:skip，
-A4）；收尾置回 running 时补 process_resumed（挂起/恢复对称，复核批）。
+事件面：node_cancelled/task_cancelled 由 cancel_token 咽喉统一发（by=incident:skip）；
+收尾置回 running 时补 process_resumed（挂起/恢复对称）。
 """
 
 from __future__ import annotations
@@ -35,15 +35,15 @@ def skip_failed_nodes(
     instance: ProcessInstanceRow | None = ctx.session.get(ProcessInstanceRow, instance_id)
     assert instance is not None
     if instance.state in TERMINAL_INSTANCE_STATES:
-        # 终态守卫（全仓 review 2026-10-13 P0-1）：skip 会激活后继节点——
-        # 对已终态实例执行会造出僵尸令牌（与 resume 守卫同批防线）
+        # 终态守卫：skip 会激活后继节点——
+        # 对已终态实例执行会造出僵尸令牌（与 resume 守卫同一道防线）
         raise FloworkError(f"实例 {instance_id} 已终态（{instance.state}），不能跳过节点")
     definition = kernel.definition_of(ctx.session, instance)
     base_functions = expression_functions_of(engine.config)
     for token in kernel.tokens(ctx.session, instance_id, states=(TokenState.UNFINISHED.value,)):
         node = definition.node(token.activity_code)
-        # node_cancelled/task_cancelled 由 cancel_token 咽喉统一发（A4，
-        # by=incident:skip）——此处不再手发防双发
+        # node_cancelled/task_cancelled 由 cancel_token 咽喉统一发（by=incident:skip）
+        # ——此处不再手发防双发
         kernel.cancel_token(ctx.session, token, cause="incident:skip", actor=actor)
         if node is None:
             continue

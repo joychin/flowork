@@ -56,7 +56,7 @@ class ProcessEngine:
         from flowork.jobs.scheduler import JobScheduler
 
         self.jobs = JobScheduler(self)
-        # 事件全序原料（2026-10-13 事件 review A1）：nonce 区分同微秒的跨引擎
+        # 事件全序原料：nonce 区分同微秒的跨引擎
         # 命令（成组不交错），counter 引擎实例内单调（冻结时钟下兜底全序）。
         self._event_nonce = secrets.token_hex(3)
         self._event_counter = _count()

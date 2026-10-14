@@ -1,6 +1,6 @@
 """flowork 官方插件 · Web 传输面：设计器与外部系统的薄投影层。
 
-地位（结构裁定 2026-10-09）：web 是 contrib 插件而非内核包——内核禁止 import
+地位：web 是 contrib 插件而非内核包——内核禁止 import
 本模块（import-linter「内核不得 import 插件包」自动覆盖），本模块只准经
 ``flowork.api`` 公开门面使用内核（import-linter「投影/插件只准走公开面」）。
 

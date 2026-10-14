@@ -53,12 +53,12 @@ class TaskRecordsMixin:
         emit_event: bool = True,
     ) -> TaskRow:
         """建任务并发 task_created；``emit_event=False`` 供「建了即归档」的
-        auto_pass 幻影任务抑制误报（事件 review A6）。"""
+        auto_pass 幻影任务抑制误报。"""
         from flowork.persistence.orm import TaskRow as _TaskRow
 
         task = _TaskRow(
             id=_new_id(),
-            # 业务时刻与 due_at/cost_seconds 同源 config.now（P1-10，列 default 兜底）
+            # 业务时刻与 due_at/cost_seconds 同源 config.now（列 default 兜底）
             created_at=self.config.now(),
             instance_id=instance.id,
             token_id=token.id,
@@ -79,7 +79,7 @@ class TaskRecordsMixin:
                     "activity_code": node.code,
                     "assignee": assignee,
                     "task_type": task_type,
-                    # 键集与克隆路径对齐（2026-10-13 复核批）：引擎解析产生
+                    # 键集与克隆路径对齐：引擎解析产生
                     # 无操作人 → None；转办/加签等克隆路径为发起人。
                     "actor": None,
                 },
@@ -111,11 +111,11 @@ class TaskRecordsMixin:
 
         单轨 CEL（spec §4.2）：函数表自 EngineConfig.expression_functions 拍平；
         有组织目录叠加委托替换与 to_admins 兜底，无目录走同一条 CEL 求值路径。
-        出口统一守规模护栏（max_participants，spec v2.3）：手动名单与表达式名单同守。
+        出口统一守规模护栏（max_participants）：手动名单与表达式名单同守。
 
         三条判定（spec §5.5）：指派优先于候选（解析出人即直派）；声明了候选槽就
         不走兜底（解析不出具体办理人是正常态，改走候选槽求值）；候选求值也空才回
-        兜底。第四条（第十八轮）：单人节点多人＝错误——未声明 multi_instance 而
+        兜底。第四条：单人节点多人＝错误——未声明 multi_instance 而
         解析出多名 todo 拒绝宽松并行，多人必须显式声明会签。
         """
         from flowork.expr.context import expression_functions_of
@@ -142,7 +142,7 @@ class TaskRecordsMixin:
             assert_participant_limit(
                 len(resolution.todo) + len(resolution.skipped), limit, where=where
             )
-            # manual 名单＝历史定格（加签扩员/驳回复活圈定，P1-5）：不是表达式
+            # manual 名单＝历史定格（加签扩员/驳回复活圈定）：不是表达式
             # 解析结果，不适用「单人多人＝错误」守卫——加签过的节点复活曾必然挂起
             manual_roster = (
                 bool((getattr(ctx.token, "manual_participants", None) or {}).get(spec.code))
@@ -168,7 +168,7 @@ class TaskRecordsMixin:
         return resolution  # 空结果：行为层报「没有可用参与者」
 
     def handled_assignees(self, session: Session, token_id: str) -> list[str]:
-        """令牌下轮次已消耗的人（轮次消耗行口径，spec §5.1 第十九轮）。
+        """令牌下轮次已消耗的人（轮次消耗行口径，spec §5.1）。
 
         审批类行：transfer（轮次被转手）/auto_pass（被策略跳过）也算消耗，
         不重派；协办/咨询行不算——此前会吞掉串行会签的下一棒（无声死锁）。
@@ -186,7 +186,7 @@ class TaskRecordsMixin:
     def advance_after_task(
         self, session: Session, instance: ProcessInstanceRow, token: TokenRow
     ) -> None:
-        """任务提交后的统一推进入口（自 kernel.py 迁入，第二十轮）。"""
+        """任务提交后的统一推进入口（自 kernel.py 迁入）。"""
         from typing import cast
 
         from flowork.engine.errors import EngineExecutionError, attribute_node_error
@@ -197,11 +197,11 @@ class TaskRecordsMixin:
         node = kernel.definition_of(session, instance).node(token.activity_code)
         if node is None:
             raise EngineExecutionError(f"令牌节点不存在：{token.activity_code}")
-        try:  # 错误归因（复核批）：任务提交后的推进失败定位到本节点
+        try:  # 错误归因：任务提交后的推进失败定位到本节点
             kernel._maybe_complete(session, instance, node, token)
-            # 出口不可达兜底（审计 D4）：全部待办办结而令牌未完（两侧出口公式均
+            # 出口不可达兜底：全部待办办结而令牌未完（两侧出口公式均
             # 未达成）＝技术故障——挂起+故障单，拒绝静默卡死。kind 知识住行为
-            # （P1-7）——owns_pending_tasks 声明「名下有待办域」：子实例/wait 名下
+            # ——owns_pending_tasks 声明「名下有待办域」：子实例/wait 名下
             # 本无待办；串行下一位已在 on_task_completed 派发，不误报。
             behavior_cls = kernel.registry.behavior_cls(node.kind)
             if (
@@ -213,7 +213,7 @@ class TaskRecordsMixin:
                     f"会签出口不可达：节点 {node.code} 全部待办已办结"
                     f"（item_count={token.item_count}, approve={token.approve_count},"
                     f" disapprove={token.disapprove_count}）而两侧出口公式均未达成"
-                    "——按技术故障挂起（spec §4.1 第二十轮）；处置：管理员手术或终态"
+                    "——按技术故障挂起（spec §4.1）；处置：管理员手术或终态"
                 )
         except EngineExecutionError as error:
             attribute_node_error(error, node.code)
@@ -287,7 +287,7 @@ class TaskRecordsMixin:
             )
         )
         session.delete(task)
-        # 候选身份关联随任务清除（review 2026-10-13 P2-5，与 cancel_token 同构）
+        # 候选身份关联随任务清除（与 cancel_token 同构）
         from sqlalchemy import delete as sa_delete
 
         from flowork.persistence.orm import IdentityLinkRow

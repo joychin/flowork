@@ -1,4 +1,4 @@
-"""角色与范围化授权（M-A 第二刀，DIR-03）。
+"""角色与范围化授权。
 
 范围解析规则（docs/product/engine-v1/01-身份与组织模型.md §2）：
 发起人部门链自下而上（含自身）逐层找**显式/默认范围命中该层**的授权，最近命中层胜出
@@ -138,7 +138,7 @@ class RoleDirectoryMixin:
     # —— 内部 ——
 
     def _active_users_of(self, session: Session, user_ids: list[str]) -> set[str]:
-        """名单里的在册且未停用用户（code-review 2026-10 P2-22）：与 org: 侧
+        """名单里的在册且未停用用户：与 org: 侧
         同口径——此前 role: 组解析不看状态，停用员工经角色候选仍可认领。"""
         if not user_ids:
             return set()

@@ -39,7 +39,7 @@ __all__ = [
 ACTOR_HEADER = "X-Flowork-Actor"
 DEFAULT_ACTOR = "rest"
 MAX_PAGE_LIMIT = 500
-# offset 上限（review P1-4）：巨 offset（base64 解出 >2^63）直推 SQL 会炸 sqlite
+# offset 上限：巨 offset（base64 解出 >2^63）直推 SQL 会炸 sqlite
 # 绑定错（裸 500）——10^7 远超业务页深、远低于 2^63
 MAX_PAGE_OFFSET = 10_000_000
 
@@ -116,7 +116,7 @@ def page_payload(items: list[Any], offset: int, limit: int) -> dict[str, Any]:
 # isinstance 链优先；类名兜底表覆盖未在 flowork.api 导出的错误家族（设计 §2.3：
 # 不为错误映射扩公开面）。
 _STATUS_BY_NAME: dict[str, int] = {
-    "InputContractError": 422,  # 变量写入校验拒绝（review P0-3：修前漏网全 500）
+    "InputContractError": 422,  # 变量写入校验拒绝（修前漏网全 500）
     "LockConflictError": 409,
     "ParticipantCountMismatchError": 422,
     "ParticipantLimitError": 422,

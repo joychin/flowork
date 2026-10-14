@@ -1,4 +1,4 @@
-"""表达式求值上下文构造（kernel-v2 §4.3/C.4 + expression-dataface §2.1）：
+"""表达式求值上下文构造（spec §4.3/C.4 + expression-dataface §2.1）：
 全表达式位共用的唯一装配入口。
 
 变量命名空间（spec §4.3 / expression-dataface §2）：``input.*``（契约入参，
@@ -31,7 +31,7 @@ def expression_context(
     """构造求值上下文副本：变量 + 保留标识符（initiator/instance/now + 可选 task/prev_task）。
 
     显式同名变量优先（setdefault）：声明了保留词同名变量时不覆盖。
-    ``now`` **引擎位点必须显式传入**（``EngineConfig.now``——第十四轮时钟统一：
+    ``now`` **引擎位点必须显式传入**（``EngineConfig.now``——时钟统一：
     FakeClock 下条件求值、任务时限与路由审计同源）；缺省墙钟仅供无引擎的
     装配面（dry-run 静态预检、web 公式试算——「试算此刻」语义）。
     上下文在求值前装配一次、组内多条公式共用——因此

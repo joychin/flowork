@@ -69,7 +69,7 @@ def register_task_routes(app: FastAPI, engine: ProcessEngine) -> None:
     def transfer(request: Request, task_id: str, body: dict[str, Any]) -> Any:
         to_user = str(body.get("to_user") or "")
         if not to_user:
-            # review P1-2：缺 to_user 曾 200 成功并产出 assignee="" 且无候选关联的
+            # 缺 to_user 曾 200 成功并产出 assignee="" 且无候选关联的
             # 孤儿任务（claim/unclaim/complete 全路被拒、无故障单）——入口拦 422
             raise RestRequestError("body.to_user 必填（转办目标裸 id）")
         return dump(

@@ -1,10 +1,10 @@
-"""部署期引用校验（v2.3 第三批 A11，L3+L4——spec §6/设计稿 deploy-validation-design.md）。
+"""部署期引用校验（L3+L4——spec §6/设计稿 deploy-validation-design.md）。
 
 与纯设计时校验（validator*.py，无 I/O）分居：本模块**要查库/查注册表/查目录**，
 只由 ``RepositoryService.deploy`` 在事务内调用（设计时 validate() 不跑这两层）。
 
 分层与级别（行业依据 delta-industry-benchmark §11：组织实体引用部署期全行业
-不校验——flowork 自持目录（M-A）有能力做，但默认只 WARNING，strict 可升 ERROR）：
+不校验——flowork 自持目录有能力做，但默认只 WARNING，strict 可升 ERROR）：
 
 - **L3 定义内引用**：
   - ``call_activity`` 目标定义——``binding="deployment"``：目标未发布 → **ERROR**
@@ -16,7 +16,7 @@
   表达式里的**字符串字面量**逐个问 ``subject_exists`` 钩子：False → WARNING
   （strict → ERROR）；None → 静默跳过（目录未实现该能力，零噪音）。
 
-纪律（spec 第十轮）：**可见优于静默**——默认 WARNING 不拦发布但留痕（logger），
+纪律：**可见优于静默**——默认 WARNING 不拦发布但留痕（logger），
 ``EngineConfig.strict_deploy_validation=True`` 全部升 ERROR 拦发布。
 """
 
@@ -172,7 +172,7 @@ def _check_call_target(
             IssueLevel.WARNING,
             "call_activity.target_unpublished",
             f"子流程定义 {target!r} 尚未发布（binding=latest：运行期解析最新版、"
-            "不锁版本【第二十轮明示】；独立部署合法，注意先发子后发父）",
+            "不锁版本；独立部署合法，注意先发子后发父）",
             node.code,
         )
 
@@ -184,7 +184,7 @@ def _check_subject_literals(
 ) -> None:
     """取人位字面量逐个问目录（L4）：False=WARNING/strict ERROR；None=静默跳过。
 
-    **组引用不进本检查**（2026-10-09 B 批）：候选槽与指派/传阅位都可能写
+    **组引用不进本检查**：候选槽与指派/传阅位都可能写
     ``role:`` / ``org:`` 主体，而 ``subject_exists`` 问的是「这是目录里的人吗」
     ——组引用大概率回 False 而误报「在目录中不存在」。显式前缀（role:/org:）
     与 candidate_groups 字段里的字面量（按字段默认是组名，``is_member`` 裸名
@@ -215,7 +215,7 @@ def _check_subject_literals(
             for i, e in enumerate(getattr(node, "recipients", None) or []):
                 add(f"{node.code}.recipients[{i}]", e)
         elif node.kind == KIND_CALL_ACTIVITY:
-            # MI subjects 同为取人位（code-review 2026-10 P0-6；组引用字面量
+            # MI subjects 同为取人位（组引用字面量
             # 由下方共享守卫跳过——问「是不是人」对组语义必误报）
             from flowork.definitions.validator_positions import mi_config
 

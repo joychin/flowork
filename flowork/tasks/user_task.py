@@ -1,7 +1,6 @@
 """人工审批节点行为（spec §5）：取人/候选/会签出口/串行换棒。
 
-从 behaviors.py 拆出（单文件 ≤300 行红线；code-review 2026-10 第二批换棒
-deadline 修复时达 305 行）。注册仍由 behaviors.register_builtin_behaviors 统一。
+注册仍由 behaviors.register_builtin_behaviors 统一。
 """
 
 from __future__ import annotations
@@ -30,7 +29,7 @@ class UserTaskBehavior(NodeBehavior):
         spec = self.spec
         assert isinstance(spec, UserTaskSpec)
         assert ctx.token is not None
-        if ctx.instance.simulated:  # v2.3 A10：模拟不建任务（try_complete 模拟分支放行）
+        if ctx.instance.simulated:  # 模拟不建任务（try_complete 模拟分支放行）
             return
         from flowork.participants.resolver import ParticipantResolution
 
@@ -47,7 +46,7 @@ class UserTaskBehavior(NodeBehavior):
         ctx.token.approve_count = len(resolution.skipped)  # 自动通过计入同意
         ctx.token_updated()
         for user in resolution.skipped:
-            # 幻影抑制（事件 review A6）：策略命中者建了即归档，task_created
+            # 幻影抑制：策略命中者建了即归档，task_created
             # 不发（待办通知不误报），统一走 auto_pass 咽喉发 task_auto_passed
             from flowork.tasks.auto_pass import archive_auto_pass
 
@@ -74,7 +73,7 @@ class UserTaskBehavior(NodeBehavior):
         候选关联＝求值后的人 ∪ 组引用，**引用保留不展开**（spec §5.5：候选制下
         组引用保留、认领时再展开——明天入组的人能认领明天的待办）；命中判定见
         `tasks.candidates.candidate_hit`。求值在 ``resolve_participants``
-        （候选槽与取人位同一 CEL 求值面，2026-10-09 B 批）。
+        （候选槽与取人位同一 CEL 求值面）。
         """
         import uuid
 
@@ -86,7 +85,7 @@ class UserTaskBehavior(NodeBehavior):
         ctx.token.item_count = 1
         ctx.token_updated()
         task = ctx.create_task(assignee="")
-        # 候选任务同样进 SLA（code-review 2026-10 P1-4）：fire 时未认领由
+        # 候选任务同样进 SLA：fire 时未认领由
         # system:timeout 代认领后执行策略（strategies 侧），不再是静默 skip
         schedule_deadline_jobs(ctx, spec, task.id)
         for candidate in candidates:
@@ -132,7 +131,7 @@ class UserTaskBehavior(NodeBehavior):
         remaining = [p for p in participants if p not in already]
         if remaining and not self._exit_reached(ctx):
             next_task = ctx.create_task(assignee=remaining[0])
-            # 换棒 deadline 羁绊（code-review 2026-10 P1-3）：档位属于节点等待
+            # 换棒 deadline 羁绊：档位属于节点等待
             # 而非任务行——与转办 carry 先例同源（deadlines.py 模块原则）。
             # 修复前旧 Job 绑定已归档任务、到期按 skip 结案，新棒零时限
             # （auto_reject@30 第 1 棒先办结则后续全员无限时窗）。
@@ -143,7 +142,7 @@ class UserTaskBehavior(NodeBehavior):
     def _finish_now(self, ctx: RuntimeNodeContext) -> None:
         """全员自动通过：节点立即完成（复用引擎完成路径）。"""
         assert ctx.token is not None
-        # 声明式 on_exit 补齐（2026-10-13 事件 review 复核批）：对齐
+        # 声明式 on_exit 补齐：对齐
         # kernel._finish_and_route 次序契约（行为 on_exit → 声明式 → finish_token）
         # ——修前三处手工完成路径静默跳过宿主钩子
         from flowork.engine.declared_hooks import run_declared_hook
@@ -170,7 +169,7 @@ class UserTaskBehavior(NodeBehavior):
         assert isinstance(spec, UserTaskSpec)
         token = ctx.token
         assert token is not None
-        if ctx.instance.simulated:  # v2.3 A10：模拟即完成（不走 auto_pass 票数语义）
+        if ctx.instance.simulated:  # 模拟即完成（不走 auto_pass 票数语义）
             token.approval_exit = "simulated"
             return True
         mi = spec.multi_instance

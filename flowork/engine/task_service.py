@@ -149,7 +149,7 @@ class TaskService(
             raise TaskNotAvailableError("协办任务请用 complete_assist 完成")
         from flowork.tasks.actions import assert_action_allowed
 
-        assert_action_allowed("complete", task)  # 动作表守卫（v2.3 A1：状态×类型×认领态）
+        assert_action_allowed("complete", task)  # 动作表守卫（状态×类型×认领态）
         instance = self._instance(ctx, task.instance_id)
         self._claim_task_action(ctx, task, instance)  # 版本抢占+复验（关双 agree 竞态窗）
         # 变量留痕归因：本命令内的变量变化（任务 output + 后续钩子写）记 task_output
@@ -187,7 +187,7 @@ class TaskService(
                 "assignee": task.assignee,
                 "actor": actor,
                 "outcome": "agree",
-                "comment": comment,  # 事件 review B2：办理意见进事件（通知面高价值）
+                "comment": comment,  # 办理意见进事件（通知面高价值）
             },
             instance.id,
         )

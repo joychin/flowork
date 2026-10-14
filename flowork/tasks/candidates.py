@@ -2,13 +2,13 @@
 
 候选名单（``wf_identity_link``，link_type=candidate）混存两种东西：具体人 id
 （含 ``user:`` 前缀写法，spec §5.4）与**显式**组引用（``role:`` / ``org:`` 前缀；
-设计期 candidate_groups.bare_reference 强制——拍板 6「角色就是角色，人名就是
+设计期 candidate_groups.bare_reference 强制——「角色就是角色，人名就是
 人名」：裸名只按人解释，不再溢出为角色名）。**组引用保留不展开**（spec §5.5「两个槽不可拍平」：
 明天入组的人能认领明天的待办），在认领与查询时逐条问目录归属——这是 §5.5 槽位表
 「groups 保留引用，认领时展开」的明文行为（此前引擎从未实现，``is_member`` 端口
 全仓只有 contrib 词汇在调）。
 
-名单**内容**来自候选槽的 CEL 求值（2026-10-09 B 批「候选槽表达式对齐」）：
+名单**内容**来自候选槽的 CEL 求值：
 ``candidate_users`` / ``candidate_groups`` 每项是公式，与取人位同一求值面
 （`participants.resolver.resolve_candidate_subjects`）——本模块只管**判定**。
 
@@ -45,9 +45,8 @@ class CandidateDirectory(Protocol):
 def person_key(subject: str) -> str:
     """人 key：剥 ``user:`` 前缀（spec §5.4 前缀写法与裸 id 互认）。
 
-    AI 代理的 id 与用户 id 是独立命名空间（分属两张表），不做归一——
-    只有 ``user:`` 是同一个人的两种写法（``agent:`` 写法已零兼容删除，
-    2026-10-10 第十六轮：agent 的 id 直接写裸 id，无前缀参与）。
+    主体一律裸 id（``agent:`` 写法已零兼容删除——AI 与人同路，id 不分命名
+    空间），只有 ``user:`` 是同一个人的两种写法。
     """
     return subject.removeprefix("user:")
 
@@ -55,7 +54,7 @@ def person_key(subject: str) -> str:
 def candidate_hit(user: str, candidate: str, org: CandidateDirectory | None) -> bool:
     """候选命中：① 人 key 对齐，或 ② 显式组引用的目录归属（无目录恒假）。
 
-    槽位定解释（code-review 2026-10 拍板 6 方案 A：「角色就是角色，人名就是
+    槽位定解释（「角色就是角色，人名就是
     人名」）——**裸名只按人解释**：此前裸名会同时被当角色名问目录（"裸名
     视同 role" 约定溢出到人名单），与人撞名的角色会让认领面静默扩大。
     组一律显式 ``role:`` / ``org:`` 前缀（设计期 candidate_groups.bare_reference

@@ -47,7 +47,7 @@ class DeadlineStrategiesMixin:
         if strategy == "notify":
             instance = ctx.session.get(ProcessInstanceRow, job.instance_id)
             if instance is not None and instance.state in FROZEN_INSTANCE_STATES:
-                # 冻结推迟（review 2026-10-13 P2-11）：notify 原是唯一不查冻结的
+                # 冻结推迟：notify 原是唯一不查冻结的
                 # 策略，竞态窗插队的暂停实例会收到预警——与其他策略同款推迟
                 job.state = "scheduled"
                 job.result_payload = {**(job.result_payload or {}), "deferred": instance.state}
@@ -64,7 +64,7 @@ class DeadlineStrategiesMixin:
                 {
                     "job_id": job.id,
                     "strategy": strategy,
-                    "task_id": task_id,  # B4：预警定位到任务（修前只有 job_id）
+                    "task_id": task_id,  # 预警定位到任务（修前只有 job_id）
                     "activity_code": task.activity_code if task is not None else None,
                 },
                 job.instance_id,
@@ -76,7 +76,7 @@ class DeadlineStrategiesMixin:
             job.result_payload = {**(job.result_payload or {}), "skipped": "task already finished"}
             return
         if task.assignee == "":
-            # 候选任务未认领的超时兜底（P1-4）：图纸配置的节点级 SLA 不因候选
+            # 候选任务未认领的超时兜底：图纸配置的节点级 SLA 不因候选
             # 池积压而空洞——system:timeout 代认领后走统一执行路径（系统代管
             # claim→act 全程归因可查）。修前一次性 Job 被静默 skip，四策略全失效。
             task.assignee = "system:timeout"
@@ -89,17 +89,17 @@ class DeadlineStrategiesMixin:
         except TaskNotAvailableError as exc:
             instance = ctx.session.get(ProcessInstanceRow, job.instance_id)
             if instance is not None and instance.state in FROZEN_INSTANCE_STATES:
-                # collect→claim 竞态窗插队的冻结（P1-12）：不消费，解冻后触发
+                # collect→claim 竞态窗插队的冻结：不消费，解冻后触发
                 job.state = "scheduled"
                 job.result_payload = {**(job.result_payload or {}), "deferred": instance.state}
                 return
             if self._consult_blocked(ctx, task):
-                # 咨询软挂起期（P2-12）：主任务动作被拦但「时钟照走」＝推迟——
+                # 咨询软挂起期：主任务动作被拦但「时钟照走」＝推迟——
                 # 意见交回后策略如期触发（修复前 Job 被消费，咨询后零时限）
                 job.state = "scheduled"
                 job.result_payload = {**(job.result_payload or {}), "deferred": "consult_open"}
                 return
-            # 如实记因（code-review 2026-10 P0-5）：此前一律写「task already
+            # 如实记因：此前一律写「task already
             # finished」——不可办场景被误标
             job.result_payload = {**(job.result_payload or {}), "skipped": str(exc)}
 
@@ -125,7 +125,7 @@ class DeadlineStrategiesMixin:
             job.result_payload = {**(job.result_payload or {}), "skipped": "instance finished"}
             return
         if instance.state in FROZEN_INSTANCE_STATES:
-            # 冻结期（P1-12 collect→claim 竞态窗）：不消费，解冻后触发——
+            # 冻结期（collect→claim 竞态窗）：不消费，解冻后触发——
             # 与 collect 过滤「冻结是推迟不是吞掉」同语义
             job.state = "scheduled"
             job.result_payload = {**(job.result_payload or {}), "deferred": instance.state}
@@ -153,14 +153,14 @@ class DeadlineStrategiesMixin:
         finish_wait(kernel, ctx.session, instance, token, result="elapsed")
 
     def _apply_instance_deadline(self, ctx: CommandContext, job: JobRow, kernel: Any) -> None:
-        """实例时限到点（v2.2 spec §7）：mark 打标继续跑 / cancel 作废 / terminate 终止。"""
+        """实例时限到点（spec §7）：mark 打标继续跑 / cancel 作废 / terminate 终止。"""
         strategy = job.payload.get("strategy", "mark")
         instance = ctx.session.get(ProcessInstanceRow, job.instance_id)
         if instance is None or instance.state in TERMINAL_INSTANCE_STATES:
             job.result_payload = {**(job.result_payload or {}), "skipped": "instance finished"}
             return  # 实例已完成则静默不触发
         if instance.state in FROZEN_INSTANCE_STATES:
-            # 冻结期（P1-12）：不消费，解冻后触发（resume 会顺延 run_at）
+            # 冻结期：不消费，解冻后触发（resume 会顺延 run_at）
             job.state = "scheduled"
             job.result_payload = {**(job.result_payload or {}), "deferred": instance.state}
             return
@@ -209,7 +209,7 @@ class DeadlineStrategiesMixin:
     def _execute_handover(
         self, ctx: CommandContext, job: JobRow, task: TaskRow, strategy: str
     ) -> None:
-        """reassign / escalate：两条都是**图纸给的 CEL 目标**（v2.3 第十四轮）。
+        """reassign / escalate：两条都是**图纸给的 CEL 目标**。
 
         取人语义归宿主（spec §5.5 分工铁律）——引擎不含「上级」概念，escalate 的
         目标由 `escalate_to` 表达式给出（科层组织写 `'manager_of(task.assignee)'`）。
@@ -261,7 +261,7 @@ class DeadlineStrategiesMixin:
                 DomainEvent.TASK_ESCALATED,
                 {
                     "task_id": task.id,
-                    "activity_code": task.activity_code,  # 2026-10-13 事件 review 复核批
+                    "activity_code": task.activity_code,
                     "task_type": task.task_type,
                     "from": task.assignee,
                     "to": target,

@@ -5,10 +5,10 @@ validator_conditions（合法性）与 validator_references（引用/函数对�
 规则名前缀表 `_RULE_PREFIX` 同处（位点 kind → 规则名，连线位沿用 condition.*、
 节点位用 expression.*、等待关联键用 wait.correlation.*）。
 
-自 validator_conditions.py 拆出（单文件 ≤300 行红线）；入口符号原位再导出，
+入口符号原位再导出，
 既有 import 路径不变。
 
-**候选槽（2026-10-09 B 批）**：`candidate_users` / `candidate_groups` 与取人位
+**候选槽**：`candidate_users` / `candidate_groups` 与取人位
 同列（spec §5.5 槽位表），kind=`candidates`——与 `subjects` 只差**接受的返回类型**
 （多接受 groups/mixed，见 validator_references 的 returns 对位）。
 """
@@ -51,7 +51,7 @@ RULE_PREFIX = {
     "mapping_input": "expression",
     "mapping_output": "expression",
     "wait_correlation": "wait.correlation",
-    "completion": "call_mi.completion",  # A9：MI 完成公式（三计数注入，catalog@completion）
+    "completion": "call_mi.completion",  # MI 完成公式（三计数注入，catalog@completion）
 }
 
 _RULE_PREFIX = RULE_PREFIX  # 历史名（validator_conditions 内部按旧名引用）
@@ -70,9 +70,8 @@ def iter_expression_positions(definition: ProcessDefinition) -> Iterator[tuple[s
     """遍历全部表达式位：yield (kind, where, expression, node)。
 
     kind ∈ condition（连线条件）/ subjects（取人：assignee·assignees·recipients）/
-    candidates（候选槽：candidate_users·candidate_groups——**2026-10-09 B 批前
-    是字面量清单，从不求值**）/ reassign（超时改派）/
-    exit（会签出口 approve_exit·disapprove_exit）/
+    candidates（候选槽：candidate_users·candidate_groups——每项是 CEL 公式而非字面量清单）/
+    reassign（超时改派）/ exit（会签出口 approve_exit·disapprove_exit）/
     mapping_input·mapping_output（子流程映射值，后者在子上下文求值——父定义
     静态不可知其变量，跳过未声明变量检查）。task.* 在 reassign 与 exit 位可用。
     """
@@ -96,7 +95,7 @@ def iter_expression_positions(definition: ProcessDefinition) -> Iterator[tuple[s
                     node.code,
                 )
             mi = getattr(node, "multi_instance", None)
-            if isinstance(mi, dict):  # builder 无 registry 的 dict 袋（P1-15）
+            if isinstance(mi, dict):  # builder 无 registry 的 dict 袋
                 from flowork.definitions.node import MultiInstance
 
                 mi = MultiInstance(**mi)
@@ -123,8 +122,8 @@ def iter_expression_positions(definition: ProcessDefinition) -> Iterator[tuple[s
         if node.kind == KIND_CALL_ACTIVITY:
             mi = mi_config(node)
             if mi is not None:
-                # MI subjects＝取人位（A9：每人一子实例，经 resolve_subjects 求值
-                # ——code-review 2026-10 P0-6：缺席曾令语法错/未声明变量/组引用
+                # MI subjects＝取人位（每人一子实例，经 resolve_subjects 求值
+                # ——缺席曾令语法错/未声明变量/组引用
                 # 字面量零告警直通运行期）
                 for index, expression in enumerate(mi.subjects or []):
                     yield (
@@ -133,7 +132,7 @@ def iter_expression_positions(definition: ProcessDefinition) -> Iterator[tuple[s
                         expression,
                         node.code,
                     )
-            if mi is not None and mi.completion != "all":  # A9 完成公式位
+            if mi is not None and mi.completion != "all":  # 完成公式位
                 where = f"{node.code}.multi_instance.completion"
                 yield "completion", where, mi.completion, node.code
             for target, expression in (getattr(node, "input_mappings", None) or {}).items():

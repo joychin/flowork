@@ -48,7 +48,7 @@ class CommandContext:
     write_source: str = "engine"
     write_actor: str | None = None
     write_reason: str | None = None
-    # v2.3 A10：模拟实例的事件静默（record_event 直通丢弃——不投 outbox，
+    # 模拟实例的事件静默（record_event 直通丢弃——不投 outbox，
     # 杜绝订阅方对试跑做出真实反应；route_decision 行不受影响=报告数据源）
     suppress_events: bool = False
 
@@ -83,7 +83,7 @@ class CommandContext:
 
 
 def _sync_variable_index(ctx: CommandContext) -> None:
-    """变量索引同步（spec §14/P1-5）：触及实例的 searchable 变量同事务重写。"""
+    """变量索引同步（spec §14）：触及实例的 searchable 变量同事务重写。"""
     from flowork.persistence.orm import ProcessInstanceRow
     from flowork.persistence.variable_index import sync_variable_index
 
@@ -145,7 +145,7 @@ def _sync_variable_history(ctx: CommandContext) -> None:
 def _flush_history(ctx: CommandContext) -> None:
     """HistoryFlush 拦截器：把命令期间缓冲的领域事件写入 outbox（同事务）。
 
-    全序与时钟（2026-10-13 事件 review A1/A2）：occurred_at＝命令时刻统一取
+    全序与时钟：occurred_at＝命令时刻统一取
     ``config.now()``（与任务/令牌同源，宿主假钟下不再分叉）；行 id 用引擎的
     可排序串（时间前缀+nonce+计数），消费方 ``ORDER BY (occurred_at, id)``
     即事件全序——同命令内按发射顺序，不再受列默认墙钟的微秒平局随机定序。
@@ -195,9 +195,8 @@ def _run_once(engine: ProcessEngine, command: Callable[[CommandContext], T]) -> 
         _record_incidents(engine, ctx, error)  # 回滚后以独立事务记录 Incident
         raise
     except RecursionError as error:
-        # 深直通链推进递归栈溢出（code-review 2026-10 P1-6；2026-10-13 收尾批
-        # 实测约 7 帧/节点、直通链 200 节点崩）：归一技术故障，与其他引擎错误
-        # 同管线（挂起+故障单；start 阶段整笔回滚时与「首节点失败」同语义）。
+        # 深直通链推进递归栈溢出（实测约 7 帧/节点、直通链 200 节点崩）：归一技术故障，
+        # 与其他引擎错误同管线（挂起+故障单；start 阶段整笔回滚时与「首节点失败」同语义）。
         # 兄弟 except 不互捕，需显式记录后再抛。迭代化根治挂账内核重排刀（§15）。
         converted = EngineExecutionError(
             "流程推进深度超限（深直通链递归栈溢出），建议拆分子流程——"
@@ -206,7 +205,7 @@ def _run_once(engine: ProcessEngine, command: Callable[[CommandContext], T]) -> 
         _record_incidents(engine, ctx, converted)
         raise converted from error
     except ObjectDeletedError as error:
-        # 并发删行归一（v2.3 第二十轮，tests/edge submit vs timer 实证残留窗）：
+        # 并发删行归一（tests/edge submit vs timer 实证残留窗）：
         # 对手在本命令 claim-flush 之后提交了同一任务行的删除——claim 咽喉的
         # expire 复验看不到这个时刻。任务行被并发删除＝已被处理，归一领域错误
         # （重试只会再次失败：行已不存在）。

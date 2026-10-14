@@ -1,7 +1,7 @@
 """变量引用与函数调用静态检查（validator 编排件的规则组三）。
 
-从 validator_conditions.py 拆出（单文件 ≤300 行红线）；保留词与位点白名单
-表驱动自 expr.catalog（F0），规则名不变。
+保留词与位点白名单
+表驱动自 expr.catalog，规则名不变。
 """
 
 from __future__ import annotations
@@ -45,7 +45,7 @@ def check_variable_references(
     *,
     expression_functions: ExpressionFunctions | None = None,
 ) -> None:
-    """变量引用与函数调用（全位点单轨 CEL；空声明不再豁免【v2.3 第二十轮，审计 D6-b】）。
+    """变量引用与函数调用（全位点单轨 CEL；空声明不再豁免）。
 
     - 保留字声明（expr.catalog：initiator/now/task）→ ERROR（求值上下文冲突）；
     - 公式引用未声明变量 → ERROR（静态检查，K8s CRD 体验）——图纸零声明时
@@ -57,7 +57,7 @@ def check_variable_references(
     - 取人/改派位根调用 returns 非 one_user/users → ERROR（谓词误用提前拦）。
     """
     declared = {v.name for v in definition.variables}
-    # input 契约属性同样是变量声明（code-review 2026-10 P1-14）：运行时
+    # input 契约属性同样是变量声明：运行时
     # 白名单＝声明 ∪ input schema ∪ 既有键——设计期只看 variables 段会把
     # 纯契约驱动图纸误拦发布（口径分裂）
     input_schema = definition.input if isinstance(definition.input, dict) else None
@@ -91,7 +91,7 @@ def check_variable_references(
     subject_returns = {
         "subjects": frozenset({"one_user", "users"}),
         # reassign/escalate fire 时要求单个非空人（jobs/strategies._execute_handover）——
-        # 设计期放行 users 曾必炸（P2-14 收窄）
+        # 设计期放行 users 曾必炸
         "reassign": frozenset({"one_user"}),
         # 候选槽（spec §5.5）：多接受组与混合集——「混合集自动拆槽」是规范行为
         "candidates": frozenset({"one_user", "users", "groups", "mixed"}),
@@ -107,7 +107,7 @@ def check_variable_references(
         if kind == "mapping_output":
             # 子上下文业务变量父定义不可知：仅豁免未声明变量检查。
             # 保留标识符是引擎注入契约、静态可知——位点检查照常
-            # （code-review 2026-10 P1-8：此前连保留词位点检查一并跳过）
+            # （此前连保留词位点检查一并跳过）
             idents = {name for name in idents if name in RESERVED_IDENTIFIERS}
         unknown: set[str] = set()
         for name in idents:

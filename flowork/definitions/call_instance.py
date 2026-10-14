@@ -1,4 +1,4 @@
-"""多实例子流程配置（v2.3 第四批 A9，multi-instance-call-design.md）。
+"""多实例子流程配置（multi-instance-call-design.md）。
 
 Zeebe inputCollection/outputCollection 契约：subjects 逐个解析＝每人一个子实例；
 输出按 index 对齐聚合（未写 null 占位）；空集合＝节点立即完成（等价 skip）。
@@ -13,11 +13,11 @@ __all__ = ["CallInstanceConfig"]
 
 
 class CallInstanceConfig(BaseModel):
-    """call_activity.multi_instance（spec §2.5/第十二批设计稿）。"""
+    """call_activity.multi_instance（spec §2.5）。"""
 
     model_config = ConfigDict(extra="forbid")
 
-    # 取人表达式（CEL，复用 resolver：查无传播/A6 上限护栏）；每人一个子实例
+    # 取人表达式（CEL，复用 resolver：查无传播/上限护栏）；每人一个子实例
     subjects: list[str] = Field(default_factory=list)
     # "all"（缺省＝全员结算）| CEL 布尔公式（注入 child_total/child_completed/child_failed）
     completion: str = "all"

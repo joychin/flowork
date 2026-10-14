@@ -45,7 +45,7 @@ def register_instance_routes(app: FastAPI, engine: ProcessEngine) -> None:
     def instances_search(body: dict[str, Any]) -> dict[str, Any]:
         flt = body.get("filter") or {}
         offset, limit = page_request(body.get("page"))
-        # limit+1 余量探测（review P0-1）：修前取数窗口恰好 offset+limit，
+        # limit+1 余量探测：修前取数窗口恰好 offset+limit，
         # has_more 恒 False——next_cursor 恒 None，第二页数据不可达
         rows = history.instances(
             state=flt.get("state"),
@@ -96,7 +96,7 @@ def register_instance_routes(app: FastAPI, engine: ProcessEngine) -> None:
             )
         except NotFoundError as exc:
             # 终态/暂停拒绝以 InstanceNotFoundError 表达（variable_actions 挂账）：
-            # 实例其实存在——重查区分真 404 与状态冲突 409（review P1-7）
+            # 实例其实存在——重查区分真 404 与状态冲突 409
             try:
                 runtime.get_instance(instance_id)
             except NotFoundError:
@@ -129,7 +129,7 @@ def signal_waiting_instance(
     runtime.get_instance(instance_id)  # 不存在 → InstanceNotFoundError（404）
     name = body.get("name")
     if not name:
-        # 缺必填字段是 422 语义（review P1-6：修前 404+NotFoundError 误导
+        # 缺必填字段是 422 语义（修前 404+NotFoundError 误导
         # 「实例/订阅不存在」——同文件 start_instance 缺 code 即 422）
         raise RestRequestError("body.name 必填（等待的消息名）")
     subscriptions = [
@@ -143,7 +143,7 @@ def signal_waiting_instance(
         correlation_key=key,
         payload=body.get("payload"),
         message_id=body.get("message_id"),
-        instance_id=instance_id,  # 实例定向（P0-2 防串单）：只消费本实例的订阅
+        instance_id=instance_id,  # 实例定向（防串单）：只消费本实例的订阅
     )
     if receipt is None or receipt.get("instance_id") != instance_id:
         # 定向关联下正常不会进此分支；剩余可达路径＝message_id 已被其他实例

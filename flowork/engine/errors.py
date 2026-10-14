@@ -1,4 +1,4 @@
-"""引擎执行错误族与错误归因（自 kernel.py 拆出守 300 行红线，2026-10-13）。
+"""引擎执行错误族与错误归因。
 
 全部为「技术故障」语义（spec §8 错误二分）：命令管线捕获后回滚整笔命令、
 独立事务记 Incident 并挂起实例。兼容面：kernel 模块对错误族显式再导出
@@ -23,11 +23,11 @@ __all__ = [
 
 
 class EngineExecutionError(FloworkError):
-    """引擎执行错误（将转为 Incident，M5）。
+    """引擎执行错误（将转为 Incident）。
 
-    ``activity_code``：错误发生时的节点定位（2026-10-13 事件 review 复核批·
-    错误归因）——由节点作用域的内核帧统一标注（activate / advance_after_task /
-    finish_wait / 驳回出口），非节点作用域（Job/消息面）缺省 None；
+    ``activity_code``：错误发生时的节点定位——由节点作用域的内核帧统一标注
+    （activate / advance_after_task / finish_wait / 驳回出口），
+    非节点作用域（Job/消息面）缺省 None；
     ``incident_raised`` 载荷据此携带定位，订阅方不再解析 message 文本。
     """
 
@@ -63,7 +63,7 @@ class ParticipantLimitError(EngineExecutionError):
 class ParticipantCountMismatchError(EngineExecutionError):
     """单人审批节点（未声明 multi_instance）解析出多名参与者——拒绝宽松并行。
 
-    spec v2.3 第十八轮：多人必须显式声明会签；解析位＝技术故障（挂起+故障单，首节点整笔回滚）。
+    多人必须显式声明会签；解析位＝技术故障（挂起+故障单，首节点整笔回滚）。
     """
 
 

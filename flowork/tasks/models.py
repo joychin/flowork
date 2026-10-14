@@ -22,10 +22,10 @@ class TaskInfo(BaseModel):
     task_type: str = "approval"
     state: str = "ready"
     context_payload: dict[str, Any] = {}
-    priority: int = 50  # v2.2（spec §3.4）：0–100，小→大＝低→高
+    priority: int = 50  # （spec §3.4）：0–100，小→大＝低→高
     due_at: datetime | None = None  # 首条 deadline 到期时刻（无超时配置为 None）
     created_at: datetime | None = None
-    # v2.3 第二批（A1）：服务端算完的可用动作清单（状态×类型×认领态；谁能做归宿主权限）。
+    # 服务端算完的可用动作清单（状态×类型×认领态；谁能做归宿主权限）。
     # 主流引擎均不下发此面——AI/前端拿到任务即知能做什么。
     available_actions: list[str] = []
 
@@ -38,7 +38,7 @@ class TaskHistoryInfo(TaskInfo):
     comment: str = ""
     acted_by: str = ""
     cause_token_id: str | None = None
-    actor_context: dict[str, Any] = {}  # v2.1 身份快照（spec §5.6）
+    actor_context: dict[str, Any] = {}  # 身份快照（spec §5.6）
 
 
 class TaskCompleteResult(BaseModel):
@@ -70,7 +70,7 @@ class InstanceInfo(BaseModel):
     started_at: datetime | None = None
     finished_at: datetime | None = None
     parent_id: str | None = None
-    simulated: bool = False  # v2.3 A10：模拟实例标记（查询面默认隔离）
+    simulated: bool = False  # 模拟实例标记（查询面默认隔离）
 
 
 class EventInfo(BaseModel):
@@ -105,7 +105,7 @@ class TokenInfo(BaseModel):
 
 
 class RouteDecisionInfo(BaseModel):
-    """一条路由决策审计（expression-dataface §6/F3）：当时为什么走这条边。
+    """一条路由决策审计（expression-dataface §6）：当时为什么走这条边。
 
     edges 逐条件边记录公式与结果（true/false/no_fact 查无跳过）；selected 为
     最终激活的连线；snapshot 钉住求值时刻关键取值（now/prev_task/node() 引用值）。
@@ -125,7 +125,7 @@ class RouteDecisionInfo(BaseModel):
 
 
 class AnticipateResult(BaseModel):
-    """anticipate 只读预判（v2.2 spec §11）：照此提交后节点是否出、实例是否完。
+    """anticipate 只读预判（spec §11）：照此提交后节点是否出、实例是否完。
 
     instance_complete 以**当前变量值**近似路由（提交 output 可能改写条件分支）；
     纯读：不落库、不改任何状态。

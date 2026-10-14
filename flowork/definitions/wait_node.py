@@ -3,7 +3,7 @@
 从 builtin.py 拆出独立模块（单文件 ≤300 行红线）。三模式合一的行业先例是
 Conductor WAIT 任务（定长延迟 / 等到某时刻 / 等外部信号）；等待与关联对标
 Zeebe receive task（订阅式关联），竞速的超时侧对标 Step Functions 回调 +
-TimeoutSeconds。周期性触发明确不做（属定时启动调度域，用户 2026-10-09 裁定）。
+TimeoutSeconds。周期性触发明确不做（属定时启动调度域）。
 """
 
 from __future__ import annotations

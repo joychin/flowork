@@ -1,6 +1,6 @@
 """公共异常体系。
 
-层级：FloworkError →（DefinitionError | ConditionError | RuntimeError 家族，后者 M1 起）。
+层级：FloworkError →（DefinitionError | ConditionError | RuntimeError 家族）。
 设计时错误携带定位信息（节点/连线编码），便于校验器与 CLI 汇报。
 """
 

@@ -69,7 +69,7 @@ BreakingRule = Callable[["ProcessDefinition", "ProcessDefinition"], list[str]]
 
 def _rule_input_contract(base: ProcessDefinition, target: ProcessDefinition) -> list[str]:
     """R1：input 契约破坏＝required 扩大、既有字段类型变化（含收窄、enum 缩小）、
-    契约从无到有、关闭多余字段容忍（拍板 4 方案 A：两类收紧同属「新实例行为
+    契约从无到有、关闭多余字段容忍（两类收紧同属「新实例行为
     断变」——与 required 扩大同构，强制 major）。"""
     base_schema = base.input or {}
     target_schema = target.input or {}

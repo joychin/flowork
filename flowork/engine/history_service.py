@@ -54,10 +54,10 @@ class HistoryService(ArchiveMixin, TraceMixin):
         *,
         limit: int = 200,
         offset: int = 0,
-    ) -> list[EventInfo]:  # offset＝REST /v2 分页探测取数用（review P0-1）
+    ) -> list[EventInfo]:  # offset＝REST /v2 分页探测取数用
 
         def _command(ctx: CommandContext) -> Any:
-            # 全局取最近（P2-7），实例维度 asc（可读）；微秒平局按可排序 id 定序（A1）。
+            # 全局取最近，实例维度 asc（可读）；微秒平局按可排序 id 定序。
             if instance_id is None:
                 stmt = select(EventOutboxRow).order_by(
                     EventOutboxRow.occurred_at.desc(), EventOutboxRow.id.desc()
@@ -83,14 +83,14 @@ class HistoryService(ArchiveMixin, TraceMixin):
         return result
 
     def route_decisions(self, instance_id: str) -> list[RouteDecisionInfo]:
-        """路由决策审计（expression-dataface §6/F3）：重放解释用，按时间正序。"""
+        """路由决策审计（expression-dataface §6）：重放解释用，按时间正序。"""
         from flowork.persistence.orm_v2 import RouteDecisionRow
 
         def _command(ctx: CommandContext) -> Any:
             stmt = (
                 select(RouteDecisionRow)
                 .where(RouteDecisionRow.instance_id == instance_id)
-                # (created_at, id) 次键（web P1-3）：一次命令多行平局按可排序 id 定序
+                # (created_at, id) 次键：一次命令多行平局按可排序 id 定序
                 .order_by(RouteDecisionRow.created_at, RouteDecisionRow.id)
             )
             return [
@@ -119,7 +119,7 @@ class HistoryService(ArchiveMixin, TraceMixin):
         limit: int = 200,
     ) -> list[TaskHistoryInfo]:
         def _command(ctx: CommandContext) -> Any:
-            # 全局/按人查询取最近（P2-7）；实例维度保持 asc
+            # 全局/按人查询取最近；实例维度保持 asc
             order = (
                 TaskHistoryRow.created_at.desc()
                 if instance_id is None and assignee is None
@@ -144,10 +144,10 @@ class HistoryService(ArchiveMixin, TraceMixin):
         offset: int = 0,
         include_simulated: bool = False,
     ) -> list[InstanceInfo]:
-        """实例查询（默认隔离模拟实例，v2.3 A10）；offset＝REST 分页探测用（review P0-1）。"""
+        """实例查询（默认隔离模拟实例）；offset＝REST 分页探测用。"""
 
         def _command(ctx: CommandContext) -> Any:
-            # id 次键（web P2-8）：同秒启动平局下翻页可能重漏行
+            # id 次键：同秒启动平局下翻页可能重漏行
             stmt = select(ProcessInstanceRow).order_by(
                 ProcessInstanceRow.started_at.desc(), ProcessInstanceRow.id
             )

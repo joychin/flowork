@@ -1,7 +1,7 @@
 """节点事实（expression-dataface §2.2/§2.3/§3）：判断面「现查派生」的只读数据。
 
 两个判断面词汇的数据源：``prev_task``（上一站＝实例内最近一条**表决行**，
-spec §5.1 第十九轮口径——转办取被转办人的 agree、协办/咨询/自动通过不入列，
+spec §5.1 口径——转办取被转办人的 agree、协办/咨询/自动通过不入列，
 目标场景＝「导致本次流转的任务」）与 ``node("code")``（点名查任意节点的聚合
 事实：轮次/最近轮办理人与耗时/最近轮会签票数，最近轮人物同表决行口径）。
 同一份底层数据（wf_task_history + wf_token）日后也服务查询面（REST/Console），
@@ -36,7 +36,7 @@ __all__ = [
     "with_prev_task",
 ]
 
-# 表决行口径（spec §5.1 第十九轮）：审批类 + agree/reject——协办收口行与会签
+# 表决行口径（spec §5.1）：审批类 + agree/reject——协办收口行与会签
 # 出口的 auto_pass 行落库更晚，此前按「最近 live 行」取会读错人、改路由。
 from flowork.tasks.vote import vote_criteria
 

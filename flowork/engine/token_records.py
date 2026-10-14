@@ -128,11 +128,11 @@ class TokenRecordsMixin:
     ) -> None:
         """取消令牌并撤销其未办任务（任务落历史 outcome=cancelled）。
 
-        事件咽喉（2026-10-13 事件 review A4）：节点级 ``node_cancelled``
+        事件咽喉：节点级 ``node_cancelled``
         （``by``=cause——撤回/终态级联/竞速/驳回/MI 收工/故障跳过/管理员七路
         统一）与逐任务 ``task_cancelled`` 都在此发，订阅方对「下游被撤回连带
         取消」不再失明。先经行为取消钩子（wait 关订阅删 Job，契约不变）。
-        ``actor``（复核批：撤回/终止/驳回等有发起人的调用方穿透传入）——
+        ``actor``（撤回/终止/驳回等有发起人的调用方穿透传入）——
         事件载荷与已办 ``acted_by`` 归因一致，不再一律记 system。
         """
         from sqlalchemy import delete as sa_delete
@@ -159,7 +159,7 @@ class TokenRecordsMixin:
                 )
             )
             session.delete(task)
-            # 候选身份关联随任务清除（全仓 review 2026-10-13 批 3 P2-5：修前只有
+            # 候选身份关联随任务清除（修前只有
             # remove_instance 清，取消路径留孤儿行）
             session.execute(sa_delete(IdentityLinkRow).where(IdentityLinkRow.task_id == task.id))
             self.record_event(
@@ -182,7 +182,7 @@ class TokenRecordsMixin:
                 "activity_code": token.activity_code,
                 "by": cause,
                 "token_id": token.id,
-                "actor": actor,  # 两级语义：状态层也带归因（复核批）
+                "actor": actor,  # 两级语义：状态层也带归因
             },
             token.instance_id,
         )
@@ -196,7 +196,7 @@ class TokenRecordsMixin:
     ) -> None:
         """任一到达即开始后取消竞速臂（判据＝``graph.racing_basin``，语义详彼处）。
 
-        v2.3 第二十轮：不限一跳（长臂漏取消会让完结节点被迟到到达二次激活
+        不限一跳（长臂漏取消会让完结节点被迟到到达二次激活
         重跑）、也不越别的汇合域；直接前驱恒计入（与旧语义一致）。
         """
         from flowork.definitions.graph import racing_basin
@@ -204,7 +204,7 @@ class TokenRecordsMixin:
         racing = racing_basin(definition, code) - {code}
         for token in self.tokens(session, instance.id, states=(TokenState.UNFINISHED.value,)):
             if token.activity_code in racing:
-                # actor 不传＝记 system（全仓 review 2026-10-13 批 3 P2-2 拍板口径：
+                # actor 不传＝记 system（口径：
                 # 竞速取消是引擎自动语义，非任何人的动作；actor 穿透需改
                 # kernel._advance 全链签名，随重排刀再议）
                 self.cancel_token(session, token, cause="racing")

@@ -1,4 +1,4 @@
-"""变量索引同步（kernel-v2 spec §14/P1-5）。
+"""变量索引同步（kernel-v2 spec §14）。
 
 searchable 变量（仅 string/number/boolean，validator 把关）在**命令边界**与变量
 写入同事务重写实例的索引行——命令管线内任何变量变更（发起/任务提交/节点输出/

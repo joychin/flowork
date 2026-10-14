@@ -1,7 +1,7 @@
-"""模拟试跑报告（v2.3 第三批 A10，simulation-dryrun-design.md 第二层）。
+"""模拟试跑报告（simulation-dryrun-design.md 第二层）。
 
-数据源全部现查（F2 facts 同款模式，不预存）：令牌时间线＝wf_token、路由轨迹＝
-wf_route_decision（F3 资产——模拟跑的每一步边判定天然在表里）、stub 清单＝
+数据源全部现查（facts 同款模式，不预存）：令牌时间线＝wf_token、路由轨迹＝
+wf_route_decision（模拟跑的每一步边判定天然在表里）、stub 清单＝
 到访过的 service_task 节点（行为层模拟分支恒不执行 handler）。**报告诚实呈现
 覆盖度**：stub 列表与卡点（wait 冻结/等待中令牌）都是发现，不是噪音。
 """

@@ -1,12 +1,12 @@
-"""多实例子流程（v2.3 第四批 A9，multi-instance-call-design.md——Zeebe 契约）。
+"""多实例子流程（multi-instance-call-design.md——Zeebe 契约）。
 
-从 subprocess_support.py 拆出（单文件 ≤300 行红线）；共享件经延迟导入
+共享件经延迟导入
 （``_mapping_values``/``_children_of``）防环。契约三件套：
 - fan-out：subjects 逐个解析＝每人一个子实例（``parent_index`` 记迭代序），
   输入映射按子求值并注入保留标识符 ``subject``（catalog 位点 mapping_input）；
 - 汇聚：completion 公式（child_total/completed/child_failed 三计数）只做
   「提前收工」——命中即终止剩余 running 子（suspended 属管理员域不动），
-  **不做失败机制**（C7 教训：提前完成丢失「谁反对」）；缺省 all＝全员结算；
+  **不做失败机制**（Camunda 7 教训：提前完成丢失「谁反对」）；缺省 all＝全员结算；
 - 聚合：collect＝输出按 parent_index 对齐聚合 list（未写 null 占位——下标
   稳定、完成序无关）；空 subjects＝零子立即完成（Zeebe skip 语义）。
 """
@@ -44,7 +44,7 @@ def start_mi_children(
 
 
 def _mi_subjects(ctx: RuntimeNodeContext, spec: CallActivitySpec) -> list[str]:
-    """解析 subjects（取人语义：查无传播；求值错→技术故障；A6 上限护栏同守）。"""
+    """解析 subjects（取人语义：查无传播；求值错→技术故障；上限护栏同守）。"""
     from flowork.expr.context import expression_functions_of
     from flowork.participants.resolver import resolve_subjects
     from flowork.tasks.facts import attach_node, instance_facts, with_prev_task
@@ -84,13 +84,13 @@ def _create_child(
         definition_revision=row.revision,
         definition_snapshot=row.content,
         state=InstanceState.RUNNING.value,
-        started_at=ctx.kernel.config.now(),  # P1-11：业务时刻单源
+        started_at=ctx.kernel.config.now(),  # 业务时刻单源
         start_user=ctx.instance.start_user,
         variables=dict(variables),
         parent_id=ctx.instance.id,
         parent_token_id=ctx.token.id,
-        simulated=ctx.instance.simulated,  # A10：模拟递归传播
-        parent_index=parent_index,  # A9：index 对齐聚合的锚
+        simulated=ctx.instance.simulated,  # 模拟递归传播
+        parent_index=parent_index,  # index 对齐聚合的锚
     )
     ctx.session.add(child)
     ctx.session.flush()
@@ -103,7 +103,7 @@ def _create_child(
         DomainEvent.SUB_PROCESS_STARTED,
         {
             "sub_instance_id": child.id,
-            "child_definition_code": spec.process_code,  # B4：订阅方免反查
+            "child_definition_code": spec.process_code,  # 订阅方免反查
             "parent_node": ctx.node.code,
         },
         ctx.instance.id,
@@ -137,7 +137,7 @@ def mi_finish(ctx: RuntimeNodeContext, spec: CallActivitySpec, children: list[An
                 outputs = _mapping_values("输出映射", spec.output_mappings or {}, ctx, child)
                 for target, value in outputs.items():
                     ctx.variables[target] = value
-    # input 契约边界③（code-review 2026-10 P1-17）：聚合写回后父变量全集仍须
+    # input 契约边界③：聚合写回后父变量全集仍须
     # 满足契约——与单子路径（sub_process_finished）同一条守卫，此前不对称
     import json
 
@@ -161,7 +161,7 @@ def _completion_hit(
     from flowork.tasks.facts import instance_facts
 
     config = ctx.kernel.engine.config if ctx.kernel.engine else None
-    # 父实例变量并入（code-review 2026-10 P1-8）：validator 按声明集放行
+    # 父实例变量并入：validator 按声明集放行
     # completion 位引用业务变量——装配面对齐，计数键冲突时计数优先
     counts = expression_context(
         {
@@ -206,10 +206,9 @@ def _collect_outputs(
 def _terminate_running_children(ctx: RuntimeNodeContext, children: list[Any]) -> None:
     """提前收工：终止剩余 running 子（**整树级联**，对齐 terminate_process 形态）。
 
-    suspended/paused 子不终止（管理员域）。级联修复（2026-10-13 事件 review
-    复核批）：修前直接置 child.state、不 BFS——MI 子自身含子实例时孙实例
-    孤儿 running 且零事件；改用 cascade_terminate 复用整树语义（先撤光令牌
-    再子先父后落终态、孙事件带 cascade_from）。
+    suspended/paused 子不终止（管理员域）。级联修复：修前直接置 child.state、不 BFS
+    ——MI 子自身含子实例时孙实例孤儿 running 且零事件；改用 cascade_terminate
+    复用整树语义（先撤光令牌再子先父后落终态、孙事件带 cascade_from）。
     """
     from flowork.engine.terminate_cascade import cascade_terminate
 
