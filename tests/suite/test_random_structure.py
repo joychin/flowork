@@ -17,7 +17,7 @@ import pytest
 from flowork import contrib
 from flowork.engine.config import EngineConfig
 from flowork.engine.engine import ProcessEngine
-from tests.suite.invariants import assert_no_dangling
+from tests.suite.invariants import assert_full_ledger
 from tests.suite.random_gen import STARTER, Generated, Step, generate
 from tests.suite.world_org import build_static_org
 
@@ -66,7 +66,7 @@ def _apply(engine: ProcessEngine, iid: str, step: Step) -> None:
 
 
 def _assert_invariants(engine: ProcessEngine, iid: str, world: Generated) -> None:
-    assert_no_dangling(engine)
+    assert_full_ledger(engine)  # 悬空+树闭合+逐实例票数/对账/终态契约
     instances = engine.history.instances()
     for row in instances:
         task_ids = [h.task_id for h in engine.history.task_history(instance_id=row.id)]

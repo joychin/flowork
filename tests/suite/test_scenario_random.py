@@ -10,7 +10,11 @@ from __future__ import annotations
 import random
 
 from flowork.engine.engine import ProcessEngine
-from tests.suite.invariants import assert_no_dangling
+from tests.suite.invariants import (
+    assert_child_tree_closed,
+    assert_full_ledger,
+    assert_instance_ledger,
+)
 from tests.suite.walkthrough import complete_of, reject_of
 
 HIGH = 5000
@@ -63,7 +67,7 @@ def test_random_expense_scenarios_converge(suite_engine: ProcessEngine) -> None:
     assert len(engine.history.instances(definition_code="suite_expense")) == 30
     for iid, final_amount in scenarios:
         assert_completed_clean(engine, iid, final_amount)
-    assert_no_dangling(engine)  # 全部办结：全库不应有僵尸实例/令牌/待办
+    assert_full_ledger(engine)  # 全部办结：全库不应有僵尸实例/令牌/待办，账本三件齐查
 
 
 def test_random_purchase_scenarios_join_and_children(static_engine: ProcessEngine) -> None:
@@ -93,7 +97,7 @@ def test_random_purchase_scenarios_join_and_children(static_engine: ProcessEngin
         complete_of(engine, iid, "u_ceo")  # admin_gate 兜底位
         assert engine.runtime.get_instance(iid).state == "completed"
     assert children_by_risk["high"] > 0, "种子组合应覆盖到高风险路径"
-    assert_no_dangling(engine)  # 含全部子实例：一并核对无悬空
+    assert_full_ledger(engine)  # 含全部子实例：一并核对无悬空+树闭合+账本
 
 
 def test_random_mixed_world_interleaved(suite_engine: ProcessEngine) -> None:
@@ -143,3 +147,7 @@ def test_random_mixed_world_interleaved(suite_engine: ProcessEngine) -> None:
         assert engine.task.list_tasks(instance_id=iid), "在办实例必须有可办任务"
     assert len(engine.history.instances(state="completed")) == len(finish)
     assert len(engine.history.instances(state="running")) == len(keep)
+    # 中途也成立的账本：已完结实例三件齐查，在办实例不豁免树闭合
+    for iid in finish:
+        assert_instance_ledger(engine, iid)
+    assert_child_tree_closed(engine)
