@@ -5,8 +5,10 @@
 
 ## 实例生命周期
 
-实例状态机：`running`（在跑）→ 终态 `completed` / `cancelled` / `terminated` /
-`failed`；中间还有两个冻结态：`paused`（人工暂停）与 `suspended`（出故障挂起）。
+实例状态机：`running`（在跑）→ 终态 `completed` / `cancelled` / `terminated`
+（枚举里另有 `failed`，当前**零写入**——「判失败」实际落 terminated，见下文
+fail 动作）；中间还有两个冻结态：`paused`（人工暂停）与 `suspended`
+（出故障挂起）。
 
 | 动作 | 效果 |
 |---|---|
@@ -41,7 +43,8 @@ engine.runtime.variable_history(iid, name="amount")     # 变量血缘
 `update_variables` 有三道门槛（实测）：
 
 1. **键白名单**：只能写「已声明的变量 ∪ input 契约字段 ∪ 实例里已有的键」——
-   凭空造新键、写保留标识符（`now` / `initiator` 这些）都被拒绝；
+   凭空造新键被拒绝；保留键 `initiator` / `task` 直接拒收；`now` 这类保留词
+   不允许声明、也进不了既有键，同样写不进去；
 2. **类型对位**：声明的类型对不上（number 写成字符串）拒绝；
 3. **状态门槛**：终态实例拒改（数据定格）；暂停实例也拒改（冻结快照——
    要改先 resume，改完再 pause）。
@@ -99,7 +102,7 @@ engine.runtime.resolve_incident(incident_id, action="retry", actor="ops")
 | `resume` | 仅恢复运行，不重做 | 挂起误伤，直接放行 |
 | `skip` | 当前停住的节点视为完成，路由推进后继 | 这一步不做了，跳过去 |
 | `cancel` | 取消实例 | 这单不要了 |
-| `fail` | 实例判失败（终态 failed） | 认定整单报废 |
+| `fail` | 终止实例（终态 **terminated**——引擎没有 failed 落点） | 认定整单报废 |
 
 上面例子修好 handler 后 `retry`：
 
@@ -113,11 +116,11 @@ engine.runtime.resolve_incident(incident_id, action="retry", actor="ops")
 
 ### 管理员手术
 
-两个更硬的手工干预（都在 `runtime` 上，绕过正常流转，慎用）：
+几个更硬的手工干预（绕过正常流转，慎用；注意挂在两个不同服务上）：
 
-- `move_token(token_id, target_activity, actor)`：把一枚令牌直接搬到指定节点；
-- `activate_node(instance_id, activity_code, actor)` / `cancel_node(...)`：
-  手工激活 / 取消某节点。
+- `engine.runtime.move_token(token_id, target_activity, actor)`：把一枚令牌直接搬到指定节点；
+- `engine.task.activate_node(instance_id, activity_code, actor)` /
+  `engine.task.cancel_node(...)`：手工激活 / 取消某节点。
 
 手术不走条件求值与汇聚判定，图复杂时容易绕出语义漏洞——优先用驳回、skip 这类
 「走正门」的动作，手术留给数据修复类场景。

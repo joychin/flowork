@@ -58,7 +58,8 @@ engine.register_handler("stamp_entry",
 ```
 
 语义口径：钩子**观察与写变量，不改路由**；handler 未注册或执行抛错＝技术故障
-（挂起+故障单），不会静默吞掉。
+（挂起+故障单），不会静默吞掉。例外是 `on_fail` 位点——它本身就在故障单事务内
+执行，钩子异常只记日志（故障单已经在，不再叠加挂起）。
 
 ## 自定义节点类型
 
@@ -103,17 +104,24 @@ engine.config.node_registry.register("risk_probe", RiskProbeSpec, RiskProbeBehav
 实测：金额 20000 的实例被路由到人工复核（`risk_score=0.9`），金额 100 的
 直达终点——自定义节点的行为产出像内置节点一样参与条件路由。
 
-`NodeBehavior` 的关键方法（全部可选，按需覆写）：
+`NodeBehavior` 的关键方法（全部可选，按需覆写；这里列常用面，全量见
+`flowork/runtime/behavior.py`）：
 
 - `on_enter(ctx)`：进入节点时执行（写变量、发事件）；
-- `try_complete(ctx) -> bool`：节点算不算完——返回 False 就停在 RUNNING
-  等外部条件（人工任务等办理、等待节点等消息，都是这个机制）；
+- `try_complete(ctx) -> bool`：节点算不算完——返回 False 就停在 `unfinished`
+  （未完）等外部条件（人工任务等办理、等待节点等消息，都是这个机制）；
 - `on_exit(ctx)` / `on_cancel(ctx)` / `on_fail(ctx, error)`：离开 / 取消 /
-  失败时机。
+  失败时机；
+- `on_task_completed(ctx, task_id, outcome)`：本节点的任务办结时（串行会签
+  推进下一棒用）；
+- `get_outgoing(ctx)`：定制路由出口（branch 的 first_match 就这么实现）；
+- 类属性契约：`performs_external_work`（外部副作用，模拟恒桩）、
+  `advances_on_message`（等消息推进）、`owns_pending_tasks`（生成待办）。
 
-**铁律**：行为（与钩子）只能观察与写变量，不得改变路由——引擎核心不存在
-「按节点类型 if/else」的分支，节点语义全部经注册表进行为，这就是自定义类型
-能做到「不改核心」的原因。
+**铁律**：生命周期钩子（on_enter / on_exit / on_cancel / on_fail）只能观察与
+写变量，不得改变路由——路由决策属于引擎 + 条件求值 + `get_outgoing` 覆写点。
+引擎核心不存在「按节点类型 if/else」的分支，节点语义全部经注册表进行为，
+这就是自定义类型能做到「不改核心」的原因。
 
 ## 组织目录的两种形态
 
@@ -136,12 +144,12 @@ engine.config.org = store                        # 挂上即 OrgDirectoryLike
 # .user_task("f", "财务复核", candidate_users=["'u_fin'"])
 ```
 
-**自实现协议**（`OrgDirectoryLike`）——生产环境对接自己的组织系统 / HR 数据：
-引擎必需的最小面是四个方法（`is_member` 人属不属于组、`subjects_in` 组→人、
-`manager_of` 查上级、`snapshot` 人→身份快照），挂 `EngineConfig.org` 即可。
-协议上还有一批丰富面方法（`delegation_of` 查委托、`admins` 管理员兜底名单、
-部门族查询等），取人词汇与候选组判定主要走最小面、兜底与委托走丰富面——
-实现方可按需退化。
+**自实现协议**（`OrgDirectoryLike`）——生产环境对接自己的组织系统 / HR 数据，
+挂 `EngineConfig.org` 即可。**引擎内核消费四个方法**：`is_member`（候选组归属
+判定）、`snapshot`（办理人身份定格）、`delegation_of`（取人期委托替换）、
+`admins`（无人兜底的管理员名单）；`subjects_in` / `manager_of` 由第 5 章的
+组织词汇函数消费。协议上还有一批丰富面方法（部门族查询、`user_exists` 等），
+实现方可按需退化——内核四方法缺一会在对应路径直接失败。
 
 目录不配置时：候选组任务认不了（提示配目录）、`to_admins` 兜底没人接、
 组织词汇调不了——引擎照常跑，只是「按组织找人」的能力缺数据源。

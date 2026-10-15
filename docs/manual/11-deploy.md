@@ -15,10 +15,11 @@ ProcessEngine(EngineConfig(
 
 规则很简单：`db_file` 是完整连接串（含 `://`）就原样透传，否则当 SQLite 文件
 路径包装。`db_url` 字段是等价的直接写法。环境变量 `FLOWORK_DB` 走同一个解析
-规则，CLI 与 REST / MCP 服务形态都认它：
+规则，**REST / MCP / web 服务形态与 Alembic 迁移认它；CLI 不认——一律显式
+`--db`**（`demo` / `demo-full` 恒为内存库，不接库参数）：
 
 ```bash
-FLOWORK_DB=/data/flowork.db uv run flowork demo
+uv run flowork init --db /data/flowork.db
 FLOWORK_DB=postgresql+psycopg://user:pw@host/flowork uv run uvicorn flowork.contrib.rest.app:app
 ```
 
@@ -39,7 +40,7 @@ FLOWORK_DB=postgresql+psycopg://user:pw@host/flowork uv run uvicorn flowork.cont
 
 ## CLI 速查
 
-无代码操作与运维面（`uv run flowork <命令>`，全部认 `--db` / `FLOWORK_DB`）：
+无代码操作与运维面（`uv run flowork <命令>`，全部认 `--db`）：
 
 | 命令 | 干什么 |
 |---|---|
@@ -93,8 +94,9 @@ python -m flowork.contrib.mcp.server    # stdio 形态；FLOWORK_DB 同约定
 
 ## 本章小结
 
-- 三库形态一句话：内存试验、文件单机、PostgreSQL 生产；`FLOWORK_DB`
-  全系约定；嵌入式形态不用管迁移。
+- 三库形态一句话：内存试验、文件单机、PostgreSQL 生产；`FLOWORK_DB` 是
+  服务形态（REST / MCP / web）与 Alembic 的约定，CLI 显式 `--db`；
+  嵌入式形态不用管迁移。
 - 并发模型一句话：乐观锁串行化同实例、跨实例天然并行、Job CAS 恰一次——
   多副本不需要分布式锁。
 - CLI 覆盖运维与无代码体验；REST / MCP 是内核之上的插件层开放面，

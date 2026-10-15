@@ -67,7 +67,7 @@ for row in engine.history.route_decisions(instance_id):
   事实缺失按不满足处理）；
 - `selected`：实际激活的边；
 - `snapshot`：求值时刻的事实快照（`now` / `instance` / 用到的 `prev_task`、
-  `node()` 取值）——事后解释公式为什么是这个结果，证据齐的。
+  `node()`、`wait` 取值）——事后解释公式为什么是这个结果，证据齐的。
 
 无条件边不进 `edges`（恒真的东西不需要审计）；无条件路由也落行（`selected`
 就是那一条）。审计行在生产事故排查里是「流程为什么走错」的第一手证据。
@@ -79,8 +79,9 @@ engine.history.trace_instance(iid)     # 令牌 + 已办 + 事件按时间合并
 engine.history.archive_instance(iid)   # 整实例归档导出（dict）
 ```
 
-`trace_instance` 返回按时间排序的 `TraceEntry` 列表（`kind` / `title` / `time`），
-令牌推进、任务办结、事件发生 interleaved——做「流转时间线」页面直接用它：
+`trace_instance` 返回按时间排序的 `TraceEntry` 列表（`kind` / `title` / `time` /
+`detail`），令牌推进、任务办结、事件发生 interleaved——做「流转时间线」页面
+直接用它：
 
 ```text
 轨迹: token #1 start → finished

@@ -17,9 +17,10 @@ amount > 5000 ? 'big' : 'small'      三元
 null                                 空值，判空用 x != null
 ```
 
-三条护栏：公式最长 2048 字符；求值异常统一归一为 `FormulaError`（消息截断防泄漏）；
-**求值出错＝技术故障**——实例挂起 + 故障单等人处理，绝不静默走默认边
-（语义细节见第 7 章故障处理）。
+四件护栏 + 一条错误语义：公式最长 2048 字符；二元运算链 ≤256 项；变量序列化
+≤1MB；求值异常统一归一为 `FormulaError`（消息截断防泄漏）。**求值出错＝技术
+故障**——实例挂起 + 故障单等人处理，绝不静默走默认边（语义细节见第 7 章
+故障处理）。
 
 想独立试一条公式的值（比如做表单试算），宿主可以直接调：
 
@@ -35,7 +36,8 @@ evaluate_formula_value(
 ## 内置词汇目录
 
 公式里除了你声明的流程变量，还有一批引擎注入的**保留标识符**——不用声明、
-拿起来就用（也不许声明同名变量）。完整目录可以用 API 枚举：
+拿起来就用（也不许声明同名变量，`variables` 段与 input 契约字段同查，
+设计期 ERROR——同名会遮蔽引擎注入值）。完整目录可以用 API 枚举：
 
 ```python
 from flowork.api import identifier_entries, engine_functions
@@ -52,7 +54,7 @@ list(engine_functions())             # 引擎注入函数：node
 | `initiator` | 人 | 发起人 | 全部 |
 | `instance` | map | `instance.id` / `instance.started_at` / `instance.business_key` | 全部 |
 | `now` | 时间 | 求值时刻（统一时钟）；一次求值钉一个时刻 | 全部 |
-| `prev_task` | map | 上一站：最近一条已办任务（assignee/outcome/finished_at 等） | 条件 / 取人 / 等待关联键 |
+| `prev_task` | map | 上一站：最近一条**真实表决**（agree/reject 的审批行；协办、咨询、传阅、转办人行、auto_pass 都不算一站） | 条件 / 取人 / 等待关联键 |
 | `task` | map | 同名两方言：改派位＝当前任务快照；会签出口位＝三计数（见第 6 章） | 改派 / 会签出口 |
 | `node("code")` | 函数 | 点名查任意节点事实：跑了几轮、最近谁办的、票数多少 | 条件 / 取人 / 等待关联键 |
 | `wait` | map | 等待节点的结果（`wait.result` ＝ matched / elapsed） | 等待节点出边条件 |
@@ -134,9 +136,10 @@ engine.task.complete(claimed.id, actor="u_fin1")
 
 ### 取人解析的兜底顺序
 
-取人表达式解析结果为空（查无此人、函数返回空）时：声明了候选槽就不兜底（池子空着
-等认领）；没声明就走节点的 `no_participant_policy`——`raise`（挂起+故障单，缺省）
-或 `to_admins`（交给目录的 admin 角色兜底）。
+取人表达式解析结果为空（查无此人、函数返回空）时：**声明了候选槽且求出人**
+就以池子等认领（不走兜底）；候选槽求值**也空**才回兜底——按节点的
+`no_participant_policy`：`raise`（挂起+故障单，缺省）或 `to_admins`
+（交给目录的 admin 角色兜底）。
 
 ## 组织目录与词汇插件
 
@@ -173,10 +176,13 @@ admins: [u_admin]
 - `delegations` 段是**委托**：窗口期内 `u_bob` 的待办解析给 `u_dave` 代办
   （单跳、不递归、撤销留痕）——上面例子中 `manager_of(u_zhang)` 落到 `u_dave`
   就是它的效果。
-- 生产环境一般不用 YAML 静态目录，而是实现 `OrgDirectoryLike` 协议（四个方法：
-  查快照 / 组→人 / 查委托 / 查管理员）对接自己的组织系统；或用 DB 版
-  `DirectoryStore`（第 10 章）。
-- 查无一律返回空值不抛异常（None/空传播），目录没配置就调组织词汇是技术故障。
+- 生产环境一般不用 YAML 静态目录，而是实现 `OrgDirectoryLike` 协议对接自己的
+  组织系统，或用 DB 版 `DirectoryStore`（第 10 章）。协议里**引擎内核消费四个
+  方法**：`is_member`（候选组归属判定）/ `snapshot`（办理人身份定格）/
+  `delegation_of`（取人期委托替换）/ `admins`（无人兜底的管理员名单）——
+  `subjects_in` / `manager_of` 由上面的词汇函数消费，宿主实现时这六个都要给。
+- 查无一律返回空值不抛异常（None/空传播）；组织词汇在挂载时就要传目录
+  （`cel_vocabulary(org)`），表达式求值期目录自身抛错＝技术故障。
 
 另一个官方插件 `contrib.numeric_vocabulary()` 补六个数值/字符串散件
 （`split` / `abs` / `max` / `min` / `sort` / `sum`），挂法相同。

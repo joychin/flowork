@@ -28,7 +28,8 @@
 - **FlowBuilder**：Python 链式构建器。适合在代码里组装（尤其要参数化生成时），
   `build()` 出来就是 `ProcessDefinition`。
 
-同一张图，两种写法对照（取自 `examples/01_simple_approval.json` 与等价的 Builder 代码）：
+同一张图，两种写法对照（Builder 代码与 `examples/01_simple_approval.json` 等价；
+JSON 块为该文件节选，略去 `version` / `status` 两字段）：
 
 ```json
 {
@@ -121,7 +122,7 @@ definition = load_definition(json_dict_or_text, create_registry())   # 内存态
 | `name` | str | **装载必填** | — | 变量名（不可与保留标识符重名） |
 | `type` | str | 可选 | `"string"` | string / number / boolean / list |
 | `label` | str | 可选 | `""` | 显示名 |
-| `sample` | 任意 | 可选 | 无 | 示例值（dry-run 取样默认值，类型须与 type 一致） |
+| `sample` | 任意 | 可选 | 无 | 示例值（设计器试算的取样默认值，由前端装配；引擎侧不消费，与 type 的一致性无校验） |
 | `searchable` | bool | 可选 | `false` | 值同步进检索索引（**仅 string/number/boolean 可标**）；集合变化＝破坏性变更（R2） |
 
 ## 所有节点共有的字段（FlowNode 基类）
@@ -133,7 +134,7 @@ definition = load_definition(json_dict_or_text, create_registry())   # 内存态
 | `code` | str | **装载必填** | — | 节点代码，图内唯一——事件、任务、路由审计都用它定位 |
 | `kind` | str | **装载必填** | — | 节点类型（八种内置或已注册的自定义类型），未知值装载即抛 `UnknownNodeKind` |
 | `name` | str | 可选 | `""` | 显示名 |
-| `advance_policy` | str | 可选 | `null`（行为等同 any） | 汇聚策略：`any`＝任一入边到达即激活（同批兄弟臂竞速取消）；`all`＝全部到齐才激活。只在多入边节点上有意义；`cc_task` 恒按 any |
+| `advance_policy` | str | 可选 | `null`（行为等同 any） | 汇聚策略：`any`＝任一入边到达即激活（同批兄弟臂竞速取消）；`all`＝全部到齐才激活。只在多入边节点上有意义；`cc_task` 缺省 any（显式配置同样生效） |
 | `hooks` | 对象 | 可选 | 空对象 | 声明式钩子 `{on_enter/on_exit/on_cancel/on_fail: {handler, params}}`（第 10 章）；`handler` 名必填 |
 | `properties` | 映射 | 可选 | `{}` | 扩展袋——放 UI / 外部系统的附加配置，引擎不解释 |
 
@@ -147,8 +148,8 @@ definition = load_definition(json_dict_or_text, create_registry())   # 内存态
 
 没有专有字段。结构规则（都是**校验必填**级）：恰好一个 start（`structure.start.count`）、
 start 不允许有入边、至少一个 end（`structure.end.missing`）、end 不允许有出边。
-实例在**所有**令牌到终点后完成；`end` 多条入边时，它自己的 `advance_policy`
-决定何时算「到了」。
+**到达 end 即完成实例**——end 缺省 `any`：首支到达即完成，同批竞速臂收尾取消；
+想让所有分支到齐再完成，给 end 配 `advance_policy: "all"`。
 
 ### user_task：人工审批（最常用）
 
@@ -156,7 +157,7 @@ start 不允许有入边、至少一个 end（`structure.end.missing`）、end �
 
 | 字段 | 类型 | 必填 | 默认 | 含义 |
 |---|---|---|---|---|
-| `assignee` | str | 四槽**至少配一个**（全空＝WARNING `user_task.no_participant`，运行期按 `no_participant_policy` 兜底） | 无 | 单人办理（一个表达式，解析出多人直接报错） |
+| `assignee` | str | 四槽**至少配一个**（全空＝WARNING `user_task.no_participant`，运行期按 `no_participant_policy` 兜底） | 无 | 单人办理（一个表达式；运行期解析出多人＝技术故障挂起，表达式在设计期数不出人头） |
 | `assignees` | 列表 | 同上 | `[]` | 多人列表（配合 `multi_instance` 做会签） |
 | `candidate_users` | 列表 | 同上 | `[]` | 候选人池——求值出的人可 `claim` 认领（第 6 章） |
 | `candidate_groups` | 列表 | 同上 | `[]` | 候选组池——组引用（如 `'role:finance'`）认领时按目录判归属 |
@@ -172,7 +173,7 @@ start 不允许有入边、至少一个 end（`structure.end.missing`）、end �
 | `auto_pass_participated` | bool | 可选 | `false` | 本节点已办过的人（重回合）自动通过 |
 | `no_participant_policy` | str | 可选 | `"raise"` | 取人解析为空：`raise`（挂起+故障单）/ `to_admins`（目录 admin 兜底） |
 | `deadlines` | 列表 | 可选 | `[]` | 超时动作（子字段见下表；上限 8 条，超出＝ERROR） |
-| `timeout` | 对象 | 可选 | 无 | **旧形态**单条超时（`{due_minutes, strategy}`）——新图请用 `deadlines`；两处都配时 deadlines 优先 |
+| `timeout` | 对象 | 可选 | 无 | **旧形态**单条超时（`{due_minutes, strategy}`）——新图请用 `deadlines`；两处都配时 deadlines 优先。旧形态仅 `notify` / `auto_approve` / `auto_reject` 三种策略生效，其余取值不报错但超时不动作（设计期 WARNING `user_task.timeout.strategy_ineffective` 提示） |
 
 **会签配置（`multi_instance`）**
 
@@ -216,7 +217,7 @@ start 不允许有入边、至少一个 end（`structure.end.missing`）、end �
 
 | 字段 | 类型 | 必填 | 默认 | 含义 |
 |---|---|---|---|---|
-| `action` | str | **事实必填** | `""` | 动作名——`engine.register_handler(action, fn)` 注册的键。空/未注册：部署期 WARNING（先部署后注册合法），运行期解析不到＝技术故障挂起 |
+| `action` | str | 可选 | `""` | 动作名——`engine.register_handler(action, fn)` 注册的键。未注册：部署期 WARNING（先部署后注册合法），运行期解析不到＝技术故障挂起；空 action＝节点静默直通（设计期与运行期都不报） |
 | `params` | 映射 | 可选 | `{}` | 静态参数，原样传给 handler 的 `params` 参数 |
 
 ```json
@@ -245,7 +246,7 @@ start 不允许有入边、至少一个 end（`structure.end.missing`）、end �
 | 字段 | 类型 | 必填 | 默认 | 含义 |
 |---|---|---|---|---|
 | `recipients` | 列表 | 可选（空列表＝没人收到，通常非本意） | `[]` | 收件人 CEL 表达式列表（`initiator` / `'u_archive'` / 取人函数） |
-| `advance_policy` | str | 固定 | `"any"` | 恒按 any 推进（多入边不等待），配置了也会被覆盖 |
+| `advance_policy` | str | 可选 | `"any"` | 缺省 any（CcTaskSpec 覆写基类默认，多入边不等待）；显式配 `all` 亦生效（等全部入边到齐） |
 
 ```json
 { "code": "notify", "name": "结果传阅", "kind": "cc_task",
@@ -258,9 +259,9 @@ start 不允许有入边、至少一个 end（`structure.end.missing`）、end �
 
 | 字段 | 类型 | 必填 | 默认 | 含义 |
 |---|---|---|---|---|
-| `process_code` | str | **事实必填** | `""` | 被调定义的 code。空/查无：部署期 L3 WARNING（binding=latest 时），运行期解析不到＝技术故障 |
-| `binding` | str | 可选 | `"latest"` | `latest`：运行期解析最新已发布版；`deployment`：部署父时子必须已发布（L3 ERROR 硬拦） |
-| `is_synchronous` | bool | 可选 | `true` | 同步等待子流程完成再推进 |
+| `process_code` | str | 可选 | `""` | 被调定义的 code。查无（binding=latest）：部署期 L3 WARNING，运行期启动子流程时报未发布错（命令回滚，**无故障单**）；空：设计期不报，运行期同样报未发布错 |
+| `binding` | str | 可选 | `"latest"` | `latest`：运行期解析最新已发布版；`deployment`：部署父时子必须已发布（L3 ERROR 硬拦）。注意 binding **不锁运行期版本**——deployment 也只是部署期校验加严，进节点时仍解析最新 published |
+| `is_synchronous` | bool | 可选 | `true` | 调用恒为同步（父节点等子流程结算才推进）；字段保留，当前无异步形态 |
 | `input_mappings` | 映射 | 可选 | `{}` | 进入子流程时求值（**父上下文**），结果注入子实例变量 |
 | `output_mappings` | 映射 | 可选 | `{}` | 子流程完成时求值（**子上下文**），结果回写父实例变量 |
 | `multi_instance` | 对象 | 可选 | 无（＝单次调用） | 多实例配置（子字段见下表） |
@@ -269,7 +270,7 @@ start 不允许有入边、至少一个 end（`structure.end.missing`）、end �
 
 | 字段 | 类型 | 必填 | 默认 | 含义 |
 |---|---|---|---|---|
-| `subjects` | 列表 | **事实必填**（空＝节点立即完成，等价跳过） | `[]` | 取人表达式（CEL）——每人解析出一个子实例；输入映射按子求值时注入 `subject` |
+| `subjects` | 列表 | **校验必填**（静态空列表＝ERROR `call_mi.subjects_empty`） | `[]` | 取人表达式（CEL）——每人解析出一个子实例；输入映射按子求值时注入 `subject`。表达式**求值结果为空**＝节点立即完成（等价跳过） |
 | `completion` | str | 可选 | `"all"` | 完成公式：`"all"`＝全员结算；CEL 布尔公式＝提前收工（注入 `child_total` / `child_completed` / `child_failed` 三计数） |
 | `output_mode` | str | 可选 | `"collect"` | `collect`：输出按迭代序对齐聚合为列表（失败位补 null）；`merge`：逐子覆写——**仅限单子**，配了多实例 validator 直接拦 |
 
@@ -307,7 +308,7 @@ start 不允许有入边、至少一个 end（`structure.end.missing`）、end �
 | `target` | str | **装载必填** | — | 止点节点 code（同上） |
 | `name` | str | 可选 | `""` | 显示名（如「大额」） |
 | `condition` | str | 可选 | 无（＝恒真） | CEL 布尔公式，≤2048 字符。**没有条件的边恒为真** |
-| `is_default` | bool | 可选 | `false` | 默认边——其他条件边全不中时走它（一个节点的默认边至多一条） |
+| `is_default` | bool | 可选 | `false` | 默认边——其他条件边全不中时走它（branch 节点的默认边至多一条＝ERROR；其他节点多条默认边不拦，命中时**全部激活**） |
 | `on_take` | 对象 | 可选 | 无 | 连线被走过时触发的声明式钩子 `{handler, params}`（第 10 章） |
 
 结构规则：同源同目标两条连线＝ERROR（`structure.flow.duplicate`，平行重边禁止）。
@@ -331,8 +332,9 @@ start 不允许有入边、至少一个 end（`structure.end.missing`）、end �
 三个容易想偏的点：
 
 - **并行不需要网关**：多条无条件出边就是并行；想「二选一」必须用条件边；
-- **默认边建议配**：branch 全不中且没有默认边时流程挂起等条件——除非你确实
-  想「等到某条件成立」；
+- **默认边建议配**：branch 全不中且没有默认边＝**技术故障**（命令回滚、实例
+  挂起、出故障单），不是安静等待——除非你确实想「算不出就走人」，否则配上
+  兜底边；真要「等某个条件成立再走」，用 wait 节点（第 8 章）。
 - **改图注意拓扑**：任何节点**入边集合**的变化都算破坏性变更（第 4 章 R4），
   往中间插一个节点会把前后两个节点的入边都改掉。
 
@@ -342,7 +344,8 @@ start 不允许有入边、至少一个 end（`structure.end.missing`）、end �
 
 1. **发起边界**（start）：`start_process` 传的变量不合 schema，拒绝发起；
 2. **提交边界**（complete）：`complete(..., variables=...)` 带的变量不合 schema，拒绝办结；
-3. **输出边界**（output_mappings）：节点输出映射的结果不合 schema，按技术故障处理。
+3. **输出边界**（output_mappings）：节点输出映射的结果不合 schema，拒绝并回滚——
+   与前两处一致，属**业务失败、不产生故障单**。
 
 schema 本身的字段就是标准 JSON Schema：`type: "object"`、`properties`
 （各字段 `type` / `enum` 等）、`required`（必填键列表）、`additionalProperties`
@@ -362,8 +365,9 @@ schema 本身的字段就是标准 JSON Schema：`type: "object"`、`properties`
 }
 ```
 
-收紧契约（required 扩大、类型变严、enum 收窄、关闭多余字段容忍、契约从无到有）
-都是**破坏性变更**（第 4 章 R1）——老调用方会突然被拒，所以强制升 major。
+收紧契约（required 扩大、类型变化——无论收紧或放宽、enum 收窄、关闭多余字段
+容忍、契约从无到有）都是**破坏性变更**（第 4 章 R1）——老调用方会突然被拒，
+所以强制升 major。
 
 ## 设计期校验规则总表
 
@@ -374,16 +378,18 @@ schema 本身的字段就是标准 JSON Schema：`type: "object"`、`properties`
 | `structure.start.count` / `structure.end.missing` | ERROR | start 不是恰好一个 / 一个 end 都没有 |
 | `structure.start.incoming` / `structure.end.outgoing` | ERROR | start 有入边 / end 有出边 |
 | `structure.flow.duplicate` | ERROR | 同源同目标平行重边 |
-| `structure.node.deadend` | ERROR | 死端节点（有入边但没有出路的非 end 节点） |
+| `structure.node.deadend` | ERROR | 非 end 节点没有出边（含既无入边也无出边的孤立节点） |
 | `structure.node.unreachable` | WARNING | 不可达节点（从 start 走不到——常是删线漏了半截） |
 | `flow.endpoint.missing` | ERROR | 连线端点节点不存在 |
 | `condition.variable.unknown` | ERROR | 条件引用未声明变量 |
+| `variables.reserved_name` / `input.reserved_name` | ERROR | 变量声明或 input 契约字段用了保留标识符（同名会遮蔽引擎注入） |
 | `participant.group_in_subjects` | ERROR | 人员位写了组引用 `role:` / `org:`——组只属于候选槽 |
 | `user_task.exit.misplaced` | ERROR | 会签出口公式写在节点顶层（应写在 `multi_instance` 里） |
 | `user_task.deadlines.too_many` | ERROR | 超时动作超过 8 条 |
 | `user_task.deadline.reassign_to_missing` / `escalate_to_missing` | ERROR | reassign/escalate 动作没带目标 |
 | `wait.mode.required` | ERROR | 等待节点既没 message 也没 timeout |
 | `user_task.no_participant` | WARNING | 审批节点一个取人槽都没配 |
+| `user_task.timeout.strategy_ineffective` | WARNING | 旧形态 timeout 的 strategy 不在 notify/auto_approve/auto_reject 内（超时静默失效） |
 | `branch.single_outgoing` | WARNING | 分支节点出边少于 2 条（仅作透传） |
 | `exit.bare_threshold` | WARNING | 会签出口写裸数字门槛（建议乘法形式） |
 | `graph.subgraph.no_exit` / `join.arm.unreachable` | WARNING | 封闭子图 / all 汇聚死臂（图级 lint） |

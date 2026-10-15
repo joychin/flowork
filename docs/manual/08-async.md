@@ -71,8 +71,9 @@ publish_message("contract_signed", payload={"signed_at": "..."})
 
 2. **载荷进变量**：`output_mappings`（与人工任务完成同一条写入路径）声明
    「变量名 = 消息上下文表达式」；不声明就**全量合并**（payload 顶层键直接进变量，
-   实测 `signed_at` 直接可用）。表达式在**消息上下文**求值（`payload.*` + `now`），
-   缺键得 None。
+   实测 `signed_at` 直接可用）。表达式在**消息上下文**求值（`payload.*` + `now`）；
+   裸 `payload.键` 投影缺键得 None，复合表达式（如 `payload.a.b`、函数包裹）
+   缺键＝求值错＝技术故障。
 
 3. **暂停冻结**：实例暂停期间等待的定时器冻结、命中的消息落缓冲，恢复后补消费。
 
@@ -119,20 +120,21 @@ engine.messages.publish_message("order_created",
 ```json
 { "code": "sub_check", "name": "合规子流程", "kind": "call_activity",
   "process_code": "compliance_check",
-  "is_synchronous": true,
   "input_mappings": {"amount": "amount"},
   "output_mappings": {"compliance_result": "compliance_result"} }
 ```
 
-- `process_code` 指向被调定义；`binding` 缺省 `latest`（每次解析最新已发布版本），
-  要钉死版本用 `deployment`（部署父时子必须已发布）；
+- `process_code` 指向被调定义；`binding` 缺省 `latest`（每次解析最新已发布版本）；
+  `deployment` 只是部署期校验加严（部署父时子必须已发布，L3 ERROR）——
+  **binding 不锁运行期版本**，进入节点时仍解析最新 published；
 - `input_mappings`：进入子流程时求值（**父上下文**），结果注入子实例变量；
 - `output_mappings`：子流程完成时回传（**子上下文**），结果写回父实例变量；
-- 同步调用（缺省）：父节点等子流程跑完才推进；子流程驳回 / 终止会按错误二分
-  影响父流程。
+- 调用恒为同步：父节点等子流程**结算**才推进。子实例挂起（suspended）会阻塞
+  父侧等待；子被取消 / 终止算已结算，父节点照常完成（输出映射缺键得 None）——
+  「驳回」是子流程内部语义，与父无涉。
 
-父子实例有完整链路：父实例可查到子实例（级联终止时子先父后落终态，
-见第 7 章 terminate）。
+子实例带 `parent_id` 可回溯父实例；父侧要知道子实例 id，看 `sub_process_started`
+事件载荷（级联终止时子先父后落终态，见第 7 章 terminate）。
 
 ### 多实例子流程：每人一个子实例
 
@@ -160,8 +162,8 @@ engine.messages.publish_message("order_created",
 
 实测：三个 subject 展开**三个子实例**，各自的待办办完，父实例自动 completed。
 
-聚合回传用 `collect="index"`：输出映射的值收集成**按迭代序对齐**的列表
-（第 1 个子实例的值落列表第 0 位，失败位补 null）——多实例下 `merge`
+聚合回传是 `output_mode="collect"`（缺省）：输出映射的值收集成**按迭代序对齐**
+的列表（第 1 个子实例的值落列表第 0 位，失败位补 null）——多实例下 `merge`
 式回传会互相覆盖，validator 直接拦（配了 merge + 多实例是设计错误）。
 
 ## 本章小结

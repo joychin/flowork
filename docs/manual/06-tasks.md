@@ -45,8 +45,8 @@ result = engine.task.complete(task_id, actor="u_manager",
 
 `comment` 是办理意见（进事件与已办）；`variables` 顺带写流程变量（经过 input 契约
 校验）。返回 `TaskCompleteResult`：`instance_state`（推进后的实例状态）和
-`next_tasks`（推进产生的新待办）——「办完这一步之后谁要办什么」一步拿到，
-不必再查一次。
+`next_tasks`（实例**当前的全部**待办——并行分支场景会包含其他分支的既有待办，
+不只是本次推进新建的）。
 
 ### reject：否决并回退
 
@@ -93,8 +93,10 @@ engine.task.withdraw(task_id, actor="u_a", comment="填错了")
 办结之后反悔，把自己那一票**撤回来**：任务回到待办状态重新办。两个守卫：
 
 - **一票一撤**：同一票不能撤两次；
-- **下游进展闸门**：撤回会取消下游还没办的东西，所以只要下游**已有非取消的已办**
-  （有人真的办了事），撤回被拒绝并提示改用驳回——能撤的只有「下游还没人动」的窗口。
+- **下游进展闸门**：撤回会取消下游还没办的东西，所以下游已有**真实表决**
+  （agree / reject 的已办）或工作节点（审批 / 子流程）已完结的令牌时，撤回被拒绝
+  并提示改用驳回——协办、咨询、自动通过这些行**不算进展**；能撤的只有
+  「下游还没人真办过」的窗口。
 
 实测两种形态：`u_a` 办结后下游 `u_b` 还没办，撤回成功、A 节点重新出现待办
 （B 的待办被取消）；实例已到终态再撤，直接被拒。
@@ -129,13 +131,16 @@ engine.task.withdraw(task_id, actor="u_a", comment="填错了")
 常用口径速查：
 
 ```text
-全票通过        task.approve_count >= task.item_count
-一票否决        task.disapprove_count >= 1
-过半数（严格）   task.approve_count * 100 >= task.item_count * 51
-三分之二以上     task.approve_count * 100 >= task.item_count * 67
+全票通过          task.approve_count >= task.item_count
+一票否决          task.disapprove_count >= 1
+过半数（严格）     task.approve_count * 2 > task.item_count
+三分之二及以上     task.approve_count * 3 >= task.item_count * 2
+至少 51%          task.approve_count * 100 >= task.item_count * 51
 ```
 
 整数乘法写法是刻意的：百分比语义用乘法精确等价（ceil），不引入浮点误差。
+「过半」用 `* 2 >` 的精确式——`* 100 >= * 51` 在分母超过 100 时会与严格过半
+出现一票之差（200 人 101 票严格过半成立、51% 式不成立）。
 全员的票办完而两侧出口都没达成时（比如绝对门槛没够但没人否决），节点**挂起 +
 故障单**兜底（第 7 章），不会静默卡死。
 
@@ -195,7 +200,7 @@ from flowork.definitions.node import TaskDeadline
 | action | 到点做什么 | 附带字段 |
 |---|---|---|
 | `notify` | 发 `timeout_warned` 事件（提醒谁的活到期了） | — |
-| `reassign` | 改派给目标人 | `reassign_to`（CEL，`task.*` 可用） |
+| `reassign` | 改派给目标人 | `reassign_to`（CEL，`task.*` 可用，**必填**——缺失设计期 ERROR） |
 | `escalate` | 升级给上级处理 | `escalate_to`（CEL，**必填**——引擎不内置「上级」概念，科层组织写 `manager_of(task.assignee)`） |
 | `auto_approve` | 自动替他同意 | — |
 | `auto_reject` | 自动替他否决（走驳回回退） | — |

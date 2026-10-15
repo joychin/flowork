@@ -59,20 +59,22 @@ verdict = engine.repository.deploy(
 | `identical_to` | 非 None ＝ 幂等去重命中：内容与该 `(major, revision)` 完全相同，本次没落库 |
 | `override` | 非 None ＝ 你用 force_major / allow_minor 覆盖过判定，记录了 kind 与 reason |
 
-一个完整的版本演进实测（同一张报销图的连续六次 deploy）：
+一个完整的版本演进实测（同一张报销图的连续六次 deploy；「撤掉核验」的
+两次分别演示精确回退与改名回退的差别）：
 
 ```text
-首发           -> (1, 1) breaking=False                # 新 code 从 1.1 起
-改名           -> (1, 2) breaking=False                # 兼容改动，revision 加一
-插入前置核验节点 -> (2, 1) breaking=True                 # R4 拓扑破坏，major 加一
-                 触发: R4_topology - 节点 audit 入边变化：[] -> ['manager']
-                 触发: R4_topology - 节点 route 入边变化：['manager'] -> ['audit']
-撤掉核验节点    -> (3, 1) breaking=True                 # 回退拓扑也是拓扑变更！
-同内容再发      -> identical_to=(3, 1)                  # 幂等去重，不产生新版本
+首发              -> (1, 1) breaking=False                # 新 code 从 1.1 起
+改名              -> (1, 2) breaking=False                # 兼容改动，revision 加一
+插入前置核验节点    -> (2, 1) breaking=True                 # R4 拓扑破坏，major 加一
+                    触发: R4_topology - 节点 audit 入边变化：[] -> ['manager']
+                    触发: R4_topology - 节点 route 入边变化：['manager'] -> ['audit']
+原样撤掉核验节点    -> identical_to=(1, 2)                  # 内容与 1.2 全同＝幂等去重
+撤掉核验+改名再发   -> (3, 1) breaking=True                 # 回退拓扑也是拓扑变更！
 ```
 
-注意第 5 行：**把改动改回去也是破坏性变更**——R4 比较的是新旧拓扑的差异，
-不关心「变回从前」。版本号是单调递增的账本，不是可以回退的指针。
+注意倒数第二行：**回退后的内容若与某个已发布版本完全一致，会先命中幂等去重**
+（返回 `identical_to`，不落新版本）——「回退也是破坏性变更」说的是回退结果
+≠ 任何已发布内容的情形。版本号是单调递增的账本，不是可以回退的指针。
 
 ## 幂等去重：重复部署是安全的
 
@@ -129,8 +131,10 @@ required 扩大、既有字段类型变化、enum 收窄、关闭多余字段容
   （revision +1）。它们改变行为但不破坏既有调用方与下游契约；
 - **删变量声明**：不触发四条规则（但 `searchable` 变量的增删触发 R2）。
   删了声明，引用它的条件会在**设计期校验**被拦——图改完自证，不靠版本判定；
-- **加节点 / 删节点**：删节点命中 R3；纯新增一个挂在末尾的节点（不改任何
-  既有节点入边）四条都不命中——算兼容性扩展。
+- **加节点 / 删节点**：删节点命中 R3；**加节点只要连了线就命中 R4**——新节点
+  自身的入边从无到有（手册初版的实测输出里「节点 audit 入边变化：[] -> ['manager']」
+  正是新节点自己的入边被报告）。想表达兼容性扩展，举不动任何连线的改动
+  （改超时配置、改取人表达式等）。
 
 ## 覆盖判定：force_major 与 allow_minor
 
@@ -177,7 +181,8 @@ changes = semantic_diff(base_definition, target_definition)
 
 设计期校验只看图纸自身；deploy 事务内还有第二层——**引用完整性**，要查库、
 查注册表、查目录（默认 WARNING 留痕不拦发布，`EngineConfig.\
-strict_deploy_validation=True` 全部升 ERROR 拦发布）：
+strict_deploy_validation=True` 全部升 ERROR 拦发布；**例外：L3a 无条件 ERROR
+必拦，与 strict 无关**）：
 
 | 层 | 查什么 | 默认级别 | 为什么不拦 |
 |---|---|---|---|
@@ -216,8 +221,8 @@ engine.runtime.start_process("expense", start_user="u_z",
 - 都不传：最高 published（major 优先、revision 次之）；
 - 只传 `major`：该 major 下的已发布版本（**没有「取该 major 最新 revision」
   的排序保证**）——要钉死请 `major + revision` 成对传；
-- 查不到 published：报 `DefinitionNotPublishedError`；全 retired 报
-  `DefinitionRetiredError`。
+- 查不到 published：报 `DefinitionNotPublishedError`；该 code 只要存在
+  retired 行就优先报 `DefinitionRetiredError`（提示重新 deploy 可恢复）。
 
 ## 维护分支：给老 major 续发补丁
 
@@ -230,6 +235,8 @@ v = engine.repository.deploy(patch_definition, target_major=1)
 ```
 
 判定基线也换成该 major 的最新 revision（比较对象对了，判定才准）。
+`target_major` 必须指向**已发布过的 major**——指向从未发布过的 major（比如
+新 code 或只有 2.x 时传 3）会直接报错，不会静默落到全局最高版本上。
 配合 `start_process(major=1, revision=3)` 就能「老版本吃老补丁」。
 
 ## 退役与对账
@@ -249,7 +256,7 @@ engine.repository.retire("expense", actor="admin", reason="业务下线")
 ### purge：物理删除
 
 ```python
-engine.repository.purge("expense", actor="admin", force=True)   # 仅 CLI 暴露 --force
+engine.repository.purge("expense", actor="admin", force=True)   # API 需显式 force；运维入口在 CLI（--force）
 ```
 
 物理删除全部版本行，**有实例引用（在途或历史）则拒绝**——先核对实例清单。
@@ -290,7 +297,7 @@ engine.repository.get_definition_json(code, major, revision)           # 原始 
 | 给老 major 发补丁 | `deploy(..., target_major=N)` |
 | 用指定版本发起 | `start_process(..., major=N, revision=M)` |
 | 下线（可恢复） | `retire(code)`；恢复＝重新 deploy |
-| 彻底删除 | `purge(code, force=True)`（仅 CLI） |
+| 彻底删除 | `purge(code, force=True)`（API 与 CLI 都要显式 force） |
 | git / 库对账 | `definition_drift(dir)` / CLI `flowork drift` |
 
 ## 本章小结
@@ -299,5 +306,6 @@ engine.repository.get_definition_json(code, major, revision)           # 原始 
   内容哈希幂等去重——重复部署与并发部署都安全。
 - 破坏性四规则 R1（输入契约）/ R2（检索索引）/ R3（节点身份）/ R4（拓扑），
   判定报告逐条可解释；业务可以带理由覆盖（force_major / allow_minor）。
-- 在跑实例钉快照，没有实例迁移这回事；老 major 可用 target_major 续发补丁；
-  retire 可恢复（版本继续走），purge 不可逆（仅 CLI）；drift 对账防漂移。
+- 在跑实例钉快照，没有实例迁移这回事；老 major 可用 target_major 续发补丁
+  （须指向已发布过的 major）；retire 可恢复（版本继续走），purge 不可逆；
+  drift 对账防漂移。
