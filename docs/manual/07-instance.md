@@ -1,4 +1,4 @@
-# 06 管理实例
+# 07 管理实例
 
 本章讲实例层面的管理面：生命周期动作（暂停 / 恢复 / 终止 / 取消）、变量读写、
 故障处理（错误二分与故障单五动作）、管理员手术，以及发布前的模拟试跑。
@@ -145,7 +145,7 @@ service 节点**恒为桩**（绝不执行 handler——试跑不能真打外部
 engine.runtime.list_instances(definition_code="expense", state="running")
 engine.runtime.get_instance(iid)                       # InstanceInfo
 engine.history.instances(state="completed")            # 历史侧（只读）
-engine.history.trace_instance(iid)                     # 轨迹页（见第 8 章）
+engine.history.trace_instance(iid)                     # 轨迹页（见第 9 章）
 ```
 
 `list_instances` 可按定义版本过滤（「多少实例还钉在旧版本上」），

@@ -21,8 +21,8 @@ engine = ProcessEngine()   # 零配置，默认内存数据库，构造即建表
 同一份内核有三种用法形态，本手册以第一种为主线：
 
 1. **嵌入式 Python**（本手册主线）：宿主应用直接持有 `ProcessEngine`，走 Python API。
-2. **命令行**：`flowork demo` 等命令，无代码体验与运维操作（见第 10 章速查表）。
-3. **独立服务**：REST `/v2` 与 MCP 两层插件把内核包成 HTTP / AI 工具面（第 10 章概览）。
+2. **命令行**：`flowork demo` 等命令，无代码体验与运维操作（见第 11 章速查表）。
+3. **独立服务**：REST `/v2` 与 MCP 两层插件把内核包成 HTTP / AI 工具面（第 11 章概览）。
 
 ## 跑通第一个流程
 
@@ -39,7 +39,7 @@ engine = ProcessEngine()
 ```
 
 `ProcessEngine` 不带参数时用内存 SQLite 数据库，构造时自动建表，进程结束数据即消失——
-适合试验和测试。要用文件库或 PostgreSQL，改 `EngineConfig` 即可（第 10 章细讲）。
+适合试验和测试。要用文件库或 PostgreSQL，改 `EngineConfig` 即可（第 11 章细讲）。
 
 ### 第 2 步：部署流程定义
 
@@ -110,7 +110,7 @@ node_entered     {'activity_code': 'finance', ...}
 process_completed {'end_status': 'completed'}
 ```
 
-事件是引擎对外通知的唯一通道（内核不做推送，消费方式见第 8 章）。
+事件是引擎对外通知的唯一通道（内核不做推送，消费方式见第 9 章）。
 
 ## 不写代码先看看
 

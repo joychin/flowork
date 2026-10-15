@@ -1,4 +1,4 @@
-# 05 办理任务
+# 06 办理任务
 
 本章讲任务（待办）的完整动作面：查询与认领、办结与驳回、会签与加签、三种不占票的
 协作（协办 / 咨询 / 传阅）、超时动作。审批业务的日常几乎都在这一章里。
@@ -20,11 +20,11 @@
 engine.task.get_task(task_id)                            # 单条
 engine.task.list_tasks(instance_id=iid)                  # 实例的全部待办
 engine.task.list_tasks(assignee="u_manager")             # 某人的待办
-engine.task.list_tasks(candidate="u_fin1")               # 我可认领的候选（见第 4 章）
+engine.task.list_tasks(candidate="u_fin1")               # 我可认领的候选（见第 5 章）
 engine.task.list_tasks(assignee="")                      # 还没被认领的池内任务
 ```
 
-候选池任务的认领与退回（第 4 章演示过，这里补齐）：
+候选池任务的认领与退回（第 5 章演示过，这里补齐）：
 
 ```python
 engine.task.claim(task_id, "u_fin1")     # 认领：assignee 变为认领人
@@ -137,7 +137,7 @@ engine.task.withdraw(task_id, actor="u_a", comment="填错了")
 
 整数乘法写法是刻意的：百分比语义用乘法精确等价（ceil），不引入浮点误差。
 全员的票办完而两侧出口都没达成时（比如绝对门槛没够但没人否决），节点**挂起 +
-故障单**兜底（第 6 章），不会静默卡死。
+故障单**兜底（第 7 章），不会静默卡死。
 
 ### add_countersigner：加签
 

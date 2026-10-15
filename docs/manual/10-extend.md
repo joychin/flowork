@@ -1,4 +1,4 @@
-# 09 扩展内核
+# 10 扩展内核
 
 内置的八种节点覆盖不了所有需求时，有三层扩展，由轻到重：
 
@@ -27,7 +27,7 @@ engine.register_handler("make_payment", make_payment)
 
 注册与部署的先后随意：先部署后注册是合法顺序（部署期给 WARNING 提示没注册，
 运行期还解析不到才出故障单）；handler 挂了换新的用
-`register_handler(..., replace=True)`（第 6 章故障修复用过）。
+`register_handler(..., replace=True)`（第 7 章故障修复用过）。
 
 ## 声明式钩子
 
@@ -117,7 +117,7 @@ engine.config.node_registry.register("risk_probe", RiskProbeSpec, RiskProbeBehav
 
 ## 组织目录的两种形态
 
-第 4 章用了 YAML 静态目录（`StaticOrgDirectory`），适合演示与固定组织。
+第 5 章用了 YAML 静态目录（`StaticOrgDirectory`），适合演示与固定组织。
 两种替代：
 
 **DB 版目录**（`DirectoryStore`）——目录数据落在引擎同一个库里，可编程增改：

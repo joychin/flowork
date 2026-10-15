@@ -1,4 +1,4 @@
-# 08 观察与集成
+# 09 观察与集成
 
 本章讲怎么「看」流程、怎么把引擎接进外部系统：事件消费、路由审计、轨迹查询、
 给外部 worker 派活。
@@ -97,7 +97,7 @@ engine.history.archive_instance(iid)   # 整实例归档导出（dict）
 引擎里有两类 Job，别混淆：
 
 1. **定时 Job**（超时 / 时限 / 等待到时）：引擎内部排程，`engine.jobs.tick()` 驱动
-   （第 5 章超时已讲）；
+   （第 6 章超时已讲）；
 2. **worker Job**：给**你自己的外部 worker** 派的活——「发邮件、调外部接口」这类
    不想阻塞流程、又想有重试与留痕的旁路任务。
 
@@ -129,7 +129,7 @@ engine.worker_jobs.fail_job(job_id, worker_id="worker-1", error="SMTP 超时")
 - 退避窗口内别的 worker 领不到（实测领 0 条）。
 
 典型接线：service_task 的 handler 里 `create_worker_job` 派活即返回，流程用
-wait 节点等外部回执（第 7 章）——「派活出去、等消息回来」的完整异步闭环。
+wait 节点等外部回执（第 8 章）——「派活出去、等消息回来」的完整异步闭环。
 
 ## 本章小结
 

@@ -1,4 +1,4 @@
-# 07 消息、等待与子流程
+# 08 消息、等待与子流程
 
 本章讲流程与外部世界的异步协作：消息怎么发、等待节点怎么等、消息怎么反过来发起
 流程，以及把一段流程封装成子流程复用（含每人一个子实例的多实例形态）。
@@ -132,7 +132,7 @@ engine.messages.publish_message("order_created",
   影响父流程。
 
 父子实例有完整链路：父实例可查到子实例（级联终止时子先父后落终态，
-见第 6 章 terminate）。
+见第 7 章 terminate）。
 
 ### 多实例子流程：每人一个子实例
 
@@ -150,7 +150,7 @@ engine.messages.publish_message("order_created",
 )
 ```
 
-- `subjects`：取人表达式列表（第 4 章词汇全可用）；输入映射按子求值时注入
+- `subjects`：取人表达式列表（第 5 章词汇全可用）；输入映射按子求值时注入
   `subject`（第 k 个主体），比如 `input_mappings={"dept": "subject"}` 就是
   每个子实例拿自己的切片；
 - `completion`：完成公式，上下文是三计数——`child_total`（计划数）、

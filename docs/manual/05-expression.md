@@ -1,4 +1,4 @@
-# 04 表达式与取人
+# 05 表达式与取人
 
 本章讲引擎里所有「公式」怎么写：一门语言（CEL）、一份内置词汇目录、
 找人的四种写法（含候选认领制）、以及宿主怎么注册自己的函数。
@@ -19,7 +19,7 @@ null                                 空值，判空用 x != null
 
 三条护栏：公式最长 2048 字符；求值异常统一归一为 `FormulaError`（消息截断防泄漏）；
 **求值出错＝技术故障**——实例挂起 + 故障单等人处理，绝不静默走默认边
-（语义细节见第 6 章故障处理）。
+（语义细节见第 7 章故障处理）。
 
 想独立试一条公式的值（比如做表单试算），宿主可以直接调：
 
@@ -53,7 +53,7 @@ list(engine_functions())             # 引擎注入函数：node
 | `instance` | map | `instance.id` / `instance.started_at` / `instance.business_key` | 全部 |
 | `now` | 时间 | 求值时刻（统一时钟）；一次求值钉一个时刻 | 全部 |
 | `prev_task` | map | 上一站：最近一条已办任务（assignee/outcome/finished_at 等） | 条件 / 取人 / 等待关联键 |
-| `task` | map | 同名两方言：改派位＝当前任务快照；会签出口位＝三计数（见第 5 章） | 改派 / 会签出口 |
+| `task` | map | 同名两方言：改派位＝当前任务快照；会签出口位＝三计数（见第 6 章） | 改派 / 会签出口 |
 | `node("code")` | 函数 | 点名查任意节点事实：跑了几轮、最近谁办的、票数多少 | 条件 / 取人 / 等待关联键 |
 | `wait` | map | 等待节点的结果（`wait.result` ＝ matched / elapsed） | 等待节点出边条件 |
 | `subject` | 人 | 多实例子流程的第 k 个主体 | 子流程输入映射 |
@@ -80,7 +80,7 @@ list(engine_functions())             # 引擎注入函数：node
 
 ### 2. 会签名单：`assignees`
 
-表达式列表，每项解析出的人进会签池，配合 `multi_instance`（第 5 章细讲）。
+表达式列表，每项解析出的人进会签池，配合 `multi_instance`（第 6 章细讲）。
 
 ### 3/4. 候选池：`candidate_users` 与 `candidate_groups`
 
@@ -126,7 +126,7 @@ claimed = engine.task.claim(mine[0].id, "u_fin1")   # 从池里认领
 engine.task.complete(claimed.id, actor="u_fin1")
 ```
 
-查询口径（容易踩坑，第 11 章 FAQ 有展开）：
+查询口径（容易踩坑，第 12 章 FAQ 有展开）：
 
 - `list_tasks(candidate="u_fin1")`＝「与我相关的候选」，**默认含已被他人认领的任务**
   （「还在池里没被抢走的」要组合 `assignee=""` 查）；
@@ -175,7 +175,7 @@ admins: [u_admin]
   就是它的效果。
 - 生产环境一般不用 YAML 静态目录，而是实现 `OrgDirectoryLike` 协议（四个方法：
   查快照 / 组→人 / 查委托 / 查管理员）对接自己的组织系统；或用 DB 版
-  `DirectoryStore`（第 9 章）。
+  `DirectoryStore`（第 10 章）。
 - 查无一律返回空值不抛异常（None/空传播），目录没配置就调组织词汇是技术故障。
 
 另一个官方插件 `contrib.numeric_vocabulary()` 补六个数值/字符串散件
