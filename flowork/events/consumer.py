@@ -108,8 +108,8 @@ class OutboxConsumer:
         保留口径（默认永久保留）：事件表
         兼任审计历史（events/trace/REST 搜索面的数据源），默认清理会静默删
         审计；宿主确要清理须显式传 ``retention_days``（参考值
-        DEFAULT_RETENTION_DAYS=90）。注意 remove_instance 连实例事件（含未
-        投递）一并删除——管理面「不可恢复」语义的明示例外。
+        DEFAULT_RETENTION_DAYS=90）。注意 remove_instance 只删已送达的
+        事件行（未投递行保留待消费，不破坏「至少一次」）。
         """
         if retention_days is None:
             return 0

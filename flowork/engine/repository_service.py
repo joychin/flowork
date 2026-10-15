@@ -23,7 +23,7 @@ from flowork.engine.definition_lifecycle import DefinitionLifecycleMixin
 from flowork.engine.designer_drafts import DesignerDraftSupportMixin
 from flowork.engine.ops import CommandContext
 from flowork.engine.repository_validation import RepositoryValidationMixin
-from flowork.errors import DefinitionNotPublishedError
+from flowork.errors import DefinitionNotPublishedError, FloworkError
 from flowork.events.domain import DomainEvent
 
 if TYPE_CHECKING:
@@ -214,7 +214,10 @@ class RepositoryService(
     def _baseline(
         self, session: Session, code: str, target_major: int | None
     ) -> ProcessDefinition | None:
-        """比较基线：默认最高 published；维护分支＝该 major 的最新 revision。"""
+        """比较基线：默认最高 published；维护分支＝该 major 的最新 revision。
+
+        显式 target_major 但该 major 从未发布 → 报错（不静默退到全局最高版本）。
+        """
         from sqlalchemy import select
 
         from flowork.persistence.orm import ProcessDefinitionRow as _Row
@@ -226,6 +229,11 @@ class RepositoryService(
             stmt = stmt.where(_Row.major == target_major).order_by(_Row.revision.desc()).limit(1)
         row = session.scalars(stmt).first()
         if row is None:
+            if target_major is not None:
+                raise FloworkError(
+                    f"target_major={target_major} 下没有已发布版本："
+                    f"维护分支须指向定义 {code} 已发布过的 major"
+                )
             return None
         return load_definition(json.loads(row.content), self._engine.config.node_registry)
 

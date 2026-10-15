@@ -28,9 +28,11 @@ __all__ = ["OrgConfigError", "OrgDirectory", "OrgDirectoryLike", "split_group"]
 class OrgDirectoryLike(Protocol):
     """引擎消费的目录查询面：静态 OrgDirectory 与持久化 DirectoryStore 均满足。
 
-    前四个方法（is_member/subjects_in/manager_of/snapshot）为引擎
-    必需的最小面——关系判断（人→组）与身份定格是引擎自己的行为；其余为宿主函数
-    （flowork.contrib）与既有解析管线使用的丰富面，实现方可按需退化。
+    引擎内核直接消费四个方法：is_member（候选组归属判定）/ snapshot（办理人
+    身份定格）/ delegation_of（取人期委托替换）/ admins（无人兜底的管理员名单）。
+    subjects_in 与 manager_of 由宿主词汇函数（flowork.contrib）消费；其余丰富面
+    （部门族/user_exists/users_with_role）实现方可按需退化，内核四方法缺一会在
+    对应路径直接失败。
     """
 
     def is_member(self, user: str, group: str) -> bool: ...

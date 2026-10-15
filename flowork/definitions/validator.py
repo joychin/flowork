@@ -104,7 +104,7 @@ def validate_definition(
     check_graph_lints(definition, warning)
     check_branch_rules(definition, error, warning)
     check_advance_policy(definition, warning)
-    check_deadlines(definition, error)
+    check_deadlines(definition, error, warning)
     check_node_semantics(definition, error, warning)
     check_wait_nodes(definition, error)
     check_condition_legality(definition, error, warning)

@@ -1,7 +1,9 @@
 """超时动作校验（validator 编排件的规则组五）：结构规则 + CEL 目标位遍历。
 
 超时动作的全部校验知识住一处：动作列表上限、目标必填（reassign_to 与
-escalate_to 均必填）、两目标的表达式位点产出。
+escalate_to 均必填）、两目标的表达式位点产出、旧形态单条 timeout 的
+strategy 取值（不在 notify/auto_approve/auto_reject 内＝运行期静默失效，
+设计期 WARNING 提示改用 deadlines 列表）。
 """
 
 from __future__ import annotations
@@ -26,6 +28,10 @@ _REQUIRED_TARGET = {"reassign": "reassign_to", "escalate": "escalate_to"}
 
 _MAX_DEADLINES = 8
 
+# 旧形态单条 timeout 实际生效的策略（effective_deadlines 白名单同源）：
+# 其余取值装载得过但超时静默失效
+_EFFECTIVE_LEGACY_STRATEGIES = ("notify", "auto_approve", "auto_reject")
+
 
 def _normalize(raw: Any) -> Any:
     """dict 袋（builder 无 registry 形态）→ TaskDeadline；其余原样。"""
@@ -47,8 +53,8 @@ def deadline_positions(node: Any) -> Iterator[tuple[str, str]]:
                 yield f"{node.code}.deadlines[{index}].{field}", expression
 
 
-def check_deadlines(definition: ProcessDefinition, error: IssueFn) -> None:
-    """超时动作列表（escalate_to 必填）。"""
+def check_deadlines(definition: ProcessDefinition, error: IssueFn, warning: IssueFn) -> None:
+    """超时动作列表（escalate_to 必填；旧形态 timeout 失效策略 WARNING）。"""
     for node in definition.nodes:
         deadlines = list(getattr(node, "deadlines", None) or [])
         if len(deadlines) > _MAX_DEADLINES:
@@ -57,6 +63,24 @@ def check_deadlines(definition: ProcessDefinition, error: IssueFn) -> None:
                 f"超时动作列表上限 {_MAX_DEADLINES} 条（当前 {len(deadlines)}）",
                 node=node.code,
             )
+        # 旧形态 timeout 仅 user_task 携带（wait 的 timeout 是 WaitTimeout，
+        # 无 strategy 字段）；builder 袋形态是裸 dict，与 deadlines 同惯例兼容
+        if getattr(node, "kind", None) == "user_task":
+            legacy = getattr(node, "timeout", None)
+            if legacy is not None:
+                strategy = (
+                    legacy.get("strategy", "notify")
+                    if isinstance(legacy, dict)
+                    else getattr(legacy, "strategy", "notify")
+                )
+                if str(strategy) not in _EFFECTIVE_LEGACY_STRATEGIES:
+                    warning(
+                        "user_task.timeout.strategy_ineffective",
+                        f"旧形态 timeout 的 strategy={strategy!r} 不生效"
+                        "（仅 notify/auto_approve/auto_reject 三种；"
+                        "全部五种动作请改用 deadlines 列表）",
+                        node=node.code,
+                    )
         for raw in deadlines:
             deadline = _normalize(raw)
             field = _REQUIRED_TARGET.get(str(deadline.action))

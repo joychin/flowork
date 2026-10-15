@@ -47,7 +47,8 @@ def check_variable_references(
 ) -> None:
     """变量引用与函数调用（全位点单轨 CEL；空声明不再豁免）。
 
-    - 保留字声明（expr.catalog：initiator/now/task）→ ERROR（求值上下文冲突）；
+    - 保留字声明（expr.catalog：initiator/now/task）→ ERROR（求值上下文冲突），
+      variables 段与 input 契约 properties 同查（input 字段同名会遮蔽引擎注入）；
     - 公式引用未声明变量 → ERROR（静态检查，K8s CRD 体验）——图纸零声明时
       同样检查：引用非保留标识符即 unknown ERROR（此前的「空声明整体跳过」
       让无 variables 段的图纸把引用错误全部推迟到运行期）；
@@ -59,7 +60,7 @@ def check_variable_references(
     declared = {v.name for v in definition.variables}
     # input 契约属性同样是变量声明：运行时
     # 白名单＝声明 ∪ input schema ∪ 既有键——设计期只看 variables 段会把
-    # 纯契约驱动图纸误拦发布（口径分裂）
+    # 纯契约驱动图纸误拦发布（口径分裂）；同为声明，保留词检查一并覆盖
     input_schema = definition.input if isinstance(definition.input, dict) else None
     declared |= set((input_schema or {}).get("properties") or {})
     for variable in definition.variables:
@@ -70,6 +71,15 @@ def check_variable_references(
                 + "、".join(f"{entry.name}={entry.label}" for entry in identifier_entries())
                 + "，由引擎注入），不可声明为流程变量",
                 node=variable.name,
+            )
+    for prop in sorted((input_schema or {}).get("properties") or {}):
+        if prop in RESERVED_IDENTIFIERS:
+            error(
+                "input.reserved_name",
+                f"{prop} 为求值保留标识符（"
+                + "、".join(f"{entry.name}={entry.label}" for entry in identifier_entries())
+                + "，由引擎注入），不可作为 input 契约字段——同名会遮蔽引擎注入值",
+                node=prop,
             )
     signatures: dict[str, tuple[int, str]] | None = None
     if expression_functions is not None:

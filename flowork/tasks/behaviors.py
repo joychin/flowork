@@ -15,6 +15,7 @@ from flowork.definitions.builtin import (
 )
 from flowork.engine.context import RuntimeNodeContext
 from flowork.engine.kernel import EngineExecutionError
+from flowork.errors import UnknownHandler
 from flowork.runtime.behavior import NodeBehavior, NodeContext
 from flowork.runtime.registry import NodeRegistry
 from flowork.tasks.user_task import UserTaskBehavior
@@ -94,7 +95,15 @@ class ServiceTaskBehavior(NodeBehavior):
             return
         if not spec.action:
             return
-        handler = ctx.kernel.handlers.resolve(spec.action)
+        try:
+            handler = ctx.kernel.handlers.resolve(spec.action)
+        except UnknownHandler as exc:
+            # 未注册＝技术故障（挂起+故障单），与声明式钩子同语义——
+            # 裸 UnknownHandler 冒泡会让命令只回滚不挂起、零故障单留痕
+            raise EngineExecutionError(
+                f"service_task {spec.code} 动作 {spec.action!r} 未注册：{exc}"
+                "（部署期校验 service_task.handler_unknown 可提前发现）"
+            ) from exc
         try:
             handler(ctx, spec.params)
         except EngineExecutionError:
