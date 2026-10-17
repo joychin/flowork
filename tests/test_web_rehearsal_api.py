@@ -154,3 +154,46 @@ def test_inline_scenario_run_with_spec(client: TestClient, spec: dict) -> None:
     )
     assert resp.status_code == 200, resp.text
     assert resp.json()["ok"] is True
+
+
+def test_scenario_compare_draft_vs_published(client: TestClient, spec: dict) -> None:
+    """两版对比：草稿与最新发布版同脚本并排（草稿改阈值→结论不同）。"""
+    # 发布原版
+    assert client.put("/api/definitions/expense", json=spec).status_code == 200
+    assert client.post("/api/definitions/expense/publish").status_code == 200
+    script = {
+        "start_user": "u_zhang",
+        "variables": {"amount": 100},
+        "steps": [
+            {"node": "submit", "by": "u_zhang", "action": "complete"},
+            {"node": "manager", "by": "u_manager", "action": "complete"},
+        ],
+        "assertions": [{"type": "final_state", "equals": "completed"}],
+    }
+    saved = client.post(
+        "/api/definitions/expense/scenarios", json={"name": "对照", "script": script}
+    ).json()
+    resp = client.post(f"/api/scenarios/{saved['id']}/compare", json={"spec": spec})
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["published_version"].startswith("v")
+    assert body["draft"]["ok"] is True
+    assert body["published"]["ok"] is True
+    assert body["draft"]["final_state"] == body["published"]["final_state"] == "completed"
+
+
+def test_scenario_compare_runs_per_side_failure(client: TestClient, spec: dict) -> None:
+    """一侧跑不起来：该侧返回失败占位，另一侧照常出结论（不整体 500）。"""
+    assert client.put("/api/definitions/expense", json=spec).status_code == 200
+    script = {
+        "start_user": "u_zhang",
+        "variables": {"amount": 100},
+        "steps": [{"node": "nope", "action": "complete"}],
+        "assertions": [{"type": "final_state", "equals": "completed"}],
+    }
+    saved = client.post(
+        "/api/definitions/expense/scenarios", json={"name": "坏步", "script": script}
+    ).json()
+    body = client.post(f"/api/scenarios/{saved['id']}/compare", json={"spec": spec}).json()
+    assert body["draft"]["ok"] is False
+    assert body["draft"]["assertions"][0]["type"] == "final_state"

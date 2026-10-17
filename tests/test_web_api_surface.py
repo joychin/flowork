@@ -47,6 +47,7 @@ EXPECTED: set[str] = {
     "GET /api/scenarios/{scenario_id}",
     "DELETE /api/scenarios/{scenario_id}",
     "POST /api/scenarios/{scenario_id}/run",
+    "POST /api/scenarios/{scenario_id}/compare",
 }
 
 

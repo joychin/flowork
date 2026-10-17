@@ -802,3 +802,10 @@ RehearsalDialog（候选池自动认领/跨实例任务树校验/等待节点两
 **公开面 +12 符号**（排练三件/场景三件+Report+Store+Controls+parse/drive）——死符号守卫
 两处登记（SimulationReport/ScenarioStore 属返回模型）；投影纪律换绑全经 api。
 **1224 测试全绿，五道门全过**。
+
+**模拟补全批 5（2026-10-16，designer-simulation-plan 可选项主体）**：覆盖照明已随批 4 报告下发
+（节点/边 covered+missing 双呈现）；本批补**两版对比跑**——`POST /api/scenarios/{id}/compare`
+（同一脚本草稿 vs 最新/指定已发布版并排红绿；单侧跑不起来返回 ScenarioFailure 占位不中断）
++ designer「对比线上版」按钮（两版结论不一致明确告警）。web 场景面拆 `scenario_routes.py`
+（与排练面分居守 300 行红线，app.py 296 行）。未做：画布路径动画（体验打磨，按定位不加深）、
+跨场景覆盖聚合（统计面按需另立）。测试 +2（对比双测）。**1226 测试全绿，五道门全过**。

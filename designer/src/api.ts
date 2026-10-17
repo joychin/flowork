@@ -163,6 +163,12 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(spec ? { spec } : {}),
     }),
+
+  compareScenario: (id: string, spec?: Spec) =>
+    request<ScenarioCompare>(`/api/scenarios/${id}/compare`, {
+      method: 'POST',
+      body: JSON.stringify(spec ? { spec } : {}),
+    }),
 }
 
 /** 排练步单(与后端 rehearsal_state 同构;报告/任务行字段按需读) */
@@ -216,6 +222,13 @@ export type ScenarioSummary = {
 }
 
 export type ScenarioDetail = ScenarioSummary & { script: Record<string, unknown> }
+
+/** 两版对比（草稿 vs 最新发布版）：任一侧失败为 null 或失败占位 */
+export type ScenarioCompare = {
+  draft: ScenarioReport | null
+  published: ScenarioReport | null
+  published_version: string | null
+}
 
 export type ScenarioReport = {
   scenario: string

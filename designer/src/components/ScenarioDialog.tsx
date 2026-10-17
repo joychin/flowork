@@ -5,7 +5,7 @@
  */
 
 import { useEffect, useState } from 'react'
-import { api, type ScenarioReport, type ScenarioSummary } from '../api'
+import { api, type ScenarioCompare, type ScenarioReport, type ScenarioSummary } from '../api'
 import type { Spec } from '../types'
 import { useStore } from '../store'
 
@@ -32,6 +32,7 @@ export function ScenarioDialog({ spec, code, onClose }: Props) {
   const [name, setName] = useState('')
   const [scriptText, setScriptText] = useState(TEMPLATE)
   const [report, setReport] = useState<ScenarioReport | null>(null)
+  const [compare, setCompare] = useState<ScenarioCompare | null>(null)
   const [busy, setBusy] = useState(false)
   const nodeNames: Record<string, string> = {}
   for (const n of spec.nodes) nodeNames[n.code] = n.name || n.code
@@ -96,9 +97,25 @@ export function ScenarioDialog({ spec, code, onClose }: Props) {
     try {
       // 主场景=当前草稿(含未保存编辑):与 simulate 同口径
       setReport(await api.runScenario(selected, spec))
+      setCompare(null)
       await refresh()
     } catch (err) {
       showToast(`场景运行失败:${err instanceof Error ? err.message : String(err)}`)
+    }
+    setBusy(false)
+  }
+
+  const runCompare = async () => {
+    if (!selected) {
+      showToast('先保存场景再对比(对比跑同一份脚本：草稿 vs 最新发布版)')
+      return
+    }
+    setBusy(true)
+    setCompare(null)
+    try {
+      setCompare(await api.compareScenario(selected, spec))
+    } catch (err) {
+      showToast(`对比失败:${err instanceof Error ? err.message : String(err)}`)
     }
     setBusy(false)
   }
@@ -168,7 +185,10 @@ export function ScenarioDialog({ spec, code, onClose }: Props) {
             <div className="modal-actions">
               <button className="btn" disabled={busy} onClick={() => void save()}>保存</button>
               <button className="btn btn-primary" disabled={busy || !selected} onClick={() => void run()}>
-                {busy ? '运行中…' : '运行'}
+                {busy ? '运行中…' : '运行(草稿)'}
+              </button>
+              <button className="btn" disabled={busy || !selected} onClick={() => void runCompare()}>
+                对比线上版
               </button>
             </div>
 
@@ -204,6 +224,38 @@ export function ScenarioDialog({ spec, code, onClose }: Props) {
                 {report.notes.map((n, i) => (
                   <div key={i} className="dryrun-warning">⚠ {n}</div>
                 ))}
+              </div>
+            )}
+
+            {compare && (
+              <div className="dryrun-result">
+                <div className="sim-section-title">
+                  两版对比（同一脚本 · 草稿 vs {compare.published_version ?? '无已发布版'}）
+                </div>
+                <table className="scenario-table">
+                  <thead>
+                    <tr><th>版本</th><th>结论</th><th>失败断言</th><th>终态</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr className={compare.draft?.ok ? '' : 'bad'}>
+                      <td>草稿</td>
+                      <td>{compare.draft ? (compare.draft.ok ? '✓ 全绿' : '✕ 有失败') : '（无草稿）'}</td>
+                      <td>{compare.draft ? compare.draft.assertions.filter((a) => !a.ok).length : '-'}</td>
+                      <td>{compare.draft?.final_state ?? '-'}</td>
+                    </tr>
+                    <tr className={compare.published?.ok ? '' : 'bad'}>
+                      <td>{compare.published_version ?? '线上'}</td>
+                      <td>{compare.published ? (compare.published.ok ? '✓ 全绿' : '✕ 有失败') : '（无已发布版）'}</td>
+                      <td>{compare.published ? compare.published.assertions.filter((a) => !a.ok).length : '-'}</td>
+                      <td>{compare.published?.final_state ?? '-'}</td>
+                    </tr>
+                  </tbody>
+                </table>
+                {compare.draft && compare.published && compare.draft.ok !== compare.published.ok && (
+                  <div className="dryrun-warning">
+                    ⚠ 两版结论不一致 — 本次改动改变了脚本行为（红=会失败的那一版）
+                  </div>
+                )}
               </div>
             )}
           </div>

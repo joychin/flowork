@@ -32,6 +32,7 @@ from flowork.contrib.web.audit_routes import register_audit_routes
 from flowork.contrib.web.meta_routes import register_meta_routes
 from flowork.contrib.web.preview_routes import register_preview_routes
 from flowork.contrib.web.rehearsal_routes import register_rehearsal_routes
+from flowork.contrib.web.scenario_routes import register_scenario_routes
 
 # "app" 为惰性属性(模块 __getattr__ 按需创建,import 无副作用),不在 __all__
 __all__ = ["create_app"]
@@ -111,6 +112,7 @@ def create_app(db_file: str | Path | None = None, *, seed: bool = True) -> FastA
     # 审计数据面（模拟 / 实例只读 / 版本）在 audit_routes
     register_audit_routes(app, engine)
     register_rehearsal_routes(app, engine)
+    register_scenario_routes(app, engine)
     # 元数据下发面（handler 名录 / 目录摘要）在 meta_routes
     register_meta_routes(app, engine)
 
