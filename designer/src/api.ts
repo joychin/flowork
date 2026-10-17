@@ -119,6 +119,123 @@ export const api = {
 
   directorySummary: () =>
     request<DirectorySummary>('/api/directory/summary'),
+
+  // —— 排练(批 3):simulated 实例的人点驱动 ——
+
+  startRehearsal: (
+    code: string,
+    spec: Spec,
+    variables: Record<string, unknown>,
+    startUser: string,
+  ) =>
+    request<RehearsalState>(`/api/definitions/${code}/rehearsal`, {
+      method: 'POST',
+      body: JSON.stringify({ spec, variables, start_user: startUser }),
+    }),
+
+  rehearsalStep: (instanceId: string, step: Record<string, unknown>) =>
+    request<RehearsalState>(`/api/rehearsals/${instanceId}/step`, {
+      method: 'POST',
+      body: JSON.stringify(step),
+    }),
+
+  rehearsalState: (instanceId: string) =>
+    request<RehearsalState>(`/api/rehearsals/${instanceId}`),
+
+  // —— 场景回归(批 4):脚本 CRUD + 运行 ——
+
+  listScenarios: (code: string) =>
+    request<ScenarioSummary[]>(`/api/definitions/${code}/scenarios`),
+
+  saveScenario: (code: string, body: Record<string, unknown>) =>
+    request<ScenarioSummary>(`/api/definitions/${code}/scenarios`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  getScenario: (id: string) => request<ScenarioDetail>(`/api/scenarios/${id}`),
+
+  deleteScenario: (id: string) =>
+    request<{ deleted: string }>(`/api/scenarios/${id}`, { method: 'DELETE' }),
+
+  runScenario: (id: string, spec?: Spec) =>
+    request<ScenarioReport>(`/api/scenarios/${id}/run`, {
+      method: 'POST',
+      body: JSON.stringify(spec ? { spec } : {}),
+    }),
+}
+
+/** 排练步单(与后端 rehearsal_state 同构;报告/任务行字段按需读) */
+export type RehearsalTask = {
+  id: string
+  instance_id: string
+  activity_code: string
+  name: string
+  assignee: string
+  task_type: string
+  state: string
+  available_actions: string[]
+}
+
+export type RehearsalState = {
+  instance_id: string
+  instance: { id: string; state: string; definition_code: string; simulated?: boolean }
+  tasks: RehearsalTask[]
+  task_history: {
+    node: string
+    assignee: string
+    acted_by: string
+    outcome: string
+    comment: string
+    created_at: string
+  }[]
+  routes: { node: string; selected: string[]; edges: unknown[]; snapshot: unknown }[]
+  variables: Record<string, unknown>
+  variable_history: {
+    name: string
+    old: unknown
+    new: unknown
+    source: string
+    acted_by: string | null
+    changed_at: string
+  }[]
+  waiting: { node: string; instance_id: string }[]
+}
+
+export type ScenarioSummary = {
+  id: string
+  definition_code: string
+  name: string
+  description: string
+  step_count: number
+  assertion_count: number
+  last_ok: boolean | null
+  last_run_at: string | null
+  last_summary: string
+  updated_at: string
+}
+
+export type ScenarioDetail = ScenarioSummary & { script: Record<string, unknown> }
+
+export type ScenarioReport = {
+  scenario: string
+  instance_id: string
+  final_state: string
+  ok: boolean
+  steps: { index: number; kind: string; node?: string; action?: string; detail?: unknown }[]
+  assertions: {
+    type: string
+    ok: boolean
+    actual: unknown
+    expected: Record<string, unknown>
+    message: string
+  }[]
+  coverage: {
+    nodes?: { covered: string[]; missing: string[]; total: number }
+    edges?: { covered: string[]; missing: string[]; total: number }
+  }
+  notes: string[]
+  advanced_minutes: number
 }
 
 /** 流程变量 → dry-run / 公式试算用的样例值表（sample 优先，否则按类型给安全默认） */

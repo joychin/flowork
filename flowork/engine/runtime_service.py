@@ -247,43 +247,49 @@ class RuntimeService(InstanceLifecycleMixin, IncidentMixin, VariableActionsMixin
         {"advance_to_next_event": true}]}``——虚拟时钟步进，模拟域的到期
         定时（任务 deadline/等待到时/实例时限）按 run_at 用真实策略面兑现。
         """
-        import uuid as _uuid
-
         from flowork.engine.simulation import build_report
-        from flowork.engine.simulation_controls import parse_controls, register_simulation_stubs
         from flowork.engine.simulation_runner import drive_simulation
 
-        parsed = parse_controls(controls)
-        # 先定实例 id：桩注册必须先于启动链（服务节点在启动命令内即会到访）
-        instance_id = _uuid.uuid4().hex
-        if parsed.stubs:
-            register_simulation_stubs(self._engine, instance_id, parsed.stubs)
-
-        def _command(ctx: CommandContext) -> str:
-            return self._start(
-                ctx,
-                code,
-                start_user,
-                variables,
-                None,
-                None,
-                None,
-                major,
-                revision,
-                None,
-                "reject",
-                simulated=True,
-                spec=spec,
-                instance_id=instance_id,
-            )
-
-        self._engine.execute(_command)
+        instance_id, parsed = self.start_simulation(
+            code,
+            variables=variables,
+            start_user=start_user,
+            major=major,
+            revision=revision,
+            spec=spec,
+            controls=controls,
+        )
         # 先驱动到停点再出报告（终态/令牌时间线要反映驱动后的实况）
         notes, advanced = drive_simulation(self._engine, instance_id, parsed)
         report = build_report(self._engine, instance_id)
         report.notes = notes
         report.advanced_minutes = advanced
         return report
+
+    def start_simulation(
+        self,
+        code: str,
+        *,
+        variables: dict[str, Any] | None = None,
+        start_user: str = "simulator",
+        major: int | None = None,
+        revision: int | None = None,
+        spec: dict[str, Any] | None = None,
+        controls: dict[str, Any] | None = None,
+    ) -> tuple[str, Any]:
+        """只启动不驱动：返回（模拟实例 id，解析后的控制面）。见 simulation_start。"""
+        from flowork.engine.simulation_start import start_simulation
+
+        return start_simulation(
+            self._engine,
+            code,
+            variables=variables,
+            start_user=start_user,
+            major=major,
+            revision=revision,
+            spec=spec,
+            controls=controls,
+        )
 
     def get_instance(self, instance_id: str) -> InstanceInfo:
         def _command(ctx: CommandContext) -> Any:

@@ -157,6 +157,13 @@ input, select, textarea { font-family: inherit; }
 }
 .palette-item:hover { background: #f4f7fb; border-color: var(--line); }
 .palette-item:active { cursor: grabbing; }
+/* 单例类型已在画布上:整项置灰(不可拖不可点)。置灰态禁用不了父 span 的 title,
+ *  提示因此挂在 wrap 上。 */
+.palette-item-wrap { display: block; }
+.palette-item:disabled, .palette-item-taken {
+  opacity: 0.42; cursor: not-allowed; background: transparent; border-color: transparent;
+}
+.palette-item:disabled:hover { background: transparent; border-color: transparent; }
 .palette-ico {
   width: 24px; height: 24px; border-radius: 7px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
 }
@@ -260,6 +267,12 @@ input, select, textarea { font-family: inherit; }
   border-radius: 7px; font-size: 12.5px; color: #1e293b; cursor: pointer; text-align: left;
 }
 .connect-menu-item:hover { background: #eef3ff; }
+/* 单例类型已在画布上:与调色板同一置灰口径;提示挂在 wrap 上(同因) */
+.connect-menu-item-wrap { display: block; }
+.connect-menu-item:disabled, .connect-menu-item-taken {
+  opacity: 0.42; cursor: not-allowed; background: none;
+}
+.connect-menu-item:disabled:hover { background: none; }
 .connect-menu-foot {
   padding: 5px 12px; font-size: 10.5px; color: var(--sub); border-top: 1px solid var(--line); background: #f8fafc;
 }
@@ -717,3 +730,40 @@ input, select, textarea { font-family: inherit; }
 .tl-body { display: flex; flex-direction: column; gap: 1px; }
 .tl-detail { color: #64748b; font-size: 11px; }
 .tl-edge { color: #475569; font-family: ui-monospace, monospace; font-size: 11px; }
+
+/* —— 排练（批 3）：人扮演逐步驱动 —— */
+.rehearsal-actions { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; }
+.rehearsal-task {
+  border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;
+  background: #fff; display: flex; flex-direction: column; gap: 6px;
+}
+.rehearsal-task-head { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
+.rehearsal-comment {
+  border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; font-size: 12px;
+}
+.rehearsal-buttons { display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* —— 场景回归（批 4）：脚本列表 + 编辑 + 断言表 —— */
+.scenario-modal { width: 900px; max-width: 96vw; }
+.scenario-layout { display: flex; gap: 12px; margin-top: 8px; align-items: flex-start; }
+.scenario-list { width: 240px; display: flex; flex-direction: column; gap: 6px; max-height: 62vh; overflow: auto; }
+.scenario-row {
+  position: relative; border: 1px solid var(--line); border-radius: 8px;
+  padding: 7px 9px; background: #fff; cursor: pointer; display: flex; flex-direction: column; gap: 2px;
+}
+.scenario-row:hover { border-color: #2f6bff; background: #f0f4ff; }
+.scenario-row.active { border-color: #2f6bff; background: #eef4ff; }
+.scenario-row-head { display: flex; align-items: center; gap: 6px; font-size: 12.5px; }
+.scenario-dot { font-weight: 700; color: #94a3b8; }
+.scenario-dot.ok { color: #16a34a; }
+.scenario-dot.bad { color: #dc2626; }
+.scenario-del { position: absolute; right: 4px; top: 4px; font-size: 11px; opacity: .55; }
+.scenario-del:hover { opacity: 1; }
+.scenario-editor { flex: 1; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.scenario-table { width: 100%; border-collapse: collapse; font-size: 11.5px; margin-top: 6px; }
+.scenario-table th, .scenario-table td {
+  border-bottom: 1px solid var(--line); padding: 4px 6px; text-align: left; vertical-align: top;
+}
+.scenario-table th { color: #64748b; font-weight: 500; }
+.scenario-table tr.bad td { background: #fef2f2; }
+.scenario-table code { font-size: 11px; word-break: break-all; }

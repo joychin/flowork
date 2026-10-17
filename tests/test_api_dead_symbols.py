@@ -45,6 +45,11 @@ _INTERNAL_CONSTRUCTED = {
     ),
     "JobClaim": "JobService 认领面返回模型（消费方只读 claim.job_id/lease 等字段）",
     "NotFoundError": "异常层级基类（消费方按 InstanceNotFoundError 等子类捕获）",
+    "SimulationReport": (
+        "RuntimeService.simulate 的返回报告模型（消费方按字段读 visited/decisions/notes，"
+        "不构造实例）"
+    ),
+    "ScenarioStore": "scenario_store() 的返回类型（消费方经工厂取用，不直接构造）",
 }
 
 # 门面自定义符号（来源即 api.py）：消费方在设计上位于仓外（宿主/第三方插件），

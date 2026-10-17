@@ -86,14 +86,23 @@
 - 测试：tests/semantics/test_simulation_clock.py 十例（等待到时/下一事件/无定时注记/reassign 全语义/自动通过/notify 仍待办/实例时限 cancel/假设优先/carry 保持 virtual/解析校验）。
 - 已决（③ **全兑现**）：由真实策略面背书——审批流的价值很大一块在超时分支，行业普遍验证不了＝我们的差异点。
 
-### 批 3 · 交互排练（web 演练台，纯前端 + 共享件）
+### 批 3 · 交互排练（web 演练台）✅ 已落地（2026-10-16）
 
 - 基座已在批 1（人点驱动＝simulated 基座的交互形态）——本批**不再有实例形态改造**：排练面板（步单复用 CLI 设计物：动作→新增/离场→路由→变量→事件；扮演提示「轮到 u_manager」；动作按钮取 available_actions）；画布高亮当前节点+已走路径；变量注入表单。
 - 已决（⑤ **免迁移**）：rehearsal 并入 simulated——交互排练只是同一基座的第三种驱动形态（机器人/决策清单/人点），不是第三种实例形态，布尔列不动。
 - 已决（④）：排练实例默认保留供回看、提供一键清理。
-- 测试：交互驱动走查、隔离复验。
+- **落地实录**：内核 `engine/rehearsal.py`（start_rehearsal/perform_rehearsal_step/
+  rehearsal_state——步单四面板=待办+已办+路由+变量血缘与等待点；步种类分派表而非
+  kind 分支）；`RuntimeService.start_simulation`（只启动不驱动，simulate/排练/场景
+  共用，拆 simulation_start.py 守行数）；web `rehearsal_routes.py` 三端点
+  （POST definitions/{code}/rehearsal · POST rehearsals/{id}/step · GET rehearsals/{id}，
+  校验门槛与 simulate 同口径）；designer `RehearsalDialog`（发起人+起始变量 → 逐步
+  办理：动作按钮取 available_actions、意见/变量、驳回落点、转办/加签/协办对象、
+  等待节点「消息到达/超时」两键；步单四面板实时呈现；只读模式同样可用）。
+  候选池任务自动认领（认领是流程细节不是演练关卡）；跨实例任务拒绝（树校验）。
+- 测试：tests/semantics/test_rehearsal_scenario.py 五例 + tests/test_web_rehearsal_api.py 三例。
 
-### 批 4 · 场景回归（脚本 + 断言 + 存储 + CI）
+### 批 4 · 场景回归（脚本 + 断言 + 存储 + CI）✅ 已落地（2026-10-16）
 
 - **场景格式**：剧本 steps + controls + assertions；断言=业务效果口径（终态/到访/未到访/任务行存在/变量值/路由选中边），期望值支持字面量+CEL 表达式；`$schema` 版本化（如 flowork-scenario/1）。
 - **运行器**：`run_scenario(定义, 场景)` → 逐步结果+断言红绿（复用批 1/2 的执行器）；web `POST /api/definitions/{code}/scenarios/run`；CLI `flowork scenario run <定义> <场景文件>`（CI 口，退出码非零即失败）。
@@ -101,6 +110,19 @@
 - 测试：场景运行器矩阵（直通/驳回回退/超时改派）、断言能力表、CLI 退出码、web 契约。
 - 已决（⑥ **都支持、显式选择**：草稿主场景与「对照线上」并存；⑦ **不做发布门禁**——发布确认框显示场景红绿提示即可，行业无门禁先例）。
 - 全量决策词（拍板①）的直接收益：场景 steps 与演练剧本**完全同构**（node/by/action/参数一比一），一份格式三消费者。
+- **落地实录**：`engine/scenario.py` + `scenario_checks.py`（运行器与评估面拆分守行数）——
+  步骤三类（任务动作十词表 / `{wait, result}` / `{clock}`，与演练剧本同构）；
+  断言六型（final_state / visited(contains|not_contains) / task(node×outcome×by×count) /
+  variable(equals|in|op+value) / route(selected) / pending(empty|node)）业务效果口径；
+  覆盖照明（节点/边 covered vs missing，非门禁）；报告含逐步执行/断言红绿/覆盖/notes。
+  存储 `wf_designer_scenario`（迁移 0007，设计器专属资产）+ `engine/scenario_store.py`
+  （CRUD + last_ok/last_run_at/last_summary 列表预览）。接口：web 六端点（列表/保存/
+  取/删/存跑/直跑）+ CLI `flowork scenario run <定义> <场景> [--deploy] [-v]`（全绿 0 /
+  断言失败 1 / 脚本错误 2＝CI 口）。designer `ScenarioDialog`（左列表红绿点+步数断言数+
+  上次结论；右 JSON 编辑+保存+运行；断言表红绿+覆盖照明+注记）。
+  示例：examples/04_expense_scenario.json（报销全链路七断言，CLI 实测全绿、覆盖 8/8）。
+- 测试：tests/semantics/test_rehearsal_scenario.py 十例 + tests/test_web_rehearsal_api.py 七例
+  + 契约快照九端点。
 
 ### 批 5 · 呈现与覆盖（可选后置）
 

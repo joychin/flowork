@@ -25,7 +25,7 @@ if TYPE_CHECKING:
     from flowork.engine.engine import ProcessEngine
     from flowork.tasks.models import TaskInfo
 
-__all__ = ["SIMULATION_ACTOR", "drive_simulation", "tree_instance_ids"]
+__all__ = ["SIMULATION_ACTOR", "drive_simulation", "resolve_wait", "tree_instance_ids"]
 
 SIMULATION_ACTOR = "simulator"
 _MAX_STEPS = 500
@@ -82,7 +82,7 @@ def drive_simulation(
                     notes.append(f"模拟停在待办 {task_id}：{exc}")
                     return notes, advanced
             continue
-        if _resolve_wait(engine, instance_id, controls.waits):
+        if resolve_wait(engine, instance_id, controls.waits):
             continue
         if clock_steps:
             virtual_now, advanced = step_virtual_clock(
@@ -168,9 +168,7 @@ def _apply_decision(engine: ProcessEngine, instance_id: str, step: dict[str, Any
     dispatch_task_action(engine, task.id, str(step["action"]), actor=actor, step=step)
 
 
-def _resolve_wait(
-    engine: ProcessEngine, instance_id: str, waits: dict[str, dict[str, Any]]
-) -> bool:
+def resolve_wait(engine: ProcessEngine, instance_id: str, waits: dict[str, dict[str, Any]]) -> bool:
     """有假设控制的冻结等待节点：按 matched/elapsed 兑现（含载荷映射）。"""
     if not waits:
         return False

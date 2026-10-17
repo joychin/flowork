@@ -36,6 +36,17 @@ EXPECTED: set[str] = {
     "GET /api/definitions/{code}/versions/{major}",
     "GET /api/handlers",
     "GET /api/directory/summary",
+    # 排练（批 3）：simulated 实例的人点驱动
+    "POST /api/definitions/{code}/rehearsal",
+    "POST /api/rehearsals/{instance_id}/step",
+    "GET /api/rehearsals/{instance_id}",
+    # 场景回归（批 4）：脚本 CRUD + 运行（存与直跑两口）
+    "GET /api/definitions/{code}/scenarios",
+    "POST /api/definitions/{code}/scenarios",
+    "POST /api/definitions/{code}/scenarios/run",
+    "GET /api/scenarios/{scenario_id}",
+    "DELETE /api/scenarios/{scenario_id}",
+    "POST /api/scenarios/{scenario_id}/run",
 }
 
 

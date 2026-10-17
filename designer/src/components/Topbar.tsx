@@ -4,6 +4,8 @@ import { useState } from 'react'
 import { useStore } from '../store'
 import { designerConfig } from '../config'
 import { InstancesDialog } from './InstancesDialog'
+import { RehearsalDialog } from './RehearsalDialog'
+import { ScenarioDialog } from './ScenarioDialog'
 
 export function Topbar() {
   const defInfo = useStore((s) => s.defInfo)
@@ -23,6 +25,9 @@ export function Topbar() {
   const future = useStore((s) => s.future.length)
   // 审计实例视图(批 B3):本地开合,不入全局状态
   const [instancesOpen, setInstancesOpen] = useState(false)
+  // 排练/场景(批 3/批 4):审阅动作,只读模式同样可用(零副作用)
+  const [rehearsalOpen, setRehearsalOpen] = useState(false)
+  const [scenarioOpen, setScenarioOpen] = useState(false)
   // 只读(宿主嵌入):审计面——保存/撤销/重排/校验/发布全部隐藏
   const readonly = designerConfig.readonly()
 
@@ -52,6 +57,8 @@ export function Topbar() {
         </>
       )}
       <button className="btn" onClick={openDryRun} title="路由预演 + 完整模拟(草稿可跑,证据先于发布)">▶ 试运行</button>
+      <button className="btn" onClick={() => setRehearsalOpen(true)} title="排练:人扮演办理人逐步走一遍(零副作用)">🎭 排练</button>
+      <button className="btn" onClick={() => setScenarioOpen(true)} title="场景回归:可复跑脚本 + 断言(与 CI 同一份文件)">🧪 场景</button>
       <button className="btn" onClick={() => setInstancesOpen(true)} title="实例审计:走到哪、条件为什么这么选">⚖ 实例</button>
       {!readonly && (
         <>
@@ -78,6 +85,12 @@ export function Topbar() {
         </>
       )}
       {instancesOpen && <InstancesDialog code={defInfo.code} onClose={() => setInstancesOpen(false)} />}
+      {rehearsalOpen && (
+        <RehearsalDialog spec={spec} code={defInfo.code} onClose={() => setRehearsalOpen(false)} />
+      )}
+      {scenarioOpen && (
+        <ScenarioDialog spec={spec} code={defInfo.code} onClose={() => setScenarioOpen(false)} />
+      )}
     </header>
   )
 }

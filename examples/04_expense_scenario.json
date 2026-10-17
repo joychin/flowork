@@ -1,0 +1,99 @@
+{
+  "name": "大额报销：驳回回退 → 改额 → 转办 → 会签",
+  "start_user": "u_zhang",
+  "variables": {
+    "amount": 20000,
+    "reason": "客户招待"
+  },
+  "steps": [
+    {
+      "node": "submit",
+      "by": "u_zhang",
+      "action": "complete",
+      "comment": "提交报销"
+    },
+    {
+      "node": "manager",
+      "by": "u_manager",
+      "action": "reject",
+      "comment": "发票不全"
+    },
+    {
+      "node": "submit",
+      "by": "u_zhang",
+      "action": "complete",
+      "variables": {
+        "amount": 18000
+      }
+    },
+    {
+      "node": "manager",
+      "by": "u_manager",
+      "action": "complete"
+    },
+    {
+      "node": "finance",
+      "by": "u_finance",
+      "action": "transfer",
+      "to": "u_finance_bak"
+    },
+    {
+      "node": "finance",
+      "by": "u_finance_bak",
+      "action": "complete"
+    },
+    {
+      "node": "cfo",
+      "by": "u_alice",
+      "action": "complete"
+    },
+    {
+      "node": "cfo",
+      "by": "u_bob",
+      "action": "complete"
+    }
+  ],
+  "assertions": [
+    {
+      "type": "final_state",
+      "equals": "completed"
+    },
+    {
+      "type": "task",
+      "node": "manager",
+      "outcome": "reject",
+      "count": 1
+    },
+    {
+      "type": "task",
+      "node": "finance",
+      "outcome": "transfer",
+      "by": "u_finance"
+    },
+    {
+      "type": "task",
+      "node": "cfo",
+      "outcome": "agree",
+      "count": 2
+    },
+    {
+      "type": "variable",
+      "name": "amount",
+      "equals": 18000
+    },
+    {
+      "type": "visited",
+      "contains": [
+        "submit",
+        "manager",
+        "finance",
+        "cfo"
+      ]
+    },
+    {
+      "type": "pending",
+      "empty": true
+    }
+  ],
+  "comment": "费用报销场景回归：steps=任务/等待/推钟三类步，assertions=业务效果断言。设计器「场景」面板与 CLI `flowork scenario run` 跑同一份文件（Camunda 双入口范式）。"
+}

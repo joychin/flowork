@@ -20,11 +20,17 @@ from flowork.api import (
 from flowork.cli.demo import demo, demo_full
 from flowork.cli.instance import instance_app
 from flowork.cli.message import message_app
+from flowork.cli.scenario import scenario_app
 from flowork.cli.task import task_app
 from flowork.cli.walkthrough import walkthrough
 
 app = typer.Typer(help="flowork 流程引擎 CLI", no_args_is_help=True)
-for _name, _sub_app in (("instance", instance_app), ("message", message_app), ("task", task_app)):
+for _name, _sub_app in (
+    ("instance", instance_app),
+    ("message", message_app),
+    ("task", task_app),
+    ("scenario", scenario_app),
+):
     app.add_typer(_sub_app, name=_name)
 app.command()(demo)
 app.command(name="demo-full")(demo_full)

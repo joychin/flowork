@@ -785,3 +785,20 @@ designer 模拟 Tab 时钟控制条（+1小时/+1天/下一事件+JSON）。测�
 （test_simulation_clock.py：等待到时/下一事件/无定时注记/reassign 全语义含 system:timeout 归因/
 自动通过/notify 仍待办/实例时限 cancel/假设优先/carry 保持 virtual/解析校验）。
 **1207 测试全绿，五道门全过**。
+
+**模拟补全批 3+批 4（2026-10-16，designer-simulation-plan 收官两批）**：
+**批 3 交互排练**——`engine/rehearsal.py`（start_rehearsal/perform_rehearsal_step/
+rehearsal_state）：simulated 基座上的人点驱动，步单四面板＝待办（含服务端 available_actions）
++已办+路由+变量血缘与等待点；步种类走**分派表**（kind 分支守卫拦下 `kind=="wait"` 写法）；
+`RuntimeService.start_simulation`（只启动不驱动——simulate/排练/场景共用启动路径，
+拆 simulation_start.py 守 runtime_service 行数）；web rehearsal_routes 三端点；designer
+RehearsalDialog（候选池自动认领/跨实例任务树校验/等待节点两键兑现/只读模式可用）。
+**批 4 场景回归**——`engine/scenario.py`+`scenario_checks.py`：一份脚本三消费者
+（设计器/CLI/测试，Camunda 双入口同 schema 范式落地）；步骤三类（任务/等待/推钟）与
+演练剧本同构；断言六型业务效果口径；覆盖照明非门禁；`wf_designer_scenario`（迁移 0007）
++ scenario_store（CRUD+last_ok 预览）；web 六端点 + CLI `flowork scenario run`
+（退出码 0 全绿/1 断言失败/2 脚本错误）；designer ScenarioDialog（红绿列表+脚本编辑+
+断言表+覆盖）。examples/04_expense_scenario.json 报销全链路七断言实测全绿。
+**公开面 +12 符号**（排练三件/场景三件+Report+Store+Controls+parse/drive）——死符号守卫
+两处登记（SimulationReport/ScenarioStore 属返回模型）；投影纪律换绑全经 api。
+**1224 测试全绿，五道门全过**。
