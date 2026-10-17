@@ -76,6 +76,16 @@ npm run dev        # http://localhost:5173,/api 代理到 8901
 | GET  | `/api/definitions/{code}/versions/{major}` | 按版本取已发布 spec(`?revision=`;只读模式的数据前提) |
 | GET  | `/api/handlers` | 已注册 handler 名录(服务任务动作下拉数据源) |
 | GET  | `/api/directory/summary` | 组织目录只读摘要(`FLOWORK_ORG=org.yaml` 装配;未配置降级) |
+| POST | `/api/definitions/{code}/rehearsal` | **启动排练**(simulated 实例,人点驱动;body 可带 spec/variables/controls) |
+| POST | `/api/rehearsals/{id}/step` | 排练步进(任务动作十词表 / 等待兑现),返回新步单 |
+| GET  | `/api/rehearsals/{id}` | 步单快照(待办+已办+路由+变量血缘+等待点) |
+| GET  | `/api/definitions/{code}/scenarios` | 场景列表(带最近运行红绿) |
+| POST | `/api/definitions/{code}/scenarios` | 保存场景(`{name, script, description?, id?}`) |
+| POST | `/api/definitions/{code}/scenarios/run` | 直跑脚本(未保存场景/CI 传入) |
+| GET  | `/api/scenarios/{id}` | 取场景(含完整脚本) |
+| DELETE | `/api/scenarios/{id}` | 删除场景 |
+| POST | `/api/scenarios/{id}/run` | 运行已存场景(可带当前草稿 spec) |
+| POST | `/api/scenarios/{id}/compare` | **两版对比跑**(同脚本草稿 vs 最新发布版,红绿并排) |
 
 ## 插件化(`@flowork/designer`)
 
@@ -118,6 +128,8 @@ designer/
 │       ├── SchemaForm.tsx          # JSON Schema 递归表单
 │       ├── Topbar.tsx              # 生命周期状态 + 发布入口
 │       ├── PublishDialog.tsx       # 发布确认(错误拦截/警告提示)
-│       ├── DryRunDialog.tsx        # 路由预演(样例变量编辑 + 结果)
+│       ├── DryRunDialog.tsx        # 试运行:路由预演 + 完整模拟(控制面四键)
+│       ├── RehearsalDialog.tsx     # 排练:人扮演办理人逐步驱动(步单四面板)
+│       ├── ScenarioDialog.tsx      # 场景回归:脚本编辑/运行/红绿/两版对比
 │       ├── ConnectMenu.tsx         # 拖线到空白处的快捷新建菜单
 │       └── DevErrorBoundary.tsx    # 开发期错误边界```
