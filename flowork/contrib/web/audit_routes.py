@@ -28,18 +28,25 @@ def register_audit_routes(app: Any, engine: Any) -> None:
     ) -> dict[str, Any]:
         """整图模拟（草稿主场景）：证据先于发布。
 
-        body：``{"spec": 定义 JSON（可选——缺省取已保存草稿）, "variables": 样例}``。
-        携带 spec 或取草稿时走**草稿直通**（不落定义表，模拟前强制设计期校验，
-        ERROR 拦 422）；``?major=&revision=`` 则模拟已发布版本（对照线上行为）。
+        body：``{"spec": 定义 JSON（可选——缺省取已保存草稿）, "variables": 样例,
+        "controls": 模拟控制面（可选）}``。携带 spec 或取草稿时走**草稿直通**
+        （不落定义表，模拟前强制设计期校验，ERROR 拦 422）；``?major=&revision=``
+        则模拟已发布版本（对照线上行为）。controls 三键全可选：
+        ``decisions``（全量十词表按序扮演办理人，未覆盖的待办停为「待决策点」）、
+        ``stubs``（service_task 桩返回值）、``waits``（等待节点 matched/elapsed 假设）；
+        缺省＝机器人全通过。
         """
         raw_spec = body.get("spec")
         raw_vars = body.get("variables")
+        raw_controls = body.get("controls")
         if raw_spec is not None and not isinstance(raw_spec, dict):
             # 修前非 dict（字符串/列表）静默回退旧草稿——「当前草稿
             # 含未保存编辑」是本端点主场景，据以拍板发布的报告可能不是送审内容
             raise HTTPException(status_code=422, detail="spec 必须是流程定义 JSON 对象")
         if raw_vars is not None and not isinstance(raw_vars, dict):
             raise HTTPException(status_code=422, detail="variables 必须是对象")
+        if raw_controls is not None and not isinstance(raw_controls, dict):
+            raise HTTPException(status_code=422, detail="controls 必须是对象")
         variables = raw_vars if isinstance(raw_vars, dict) else None
         if raw_spec is not None or (major is None and revision is None):
             spec = raw_spec if isinstance(raw_spec, dict) else _saved_draft(engine, code)
@@ -51,10 +58,16 @@ def register_audit_routes(app: Any, engine: Any) -> None:
                     status_code=422,
                     detail={"message": "校验未通过，禁止模拟", "issues": issues_payload(errors)},
                 )
-            report = engine.runtime.simulate(code, spec=spec, variables=variables)
+            report = engine.runtime.simulate(
+                code, spec=spec, variables=variables, controls=raw_controls
+            )
         else:
             report = engine.runtime.simulate(
-                code, variables=variables, major=major, revision=revision
+                code,
+                variables=variables,
+                major=major,
+                revision=revision,
+                controls=raw_controls,
             )
         return asdict(report)
 

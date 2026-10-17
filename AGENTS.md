@@ -750,3 +750,22 @@ candidate_task_ids join 过滤、instance_id 定向查询不隔离=审计/驱动
 claim 对模拟实例放行候选守卫=业务防抢注不约束试跑）。报告增 notes 字段（驱动器停点说明）；
 模拟-驱动顺序=先驱动后出报告。测试：test_simulation 语义更新+新增 5 例（隔离矩阵/候选隔离/
 并签机器人/deadline 零 Job/中途取人失败落 notes）。五道门全绿。
+
+**模拟补全批 1b（2026-10-16，designer-simulation-plan 批 1 提交二）**：控制面三件＋共享件内核化。
+① **决策全量词表**（拍板①）：simulate 增 controls 参数——decisions[{node,by,action,comment,
+variables,target,to,users}] 与演练剧本同构，按序扮演办理人；**给了决策清单即禁用机器人**，
+未覆盖的待办停「待决策点」进报告 pending；驳回复活圈定/转办票随人走/会签计数在模拟里原生成立
+（真实任务动作面）。② **桩返回值**（拍板②修正口径）：stubs{节点:变量对象}＝替身 handler 经
+同一写入口注入（ctx.variables 直引实例行），下游条件真求值；桩注册表按引擎+实例挂
+（simulation_controls.py——服务节点可能在决策推进链才到访，须跨命令可用；已消费记 stubs_applied）。
+③ **等待假设**：waits{节点:matched|elapsed(+payload)}——直调 finish_wait；matched 载荷走
+resolve_payload_write+output_mappings 同语义（消息路径同款含契约边界）；等待节点判别走行为
+advances_on_message 标志（kind 分支守卫拦下 kind=="wait" 写法——kind 知识住行为）。
+④ **共享件内核化**：tasks/action_steps.py（find_pending_task+dispatch_task_action 十词表分派）
+上公开面（api +3 符号：KNOWN_TASK_ACTIONS/find_pending_task/dispatch_task_action）；CLI
+walkthrough_core 改薄壳委托（ScriptError 包装，词表单源）——模拟驱动器与演练台同一份分派。
+⑤ **报告扩展**：decisions（全树已办行推导：node/assignee/acted_by/outcome/comment）、pending
+（停住的待办）、stubs_applied、notes。⑥ **web+designer**：simulate body 扩 controls（非对象 422）；
+DryRunDialog 模拟 Tab 加控制区（等待假设下拉+决策/桩 JSON），报告呈现办理记录/待决策/注记。
+simulate 两路统一走 _start（instance_id 预生成——桩注册先于启动链）。测试 +10
+（tests/semantics/test_simulation_controls.py 九例+web 一例）。**1197 测试全绿，五道门全过**。

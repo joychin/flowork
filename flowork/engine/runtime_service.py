@@ -115,6 +115,7 @@ class RuntimeService(InstanceLifecycleMixin, IncidentMixin, VariableActionsMixin
         start_message: dict[str, str] | None = None,
         simulated: bool = False,
         spec: dict[str, Any] | None = None,
+        instance_id: str | None = None,
     ) -> str:
         import json
 
@@ -144,7 +145,7 @@ class RuntimeService(InstanceLifecycleMixin, IncidentMixin, VariableActionsMixin
 
         validate_input_contract(definition.input, dict(variables or {}), boundary="start")
         instance = _Row(
-            id=uuid.uuid4().hex,
+            id=instance_id or uuid.uuid4().hex,
             definition_code=code,
             definition_major=snapshot["major"],
             definition_revision=snapshot["revision"],
@@ -221,8 +222,9 @@ class RuntimeService(InstanceLifecycleMixin, IncidentMixin, VariableActionsMixin
         major: int | None = None,
         revision: int | None = None,
         spec: dict[str, Any] | None = None,
+        controls: dict[str, Any] | None = None,
     ) -> Any:
-        """整图试跑：模拟启动并由机器人驱动到卡点/终态，返回 SimulationReport。
+        """整图试跑：模拟启动并驱动到卡点/终态，返回 SimulationReport。
 
         条件边按初始变量**真求值**；user_task 建真实任务行、机器人缺省全通过
         （办理走真实任务动作面——会签/协办语义与真实运行同源）；service_task 恒
@@ -233,43 +235,48 @@ class RuntimeService(InstanceLifecycleMixin, IncidentMixin, VariableActionsMixin
         草稿内容模拟——证据先于发布（AI 改完草稿 → 人模拟 → 拍板发布）。
         实例行版本列记草稿占位 (0, 0)，隔离语义与发布版模拟完全一致；
         major/revision 与 spec 互斥（spec 优先）。
+
+        ``controls``（控制面，全部可选；``None``＝机器人全通过）：
+        ``{"decisions": [{node, by?, action, ...}]}``——全量十词表按序扮演
+        办理人，给了 decisions 未覆盖的待办停在「待决策点」（不回落机器人）；
+        ``{"stubs": {节点: 变量对象}}``——service_task 桩返回值（替身 handler
+        同一写入口注入）；``{"waits": {节点: "matched"|"elapsed"|
+        {"result": …, "payload": …}}}``——等待节点按假设兑现（matched 载荷
+        走 output_mappings 同语义）。
         """
+        import uuid as _uuid
+
         from flowork.engine.simulation import build_report
+        from flowork.engine.simulation_controls import parse_controls, register_simulation_stubs
         from flowork.engine.simulation_runner import drive_simulation
 
-        if spec is not None:
-            spec_user = start_user
-            spec_vars = variables
+        parsed = parse_controls(controls)
+        # 先定实例 id：桩注册必须先于启动链（服务节点在启动命令内即会到访）
+        instance_id = _uuid.uuid4().hex
+        if parsed.stubs:
+            register_simulation_stubs(self._engine, instance_id, parsed.stubs)
 
-            def _command(ctx: CommandContext) -> str:
-                return self._start(
-                    ctx,
-                    code,
-                    spec_user,
-                    spec_vars,
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                    "reject",
-                    simulated=True,
-                    spec=spec,
-                )
-
-            instance_id = self._engine.execute(_command)
-        else:
-            instance_id = self.start_process(
+        def _command(ctx: CommandContext) -> str:
+            return self._start(
+                ctx,
                 code,
-                start_user=start_user,
-                variables=variables,
-                major=major,
-                revision=revision,
+                start_user,
+                variables,
+                None,
+                None,
+                None,
+                major,
+                revision,
+                None,
+                "reject",
                 simulated=True,
+                spec=spec,
+                instance_id=instance_id,
             )
+
+        self._engine.execute(_command)
         # 先驱动到停点再出报告（终态/令牌时间线要反映驱动后的实况）
-        notes = drive_simulation(self._engine, instance_id)
+        notes = drive_simulation(self._engine, instance_id, parsed)
         report = build_report(self._engine, instance_id)
         report.notes = notes
         return report

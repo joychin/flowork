@@ -84,11 +84,16 @@ export const api = {
 
   // —— 审计数据面(设计器插件计划批 A/批 B 消费) ——
 
-  /** 整图模拟(主场景=当前草稿,含未保存编辑;引擎真跑但零副作用) */
-  simulate: (code: string, spec: Spec, variables: Record<string, unknown>) =>
+  /** 整图模拟(主场景=当前草稿,含未保存编辑;引擎真跑但零副作用;controls=决策/桩/等待假设,可选) */
+  simulate: (
+    code: string,
+    spec: Spec,
+    variables: Record<string, unknown>,
+    controls?: Record<string, unknown>,
+  ) =>
     request<SimulationReport>(`/api/definitions/${code}/simulate`, {
       method: 'POST',
-      body: JSON.stringify({ spec, variables }),
+      body: JSON.stringify(controls ? { spec, variables, controls } : { spec, variables }),
     }),
 
   instances: (params: { state?: string; definition_code?: string; include_simulated?: boolean }) => {

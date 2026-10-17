@@ -10,22 +10,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from flowork.api import FloworkError, ProcessEngine
+from flowork.api import KNOWN_TASK_ACTIONS, FloworkError, ProcessEngine
 
-KNOWN_ACTIONS = frozenset(
-    {
-        "complete",
-        "reject",
-        "transfer",
-        "assist",
-        "consult",
-        "claim",
-        "unclaim",
-        "add_countersigner",
-        "complete_assist",
-        "complete_consult",
-    }
-)
+# 动作词表单源：与模拟驱动器的决策清单同一份（api 门面导出）
+KNOWN_ACTIONS = KNOWN_TASK_ACTIONS
 
 # 出结果类动作：被办任务自身的离场由动作行交代，不重复报「待办-」；
 # 转办/认领类的离场是语义信息（换人接棒），照常报。
@@ -133,66 +121,24 @@ def _users_of(step: dict[str, Any]) -> list[str]:
     return []
 
 
-def _same_person(left: str, right: str) -> bool:
-    return left.removeprefix("user:") == right.removeprefix("user:")
-
-
 def find_task(engine: ProcessEngine, instance_id: str, step: dict[str, Any]) -> Any:
-    """按 node（必要时加 by 对人）在就绪待办中定位任务；找不到给当前待办提示。
+    """按 node（必要时加 by 对人）定位就绪待办（共享件内核化，CLI 包 ScriptError）。"""
+    from flowork.api import find_pending_task
 
-    节点多条待办而不给 ``by``＝会签等并行场景的任意选择（list_tasks 无排序，
-    结果不可复现）——直接拒绝并点明办理人名单，不许静默任取。
-    """
-    pending = engine.task.list_tasks(instance_id=instance_id)
-    at_node = [t for t in pending if t.activity_code == step["node"]]
-    if not at_node:
-        have = "、".join(sorted({t.activity_code for t in pending})) or "（当前无就绪待办）"
-        raise ScriptError(f"节点 {step['node']} 没有就绪任务；当前待办节点：{have}")
-    by = step.get("by")
-    if by:
-        matched = [t for t in at_node if _same_person(t.assignee, by)]
-        if matched:
-            at_node = matched
-        elif not any(t.assignee == "" for t in at_node):
-            who = "、".join(sorted({t.assignee for t in at_node}))
-            raise ScriptError(f"节点 {step['node']} 的待办办理人是 {who}，不是 {by}")
-        # else 候选池任务（未认领，assignee 为空）：by 是否在候选集里交给引擎
-        # 认领守卫（require_candidate）判定，CLI 不复制候选判定逻辑
-    elif len(at_node) > 1:
-        who = "、".join(sorted({t.assignee or "（候选池）" for t in at_node}))
-        raise ScriptError(
-            f"节点 {step['node']} 有 {len(at_node)} 条待办（{who}），请在步骤里用 by 指定办理人"
-        )
-    return at_node[0]
+    try:
+        return find_pending_task(engine, instance_id, node=step["node"], by=step.get("by"))
+    except FloworkError as exc:
+        raise ScriptError(str(exc)) from exc
 
 
 def perform_step(engine: ProcessEngine, task: Any, step: dict[str, Any]) -> None:
-    """把一个剧本/交互步骤翻译成 TaskService 调用（动作表全集）。"""
+    """把一个剧本/交互步骤翻译成 TaskService 调用（动作表全集，共享件内核化）。"""
+    from flowork.api import dispatch_task_action
+
     action = step["action"]
     actor = step.get("by") or task.assignee
-    comment = step.get("comment", "")
-    task_svc = engine.task
     try:
-        if action == "complete":
-            task_svc.complete(task.id, actor, comment=comment, variables=step.get("variables"))
-        elif action == "reject":
-            task_svc.reject(
-                task.id,
-                actor,
-                comment=comment,
-                target=step.get("target"),  # 手动指定驳回落点（缺省走节点 reject_target）
-                variables=step.get("variables"),
-            )
-        elif action == "transfer":
-            task_svc.transfer(task.id, str(step["to"]), actor, comment)
-        elif action in ("assist", "consult", "add_countersigner"):
-            getattr(task_svc, action)(task.id, _users_of(step), actor, comment)
-        elif action == "claim":
-            task_svc.claim(task.id, actor)
-        elif action == "unclaim":
-            task_svc.unclaim(task.id, actor)
-        else:  # complete_assist / complete_consult
-            getattr(task_svc, action)(task.id, actor, comment)
+        dispatch_task_action(engine, task.id, action, actor=actor, step=step)
     except FloworkError as exc:
         raise ScriptError(f"{action} 被引擎拒绝：{exc}") from exc
 

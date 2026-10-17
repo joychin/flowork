@@ -114,6 +114,28 @@ def test_simulate_isolated_from_instance_list(client: TestClient, spec02: dict) 
     assert [i["definition_code"] for i in included] == ["demo"]
 
 
+def test_simulate_controls_passthrough(client: TestClient, spec02: dict) -> None:
+    """控制面透传：决策清单驱动办理并回进报告（decisions/pending）；坏形状 422。"""
+    controls = {
+        "decisions": [
+            {"node": "manager", "action": "complete", "variables": {"amount": 1}},
+            {"node": "director", "action": "complete"},
+        ]
+    }
+    resp = client.post(
+        "/api/definitions/demo/simulate", json=_simulate_body(spec02, controls=controls)
+    )
+    assert resp.status_code == 200
+    report = resp.json()
+    assert report["decisions"], "决策记录应从已办行进报告"
+    assert all(("acted_by" in d and "outcome" in d) for d in report["decisions"])
+    # 坏形状：非对象 controls 拦 422
+    bad = client.post(
+        "/api/definitions/demo/simulate", json=_simulate_body(spec02, controls="junk")
+    )
+    assert bad.status_code == 422
+
+
 # —— A2 实例只读面 ——
 
 

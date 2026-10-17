@@ -92,6 +92,15 @@ class ServiceTaskBehavior(NodeBehavior):
         spec = self.spec
         assert isinstance(spec, ServiceTaskSpec)
         if ctx.instance.simulated:  # stub（行业共识：模拟绝不执行外部副作用）
+            from flowork.engine.simulation_controls import simulation_stub_of
+
+            stub = simulation_stub_of(
+                getattr(ctx.kernel, "engine", None), ctx.instance.id, spec.code
+            )
+            if stub:
+                # 桩＝替身 handler：经与真实 handler 相同的写入口（ctx.variables
+                # 直接引用实例行字典）注入——下游条件按真实语义求值
+                ctx.variables.update(dict(stub))
             return
         if not spec.action:
             return

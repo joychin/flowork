@@ -91,6 +91,14 @@ from flowork.spi.ports import (
     ExpressionFunctions,
     FunctionSignature,
 )
+
+# 演练/模拟共用的任务步骤机件：CLI 演练台与模拟驱动器共用一份词表与分派
+# （find_pending_task 定位待办 + dispatch_task_action 十动作分派）。
+from flowork.tasks.action_steps import (
+    KNOWN_TASK_ACTIONS,
+    dispatch_task_action,
+    find_pending_task,
+)
 from flowork.tasks.models import (
     EventInfo,
     InstanceInfo,
@@ -103,6 +111,7 @@ API_VERSION: Final = "1"
 
 __all__ = [
     "API_VERSION",
+    "KNOWN_TASK_ACTIONS",
     "ConditionError",
     "DefinitionError",
     "DefinitionNotPublishedError",
@@ -158,10 +167,12 @@ __all__ = [
     "UnknownNodeKind",
     "ValidateIssue",
     "create_registry",
+    "dispatch_task_action",
     "engine_functions",
     "evaluate_condition",
     "evaluate_formula_value",
     "expression_functions_of",
+    "find_pending_task",
     "identifier_entries",
     "load_definition",
     "load_definition_file",
