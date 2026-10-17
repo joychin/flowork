@@ -769,3 +769,19 @@ walkthrough_core 改薄壳委托（ScriptError 包装，词表单源）——模
 DryRunDialog 模拟 Tab 加控制区（等待假设下拉+决策/桩 JSON），报告呈现办理记录/待决策/注记。
 simulate 两路统一走 _start（instance_id 预生成——桩注册先于启动链）。测试 +10
 （tests/semantics/test_simulation_controls.py 九例+web 一例）。**1197 测试全绿，五道门全过**。
+
+**模拟补全批 2（2026-10-16，designer-simulation-plan 批 2；拍板③全兑现）**：虚拟时钟——
+**实现口径修正**：放弃「模拟器自算定时器」，改「模拟域定时 Job 照建但置 virtual 态（真实调度器
+只认 scheduled，天然不可见），推钟按 run_at 用真实策略面兑现（JobScheduler.run_virtual：CAS
+virtual→running＋savepoint 策略＋冻结/咨询推迟拉回 virtual）」——超时五动作/等待到时/实例时限
+零第二实现。四处 Job 创建点落 virtual（任务 deadline/实例时限/等待到时/_carry 剩余档——串行换棒
+与转办的 carry 不漏真实域）；wait 模拟分支改为「不订阅但建 virtual 到时 Job」。controls 增 clock
+（advance_minutes/advance_to_next_event 序列，parse 校验）；驱动优先级＝到期 virtual Job→决策
+（下一决策暂无对应待办且时钟未耗尽时先推钟）→机器人（decisions 键含空表即禁用）→等待假设→
+**终态即收束**（剩余时钟不消费——红绿逼出：假设优先用例实证终态后时钟仍被消费）；报告增
+advanced_minutes，兑现证据进 notes（事件面对模拟静默）。**踩坑**：run_at 与虚拟基线是同命令两次
+config.now()，真实墙钟差毫秒——2880 分钟整推时 Job 判不到到期，5 秒容差兜底（推钟粒度分钟）。
+designer 模拟 Tab 时钟控制条（+1小时/+1天/下一事件+JSON）。测试 +10
+（test_simulation_clock.py：等待到时/下一事件/无定时注记/reassign 全语义含 system:timeout 归因/
+自动通过/notify 仍待办/实例时限 cancel/假设优先/carry 保持 virtual/解析校验）。
+**1207 测试全绿，五道门全过**。

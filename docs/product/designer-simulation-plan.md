@@ -78,13 +78,13 @@
 - **web+designer**：simulate body 扩 controls（契约快照同步）；DryRunDialog 模拟面板加「控制」编辑区（逐节点：动作下拉（十词表）+参数、桩 JSON、等待假设）。
 - 测试：全词表驱动走查（**转办票随人走/加签计数/协办收口在模拟里成立**——全量决策词的价值钉子）、待决策语义、桩注入使下游分支可验、web 契约。
 
-### 批 2 · 虚拟时钟（内核 + designer）
+### 批 2 · 虚拟时钟（内核 + designer）✅ 已落地（2026-10-16，实现口径修正见下）
 
-- **内核**：模拟实例显式推钟——`advance("PT24H")` / `advance_to_next_event()`；模拟器自算下一事件（wait 超时、任务 deadline、实例时限），**不建 Job**（在模拟事务内按定义+令牌状态排序取最近）；兑现：wait 到时=elapsed、**deadline 动作**按类型映射（notify 记录留痕；reassign 走改派语义；auto_approve/auto_reject 走对应出口；mark 记录）、实例时限到点落终态。
-- 报告时间线带「模拟时刻」；route_audit 的 now 即虚拟时刻（时钟统一批已钉 config.now，天然复用）。
-- **designer**：时间控制条（+1 小时/+1 天/推进到下一事件）；报告时间线呈现「时间跳过」标记与每步时刻。
-- 测试：wait 超时分派、deadline 动作矩阵、实例时限、推钟上限（防死循环）。
-- 已决（③ **全兑现**）：模拟器自算定时器并兑现 deadline 动作（通知留痕、改派走转办语义、自动通过/驳回走对应出口、实例时限落终态）——审批流的价值很大一块在超时分支，行业普遍验证不了＝我们的差异点。
+- **实现修正**：原稿「模拟器自算下一事件、不建 Job」改为「**模拟域 Job 照建但置 `virtual` 态**（真实调度器只认 scheduled，天然不可见），推钟按 run_at 用**真实策略面**兑现（`JobScheduler.run_virtual`）」——超时五动作/等待到时/实例时限零第二实现，拍板③的全兑现由真实语义背书。同命令毫秒级时钟偏移以 5 秒容差兜底（推钟粒度是分钟）。
+- **内核**：`controls.clock`（`{"advance_minutes": N}` / `{"advance_to_next_event": true}` 序列）；驱动优先级＝到期 virtual Job → 决策（下一决策暂无对应待办且时钟未耗尽时先推钟）→ 机器人（给了 decisions 键即禁用，含空表）→ 等待假设 → 终态即收束（剩余时钟不消费）；`_carry` 与等待到时 Job 同样落 virtual（串行换棒/转办的剩余档不漏给真实调度器）；报告增 `advanced_minutes`，兑现证据进 notes（事件面对模拟静默）。
+- **designer**：模拟 Tab 时钟控制条（+1 小时/+1 天/下一事件 快捷键 + JSON 数组编辑）；报告呈现推钟合计。
+- 测试：tests/semantics/test_simulation_clock.py 十例（等待到时/下一事件/无定时注记/reassign 全语义/自动通过/notify 仍待办/实例时限 cancel/假设优先/carry 保持 virtual/解析校验）。
+- 已决（③ **全兑现**）：由真实策略面背书——审批流的价值很大一块在超时分支，行业普遍验证不了＝我们的差异点。
 
 ### 批 3 · 交互排练（web 演练台，纯前端 + 共享件）
 

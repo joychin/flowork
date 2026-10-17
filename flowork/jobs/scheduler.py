@@ -113,6 +113,42 @@ class JobScheduler(DeadlineStrategiesMixin):
 
         return bool(self._engine.execute(_command))
 
+    def run_virtual(self, job_id: str, moment: datetime) -> bool:
+        """执行单个 virtual Job（模拟域虚拟时钟）：策略与真实执行同源。
+
+        认领条件 ``state='virtual'``（tick 只认 scheduled——模拟 Job 对真实
+        调度器不可见）；冻结/咨询推迟被策略回置 scheduled 后**拉回 virtual**
+        （不落真实域）；策略失败上抛给模拟驱动器（诚实停点，不重试不死信）。
+        """
+        from sqlalchemy import update
+
+        def _command(ctx: CommandContext) -> bool:
+            claimed_id = ctx.session.execute(
+                update(JobRow)
+                .where(JobRow.id == job_id, JobRow.state == "virtual")
+                .values(state="running")
+                .returning(JobRow.id)
+            ).scalar_one_or_none()
+            if claimed_id is None:
+                return False
+            job = ctx.session.get(JobRow, job_id)
+            assert job is not None
+            with ctx.session.begin_nested():
+                self._apply_strategy(ctx, job)
+            if job.state == "scheduled":
+                # 策略显式回置 scheduled＝冻结/咨询推迟不消费——留在虚拟域，
+                # 由后续推钟再次兑现
+                job.state = "virtual"
+                return True
+            job.state = "done"
+            job.result_payload = {
+                **(job.result_payload or {}),
+                "finished_at": moment.isoformat(),
+            }
+            return True
+
+        return bool(self._engine.execute(_command))
+
     def _mark_failure(
         self, ctx: CommandContext, job: JobRow, exc: Exception, moment: datetime
     ) -> None:

@@ -38,7 +38,11 @@ class WaitBehavior(NodeBehavior):
         assert isinstance(ctx, RuntimeNodeContext)
         spec = self.spec
         assert isinstance(spec, WaitSpec)
-        if ctx.instance.simulated:  # 模拟冻结（不订阅不建 Job）——卡点即报告发现
+        if ctx.instance.simulated:
+            # 模拟：不订阅消息（消息面对试跑关闭），但到时 Job 照建并置
+            # virtual——真实调度器不可见，由虚拟时钟按 run_at 兑现 elapsed
+            if spec.timeout is not None:
+                schedule_wait_job(ctx, spec)
             return
         if spec.message is not None:
             assert ctx.token is not None
@@ -164,7 +168,10 @@ def select_jobs_of(instance_id: str) -> Any:
 
 
 def schedule_wait_job(ctx: RuntimeNodeContext, spec: WaitSpec) -> None:
-    """登记到时 Job（与任务超时同款形态；暂停冻结/恢复顺延走既有 tick 规则）。"""
+    """登记到时 Job（与任务超时同款形态；暂停冻结/恢复顺延走既有 tick 规则）。
+
+    模拟实例置 ``virtual``（真实调度器不可见，虚拟时钟兑现）。
+    """
     import uuid
 
     from flowork.persistence.orm import JobRow
@@ -175,7 +182,7 @@ def schedule_wait_job(ctx: RuntimeNodeContext, spec: WaitSpec) -> None:
         JobRow(
             id=uuid.uuid4().hex,
             job_type="timer",
-            state="scheduled",
+            state="virtual" if ctx.instance.simulated else "scheduled",
             created_at=ctx.kernel.config.now(),  # 与 run_at 同钟
             run_at=ctx.kernel.config.now() + timedelta(minutes=spec.timeout.after_minutes),
             instance_id=ctx.instance.id,

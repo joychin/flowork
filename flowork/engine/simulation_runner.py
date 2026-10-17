@@ -1,22 +1,29 @@
 """模拟驱动器：把 simulated 实例驱动到停点（机器人缺省＝全通过；控制面见 simulation_controls）。
 
 基座（批 1a 任务行化）：模拟实例建真实任务行，办理全部经真实任务动作面——
-会签/协办/候选语义与真实运行同源；决策清单按序扮演办理人（给了清单即禁用
-机器人，未覆盖的待办停在「待决策点」）；等待节点按假设兑现。
+会签/协办/候选语义与真实运行同源。驱动优先级：到期 virtual Job（虚拟时钟
+兑现）→ 决策（按序扮演，下一决策暂无对应待办且时钟未耗尽时先推钟）→
+机器人（全通过；给了 decisions 键即禁用）→ 等待假设 → 停点。
 
-停点＝终态 / wait 冻结（无假设）/ 待决策 / 推进失败（错误进报告 notes 不上抛）。
-驱动范围＝实例全树（子实例递归传播 simulated，一并办理）。
+停点＝终态 / wait 冻结（无假设且时钟耗尽）/ 待决策 / 推进失败（错误进
+报告 notes 不上抛）。驱动范围＝实例全树（子实例递归传播 simulated）。
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from flowork.engine.simulation_controls import SimulationControls
+from flowork.engine.simulation_controls import (
+    SimulationControls,
+    fire_one_due_job,
+    instance_started_at,
+    step_virtual_clock,
+)
 from flowork.errors import FloworkError, TaskNotAvailableError
 
 if TYPE_CHECKING:
     from flowork.engine.engine import ProcessEngine
+    from flowork.tasks.models import TaskInfo
 
 __all__ = ["SIMULATION_ACTOR", "drive_simulation", "tree_instance_ids"]
 
@@ -26,44 +33,78 @@ _MAX_STEPS = 500
 
 def drive_simulation(
     engine: ProcessEngine, instance_id: str, controls: SimulationControls | None = None
-) -> list[str]:
-    """驱动到停点；返回说明性注记（进报告 notes）。"""
+) -> tuple[list[str], int]:
+    """驱动到停点；返回（说明性注记，累计推钟分钟）——进报告 notes/advanced_minutes。"""
     controls = controls or SimulationControls()
-    robot = not controls.decisions  # 无决策清单＝机器人全通过（基座语义）
     notes: list[str] = []
-    decisions = list(controls.decisions)
+    queue = list(controls.decisions)
+    clock_steps = list(controls.clock)
+    virtual_now = instance_started_at(engine, instance_id)
+    advanced = 0
     for _ in range(_MAX_STEPS):
+        if _instance_terminal(engine, instance_id):
+            return notes, advanced  # 终态即收束：不再消费剩余时钟/决策
+        if fire_one_due_job(engine, instance_id, virtual_now, notes):
+            continue
         pending = _pending_tasks(engine, instance_id)
-        if pending:
+        if pending and controls.decisions_given and queue:
+            step = queue[0]
+            if _locate(engine, instance_id, str(step["node"]), step.get("by")) is not None:
+                _apply_decision(engine, instance_id, step)
+                queue.pop(0)
+            elif clock_steps:
+                virtual_now, advanced = step_virtual_clock(
+                    engine, instance_id, clock_steps.pop(0), virtual_now, advanced, notes
+                )
+            else:
+                notes.append(
+                    f"待决策：决策 {step.get('node')}/{step.get('action')}"
+                    "暂无对应待办且时钟已耗尽（机器人已被决策清单禁用）"
+                )
+                return notes, advanced
+            continue
+        if pending and controls.decisions_given:
+            if clock_steps:
+                virtual_now, advanced = step_virtual_clock(
+                    engine, instance_id, clock_steps.pop(0), virtual_now, advanced, notes
+                )
+                continue
+            nodes = "、".join(sorted({f"{item[1]}@{item[0][:8]}" for item in pending}))
+            notes.append(f"待决策：控制面未提供决策的待办停在 {nodes}（机器人已被决策清单禁用）")
+            return notes, advanced
+        if pending:  # 机器人全通过（基座语义）
             # 协办/咨询先办：主任务在咨询未完时被拦（软挂起），顺序错了会假卡
             pending.sort(key=lambda item: 0 if item[1] in ("consult", "assist") else 1)
-            if robot:
-                for task_id, task_type, assignee in pending:
-                    try:
-                        _robot_act(engine, task_id, task_type, assignee)
-                    except FloworkError as exc:
-                        notes.append(f"模拟停在待办 {task_id}：{exc}")
-                        return notes
-                continue
-            if not decisions:
-                nodes = "、".join(sorted({f"{item[1]}@{item[0][:8]}" for item in pending}))
-                notes.append(
-                    f"待决策：控制面未提供决策的待办停在 {nodes}（机器人已被决策清单禁用）"
-                )
-                return notes
-            step = decisions[0]
-            try:
-                _apply_decision(engine, instance_id, step)
-                decisions.pop(0)
-            except FloworkError as exc:
-                notes.append(f"决策 {step.get('node')}/{step.get('action')} 失败：{exc}")
-                return notes
+            for task_id, task_type, assignee in pending:
+                try:
+                    _robot_act(engine, task_id, task_type, assignee)
+                except FloworkError as exc:
+                    notes.append(f"模拟停在待办 {task_id}：{exc}")
+                    return notes, advanced
             continue
         if _resolve_wait(engine, instance_id, controls.waits):
             continue
-        return notes  # 终态，或无假设的冻结等待
+        if clock_steps:
+            virtual_now, advanced = step_virtual_clock(
+                engine, instance_id, clock_steps.pop(0), virtual_now, advanced, notes
+            )
+            continue
+        return notes, advanced  # 终态，或无假设的冻结等待
     notes.append(f"模拟步数超过 {_MAX_STEPS} 上限，已停止（图中可能存在循环）")
-    return notes
+    return notes, advanced
+
+
+def _instance_terminal(engine: ProcessEngine, instance_id: str) -> bool:
+    """实例是否已落终态（终态即收束：剩余时钟/决策不再消费）。"""
+
+    def _read(ctx: Any) -> bool:
+        from flowork.persistence.orm import ProcessInstanceRow
+        from flowork.runtime.lifecycle import TERMINAL_INSTANCE_STATES
+
+        row = ctx.session.get(ProcessInstanceRow, instance_id)
+        return row is not None and row.state in TERMINAL_INSTANCE_STATES
+
+    return engine.execute(_read)
 
 
 def _pending_tasks(engine: ProcessEngine, instance_id: str) -> list[tuple[str, str, str]]:
@@ -101,26 +142,28 @@ def tree_instance_ids(ctx: Any, instance_id: str) -> list[str]:
     return ids
 
 
-def _apply_decision(engine: ProcessEngine, instance_id: str, step: dict[str, Any]) -> None:
-    """按序应用一条决策（真实动作面；子实例节点一并寻址）。"""
-    from flowork.tasks.action_steps import dispatch_task_action, find_pending_task
+def _locate(engine: ProcessEngine, instance_id: str, node: str, by: Any) -> TaskInfo | None:
+    """决策定位（全树寻址，只读）：找得到返回任务，找不到返回 None。"""
+    from flowork.tasks.action_steps import find_pending_task
 
     def _read(ctx: Any) -> list[str]:
         return tree_instance_ids(ctx, instance_id)
 
-    task = None
-    last_error: TaskNotAvailableError | None = None
     for candidate_id in engine.execute(_read):
         try:
-            task = find_pending_task(
-                engine, candidate_id, node=str(step["node"]), by=step.get("by")
-            )
-            break
-        except TaskNotAvailableError as exc:
-            last_error = exc
-    if task is None:
-        assert last_error is not None
-        raise last_error
+            return find_pending_task(engine, candidate_id, node=node, by=by)
+        except TaskNotAvailableError:
+            continue
+    return None
+
+
+def _apply_decision(engine: ProcessEngine, instance_id: str, step: dict[str, Any]) -> None:
+    """按序应用一条决策（真实动作面；子实例节点一并寻址）。"""
+    from flowork.tasks.action_steps import dispatch_task_action
+
+    task = _locate(engine, instance_id, str(step["node"]), step.get("by"))
+    if task is None:  # pragma: no cover - 驱动循环已先判定可定位
+        raise TaskNotAvailableError(f"节点 {step['node']} 没有就绪任务")
     actor = str(step.get("by") or task.assignee or SIMULATION_ACTOR)
     dispatch_task_action(engine, task.id, str(step["action"]), actor=actor, step=step)
 

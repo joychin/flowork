@@ -249,8 +249,8 @@ def test_simulation_robot_drives_countersign_to_completion(engine: ProcessEngine
         assert all(row.outcome == "agree" for row in done)
 
 
-def test_simulation_deadlines_create_no_jobs(engine: ProcessEngine):
-    """deadline 守卫：模拟任务建行但不建 timer Job（零 Job 不变量，批 2 虚拟时钟自算）。"""
+def test_simulation_deadline_jobs_stay_virtual(engine: ProcessEngine):
+    """deadline Job 照建但置 virtual（真实调度器不可见，批 2 虚拟时钟兑现）。"""
     from flowork.definitions.node import TaskDeadline
 
     flow = (
@@ -267,10 +267,13 @@ def test_simulation_deadlines_create_no_jobs(engine: ProcessEngine):
     report = engine.runtime.simulate("simdl")
     assert report.final_state == "completed"
     with engine.session_factory() as session:
-        assert (
-            session.scalars(select(JobRow).where(JobRow.instance_id == report.instance_id)).all()
-            == []
-        )
+        states = [
+            job.state
+            for job in session.scalars(
+                select(JobRow).where(JobRow.instance_id == report.instance_id)
+            ).all()
+        ]
+        assert states and all(state == "virtual" for state in states)
 
 
 def test_simulation_midflow_failure_lands_in_notes(engine: ProcessEngine):

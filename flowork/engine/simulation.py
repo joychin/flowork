@@ -34,6 +34,7 @@ class SimulationReport:
     decisions: list[dict[str, Any]] = field(default_factory=list)  # 办理记录（已办行推导）
     pending: list[dict[str, Any]] = field(default_factory=list)  # 停住的待办（待决策点）
     stubs_applied: list[str] = field(default_factory=list)  # 消费过桩值的 service 节点
+    advanced_minutes: int = 0  # 虚拟时钟累计推进（兑现明细在 notes 与已办行）
 
 
 def build_report(engine: ProcessEngine, instance_id: str) -> SimulationReport:

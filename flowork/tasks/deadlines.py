@@ -38,12 +38,14 @@ def carry_deadline_jobs_of(session: Any, old_task_id: str, instance_id: str, new
 def _carry(session: Any, old_task_id: str, instance_id: str, new: TaskRow) -> None:
     from sqlalchemy import select
 
-    from flowork.persistence.orm import JobRow
+    from flowork.persistence.orm import JobRow, ProcessInstanceRow
 
+    instance = session.get(ProcessInstanceRow, instance_id)
+    state = "virtual" if instance is not None and instance.simulated else "scheduled"
     jobs = session.scalars(
         select(JobRow).where(
             JobRow.job_type == "timer",
-            JobRow.state == "scheduled",
+            JobRow.state.in_(("scheduled", "virtual")),
             JobRow.instance_id == instance_id,
         )
     )
@@ -58,7 +60,7 @@ def _carry(session: Any, old_task_id: str, instance_id: str, new: TaskRow) -> No
             JobRow(
                 id=uuid.uuid4().hex,
                 job_type="timer",
-                state="scheduled",
+                state=state,
                 created_at=job.created_at,  # carry 保持原钟源
                 run_at=job.run_at,
                 instance_id=job.instance_id,
@@ -77,23 +79,24 @@ def _carry(session: Any, old_task_id: str, instance_id: str, new: TaskRow) -> No
 
 
 def schedule_deadline_jobs(ctx: RuntimeNodeContext, spec: UserTaskSpec, task_id: str) -> None:
-    """deadlines 逐条建 timer Job（≤8 条，validator 把关）。"""
-    if ctx.instance.simulated:
-        # 模拟不建 timer Job——零 Job 不变量（真实调度器不触达试跑）；
-        # 超时语义由批 2 的模拟器虚拟时钟自算兑现。
-        return
+    """deadlines 逐条建 timer Job（≤8 条，validator 把关）。
+
+    模拟实例的 Job 置 ``virtual``：真实调度器不可见（tick 只认 scheduled），
+    由模拟驱动器的虚拟时钟按 run_at 兑现——策略与真实执行同源。
+    """
     from flowork.persistence.orm import JobRow, TaskRow
 
     deadlines = effective_deadlines(spec)
     if not deadlines:
         return
+    state = "virtual" if ctx.instance.simulated else "scheduled"
     now = ctx.kernel.config.now()
     for index, deadline in enumerate(deadlines):
         ctx.session.add(
             JobRow(
                 id=uuid.uuid4().hex,
                 job_type="timer",
-                state="scheduled",
+                state=state,
                 created_at=now,  # 与 run_at 同钟
                 run_at=now + timedelta(minutes=deadline.after_minutes),
                 instance_id=ctx.instance.id,

@@ -33,13 +33,16 @@ const OUTCOME_BADGES: Record<string, string> = {
   agree: '✓', reject: '✕', transfer: '⇄', auto_pass: '↷', withdrawn: '↩', assist_cancel: '−',
 }
 
-/** 报告扩展字段(决策/待决策/桩应用/注记);主体 SimulationReport 在 types.ts */
+/** 报告扩展字段(决策/待决策/桩应用/注记/推钟);主体 SimulationReport 在 types.ts */
 type SimReport = SimulationReport & {
   notes?: string[]
   decisions?: { node: string; assignee: string; acted_by: string; outcome: string; comment: string }[]
   pending?: { task_id: string; node: string; assignee: string; task_type: string }[]
   stubs_applied?: string[]
+  advanced_minutes?: number
 }
+
+const CLOCK_PLACEHOLDER = `[{"advance_minutes": 2880}]`
 
 const STATE_LABELS: Record<string, string> = {
   completed: '✓ 全图跑通,正常完结',
@@ -60,10 +63,11 @@ export function DryRunDialog() {
   const [parseError, setParseError] = useState<string | null>(null)
   // 等待节点预演假设(逐节点;缺省 auto=两面都试,reason 会标注假设)
   const [assumptions, setAssumptions] = useState<Record<string, string>>({})
-  // 完整模拟控制面:等待假设(逐节点 none/matched/elapsed) + 决策清单/桩(JSON)
+  // 完整模拟控制面:等待假设(逐节点 none/matched/elapsed) + 决策/桩/时钟(JSON)
   const [simWaits, setSimWaits] = useState<Record<string, string>>({})
   const [decisionsText, setDecisionsText] = useState('')
   const [stubsText, setStubsText] = useState('')
+  const [clockText, setClockText] = useState('')
   // 完整模拟(本地状态,不入全局——报告只属于本次试跑)
   const [sim, setSim] = useState<SimReport | null>(null)
   const waitNodes = (spec?.nodes ?? []).filter((n) => n.kind === 'wait')
@@ -104,15 +108,30 @@ export function DryRunDialog() {
     setRunning(false)
   }
 
+  const appendClock = (stepObj: Record<string, unknown>) => {
+    try {
+      const arr = clockText.trim() ? JSON.parse(clockText) : []
+      if (!Array.isArray(arr)) {
+        showToast('时钟推进必须是 JSON 数组')
+        return
+      }
+      setClockText(JSON.stringify([...arr, stepObj]))
+    } catch (err) {
+      showToast(`时钟推进 JSON 无效:${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+
   const runSim = async () => {
     const variables = parseVars()
     if (!variables) return
-    // 控制面三件(全可选):决策清单/桩=JSON 文本,等待假设=逐节点下拉
+    // 控制面四件(全可选):决策清单/桩/时钟=JSON 文本,等待假设=逐节点下拉
     let decisions: unknown
     let stubs: unknown
+    let clock: unknown
     try {
       decisions = decisionsText.trim() ? JSON.parse(decisionsText) : undefined
       stubs = stubsText.trim() ? JSON.parse(stubsText) : undefined
+      clock = clockText.trim() ? JSON.parse(clockText) : undefined
     } catch (err) {
       showToast(`控制面 JSON 无效:${err instanceof Error ? err.message : String(err)}`)
       return
@@ -121,10 +140,12 @@ export function DryRunDialog() {
     for (const [node, value] of Object.entries(simWaits)) {
       if (value === 'matched' || value === 'elapsed') waits[node] = value
     }
-    const hasControls = decisions !== undefined || stubs !== undefined || Object.keys(waits).length > 0
-    const controls = hasControls
-      ? { ...(decisions !== undefined ? { decisions } : {}), ...(stubs !== undefined ? { stubs } : {}), ...(Object.keys(waits).length > 0 ? { waits } : {}) }
-      : undefined
+    const parts: Record<string, unknown>[] = []
+    if (decisions !== undefined) parts.push({ decisions })
+    if (stubs !== undefined) parts.push({ stubs })
+    if (clock !== undefined) parts.push({ clock })
+    if (Object.keys(waits).length > 0) parts.push({ waits })
+    const controls = parts.length > 0 ? Object.assign({}, ...parts) : undefined
     setRunning(true)
     setSim(null)
     try {
@@ -233,6 +254,22 @@ export function DryRunDialog() {
                 placeholder={DECISIONS_PLACEHOLDER}
                 value={decisionsText}
                 onChange={(e) => setDecisionsText(e.target.value)}
+              />
+            </div>
+            <div className="var-row" style={{ alignItems: 'flex-start', flexDirection: 'column', gap: 4 }}>
+              <span className="dryrun-node">
+                虚拟时钟(JSON 数组,按序推钟;到期定时用真实策略兑现 — 超时改派/自动通过/实例时限)
+                <button className="btn" style={{ marginLeft: 8, padding: '0 6px' }} onClick={() => appendClock({ advance_minutes: 60 })}>+1小时</button>
+                <button className="btn" style={{ marginLeft: 4, padding: '0 6px' }} onClick={() => appendClock({ advance_minutes: 1440 })}>+1天</button>
+                <button className="btn" style={{ marginLeft: 4, padding: '0 6px' }} onClick={() => appendClock({ advance_to_next_event: true })}>下一事件</button>
+              </span>
+              <textarea
+                className="json-area"
+                rows={2}
+                spellCheck={false}
+                placeholder={CLOCK_PLACEHOLDER}
+                value={clockText}
+                onChange={(e) => setClockText(e.target.value)}
               />
             </div>
             <div className="var-row" style={{ alignItems: 'flex-start', flexDirection: 'column', gap: 4 }}>
@@ -368,6 +405,10 @@ function SimulationView({ report, names }: { report: SimReport; names: Record<st
       {notes.map((n, i) => (
         <div key={`n${i}`} className="dryrun-warning">⚠ {n}</div>
       ))}
+
+      {(report.advanced_minutes ?? 0) > 0 && (
+        <div className="dryrun-hint">虚拟时钟累计推进 {report.advanced_minutes} 分钟(到期定时按真实策略兑现,明细见注记与办理记录)。</div>
+      )}
 
       <div className="dryrun-hint">
         模拟实例已隔离留存({report.instance_id.slice(0, 8)}…),不出现在实例列表;发布后可用同参数对照线上行为。

@@ -177,7 +177,7 @@ class RuntimeService(InstanceLifecycleMixin, IncidentMixin, VariableActionsMixin
                 minutes=definition.deadline.after_minutes
             )
         ctx.session.flush()
-        if definition.deadline is not None and not simulated:
+        if definition.deadline is not None:
             import uuid as _uuid
 
             from flowork.persistence.orm import JobRow
@@ -186,7 +186,8 @@ class RuntimeService(InstanceLifecycleMixin, IncidentMixin, VariableActionsMixin
                 JobRow(
                     id=_uuid.uuid4().hex,
                     job_type="timer",
-                    state="scheduled",
+                    # 模拟域置 virtual：真实调度器不可见，由虚拟时钟兑现
+                    state="virtual" if simulated else "scheduled",
                     created_at=self._engine.config.now(),  # 与 run_at 同钟
                     run_at=instance.deadline_at,
                     instance_id=instance.id,
@@ -242,7 +243,9 @@ class RuntimeService(InstanceLifecycleMixin, IncidentMixin, VariableActionsMixin
         ``{"stubs": {节点: 变量对象}}``——service_task 桩返回值（替身 handler
         同一写入口注入）；``{"waits": {节点: "matched"|"elapsed"|
         {"result": …, "payload": …}}}``——等待节点按假设兑现（matched 载荷
-        走 output_mappings 同语义）。
+        走 output_mappings 同语义）；``{"clock": [{"advance_minutes": N} |
+        {"advance_to_next_event": true}]}``——虚拟时钟步进，模拟域的到期
+        定时（任务 deadline/等待到时/实例时限）按 run_at 用真实策略面兑现。
         """
         import uuid as _uuid
 
@@ -276,9 +279,10 @@ class RuntimeService(InstanceLifecycleMixin, IncidentMixin, VariableActionsMixin
 
         self._engine.execute(_command)
         # 先驱动到停点再出报告（终态/令牌时间线要反映驱动后的实况）
-        notes = drive_simulation(self._engine, instance_id, parsed)
+        notes, advanced = drive_simulation(self._engine, instance_id, parsed)
         report = build_report(self._engine, instance_id)
         report.notes = notes
+        report.advanced_minutes = advanced
         return report
 
     def get_instance(self, instance_id: str) -> InstanceInfo:
