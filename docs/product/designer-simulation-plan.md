@@ -1,6 +1,9 @@
 # 设计器模拟测试补全计划（designer-simulation-plan）
 
-> 状态：**草案，待拍板**。制定 2026-10-16。
+> 状态：**已拍板（2026-10-16），按批施工**。制定 2026-10-16。
+> 七个拍板点全部已决：① 决策词**全量**（十动作词表，与演练剧本同构——连带基座翻转，见批 1）；
+> ②–⑦ 按原建议，其中②有诚实修正：**桩＝替身 handler 写变量**（output_mappings 是 wait 专属、
+> service handler 返回值本就由 handler 自写变量——探查证实）。
 > 行业参照：《流程模拟行业最佳实践调研》docs_research/流程模拟行业最佳实践-2026-10-16.md（本地资料）。
 > 定位背景（2026-10-16 用户拍板三功能）：① **可视化检视**（AI 会审，人看一眼仍不可替代）；② **调整编辑**（不是主战场，维持现有能力不再加深）；③ **模拟测试**（特别重要，本计划补全对象）。设计器=流程的信任面（发布前审阅把关 + 运行后审计回看）；形态维持双轨（只读组件嵌入宿主 / 仓库内全功能工作台）。
 
@@ -33,7 +36,7 @@
 
 | flowork 控制面 | 语义 | CPT 对应 |
 |---|---|---|
-| 决策 decisions | 节点(+人)→ complete/reject + variables/comment | COMPLETE_USER_TASK / UPDATE_VARIABLES |
+| 决策 decisions | 节点(+人)→ **全量十词表**（complete/reject/transfer/assist/consult/claim/unclaim/add_countersigner/complete_assist/complete_consult + comment/variables/target/to，与演练剧本同构） | COMPLETE_USER_TASK / UPDATE_VARIABLES 等 |
 | 桩 stubs | 节点→返回值 dict（下游分支可验） | MOCK_JOB_WORKER_* / MOCK_CHILD_PROCESS |
 | 等待/消息 waits/messages | 节点→ matched/elapsed + 载荷注入 | CORRELATE_MESSAGE / PUBLISH_MESSAGE |
 | 时间 clock | 推钟 advance(PT1H)/推进到下一事件 | INCREASE_TIME / SET_TIME |
@@ -54,15 +57,26 @@
 - `designer-plugin-plan.md` §1 补三功能定位与「信任面」措辞（含「发布把关是工作流约定不是技术强制」的诚实条款）；`designer/README.md` 与 `docs/manual/11-deploy.md` 措辞同步（「开发与审计工具」→「审阅与模拟测试工具」）；llms.txt/根 README 对应句；《本期建设边界》backlog 记录定位更新。
 - 验收：文档一致，无代码改动。
 
-### 批 1 · 模拟控制面：决策与桩（内核 + web + designer）
+### 批 1 · 模拟执行域任务行化 + 全量决策 + 桩（内核 + web + designer）
 
-- **内核**：`simulate` 增 `controls` 入参（decisions/stubs/waits/messages；keyword-only、缺省=None 时行为与现状完全一致）；决策走真引擎语义（approval_exit 置 agree/reject → 下游条件/会签计数/复活圈定自然生效）；报告扩展：应用的决策清单、桩返回值、等待假设兑现记录、**待决策点**（给了 controls 而未覆盖的 user_task 停在「待决策」而不是默认通过——缺省无 controls 时仍全通过）。
-- **决策首刀**：complete(agree)/reject + variables（驳回回退=复活语义天然生效）；转办/加签/协办/咨询随批 3 排练域（真实任务行）获得全语义。
-- **等待假设统一**：dry-run 的 matched/elapsed/auto 进整图模拟（按假设兑现 wait 完成；matched 可带载荷注入验 output_mappings）。
-- **web**：`POST /api/definitions/{code}/simulate` body 扩 controls（契约快照同步）；**designer**：模拟面板加「控制」编辑区（逐节点：决策下拉+变量、桩 JSON、等待假设），报告呈现决策/桩应用记录。
-- 测试：内核 semantics（驳回路径/多态会签按决策计数/待决策点语义）+ web 契约。
-- **拍板点 ①**：决策词表首刀范围（建议=complete/reject+变量；其余随批 3）。
-- **拍板点 ②**：桩返回值与 output_mappings 的关系（建议：桩值作为服务节点输出、走该节点 output_mappings 同语义——与真实路径一致）。
+拍板①为**全量决策词**（2026-10-16）。架构连带（探查证实）：转办/加签/协办/咨询的语义全部长在真实任务行与任务动作服务上，模拟域若维持「不建任务」（user_task.py 两处 simulated 分支）就没有承载这些动作的实体——**先翻转基座，再上控制面**。两提交：
+
+**提交 1a · 基座翻转与隔离（内核）**
+
+- **user_task 翻转**：删两处 simulated 分支（不建任务/进入即完成），模拟实例走真实路径（取人→建任务→等待完成）；approval_exit="simulated" 值退役（全仓无消费方）；取人失败照常挂起（诚实卡点）。
+- **deadline Job 守卫**：schedule_deadline_jobs 加 simulated 跳过——「模拟零 Job」不变量保持（批 2 由模拟器自算定时器；探查发现该处原本无守卫，翻转后模拟任务会建出被真实调度器触发的 Job）。
+- **事件抑制下沉**：从 start 命令的局部标志改为按 instance.simulated 在咽喉判定——否则驱动器后续命令（complete/finish_wait，每命令新 ctx 默认开事件）会把模拟事件真投 outbox。
+- **任务面隔离**（探查证实六个面今天全部不过滤）：list_tasks 与候选查询 join 实例过滤（include_simulated=False 缺省，与 instances() 同款）；instance_id 定向查询不过滤（审计要看模拟实例任务）；REST/MCP/CLI 透传自动继承。
+- **机器人驱动循环**：simulate 收尾把待办按缺省 agree 办完（actor=simulator，候选任务先认领），扫全树（子实例待办一并驱动），步数上限防环；停点=终态/wait 冻结/取人失败。
+- 测试：test_simulation.py 语义更新（建任务并归档/exit=agree/零事件零 Job 不变量保留）+ 任务面隔离矩阵（start_process(simulated=True) 原始入口验证活跃模拟任务的可见性）。
+
+**提交 1b · 控制面（内核+web+designer）**
+
+- **controls 模型**：simulate(..., controls=None)——decisions[{node,by,action,params}]（全量十词表）、stubs{node:值}、waits{node:matched|elapsed(+payload)}；缺省 None＝机器人（1a 语义，对外兼容）。
+- **驱动器** engine/simulation_runner.py：find_task 与十动作→TaskService 分派映射提为内核共享件（CLI walkthrough 改 import，api 快照 +N）；显式给 decisions 时未覆盖的 user_task 停为「待决策」（不回落机器人）；**桩＝替身 handler 写变量**（拍板②修正口径）；waits 直调 finish_wait（无 simulated 守卫，已证实可调）。桩与决策跨命令可用＝引擎级按实例注册 controls（服务节点可能在决策推进链中才到达）。
+- **报告扩展**：决策清单从已办行推导（acted_by/outcome/comment 天然在）、桩应用记录、待决策点（停住的待办）。
+- **web+designer**：simulate body 扩 controls（契约快照同步）；DryRunDialog 模拟面板加「控制」编辑区（逐节点：动作下拉（十词表）+参数、桩 JSON、等待假设）。
+- 测试：全词表驱动走查（**转办票随人走/加签计数/协办收口在模拟里成立**——全量决策词的价值钉子）、待决策语义、桩注入使下游分支可验、web 契约。
 
 ### 批 2 · 虚拟时钟（内核 + designer）
 
@@ -70,16 +84,14 @@
 - 报告时间线带「模拟时刻」；route_audit 的 now 即虚拟时刻（时钟统一批已钉 config.now，天然复用）。
 - **designer**：时间控制条（+1 小时/+1 天/推进到下一事件）；报告时间线呈现「时间跳过」标记与每步时刻。
 - 测试：wait 超时分派、deadline 动作矩阵、实例时限、推钟上限（防死循环）。
-- **拍板点 ③**：deadline 动作保真口径——全兑现 vs 只报告「到点将触发」（建议全兑现：审批流的价值很大一块在超时分支，行业普遍验证不了=我们的差异点）；与批 3 的关系：模拟域（无任务行）由模拟器兑现，排练域（有任务行）可复用真实 Job 机制跑虚拟时间。
+- 已决（③ **全兑现**）：模拟器自算定时器并兑现 deadline 动作（通知留痕、改派走转办语义、自动通过/驳回走对应出口、实例时限落终态）——审批流的价值很大一块在超时分支，行业普遍验证不了＝我们的差异点。
 
-### 批 3 · 交互排练（web 演练台）
+### 批 3 · 交互排练（web 演练台，纯前端 + 共享件）
 
-- **实例三档**：real / simulated / **rehearsal**（排练域）——隔离（查询面默认过滤、事件抑制、service 恒 stub、不建外部 Job）**但建真实任务行**：排练者用既有任务动作办理，转办/加签/协办/咨询全语义天然可用，无重复实现。`simulated` 布尔列改造为 `mode`（real/simulated/rehearsal）+ 迁移；查询面（实例/任务）默认过滤 simulated+rehearsal。
-- 排练可**挂剧本**（预填步骤，照着走）也可**纯交互**；CLI walkthrough 保持真实实例+内存库形态不变，共享步单渲染与步骤词表——`walkthrough_core` 提为共享件经 `flowork.api` 导出（公开面快照 +N 符号，CLI 改 import）。
-- **前端**：排练面板（步单复用 CLI 设计物：动作→新增/离场→路由→变量→事件；扮演提示「轮到 u_manager」；动作按钮取 available_actions）；画布高亮当前节点+已走路径；变量注入表单。
-- 测试：三档隔离矩阵（排练实例不进业务列表、事件不投递）、排练全动作走查。
-- **拍板点 ④**：排练实例的生命周期（保留供回看 vs 过期自动归档；建议默认保留、一键清理）。
-- **拍板点 ⑤**：三档列改造的兼容面（零兼容改 mode 列 vs 并列旧布尔——建议零兼容，早期惯例）。
+- 基座已在批 1（人点驱动＝simulated 基座的交互形态）——本批**不再有实例形态改造**：排练面板（步单复用 CLI 设计物：动作→新增/离场→路由→变量→事件；扮演提示「轮到 u_manager」；动作按钮取 available_actions）；画布高亮当前节点+已走路径；变量注入表单。
+- 已决（⑤ **免迁移**）：rehearsal 并入 simulated——交互排练只是同一基座的第三种驱动形态（机器人/决策清单/人点），不是第三种实例形态，布尔列不动。
+- 已决（④）：排练实例默认保留供回看、提供一键清理。
+- 测试：交互驱动走查、隔离复验。
 
 ### 批 4 · 场景回归（脚本 + 断言 + 存储 + CI）
 
@@ -87,8 +99,8 @@
 - **运行器**：`run_scenario(定义, 场景)` → 逐步结果+断言红绿（复用批 1/2 的执行器）；web `POST /api/definitions/{code}/scenarios/run`；CLI `flowork scenario run <定义> <场景文件>`（CI 口，退出码非零即失败）。
 - **存储**：`wf_designer_scenario` 表（迁移）；designer 场景面板（列表/存/跑/红绿/最近一次结果与时刻）。
 - 测试：场景运行器矩阵（直通/驳回回退/超时改派）、断言能力表、CLI 退出码、web 契约。
-- **拍板点 ⑥**：场景跑「草稿」还是「指定版本」（建议都支持、显式选择：草稿主场景与对照线上并存）。
-- **拍板点 ⑦**：场景是否成为发布门禁（**建议不做门禁**——行业无先例，测试/覆盖率都是照明；可选在发布确认框显示「场景红绿」提示）。
+- 已决（⑥ **都支持、显式选择**：草稿主场景与「对照线上」并存；⑦ **不做发布门禁**——发布确认框显示场景红绿提示即可，行业无门禁先例）。
+- 全量决策词（拍板①）的直接收益：场景 steps 与演练剧本**完全同构**（node/by/action/参数一比一），一份格式三消费者。
 
 ### 批 5 · 呈现与覆盖（可选后置）
 
