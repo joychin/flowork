@@ -61,6 +61,7 @@ class TaskService(
         assignee: str | None = None,
         candidate: str | None = None,
         state: str = "ready",
+        include_simulated: bool = False,
     ) -> list[TaskInfo]:
         """查询待办（默认 ready；state=None 查全部）。
 
@@ -68,6 +69,10 @@ class TaskService(
         关联含具体人（``user:`` 前缀与裸 id 互认）与组引用（认领时展开，有目录才
         命中）。``assignee=""`` 是显式条件＝尚未认领（候选池口径，与 candidate
         组合即「我可认领且仍在池中」）；``None`` 才是不筛。
+
+        模拟实例的任务默认隔离（与 ``instances()`` 同款）：模拟任务行是真实行
+        （批 1a 基座），不隔离会漏进业务待办/可认领面；按 ``instance_id`` 定向
+        查询（审计/模拟驱动器）不隔离，``include_simulated=True`` 显式放开。
         """
         from sqlalchemy import select
 
@@ -77,6 +82,12 @@ class TaskService(
             stmt = select(TaskRow)
             if instance_id:
                 stmt = stmt.where(TaskRow.instance_id == instance_id)
+            elif not include_simulated:
+                from flowork.persistence.orm import ProcessInstanceRow
+
+                stmt = stmt.join(
+                    ProcessInstanceRow, ProcessInstanceRow.id == TaskRow.instance_id
+                ).where(ProcessInstanceRow.simulated.is_(False))
             if assignee is not None:
                 stmt = stmt.where(TaskRow.assignee == assignee)
             if state:

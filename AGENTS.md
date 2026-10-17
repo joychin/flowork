@@ -737,3 +737,16 @@ withdraw 不在词表（作用于已办历史行，需历史行入口另立）�
 时间/变量，对齐 CPT 指令维度）+三玩法（自动冒烟/交互排练/场景回归）+一份脚本（与演练剧本同构）；
 五批：0 文档 / 1 任务行化+全量决策+桩 / 2 虚拟时钟 / 3 web 排练（rehearsal 并入 simulated=驱动
 形态，免迁移）/ 4 场景回归+CI。批 0 定位同步随本批落地（plugin-plan/README/manual/llms）。
+
+**模拟补全批 1a（2026-10-16，designer-simulation-plan 批 1 提交一）**：模拟执行域**任务行化基座**——
+simulated 实例建真实任务行，机器人（simulator）经真实任务动作面全通过办理（claim/complete/
+complete_assist/complete_consult 按任务类型选动词），会签/协办/候选语义与真实运行完全同源；
+驱动扫实例全树（子流程递归），FloworkError=诚实停点进报告 notes 不上抛（完成命令回滚令牌停原地）。
+四处配套：user_task 删两处模拟分支（approval_exit=simulated 值退役，全仓无消费方）；deadline
+建 Job 加模拟守卫（零 Job 不变量，批 2 虚拟时钟自算）；事件抑制下沉 kernel.record_event 咽喉
+按 instance.simulated 判定（驱动器后续命令各建新 ctx，局部 suppress 标志覆盖不到——探查实证三雷
+之一）；任务面隔离六处收口（list_tasks join 实例过滤+include_simulated=False 缺省、候选维度
+candidate_task_ids join 过滤、instance_id 定向查询不隔离=审计/驱动器口，REST/MCP/CLI 透传继承；
+claim 对模拟实例放行候选守卫=业务防抢注不约束试跑）。报告增 notes 字段（驱动器停点说明）；
+模拟-驱动顺序=先驱动后出报告。测试：test_simulation 语义更新+新增 5 例（隔离矩阵/候选隔离/
+并签机器人/deadline 零 Job/中途取人失败落 notes）。五道门全绿。

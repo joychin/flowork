@@ -4,6 +4,8 @@
 wf_route_decision（模拟跑的每一步边判定天然在表里）、stub 清单＝
 到访过的 service_task 节点（行为层模拟分支恒不执行 handler）。**报告诚实呈现
 覆盖度**：stub 列表与卡点（wait 冻结/等待中令牌）都是发现，不是噪音。
+批 1a 起模拟建真实任务行（机器人经真实动作面办理）——办理记录天然落在
+已办行（acted_by=simulator），notes 承载驱动器停点说明。
 """
 
 from __future__ import annotations
@@ -28,6 +30,7 @@ class SimulationReport:
     stubbed: list[str] = field(default_factory=list)  # service_task 到访（handler 未执行）
     stalled_at: str | None = None  # 卡点（有未完令牌时的所在节点，如 wait 冻结）
     route_decisions: list[dict[str, Any]] = field(default_factory=list)  # 逐步路由轨迹
+    notes: list[str] = field(default_factory=list)  # 驱动器停点说明（进报告不上抛）
 
 
 def build_report(engine: ProcessEngine, instance_id: str) -> SimulationReport:

@@ -222,10 +222,12 @@ class RuntimeService(InstanceLifecycleMixin, IncidentMixin, VariableActionsMixin
         revision: int | None = None,
         spec: dict[str, Any] | None = None,
     ) -> Any:
-        """整图试跑：模拟启动并自动推到卡点/终态，返回 SimulationReport。
+        """整图试跑：模拟启动并由机器人驱动到卡点/终态，返回 SimulationReport。
 
-        条件边按初始变量**真求值**；service_task 恒 stub、wait 冻结为卡点、
-        事件不投 outbox——报告复用路由审计（wf_route_decision）+ 令牌时间线。
+        条件边按初始变量**真求值**；user_task 建真实任务行、机器人缺省全通过
+        （办理走真实任务动作面——会签/协办语义与真实运行同源）；service_task 恒
+        stub、wait 冻结为卡点、事件不投 outbox——报告复用路由审计
+        （wf_route_decision）+ 令牌时间线 + 已办行。
 
         ``spec``（草稿直通）：传入定义 JSON 则**不查库**，按
         草稿内容模拟——证据先于发布（AI 改完草稿 → 人模拟 → 拍板发布）。
@@ -233,6 +235,7 @@ class RuntimeService(InstanceLifecycleMixin, IncidentMixin, VariableActionsMixin
         major/revision 与 spec 互斥（spec 优先）。
         """
         from flowork.engine.simulation import build_report
+        from flowork.engine.simulation_runner import drive_simulation
 
         if spec is not None:
             spec_user = start_user
@@ -265,7 +268,11 @@ class RuntimeService(InstanceLifecycleMixin, IncidentMixin, VariableActionsMixin
                 revision=revision,
                 simulated=True,
             )
-        return build_report(self._engine, instance_id)
+        # 先驱动到停点再出报告（终态/令牌时间线要反映驱动后的实况）
+        notes = drive_simulation(self._engine, instance_id)
+        report = build_report(self._engine, instance_id)
+        report.notes = notes
+        return report
 
     def get_instance(self, instance_id: str) -> InstanceInfo:
         def _command(ctx: CommandContext) -> Any:

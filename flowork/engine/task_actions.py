@@ -46,10 +46,14 @@ class TaskOpsMixin:
         if task is None or task.state != "ready":
             raise TaskNotAvailableError(f"任务不可认领（不存在或已处理）：{task_id}")
         self._assert_operable(ctx, task)
-        ctx.touch(self._instance(ctx, task.instance_id))
+        instance = self._instance(ctx, task.instance_id)
+        ctx.touch(instance)
         org = self._engine.config.org
         if task.assignee == "":
-            require_candidate(ctx.session, task_id, user, org)
+            if not instance.simulated:
+                require_candidate(ctx.session, task_id, user, org)
+            # 模拟实例放行：候选是业务防抢注语义，不约束试跑（模拟任务已被
+            # 查询面隔离，驱动者以 simulator 身份认领办理）
             task.assignee = user
             ctx.session.flush()
             self._emit_task_event(ctx, DomainEvent.TASK_CLAIMED, task, user)

@@ -78,6 +78,10 @@ def _carry(session: Any, old_task_id: str, instance_id: str, new: TaskRow) -> No
 
 def schedule_deadline_jobs(ctx: RuntimeNodeContext, spec: UserTaskSpec, task_id: str) -> None:
     """deadlines 逐条建 timer Job（≤8 条，validator 把关）。"""
+    if ctx.instance.simulated:
+        # 模拟不建 timer Job——零 Job 不变量（真实调度器不触达试跑）；
+        # 超时语义由批 2 的模拟器虚拟时钟自算兑现。
+        return
     from flowork.persistence.orm import JobRow, TaskRow
 
     deadlines = effective_deadlines(spec)

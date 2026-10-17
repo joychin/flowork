@@ -90,6 +90,15 @@ class Kernel(AdvanceGateMixin, TaskRecordsMixin, TokenRecordsMixin):
         """记录领域事件（引擎内部一律传 DomainEvent 成员；端口对宿主开放事件名）。"""
         if self.command_ctx is not None and self.command_ctx.suppress_events:
             return  # 模拟实例：事件不投 outbox（试跑不得惊动订阅方）
+        if instance_id and self.command_ctx is not None:
+            from flowork.persistence.orm import ProcessInstanceRow
+
+            row = self.command_ctx.session.get(ProcessInstanceRow, instance_id)
+            if row is not None and row.simulated:
+                # 静默判定下沉到咽喉：模拟驱动器的办理/兑现命令各建新
+                # CommandContext（局部 suppress 标志覆盖不到）——凡模拟
+                # 实例的事件一律不投 outbox。
+                return
         self.events.append((name, payload, instance_id))
         if instance_id and self.command_ctx is not None:
             self.command_ctx.instances_touched.add(instance_id)

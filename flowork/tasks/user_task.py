@@ -29,8 +29,8 @@ class UserTaskBehavior(NodeBehavior):
         spec = self.spec
         assert isinstance(spec, UserTaskSpec)
         assert ctx.token is not None
-        if ctx.instance.simulated:  # 模拟不建任务（try_complete 模拟分支放行）
-            return
+        # 模拟实例同样建真实任务行（批 1a 基座）：待办由模拟驱动器办理
+        # （机器人缺省全通过 / 决策清单 / 人点），语义与真实运行同源。
         from flowork.participants.resolver import ParticipantResolution
 
         resolution: ParticipantResolution = ctx.kernel.resolve_participants(ctx, spec)
@@ -169,9 +169,6 @@ class UserTaskBehavior(NodeBehavior):
         assert isinstance(spec, UserTaskSpec)
         token = ctx.token
         assert token is not None
-        if ctx.instance.simulated:  # 模拟即完成（不走 auto_pass 票数语义）
-            token.approval_exit = "simulated"
-            return True
         mi = spec.multi_instance
         from flowork.tasks.facts import instance_facts
 

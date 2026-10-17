@@ -98,13 +98,17 @@ def candidate_task_ids(session: Session, user: str, org: CandidateDirectory | No
     """候选查询维度：全部候选关联里命中该用户的任务 id（未去重）。
 
     全表走关联行——候选量级小，且本维度先落 Python API（索引化随 REST /v2 搜索面）。
+    模拟实例的任务不进本维度（与 list_tasks 隔离同口径：模拟任务行是真实行，
+    由模拟驱动器自会认领办理，不得漏进业务可认领面）。
     """
     from sqlalchemy import select
 
-    from flowork.persistence.orm import IdentityLinkRow
+    from flowork.persistence.orm import IdentityLinkRow, ProcessInstanceRow, TaskRow
 
-    return [
-        row.task_id
-        for row in session.scalars(select(IdentityLinkRow))
-        if candidate_hit(user, row.user_id, org)
-    ]
+    stmt = (
+        select(IdentityLinkRow)
+        .join(TaskRow, TaskRow.id == IdentityLinkRow.task_id)
+        .join(ProcessInstanceRow, ProcessInstanceRow.id == TaskRow.instance_id)
+        .where(ProcessInstanceRow.simulated.is_(False))
+    )
+    return [row.task_id for row in session.scalars(stmt) if candidate_hit(user, row.user_id, org)]
