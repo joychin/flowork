@@ -53,7 +53,8 @@ node_registry.register("my_node", MySpec, MyBehavior)
 
 ## 流程设计器(Web UI)
 
-`designer/` 提供 React Flow 可视化设计器(草稿 → 校验 → 发布生命周期、schema 驱动属性表单、
+流程的信任面:检视 / 调整 / 模拟测试(定位详见 `designer/README.md`)。`designer/` 提供
+React Flow 可视化界面(草稿 → 校验 → 试运行 → 发布生命周期、schema 驱动属性表单、
 registry 驱动调色板、Spec JSON 直编辑),后端为 `flowork/contrib/web/`（官方插件位）的薄 FastAPI:
 
 ```bash

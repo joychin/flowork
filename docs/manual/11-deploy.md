@@ -90,7 +90,8 @@ python -m flowork.contrib.mcp.server    # stdio 形态；FLOWORK_DB 同约定
 写类工具的 actor 参数必填——AI 操作同样要归因。
 
 另有 web 内部面（`flowork.contrib.web`，流程设计器的后端）与前端设计器
-（`designer/`），那是开发与审计工具，不属于运行面——详见 `designer/README.md`。
+（`designer/`），那是流程的审阅与模拟测试工具（发布前拿证据、运行后审计回看），
+不属于运行集成面——详见 `designer/README.md`。
 
 ## 本章小结
 

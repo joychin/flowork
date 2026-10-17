@@ -1,7 +1,9 @@
 # flowork Designer(流程设计器)
 
-React + TypeScript + React Flow 实现的 flowork 流程设计器 UI。
-对应《Python流程引擎实施规划》的「后续 UI 独立项目」落地:UI 只是 **Spec(模板 JSON)的编辑视图**,与 CLI / API / AI 写路径等价。
+React + TypeScript + React Flow 实现的 flowork 流程界面。定位(2026-10-16 拍板)＝**流程的信任面**:
+① **可视化检视**——AI 能审,人看一眼仍不可替代;② **调整编辑**——不是主战场,保留全套能力;
+③ **模拟测试**——发布前拿证据(路由预演/整图模拟,补全计划见 `docs/product/designer-simulation-plan.md`)。
+画布/表单仍是 **Spec(模板 JSON)的编辑视图**,与 CLI / API / AI 写路径等价。
 
 ## 架构原则
 
