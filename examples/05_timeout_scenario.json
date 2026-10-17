@@ -1,0 +1,19 @@
+{
+  "comment": "超时改派场景：48h 未办 → 真实 reassign 策略把经理待办转给总监（拍板③全兑现）。推钟在虚拟时钟上发生，零真实等待。",
+  "name": "超时改派：48h 未办 → 转总监 → 会签通过",
+  "start_user": "u_zhang",
+  "variables": {"amount": 12000, "reason": "设备采购"},
+  "steps": [
+    {"node": "submit", "by": "u_zhang", "action": "complete", "comment": "提交申请"},
+    {"clock": {"advance_minutes": 2880}},
+    {"node": "manager", "by": "u_director", "action": "complete", "comment": "超时改派后由总监代办"},
+    {"node": "cfo", "by": "u_cfo", "action": "complete"},
+    {"node": "cfo", "by": "u_director", "action": "complete"}
+  ],
+  "assertions": [
+    {"type": "final_state", "equals": "completed"},
+    {"type": "task", "node": "manager", "outcome": "transfer", "by": "system:timeout", "count": 1},
+    {"type": "task", "node": "manager", "outcome": "agree", "by": "u_director", "count": 1},
+    {"type": "visited", "contains": ["submit", "manager", "cfo", "notify"]}
+  ]
+}

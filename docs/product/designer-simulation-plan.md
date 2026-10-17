@@ -139,12 +139,19 @@
 - **AI 自动生成场景**：行业尚无成熟范式（UiPath 营销口径+两篇论文）；场景格式先立，将来「AI 按格式生成场景草案」只是一个小函数，不占主线。
 - 画布编辑体验继续加深、BPMN 导入导出、业务办理面（任务页）——既有结论不变。
 
-## 5. 验收（DoD）：费用报销模板（examples/04_expense_claim）全程
+## 5. 验收（DoD）：费用报销 + 超时改派双模板（✅ 全部实证，2026-10-16）
 
 1. 批 1：模拟「经理驳回 → 重报改额 → 财务转办」路径，报告呈现决策应用与复活语义；
 2. 批 2：推钟 2 天证明「48h 未办 → 转上级」分支，deadline 动作兑现且留痕；
 3. 批 3：web 排练面板人肉走完全程（含会签），每一步有步单；
 4. 批 4：三场景脚本（直通/驳回回退/超时改派）落库，设计器红绿可见，`flowork scenario run` 在 CI 全绿。
+
+**实证记录**：
+- `examples/04_expense_scenario.json`（驳回回退+改额+转办+会签，7 断言）→ CLI 全绿、覆盖 8/8。
+- `examples/05_timeout_reassign.json` + `05_timeout_scenario.json`（48h 未办→真实 reassign 转总监→会签）：
+  CLI 全绿、覆盖 6/6，报告注记显示 `strategy=notify` 与 `strategy=reassign` 两次真实策略兑现、
+  已办行 `system:timeout` 转办 + 总监接棒（拍板③「全兑现」的端到端证据）。
+  回归钉子：tests/semantics/test_rehearsal_scenario.py::test_scenario_timeout_reassign_end_to_end。
 
 ## 6. 工程纪律
 

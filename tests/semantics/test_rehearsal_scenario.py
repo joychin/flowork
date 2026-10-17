@@ -13,6 +13,7 @@ import pytest
 from flowork.definitions.builder import FlowBuilder
 from flowork.definitions.definition import ProcessVariable
 from flowork.engine import rehearsal
+from flowork.engine.config import EngineConfig
 from flowork.engine.engine import ProcessEngine
 from flowork.engine.scenario import parse_scenario, run_scenario
 from flowork.errors import FloworkError
@@ -272,3 +273,28 @@ def test_scenario_stops_on_bad_step_and_reports(engine: ProcessEngine):
     )
     assert not report.ok
     assert any("脚本停在失败步" in note for note in report.notes)
+
+
+def test_scenario_timeout_reassign_end_to_end(tmp_path):
+    """DoD：超时改派全链路（示例定义+示例场景，推钟兑现真实策略）全绿。"""
+    import json
+    from pathlib import Path
+
+    from flowork.api import create_registry, load_definition_file
+
+    examples = Path(__file__).parent.parent.parent / "examples"
+    engine = ProcessEngine(EngineConfig(db_file=str(tmp_path / "dod.db")))
+    try:
+        engine.repository.deploy(
+            load_definition_file(examples / "05_timeout_reassign.json", create_registry())
+        )
+        script = json.loads((examples / "05_timeout_scenario.json").read_text(encoding="utf-8"))
+        report = run_scenario(engine, "approval_timeout", script)
+        assert report.ok, (report.assertions, report.notes)
+        assert report.advanced_minutes == 2880
+        assert report.coverage["nodes"]["total"] == 6
+        assert report.coverage["nodes"]["missing"] == []
+        # 真实策略面兑现的归因证据
+        assert any("strategy=reassign" in note for note in report.notes)
+    finally:
+        engine.close()

@@ -809,3 +809,10 @@ RehearsalDialog（候选池自动认领/跨实例任务树校验/等待节点两
 + designer「对比线上版」按钮（两版结论不一致明确告警）。web 场景面拆 `scenario_routes.py`
 （与排练面分居守 300 行红线，app.py 296 行）。未做：画布路径动画（体验打磨，按定位不加深）、
 跨场景覆盖聚合（统计面按需另立）。测试 +2（对比双测）。**1226 测试全绿，五道门全过**。
+
+**模拟补全 DoD 实证批（2026-10-16，计划 §5 收口）**：新增 `examples/05_timeout_reassign.json`
+（经理两级超时：1440 notify + 2880 reassign→总监；会签严格过半；传阅发起人）+
+`examples/05_timeout_scenario.json`（推钟 2880 → 真实 notify/reassign 依次兑现 → 总监接棒 →
+会签通过；四条断言含 `outcome=transfer, by=system:timeout` 归因钉子）。CLI 实测全绿、覆盖 6/6；
+回归测试 test_scenario_timeout_reassign_end_to_end 固化（拍板③「超时全兑现」的端到端证据——
+行业调研里「全行业验证不了」的分支，flowork 现在可验）。**1227 测试全绿，五道门全过**。

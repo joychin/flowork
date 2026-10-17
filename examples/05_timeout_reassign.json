@@ -1,0 +1,178 @@
+{
+  "code": "approval_timeout",
+  "name": "超时改派演示",
+  "major": 1,
+  "revision": 1,
+  "status": "published",
+  "input": null,
+  "deadline": null,
+  "start_on_message": [],
+  "nodes": [
+    {
+      "code": "start",
+      "name": "开始",
+      "kind": "start",
+      "advance_policy": null,
+      "hooks": {
+        "on_enter": null,
+        "on_exit": null,
+        "on_cancel": null,
+        "on_fail": null
+      },
+      "properties": {}
+    },
+    {
+      "code": "submit",
+      "name": "填写申请",
+      "kind": "user_task",
+      "advance_policy": null,
+      "hooks": {
+        "on_enter": null,
+        "on_exit": null,
+        "on_cancel": null,
+        "on_fail": null
+      },
+      "properties": {},
+      "assignee": "initiator"
+    },
+    {
+      "code": "manager",
+      "name": "经理审批",
+      "kind": "user_task",
+      "advance_policy": null,
+      "hooks": {
+        "on_enter": null,
+        "on_exit": null,
+        "on_cancel": null,
+        "on_fail": null
+      },
+      "properties": {},
+      "assignee": "'u_manager'",
+      "reject_target": "submit",
+      "deadlines": [
+        {
+          "after_minutes": 1440,
+          "action": "notify",
+          "reassign_to": null,
+          "escalate_to": null
+        },
+        {
+          "after_minutes": 2880,
+          "action": "reassign",
+          "reassign_to": "'u_director'",
+          "escalate_to": null
+        }
+      ]
+    },
+    {
+      "code": "cfo",
+      "name": "财务与总监会签",
+      "kind": "user_task",
+      "advance_policy": null,
+      "hooks": {
+        "on_enter": null,
+        "on_exit": null,
+        "on_cancel": null,
+        "on_fail": null
+      },
+      "properties": {},
+      "assignees": [
+        "'u_cfo'",
+        "'u_director'"
+      ],
+      "multi_instance": {
+        "mode": "parallel",
+        "approve_exit": "task.approve_count * 2 > task.item_count",
+        "disapprove_exit": null
+      }
+    },
+    {
+      "code": "notify",
+      "name": "传阅申请人",
+      "kind": "cc_task",
+      "advance_policy": null,
+      "hooks": {
+        "on_enter": null,
+        "on_exit": null,
+        "on_cancel": null,
+        "on_fail": null
+      },
+      "properties": {},
+      "recipients": [
+        "initiator"
+      ]
+    },
+    {
+      "code": "end",
+      "name": "结束",
+      "kind": "end",
+      "advance_policy": null,
+      "hooks": {
+        "on_enter": null,
+        "on_exit": null,
+        "on_cancel": null,
+        "on_fail": null
+      },
+      "properties": {}
+    }
+  ],
+  "flows": [
+    {
+      "source": "start",
+      "target": "submit",
+      "name": "",
+      "is_default": false,
+      "condition": null,
+      "on_take": null
+    },
+    {
+      "source": "submit",
+      "target": "manager",
+      "name": "",
+      "is_default": false,
+      "condition": null,
+      "on_take": null
+    },
+    {
+      "source": "manager",
+      "target": "cfo",
+      "name": "",
+      "is_default": false,
+      "condition": null,
+      "on_take": null
+    },
+    {
+      "source": "cfo",
+      "target": "notify",
+      "name": "",
+      "is_default": false,
+      "condition": null,
+      "on_take": null
+    },
+    {
+      "source": "notify",
+      "target": "end",
+      "name": "",
+      "is_default": false,
+      "condition": null,
+      "on_take": null
+    }
+  ],
+  "variables": [
+    {
+      "name": "amount",
+      "type": "number",
+      "label": "金额",
+      "sample": 12000,
+      "searchable": false
+    },
+    {
+      "name": "reason",
+      "type": "string",
+      "label": "事由",
+      "sample": "设备采购",
+      "searchable": false
+    }
+  ],
+  "layout": {}
+}
