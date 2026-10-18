@@ -65,7 +65,21 @@ def perform_rehearsal_step(engine: ProcessEngine, instance_id: str, step: dict[s
     handler = _STEP_HANDLERS.get(kind)
     if handler is None:
         raise FloworkError(f"未知的排练步类型：{kind}（可选 {sorted(_STEP_HANDLERS)}）")
+    _require_simulated(engine, instance_id)
     handler(engine, instance_id, step)
+
+
+def _require_simulated(engine: ProcessEngine, instance_id: str) -> None:
+    """排练只驱动模拟域实例：真实实例的动作面不对排练端点开放（越权面）。"""
+
+    def _read(ctx: Any) -> bool:
+        from flowork.persistence.orm import ProcessInstanceRow
+
+        row = ctx.session.get(ProcessInstanceRow, instance_id)
+        return row is not None and bool(row.simulated)
+
+    if not engine.execute(_read):
+        raise InstanceNotFoundError(f"排练实例不存在或不是模拟实例：{instance_id}")
 
 
 def _wait_step(engine: ProcessEngine, instance_id: str, step: dict[str, Any]) -> None:

@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from typing import Any
 
 from fastapi import HTTPException
@@ -118,10 +119,18 @@ def register_scenario_routes(app: Any, engine: Any) -> None:
             }
         major = raw.get("major") if isinstance(raw, dict) else None
         revision = raw.get("revision") if isinstance(raw, dict) else None
-        version = next(
-            (v for v in versions if v["major"] == major and v["revision"] == revision),
-            versions[0],
-        )
+        if major is None and revision is None:
+            version = versions[0]
+        else:
+            version = next(
+                (v for v in versions if v["major"] == major and v["revision"] == revision),
+                None,
+            )
+            if version is None:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"版本不存在：v{major}.{revision}（已发布 {len(versions)} 个版本）",
+                )
         published_report = _safe_run(
             engine,
             code,
@@ -202,25 +211,32 @@ def _safe_run(
 
     try:
         return run_scenario(engine, code, script, spec=spec, major=major, revision=revision)
-    except FloworkError as exc:
-        return ScenarioFailure(str(exc))
+    except (FloworkError, ValueError, TypeError) as exc:
+        return ScenarioFailure.of(str(exc))
 
 
+@dataclass
 class ScenarioFailure:
-    """一侧跑不起来（校验/引擎错）：报告形状兼容的失败占位。"""
+    """一侧跑不起来（校验/引擎错）：ScenarioReport 形状兼容的失败占位（asdict 可用）。"""
 
-    def __init__(self, message: str) -> None:
-        self.scenario = ""
-        self.instance_id = ""
-        self.final_state = "failed"
-        self.ok = False
-        self.steps: list[Any] = []
-        self.assertions = [
-            {"type": "run", "ok": False, "actual": message, "expected": {}, "message": message}
-        ]
-        self.coverage: dict[str, Any] = {}
-        self.notes = [message]
-        self.advanced_minutes = 0
+    scenario: str = ""
+    instance_id: str = ""
+    final_state: str = "failed"
+    ok: bool = False
+    steps: list[Any] = field(default_factory=list)
+    assertions: list[Any] = field(default_factory=list)
+    coverage: dict[str, Any] = field(default_factory=dict)
+    notes: list[str] = field(default_factory=list)
+    advanced_minutes: int = 0
+
+    @classmethod
+    def of(cls, message: str) -> ScenarioFailure:
+        return cls(
+            assertions=[
+                {"type": "run", "ok": False, "actual": message, "expected": {}, "message": message}
+            ],
+            notes=[message],
+        )
 
     @property
     def failed(self) -> list[Any]:

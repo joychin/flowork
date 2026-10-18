@@ -92,24 +92,37 @@ def check_assertion(
 
 
 def match_expected(actual: Any, item: dict[str, Any]) -> bool:
+    """期望值匹配：equals / in / op+value（逐分支求值，不可比即 False）。"""
     if "equals" in item:
         return bool(actual == item["equals"])
     if "in" in item:
-        return actual in item["in"]
-    if "op" in item and "value" in item:
-        op, value = str(item["op"]), item["value"]
+        expected = item["in"]
+        if not isinstance(expected, (list, tuple, set, str)):
+            return False  # 形状错当不满足（不抛）
         try:
-            return bool(
-                {
-                    ">": actual > value,
-                    ">=": actual >= value,
-                    "<": actual < value,
-                    "<=": actual <= value,
-                    "!=": actual != value,
-                }[op]
-            )
-        except (KeyError, TypeError):
+            return actual in expected
+        except TypeError:
             return False
+    if "op" in item:
+        if "value" not in item:
+            return False  # op 缺 value＝断言配置错，不静默算过
+        op, value = str(item["op"]), item["value"]
+        if actual is None:
+            return op == "!="  # 空值只对「不等」有意义（其余比较不可比）
+        try:
+            if op == ">":
+                return bool(actual > value)
+            if op == ">=":
+                return bool(actual >= value)
+            if op == "<":
+                return bool(actual < value)
+            if op == "<=":
+                return bool(actual <= value)
+            if op == "!=":
+                return bool(actual != value)
+        except TypeError:
+            return False
+        return False  # 未知 op
     return True  # 无期望＝只做存在性（配合 count/contains 用法）
 
 
@@ -141,8 +154,6 @@ def compute_coverage(engine: ProcessEngine, instance_id: str) -> dict[str, Any]:
     edges_hit: set[str] = set()
     for row in state["routes"]:
         edges_hit.update(str(edge) for edge in row["selected"])
-    for step in state["task_history"]:
-        edges_hit.add(f"{step['node']}->?")  # 已办行无出边信息：仅节点维度可用
     edges_hit = {edge for edge in edges_hit if edge in edges_all}
     return {
         "nodes": {

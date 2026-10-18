@@ -245,9 +245,9 @@ class RuntimeService(InstanceLifecycleMixin, IncidentMixin, VariableActionsMixin
         {"result": …, "payload": …}}}``——等待节点按假设兑现（matched 载荷
         走 output_mappings 同语义）；``{"clock": [{"advance_minutes": N} |
         {"advance_to_next_event": true}]}``——虚拟时钟步进，模拟域的到期
-        定时（任务 deadline/等待到时/实例时限）按 run_at 用真实策略面兑现。
-        """
+        定时（任务 deadline/等待到时/实例时限）按 run_at 用真实策略面兑现。"""
         from flowork.engine.simulation import build_report
+        from flowork.engine.simulation_controls import clear_simulation_state
         from flowork.engine.simulation_runner import drive_simulation
 
         instance_id, parsed = self.start_simulation(
@@ -264,6 +264,7 @@ class RuntimeService(InstanceLifecycleMixin, IncidentMixin, VariableActionsMixin
         report = build_report(self._engine, instance_id)
         report.notes = notes
         report.advanced_minutes = advanced
+        clear_simulation_state(self._engine, instance_id)  # 桩值不随试跑次数累积
         return report
 
     def start_simulation(
@@ -292,7 +293,7 @@ class RuntimeService(InstanceLifecycleMixin, IncidentMixin, VariableActionsMixin
         )
 
     def get_instance(self, instance_id: str) -> InstanceInfo:
-        def _command(ctx: CommandContext) -> Any:
+        def _command(ctx: CommandContext) -> InstanceInfo:
             return _to_info(_load(ctx, instance_id))
 
         result: InstanceInfo = self._engine.execute(_command)

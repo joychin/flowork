@@ -133,8 +133,17 @@ class JobScheduler(DeadlineStrategiesMixin):
                 return False
             job = ctx.session.get(JobRow, job_id)
             assert job is not None
-            with ctx.session.begin_nested():
-                self._apply_strategy(ctx, job)
+            try:
+                with ctx.session.begin_nested():
+                    self._apply_strategy(ctx, job)
+            except Exception as exc:
+                # 模拟域：策略异常不得穿出驱动循环（整次模拟会丢报告）——
+                # Job 结案留痕，错误归一 FloworkError 由驱动器记 notes
+                job.state = "done"
+                job.result_payload = {**(job.result_payload or {}), "skipped": str(exc)}
+                from flowork.errors import FloworkError
+
+                raise FloworkError(f"虚拟时钟策略执行失败（job={job.id}）：{exc}") from exc
             if job.state == "scheduled":
                 # 策略显式回置 scheduled＝冻结/咨询推迟不消费——留在虚拟域，
                 # 由后续推钟再次兑现

@@ -8,20 +8,19 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 
 from flowork.engine.history_archive import ArchiveMixin
+from flowork.engine.history_token import HistoryTokenMixin
 from flowork.engine.history_trace import TraceEntry, TraceMixin
 from flowork.engine.ops import CommandContext
 from flowork.persistence.orm import (
     EventOutboxRow,
     ProcessInstanceRow,
     TaskHistoryRow,
-    TokenRow,
 )
 from flowork.tasks.models import (
     EventInfo,
     InstanceInfo,
     RouteDecisionInfo,
     TaskHistoryInfo,
-    TokenInfo,
 )
 
 if TYPE_CHECKING:
@@ -42,7 +41,7 @@ class Page(BaseModel):
     limit: int = 50
 
 
-class HistoryService(ArchiveMixin, TraceMixin):
+class HistoryService(HistoryTokenMixin, ArchiveMixin, TraceMixin):
     """历史与只读查询服务（待办查询在 TaskService.list_tasks）。"""
 
     def __init__(self, engine: ProcessEngine) -> None:
@@ -117,7 +116,10 @@ class HistoryService(ArchiveMixin, TraceMixin):
         assignee: str | None = None,
         *,
         limit: int = 200,
+        include_simulated: bool = False,
     ) -> list[TaskHistoryInfo]:
+        """已办查询（实例定向不隔离；全局/按人默认排除模拟）。"""
+
         def _command(ctx: CommandContext) -> Any:
             # 全局/按人查询取最近；实例维度保持 asc
             order = (
@@ -128,6 +130,10 @@ class HistoryService(ArchiveMixin, TraceMixin):
             stmt = select(TaskHistoryRow).order_by(order)
             if instance_id:
                 stmt = stmt.where(TaskHistoryRow.instance_id == instance_id)
+            elif not include_simulated:
+                from flowork.engine.sim_isolation import exclude_simulated
+
+                stmt = exclude_simulated(stmt, TaskHistoryRow.instance_id)
             if assignee:
                 stmt = stmt.where(TaskHistoryRow.assignee == assignee)
             return [_history(row) for row in ctx.session.scalars(stmt.limit(limit))]
@@ -177,34 +183,6 @@ class HistoryService(ArchiveMixin, TraceMixin):
         result: list[InstanceInfo] = self._engine.execute(_command)
         return result
 
-    def tokens(self, instance_id: str) -> list[TokenInfo]:
-        def _command(ctx: CommandContext) -> Any:
-            stmt = (
-                select(TokenRow)
-                .where(TokenRow.instance_id == instance_id)
-                .order_by(TokenRow.token_no)
-            )
-            return [
-                TokenInfo(
-                    id=row.id,
-                    token_no=row.token_no,
-                    activity_code=row.activity_code,
-                    source_activity_code=row.source_activity_code,
-                    state=row.state,
-                    item_count=row.item_count,
-                    approve_count=row.approve_count,
-                    disapprove_count=row.disapprove_count,
-                    reject_flag=row.reject_flag,
-                    approval_exit=row.approval_exit,
-                    created_at=row.created_at,
-                    finished_at=row.finished_at,
-                )
-                for row in ctx.session.scalars(stmt)
-            ]
-
-        result: list[TokenInfo] = self._engine.execute(_command)
-        return result
-
     def paged_tasks(
         self,
         *,
@@ -212,8 +190,9 @@ class HistoryService(ArchiveMixin, TraceMixin):
         instance_id: str | None = None,
         offset: int = 0,
         limit: int = 50,
+        include_simulated: bool = False,
     ) -> Page:
-        """已办分页查询（UI 列表页数据源）。"""
+        """已办分页查询（UI 列表页数据源）。模拟实例默认隔离（定向实例不隔离）。"""
         from sqlalchemy import func, select
 
         def _command(ctx: CommandContext) -> Any:
@@ -222,6 +201,10 @@ class HistoryService(ArchiveMixin, TraceMixin):
                 stmt = stmt.where(TaskHistoryRow.assignee == assignee)
             if instance_id:
                 stmt = stmt.where(TaskHistoryRow.instance_id == instance_id)
+            elif not include_simulated:
+                from flowork.engine.sim_isolation import exclude_simulated
+
+                stmt = exclude_simulated(stmt, TaskHistoryRow.instance_id)
             total = ctx.session.scalar(select(func.count()).select_from(stmt.subquery()))
             rows = ctx.session.scalars(
                 stmt.order_by(TaskHistoryRow.created_at.desc(), TaskHistoryRow.id)

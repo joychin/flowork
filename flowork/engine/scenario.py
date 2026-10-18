@@ -109,18 +109,20 @@ def run_scenario(
     virtual_now = _started_at(engine, instance_id)
     advance = _Advance(engine, instance_id, virtual_now, report.notes)
 
+    stopped = False
     try:
-        _run_steps(engine, instance_id, scenario.get("steps") or [], advance, report)
+        _run_steps(engine, instance_id, scenario.get("steps") or [], advance, report, _parsed)
+        advance.drain(report)
     except FloworkError as exc:
         report.notes.append(f"脚本停在失败步：{exc}")
-    advance.drain(report)
+        stopped = True
     report.final_state = _final_state(engine, instance_id)
     report.advanced_minutes = advance.advanced
     from flowork.engine.scenario_checks import compute_coverage, evaluate_assertions
 
     evaluate_assertions(engine, instance_id, scenario.get("assertions") or [], report)
     report.coverage = compute_coverage(engine, instance_id)
-    report.ok = not report.failed and report.final_state not in ("failed",)
+    report.ok = not stopped and not report.failed and report.final_state not in ("failed",)
     return report
 
 
@@ -186,14 +188,28 @@ def _run_steps(
     steps: list[dict[str, Any]],
     advance: _Advance,
     report: ScenarioReport,
+    controls: Any = None,
 ) -> None:
     from flowork.engine.rehearsal import perform_rehearsal_step
-    from flowork.tasks.action_steps import find_pending_task
+    from flowork.engine.simulation_runner import resolve_wait
 
+    preset_waits: dict[str, dict[str, Any]] = dict(getattr(controls, "waits", None) or {})
     for index, step in enumerate(steps):
+        # 控制面预置的等待假设：到访等待节点即兑现（与显式 wait 步等价）
+        if preset_waits and resolve_wait(engine, instance_id, preset_waits):
+            report.steps.append({"index": index, "kind": "wait", "detail": "controls.waits"})
         if "clock" in step:
-            advance.step(dict(step["clock"]))
-            report.steps.append({"index": index, "kind": "clock", "detail": step["clock"]})
+            step_clock = step["clock"]
+            if not isinstance(step_clock, dict):
+                raise FloworkError(f"clock 步必须是对象：{step_clock!r}")
+            # 复用控制面校验（advance_minutes 正整数 / advance_to_next_event）
+            from flowork.engine.simulation_controls import parse_controls
+
+            parsed_clock = parse_controls({"clock": [step_clock]}).clock
+            if not parsed_clock:
+                raise FloworkError(f"clock 步形状非法：{step_clock!r}")
+            advance.step(parsed_clock[0])
+            report.steps.append({"index": index, "kind": "clock", "detail": step_clock})
             continue
         if "wait" in step:
             perform_rehearsal_step(
@@ -209,7 +225,7 @@ def _run_steps(
             report.steps.append({"index": index, "kind": "wait", "detail": step["wait"]})
             advance.drain(report)
             continue
-        task = find_pending_task(engine, instance_id, node=str(step["node"]), by=step.get("by"))
+        task = _locate_in_tree(engine, instance_id, str(step["node"]), step.get("by"))
         perform_rehearsal_step(engine, instance_id, {"task_id": task.id, **step})
         report.steps.append(
             {
@@ -221,6 +237,25 @@ def _run_steps(
             }
         )
         advance.drain(report)
+
+
+def _locate_in_tree(engine: ProcessEngine, instance_id: str, node: str, by: Any) -> Any:
+    """全树定位待办（子流程节点同样可按 node 寻址，与 simulate 决策一致）。"""
+    from flowork.engine.simulation_runner import tree_instance_ids
+    from flowork.tasks.action_steps import find_pending_task
+
+    def _tree(ctx: Any) -> list[str]:
+        return tree_instance_ids(ctx, instance_id)
+
+    last: Exception | None = None
+    for candidate_id in engine.execute(_tree):
+        try:
+            return find_pending_task(engine, candidate_id, node=node, by=by)
+        except FloworkError as exc:
+            last = exc
+    if last is None:  # pragma: no cover - 树至少含自身
+        raise FloworkError(f"节点 {node} 没有就绪任务")
+    raise last
 
 
 def _final_state(engine: ProcessEngine, instance_id: str) -> str:

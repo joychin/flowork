@@ -18,6 +18,7 @@ from rich.table import Table
 from flowork.api import (
     EngineConfig,
     FloworkError,
+    IssueLevel,
     ProcessEngine,
     create_registry,
     run_scenario,
@@ -61,7 +62,10 @@ def run(
 def _definition_for(path: Path, registry: Any) -> Any:
     from flowork.api import load_definition_file
 
-    return load_definition_file(path, registry)
+    try:
+        return load_definition_file(path, registry)
+    except OSError as exc:
+        raise FloworkError(f"读取定义文件失败 {path}：{exc}") from exc
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -80,6 +84,14 @@ def _run(
     code = str(spec.get("code") or "")
     if not code:
         raise FloworkError(f"{definition} 缺少 code")
+    # 与 web 同门槛：设计期 ERROR 拦（否则 CI 会放过设计器拒跑的定义）
+    from flowork.api import load_definition
+
+    issues = engine.repository.validate(load_definition(spec, engine.config.node_registry))
+    errors = [issue for issue in issues if issue.level == IssueLevel.ERROR]
+    if errors:
+        detail = "；".join(f"{e.rule} {e.message}" for e in errors[:3])
+        raise FloworkError(f"定义校验未通过（{len(errors)} 个错误）：{detail}")
     return run_scenario(engine, code, script, spec=spec)
 
 

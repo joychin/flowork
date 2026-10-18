@@ -26,6 +26,7 @@ if TYPE_CHECKING:
 __all__ = [
     "SimulationControls",
     "applied_stubs",
+    "clear_simulation_state",
     "fire_one_due_job",
     "instance_started_at",
     "parse_controls",
@@ -65,6 +66,10 @@ def parse_controls(raw: dict[str, Any] | None) -> SimulationControls:
         for item in decisions:
             if not isinstance(item, dict) or not item.get("node") or not item.get("action"):
                 raise FloworkError(f"决策步骤缺少 node/action：{item!r}")
+            if not isinstance(item["node"], str) or not isinstance(item["action"], str):
+                raise FloworkError(f"决策的 node/action 必须是字符串：{item!r}")
+            if "by" in item and item["by"] is not None and not isinstance(item["by"], str):
+                raise FloworkError(f"决策的 by 必须是字符串：{item!r}")
             if item["action"] not in KNOWN_TASK_ACTIONS:
                 raise FloworkError(
                     f"决策动作未知：{item['action']}（可选 {sorted(KNOWN_TASK_ACTIONS)}）"
@@ -235,16 +240,51 @@ def register_simulation_stubs(
 def simulation_stub_of(
     engine: ProcessEngine | None, instance_id: str, node: str
 ) -> dict[str, Any] | None:
-    """取节点桩值并记「已消费」（报告 stubs_applied 数据源）。"""
+    """取节点桩值并记「已消费」（报告 stubs_applied 数据源）。
+
+    按实例**根**解析：子流程实例（call_activity）自带新 id，桩注册在根实例上
+    ——必须沿 parent 链上溯，否则子流程内的 service 节点桩全部失效。
+    """
     if engine is None:
         return None
-    stubs = _STUBS.get(engine, {}).get(instance_id)
+    root_id = _root_instance_id(engine, instance_id)
+    stubs = _STUBS.get(engine, {}).get(root_id)
     if not stubs or node not in stubs:
         return None
-    applied = _STUBS_APPLIED.setdefault(engine, {}).setdefault(instance_id, [])
+    applied = _STUBS_APPLIED.setdefault(engine, {}).setdefault(root_id, [])
     if node not in applied:
         applied.append(node)
     return stubs[node]
+
+
+_LOOKUP_ROOT_MAX = 32  # 子流程嵌套上限（防环兜底）
+
+
+def _root_instance_id(engine: ProcessEngine, instance_id: str) -> str:
+    """沿 parent_id 上溯到根实例（单调收敛，带深度上限）。"""
+
+    def _read(ctx: Any) -> str:
+        from sqlalchemy import select
+
+        from flowork.persistence.orm import ProcessInstanceRow
+
+        current = instance_id
+        for _ in range(_LOOKUP_ROOT_MAX):
+            parent = ctx.session.scalars(
+                select(ProcessInstanceRow.parent_id).where(ProcessInstanceRow.id == current)
+            ).first()
+            if parent is None:
+                return current
+            current = str(parent)
+        return current
+
+    return engine.execute(_read)
+
+
+def clear_simulation_state(engine: ProcessEngine, instance_id: str) -> None:
+    """模拟结束清理（桩值/已消费记录）：长驻引擎不随试跑次数累积。"""
+    _STUBS.get(engine, {}).pop(instance_id, None)
+    _STUBS_APPLIED.get(engine, {}).pop(instance_id, None)
 
 
 def applied_stubs(engine: ProcessEngine, instance_id: str) -> list[str]:

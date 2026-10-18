@@ -298,3 +298,175 @@ def test_scenario_timeout_reassign_end_to_end(tmp_path):
         assert any("strategy=reassign" in note for note in report.notes)
     finally:
         engine.close()
+
+
+# —— review 修复批回归钉子（2026-10-17） ——
+
+
+def test_review_complete_consult_signature(engine: ProcessEngine):
+    """P1：complete_consult 的第三参是 opinion 不是 comment——动作词表必须对位。"""
+    flow = (
+        FlowBuilder("rev_consult")
+        .start()
+        .user_task("main", assignee="'u_a'")
+        .end()
+        .connect("start", "main")
+        .connect("main", "end")
+    )
+    engine.repository.deploy(flow.build())
+    iid = rehearsal.start_rehearsal(engine, "rev_consult")
+    main = rehearsal.rehearsal_state(engine, iid)["tasks"][0]
+    rehearsal.perform_rehearsal_step(
+        engine, iid, {"task_id": main["id"], "action": "consult", "users": ["u_c"], "by": "u_a"}
+    )
+    consult = next(
+        t for t in rehearsal.rehearsal_state(engine, iid)["tasks"] if t["task_type"] == "consult"
+    )
+    # 修复前：comment 被当 opinion 传 → 「只接受 agree/reject」拒绝
+    rehearsal.perform_rehearsal_step(
+        engine, iid, {"task_id": consult["id"], "action": "complete_consult", "by": "u_c"}
+    )
+    rows = rehearsal.rehearsal_state(engine, iid)["task_history"]
+    assert any(r["outcome"] == "agree" and r["acted_by"] == "u_c" for r in rows)
+
+
+def test_review_rehearsal_rejects_real_instance(engine: ProcessEngine):
+    """P1：排练端点不得驱动真实实例（越权面）。"""
+    flow = (
+        FlowBuilder("rev_real")
+        .start()
+        .user_task("a", assignee="'u_a'")
+        .end()
+        .connect("start", "a")
+        .connect("a", "end")
+    )
+    engine.repository.deploy(flow.build())
+    real_id = engine.runtime.start_process("rev_real", start_user="u_real")
+    task = engine.task.list_tasks(instance_id=real_id)[0]
+    with pytest.raises(FloworkError, match="不是模拟实例"):
+        rehearsal.perform_rehearsal_step(
+            engine, real_id, {"task_id": task.id, "action": "complete"}
+        )
+    assert engine.task.list_tasks(instance_id=real_id)  # 真实待办未被动过
+
+
+def test_review_scenario_step_failure_not_green(engine: ProcessEngine):
+    """P1：有步跑失败时 ok 必须为 False（即使没有断言）。"""
+    engine.repository.deploy(
+        FlowBuilder("rev_bad")
+        .start()
+        .user_task("a", assignee="'u_a'")
+        .end()
+        .connect("start", "a")
+        .connect("a", "end")
+        .build()
+    )
+    report = run_scenario(
+        engine, "rev_bad", {"steps": [{"node": "nope", "action": "complete"}], "assertions": []}
+    )
+    assert report.ok is False
+    assert any("脚本停在失败步" in note for note in report.notes)
+
+
+def test_review_scenario_controls_waits_preset(engine: ProcessEngine):
+    """P1：controls.waits 预置生效（不必写显式 wait 步）。"""
+    engine.repository.deploy(
+        FlowBuilder("rev_wait")
+        .start()
+        .wait("w", message={"name": "paid", "correlation_key": "'K'"})
+        .user_task("after", assignee="'u_a'")
+        .end()
+        .connect("start", "w")
+        .connect("w", "after")
+        .connect("after", "end")
+        .build()
+    )
+    report = run_scenario(
+        engine,
+        "rev_wait",
+        {
+            "controls": {"waits": {"w": "matched"}},
+            "steps": [{"node": "after", "by": "u_a", "action": "complete"}],
+            "assertions": [{"type": "final_state", "equals": "completed"}],
+        },
+    )
+    assert report.ok, (report.assertions, report.notes)
+
+
+def test_review_scenario_locates_child_instance_task(engine: ProcessEngine):
+    """P2：场景按 node 定位子流程实例里的待办（全树寻址）。"""
+    engine.repository.deploy(
+        FlowBuilder("rev_child")
+        .start()
+        .user_task("c1", assignee="'u_c'")
+        .end()
+        .connect("start", "c1")
+        .connect("c1", "end")
+        .build()
+    )
+    engine.repository.deploy(
+        FlowBuilder("rev_parent")
+        .start()
+        .user_task("p1", assignee="'u_p'")
+        .call_activity("sub", process_code="rev_child")
+        .end()
+        .connect("start", "p1")
+        .connect("p1", "sub")
+        .connect("sub", "end")
+        .build()
+    )
+    report = run_scenario(
+        engine,
+        "rev_parent",
+        {
+            "steps": [
+                {"node": "p1", "by": "u_p", "action": "complete"},
+                {"node": "c1", "by": "u_c", "action": "complete"},
+            ],
+            "assertions": [{"type": "final_state", "equals": "completed"}],
+        },
+    )
+    assert report.ok, (report.assertions, report.notes)
+
+
+def test_review_stub_applies_inside_child_instance(engine: ProcessEngine):
+    """P2：桩沿 parent 上溯——子流程里的 service 节点也能拿到桩值。"""
+    engine.repository.deploy(
+        FlowBuilder("rev_svc_child")
+        .start()
+        .service_task("score", action="NEVER")
+        .user_task("hi", assignee="'u_h'")
+        .end()
+        .connect("start", "score")
+        .flow("score", "hi", condition="v > 1")
+        .flow("score", "end", default=True)
+        .connect("hi", "end")
+        .build()
+        .model_copy(update={"variables": [ProcessVariable(name="v", type="number")]})
+    )
+    engine.repository.deploy(
+        FlowBuilder("rev_svc_parent")
+        .start()
+        .user_task("p", assignee="'u_p'")
+        .call_activity("sub", process_code="rev_svc_child")
+        .end()
+        .connect("start", "p")
+        .connect("p", "sub")
+        .connect("sub", "end")
+        .build()
+    )
+    report = engine.runtime.simulate("rev_svc_parent", controls={"stubs": {"score": {"v": 9}}})
+    assert report.final_state == "completed"
+    assert "hi" in report.visited  # 桩注入使子流程分支可选
+    assert report.stubs_applied == ["score"]
+
+
+def test_review_assertion_robustness(engine: ProcessEngine):
+    """P2：断言对不可比/形状错不抛（当不满足），op 缺 value 不算过。"""
+    from flowork.engine.scenario_checks import match_expected
+
+    assert match_expected(None, {"op": ">", "value": 1}) is False
+    assert match_expected(None, {"op": "!=", "value": 1}) is True
+    assert match_expected(1, {"in": 5}) is False
+    assert match_expected(1, {"op": ">"}) is False
+    assert match_expected("x", {"op": "?", "value": 1}) is False

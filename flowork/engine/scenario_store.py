@@ -9,6 +9,8 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING, Any
 
+from flowork.errors import FloworkError
+
 if TYPE_CHECKING:
     from flowork.engine.engine import ProcessEngine
 
@@ -67,6 +69,12 @@ class ScenarioStore:
 
             now = self._engine.config.now()
             row = ctx.session.get(DesignerScenarioRow, scenario_id) if scenario_id else None
+            if scenario_id and row is None:
+                raise FloworkError(f"场景不存在（不能以指定 id 新建）：{scenario_id}")
+            if row is not None and row.definition_code != definition_code:
+                raise FloworkError(
+                    f"场景 {scenario_id} 属于定义 {row.definition_code}，不能跨定义覆盖"
+                )
             if row is None:
                 row = DesignerScenarioRow(
                     id=uuid.uuid4().hex,

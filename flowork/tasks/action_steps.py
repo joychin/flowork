@@ -68,9 +68,14 @@ def find_pending_task(
         matched = [t for t in at_node if _same_person(t.assignee, by)]
         if matched:
             at_node = matched
-        elif not any(t.assignee == "" for t in at_node):
-            who = "、".join(sorted({t.assignee for t in at_node}))
-            raise TaskNotAvailableError(f"节点 {node} 的待办办理人是 {who}，不是 {by}")
+        else:
+            # by 对不上直派任务：只在候选池里找（未认领的才可能由本步认领）；
+            # 混合场景不得回退到他人的直派任务（否则以 by 的身份替人办理）
+            pool = [t for t in at_node if t.assignee == ""]
+            if not pool:
+                who = "、".join(sorted({t.assignee for t in at_node}))
+                raise TaskNotAvailableError(f"节点 {node} 的待办办理人是 {who}，不是 {by}")
+            at_node = pool
     elif len(at_node) > 1:
         who = "、".join(sorted({t.assignee or "（候选池）" for t in at_node}))
         raise TaskNotAvailableError(
@@ -115,5 +120,14 @@ def dispatch_task_action(
         task_svc.claim(task_id, actor)
     elif action == "unclaim":
         task_svc.unclaim(task_id, actor)
-    else:  # complete_assist / complete_consult
-        getattr(task_svc, action)(task_id, actor, comment)
+    elif action == "complete_consult":
+        # 签名是 (task_id, actor, opinion, comment)——意见与备注是两个参数，
+        # 位置传 comment 会被当成 opinion 拒绝（只接受 agree/reject）
+        task_svc.complete_consult(
+            task_id,
+            actor,
+            opinion=str(step.get("opinion") or "agree"),
+            comment=comment,
+        )
+    else:  # complete_assist
+        task_svc.complete_assist(task_id, actor, comment)

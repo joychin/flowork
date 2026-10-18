@@ -38,42 +38,48 @@ class SimulationReport:
 
 
 def build_report(engine: ProcessEngine, instance_id: str) -> SimulationReport:
-    """聚合模拟实例的报告（tokens/stub/卡点/路由轨迹）。"""
+    """聚合模拟实例的报告（tokens/stub/卡点/路由轨迹）。
+
+    全树聚合：子流程实例（call_activity/MI）的令牌与已办同样进报告——
+    只查根实例会让子流程节点在时间线里凭空消失（决策/待办面早已全树）。
+    """
 
     def _command(ctx: Any) -> SimulationReport:
+        from flowork.engine.simulation_controls import applied_stubs
+        from flowork.engine.simulation_runner import tree_instance_ids
         from flowork.persistence.orm import ProcessInstanceRow, TokenRow
 
         instance = ctx.session.get(ProcessInstanceRow, instance_id)
         assert instance is not None
-        definition = engine.kernel_for(ctx).definition_of(ctx.session, instance)
-        tokens = list(
-            ctx.session.query(TokenRow)
-            .filter(TokenRow.instance_id == instance_id)
-            .order_by(TokenRow.token_no)
-        )
+        kernel = engine.kernel_for(ctx)
+        tree = tree_instance_ids(ctx, instance_id)
+        definitions = {}
+        tokens = []
+        for inst_id in tree:  # 子实例的定义各是各的（快照不同）
+            row = ctx.session.get(ProcessInstanceRow, inst_id)
+            if row is None:
+                continue
+            definitions[inst_id] = kernel.definition_of(ctx.session, row)
+            tokens.extend(
+                ctx.session.query(TokenRow)
+                .filter(TokenRow.instance_id == inst_id)
+                .order_by(TokenRow.token_no)
+            )
         visited = [token.activity_code for token in tokens]
-        stubbed = [
-            token.activity_code
-            for token in tokens
-            if (node := definition.node(token.activity_code)) is not None
-            and engine.kernel_for(ctx).behavior_of(node).performs_external_work
-        ]
-        stalled = next(
-            (
-                token.activity_code
-                for token in tokens
-                if token.state == "unfinished" and token.activity_code not in stubbed
-            ),
-            None,
-        )
+        stubbed: list[str] = []
+        stalled: str | None = None
+        for token in tokens:
+            definition = definitions.get(token.instance_id)
+            node = definition.node(token.activity_code) if definition is not None else None
+            is_stub = node is not None and kernel.behavior_of(node).performs_external_work
+            if is_stub and token.activity_code not in stubbed:
+                stubbed.append(token.activity_code)
+            if token.state == "unfinished" and not is_stub and stalled is None:
+                stalled = token.activity_code
         decisions = [
             {"node": row["source_activity"], "selected": row["selected"]}
-            for row in _route_decisions(ctx, instance_id)
+            for row in _route_decisions(ctx, tree)
         ]
-        from flowork.engine.simulation_controls import applied_stubs
-        from flowork.engine.simulation_runner import tree_instance_ids
-
-        tree = tree_instance_ids(ctx, instance_id)
         task_actions = _task_records(ctx, tree)
         active = _pending_records(ctx, tree)
         return SimulationReport(
@@ -92,15 +98,15 @@ def build_report(engine: ProcessEngine, instance_id: str) -> SimulationReport:
     return engine.execute(_command)
 
 
-def _route_decisions(ctx: Any, instance_id: str) -> list[dict[str, Any]]:
-    """路由轨迹（wf_route_decision 现查；模拟实例与真实实例同表同构）。"""
+def _route_decisions(ctx: Any, tree: list[str]) -> list[dict[str, Any]]:
+    """路由轨迹（wf_route_decision 现查；模拟实例与真实实例同表同构，全树）。"""
     from sqlalchemy import select
 
     from flowork.persistence.orm_v2 import RouteDecisionRow
 
     rows = ctx.session.scalars(
         select(RouteDecisionRow)
-        .where(RouteDecisionRow.instance_id == instance_id)
+        .where(RouteDecisionRow.instance_id.in_(tree))
         .order_by(RouteDecisionRow.id)
     )
     return [{"source_activity": row.source_activity, "selected": row.selected} for row in rows]

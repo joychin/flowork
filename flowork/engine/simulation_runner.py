@@ -44,13 +44,22 @@ def drive_simulation(
     for _ in range(_MAX_STEPS):
         if _instance_terminal(engine, instance_id):
             return notes, advanced  # 终态即收束：不再消费剩余时钟/决策
-        if fire_one_due_job(engine, instance_id, virtual_now, notes):
+        try:
+            fired = fire_one_due_job(engine, instance_id, virtual_now, notes)
+        except FloworkError as exc:
+            notes.append(f"虚拟时钟兑现失败：{exc}")
+            return notes, advanced
+        if fired:
             continue
         pending = _pending_tasks(engine, instance_id)
         if pending and controls.decisions_given and queue:
             step = queue[0]
             if _locate(engine, instance_id, str(step["node"]), step.get("by")) is not None:
-                _apply_decision(engine, instance_id, step)
+                try:
+                    _apply_decision(engine, instance_id, step)
+                except FloworkError as exc:
+                    notes.append(f"决策 {step.get('node')}/{step.get('action')} 失败：{exc}")
+                    return notes, advanced
                 queue.pop(0)
             elif clock_steps:
                 virtual_now, advanced = step_virtual_clock(
@@ -82,7 +91,12 @@ def drive_simulation(
                     notes.append(f"模拟停在待办 {task_id}：{exc}")
                     return notes, advanced
             continue
-        if resolve_wait(engine, instance_id, controls.waits):
+        try:
+            resolved = resolve_wait(engine, instance_id, controls.waits)
+        except FloworkError as exc:
+            notes.append(f"等待兑现失败：{exc}")
+            return notes, advanced
+        if resolved:
             continue
         if clock_steps:
             virtual_now, advanced = step_virtual_clock(

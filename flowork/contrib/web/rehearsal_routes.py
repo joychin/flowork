@@ -10,7 +10,7 @@ from typing import Any
 
 from fastapi import HTTPException
 
-from flowork.api import FloworkError, IssueLevel
+from flowork.api import FloworkError, InstanceNotFoundError, IssueLevel
 from flowork.contrib.web._helpers import issues_payload, parse_spec
 
 __all__ = ["register_rehearsal_routes"]
@@ -44,6 +44,8 @@ def register_rehearsal_routes(app: Any, engine: Any) -> None:
                 controls=controls,
                 start_user=start_user or "rehearsal",
             )
+        except InstanceNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
         except FloworkError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         state = rehearsal_state(engine, instance_id)
@@ -59,6 +61,8 @@ def register_rehearsal_routes(app: Any, engine: Any) -> None:
             raise HTTPException(status_code=422, detail="step 必须是对象")
         try:
             perform_rehearsal_step(engine, instance_id, body)
+        except InstanceNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
         except FloworkError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         state = rehearsal_state(engine, instance_id)

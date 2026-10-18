@@ -155,7 +155,11 @@ class WaitBehavior(NodeBehavior):
 
 
 def select_jobs_of(instance_id: str) -> Any:
-    """实例的 scheduled timer Job 查询（清理用，避免行为层拼查询重复）。"""
+    """实例的定时 Job 查询（清理用，避免行为层拼查询重复）。
+
+    含 ``virtual``：模拟域的到时 Job 同样要随等待解决清掉（否则残留到
+    下一次推钟空烧一轮）。
+    """
     from sqlalchemy import select
 
     from flowork.persistence.orm import JobRow
@@ -163,7 +167,7 @@ def select_jobs_of(instance_id: str) -> Any:
     return select(JobRow).where(
         JobRow.instance_id == instance_id,
         JobRow.job_type == "timer",
-        JobRow.state == "scheduled",
+        JobRow.state.in_(("scheduled", "virtual")),
     )
 
 

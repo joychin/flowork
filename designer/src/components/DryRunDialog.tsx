@@ -201,7 +201,7 @@ export function DryRunDialog() {
           rows={Math.min(10, 3 + varsText.split('\n').length)}
           spellCheck={false}
           value={varsText}
-          onChange={(e) => setVarsText(e.target.value)}
+          onChange={(e) => { setVarsText(e.target.value); if (parseError) setParseError(null) }}
         />
         {parseError && <div className="field-error">{parseError}</div>}
 

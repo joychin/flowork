@@ -83,11 +83,9 @@ class TaskService(
             if instance_id:
                 stmt = stmt.where(TaskRow.instance_id == instance_id)
             elif not include_simulated:
-                from flowork.persistence.orm import ProcessInstanceRow
+                from flowork.engine.sim_isolation import exclude_simulated
 
-                stmt = stmt.join(
-                    ProcessInstanceRow, ProcessInstanceRow.id == TaskRow.instance_id
-                ).where(ProcessInstanceRow.simulated.is_(False))
+                stmt = exclude_simulated(stmt, TaskRow.instance_id)
             if assignee is not None:
                 stmt = stmt.where(TaskRow.assignee == assignee)
             if state:

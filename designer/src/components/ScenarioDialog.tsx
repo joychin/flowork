@@ -7,6 +7,7 @@
 import { useEffect, useState } from 'react'
 import { api, type ScenarioCompare, type ScenarioReport, type ScenarioSummary } from '../api'
 import type { Spec } from '../types'
+import { designerConfig } from '../config'
 import { useStore } from '../store'
 
 const TEMPLATE = `{
@@ -37,6 +38,8 @@ export function ScenarioDialog({ spec, code, onClose }: Props) {
   const nodeNames: Record<string, string> = {}
   for (const n of spec.nodes) nodeNames[n.code] = n.name || n.code
   const label = (c: string) => nodeNames[c] ?? c
+  // 只读嵌入：场景行是持久化写面——隐藏新建/保存/删除，保留运行（零副作用）
+  const readonly = designerConfig.readonly()
 
   const refresh = async () => {
     try {
@@ -58,6 +61,7 @@ export function ScenarioDialog({ spec, code, onClose }: Props) {
       setName(detail.name)
       setScriptText(JSON.stringify(detail.script, null, 2))
       setReport(null)
+      setCompare(null)
     } catch (err) {
       showToast(`场景读取失败:${err instanceof Error ? err.message : String(err)}`)
     }
@@ -89,7 +93,7 @@ export function ScenarioDialog({ spec, code, onClose }: Props) {
 
   const run = async () => {
     if (!selected) {
-      showToast('先保存场景再运行(或直接粘贴脚本后点保存并运行)')
+      showToast('先保存场景再运行（左侧选一个已保存的场景）')
       return
     }
     setBusy(true)
@@ -122,9 +126,13 @@ export function ScenarioDialog({ spec, code, onClose }: Props) {
 
   const remove = async (row: ScenarioSummary) => {
     if (!window.confirm(`删除场景「${row.name}」？`)) return
-    await api.deleteScenario(row.id)
-    if (selected === row.id) setSelected(null)
-    await refresh()
+    try {
+      await api.deleteScenario(row.id)
+      if (selected === row.id) setSelected(null)
+      await refresh()
+    } catch (err) {
+      showToast(`删除失败:${err instanceof Error ? err.message : String(err)}`)
+    }
   }
 
   return (
@@ -138,9 +146,11 @@ export function ScenarioDialog({ spec, code, onClose }: Props) {
 
         <div className="scenario-layout">
           <div className="scenario-list">
-            <button className="btn" disabled={busy} onClick={() => { setSelected(null); setName(''); setScriptText(TEMPLATE); setReport(null) }}>
-              ＋ 新建场景
-            </button>
+            {!readonly && (
+              <button className="btn" disabled={busy} onClick={() => { setSelected(null); setName(''); setScriptText(TEMPLATE); setReport(null); setCompare(null) }}>
+                ＋ 新建场景
+              </button>
+            )}
             {rows.map((row) => (
               <div
                 key={row.id}
@@ -158,13 +168,15 @@ export function ScenarioDialog({ spec, code, onClose }: Props) {
                   {row.last_run_at ? ` · 上次 ${row.last_run_at}` : ' · 未运行'}
                 </div>
                 {row.last_summary && <div className="dryrun-note">{row.last_summary}</div>}
-                <button
-                  className="icon-btn scenario-del"
-                  title="删除"
-                  onClick={(e) => { e.stopPropagation(); void remove(row) }}
-                >
-                  ✕
-                </button>
+                {!readonly && (
+                  <button
+                    className="icon-btn scenario-del"
+                    title="删除"
+                    onClick={(e) => { e.stopPropagation(); void remove(row) }}
+                  >
+                    ✕
+                  </button>
+                )}
               </div>
             ))}
             {rows.length === 0 && <div className="dryrun-hint">还没有场景 — 点上面的「新建场景」</div>}
@@ -183,7 +195,9 @@ export function ScenarioDialog({ spec, code, onClose }: Props) {
               onChange={(e) => setScriptText(e.target.value)}
             />
             <div className="modal-actions">
+              {!readonly && (
               <button className="btn" disabled={busy} onClick={() => void save()}>保存</button>
+            )}
               <button className="btn btn-primary" disabled={busy || !selected} onClick={() => void run()}>
                 {busy ? '运行中…' : '运行(草稿)'}
               </button>

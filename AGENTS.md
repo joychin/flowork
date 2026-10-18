@@ -816,3 +816,22 @@ RehearsalDialog（候选池自动认领/跨实例任务树校验/等待节点两
 会签通过；四条断言含 `outcome=transfer, by=system:timeout` 归因钉子）。CLI 实测全绿、覆盖 6/6；
 回归测试 test_scenario_timeout_reassign_end_to_end 固化（拍板③「超时全兑现」的端到端证据——
 行业调研里「全行业验证不了」的分支，flowork 现在可验）。**1227 测试全绿，五道门全过**。
+
+**模拟补全 review 修复批（2026-10-17，三路并行 review 落地；1234 全绿五道门全过）**：
+三路代码 review（内核驱动/隔离触点/传输前端）发现 **1 P0 + 7 P1 + 十余 P2**，全部修复：
+**P0** compare 端点 `asdict(ScenarioFailure)` 崩溃（非 dataclass → 改 @dataclass + `.of()` 工厂，
+否则「一侧失败不中断」承诺自身即 500）。**P1**：① `complete_consult` 的第三参是 `opinion`
+不是 comment——动作词表位置传参必被拒（单列分支 + 测试）；② **排练端点可驱动真实实例**
+（越权面）：`_require_simulated` 树校验；③ 驱动循环只捕机器人分支错误——决策/等待/虚拟时钟
+兑现三处补齐（策略异常在 `run_virtual` 归一 FloworkError 并结案 Job，绝不穿出丢报告）；
+④ 场景 `ok` 只看断言——步失败仍报绿：加 `stopped` 标志；⑤ `controls.waits` 解析后从未使用
+（预置等待假设失效）：步间 `resolve_wait` 兑现；⑥ 场景按 node 定位只查根实例（子流程待办
+不可达）：`_locate_in_tree` 全树。**P2 组**：wait 到时 Job 清理补 virtual（残留空烧）、
+桩注册沿 parent 上溯（子实例桩曾全部失效）+ 模拟结束清理、断言 `op` 分支求值（不可比不抛）、
+`in` 形状校验、clock 步复用 parse_controls 校验、paged_tasks/task_history 补模拟隔离
+（`sim_isolation.exclude_simulated` 单源）、场景 store 显式 id 未命中报错+定义归属校验、
+CLI OSError 归一+补设计期校验门槛、报告 `visited/stubbed/stalled_at/route_decisions` 全树聚合
+（子流程节点曾在时间线凭空消失）、`history_service` 拆 `history_token.py`（MRO：新 Mixin 须置于
+TraceMixin 之前——后者有同名 NotImplemented 桩）。**designer**：场景面板切换清 compare 残留、
+readonly 隐藏场景写面（保留运行）、变量 JSON 改对后解除禁用、删除失败 toast。
+测试 +7 回归钉子（review 每条一个）。
