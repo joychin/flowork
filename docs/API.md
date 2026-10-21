@@ -1,4 +1,4 @@
-# flowork API 参考（v0.2 · kernel-v2 P0/P1 后）
+# flowork API 参考（对齐 API_VERSION 1.1——门面契约版本见 flowork.api）
 
 > 入口：`ProcessEngine(config?)` → 四服务 `engine.repository / runtime / task / history` + `engine.jobs / engine.messages / engine.worker_jobs`。
 > 所有写操作带 `actor` 归因（acted_by 落历史/流水，人/AI 一律裸 id——引擎不区分主体类型）。
@@ -49,14 +49,14 @@ engine.close()
 | `update_variables(instance_id, updates, *, actor, reason="") -> dict` | 外部受控改值（PATCH 合并；白名单=声明∪input schema∪既有键、保留键拒、类型对位、≤256KB、终态拒；发 variables_updated） |
 | `variables_of(instance_id) -> dict` | 变量值全集（只读，含运行期键） |
 | `variable_history(instance_id, *, name=None, limit=50, offset=0)` | 变量血缘（改前/改后+写方归因，倒序；引擎与外部全写方留痕） |
-| `simulate(code, *, spec=None, variables=None, major=None, revision=None) -> SimulationReport` | 整图模拟试跑（A10，一等公民）：真跑定义——终态/令牌时间线/stub 清单/卡点/路由轨迹；`spec=` 草稿直通（证据先于发布），隔离语义（事件不投 outbox、不建 Job、失败不产故障单）|
+| `simulate(code, *, spec=None, variables=None, start_user=None, controls=None, major=None, revision=None) -> SimulationReport` | 整图模拟试跑（一等公民）：真跑定义——终态/令牌时间线/stub 清单/卡点/路由轨迹/办理记录；`spec=` 草稿直通（证据先于发布）；`controls=` 控制面四键（`decisions` 决策清单〔给即禁机器人〕/`stubs` 桩返回值/`waits` 等待假设/`clock` 虚拟时钟推钟，`parse_controls` 校验）；`start_user` 发起人（缺省 simulator）；隔离语义（事件不投 outbox、不建真实 Job、失败不产故障单）|
 | `list_instances(*, definition_code=None, major=None, revision=None, state=None, include_simulated=False)` | 实例清单（可按定义版本过滤——「多少在跑实例钉旧版」查询） |
 
 ## TaskService（任务，`engine.task`）
 
 | 方法 | 说明 |
 |---|---|
-| `list_tasks(*, instance_id=None, assignee=None, candidate=None, state="ready")` | 待办查询；`candidate`=与我相关的候选（**默认含已被他人认领的任务**——「仍在池内」须组合 `assignee=""`，spec §5.5/审计 D5 明示口径；组按目录展开） |
+| `list_tasks(*, instance_id=None, assignee=None, candidate=None, state="ready", include_simulated=False, limit=None)` | 待办查询（按 created_at,id 稳定排序，`limit` 可选封顶）；`candidate`=与我相关的候选（**默认含已被他人认领的任务**——「仍在池内」须组合 `assignee=""`；组按目录展开）；`instance_id` 定向查询不隔离模拟，`include_simulated` 显式放开 |
 | `get_task(task_id)` | 单任务 |
 | `complete(task_id, actor, *, comment, variables, idempotency_key)` | 同意提交（幂等） |
 | `reject(task_id, actor, *, comment, target=None)` | 驳回回退（显式目标 > reject_target > 来源节点） |
@@ -65,7 +65,7 @@ engine.close()
 | `assist(task_id, users, actor)` / `complete_assist(task_id, actor)` | 协办（不推进流程） |
 | `list_cc_tasks(*, recipient=None, instance_id=None)` / `mark_cc_read(cc_id, user)` | 传阅 |
 | `add_countersigner(task_id, users, actor)` | 加签（item_count 联动） |
-| `consult(task_id, users, actor)` / `complete_consult(task_id, actor)` | 咨询（A8）：先收意见、原办理人拍板——意见任务不占票，未收齐前主任务全动作被拦 |
+| `consult(task_id, users, actor)` / `complete_consult(task_id, actor, opinion)` | 咨询（A8）：先收意见、原办理人拍板——意见任务不占票，未收齐前主任务全动作被拦；`opinion` 为意见正文（第三参，非 comment） |
 | `withdraw(task_id, actor)` | 撤回已办（取消下游、原人重办） |
 | `activate_node(instance_id, activity_code, actor, participants=None)` / `cancel_node(...)` | 管理员激活/取消节点 |
 | `finish_instance(instance_id, actor)` / `remove_instance(instance_id, actor)` | 强制完成（终态守卫；令牌补发 node_exited；process_completed+process_finished_by_admin 两级事件）/ 删除实例（运行时数据按全树删；事件只删**已送达**行，未投递保留待消费） |
@@ -77,7 +77,7 @@ engine.close()
 
 | 方法 | 说明 |
 |---|---|
-| `events(instance_id=None, limit=200)` | 事件 outbox（`ORDER BY (occurred_at, id)`＝事件全序；id 为可排序串——同命令内按发射顺序） |
+| `events(instance_id=None, limit=200, offset=0)` | 事件 outbox（`ORDER BY (occurred_at, id)`＝事件全序；id 为可排序串——同命令内按发射顺序；offset 分页） |
 | `task_history(instance_id=None, assignee=None, limit=200)` | 已办（append-only） |
 | `paged_tasks(*, assignee, instance_id, offset, limit) -> Page` | 已办分页 |
 | `instances(*, state=None, definition_code=None, limit=100)` | 实例列表 |
@@ -139,5 +139,27 @@ Worker 面（service_task mode=worker，`engine.worker_jobs`）：
   写工具 `actor` 必填（裸 id，无缺省）；三个查询工具带 limit/offset 分页
   （返回 `{items,total,offset,limit}`）。
 
-门面契约版本 `flowork.api.API_VERSION`（当前 "1"）：增符号=minor（同步快照）、
-删/改名=major；插件以 `REQUIRES_FLOWORK_API` 声明依赖版本。
+门面契约版本 `flowork.api.API_VERSION`（当前 "1.1"，整数元组比较）：增符号=minor
+（同步快照）、删/改名=major；插件以 `REQUIRES_FLOWORK_API` 声明依赖版本。
+排练三符号与 ScenarioStore 于 2026-10-16 加入、2026-10-18 移除，同处预发布
+窗口从未对外发布，该删除不升 major。
+
+## 错误族与返回模型（2026-10-21 扩面）
+
+门面现导出会从公开方法逃逸的错误族——宿主 `from flowork.api import` 后即可
+按类型编程分流，不必捕基类再解析消息文本：
+
+| 类 | 含义 | 处置建议 |
+| --- | --- | --- |
+| `EngineExecutionError` | 技术故障（已挂起+故障单） | 告警/等修复，勿盲目重试 |
+| `LockConflictError` | 乐观锁冲突 | **可重试**（唯一重试信号） |
+| `InputContractError` | input 契约违规 | 调用方修正输入 |
+| `NoParticipantError` / `ParticipantLimitError` / `ParticipantCountMismatchError` | 取人失败/护栏触发 | 定义或目录问题 |
+| `OrgConfigError` | 组织目录配置错 | 装配问题 |
+| `DefinitionConflictError` | 并发部署撞唯一索引 | 重试（同内容命中幂等 verdict） |
+
+公开方法返回模型（`VersionVerdict`/`Page`/`TraceEntry`/`TokenInfo`/
+`RouteDecisionInfo`/`AnticipateResult`/`VariableChangeInfo`）同在门面——
+宿主标注返回类型不再需要深路径 import。目录协议 `CoreOrgDirectory`
+（内核四方法）与 `RichOrgDirectory`（丰富面，`OrgDirectoryLike 别名`）分层：
+实现四方法即可挂 `EngineConfig.org`（类型与运行时双通过）。

@@ -144,12 +144,15 @@ engine.config.org = store                        # 挂上即 OrgDirectoryLike
 # .user_task("f", "财务复核", candidate_users=["'u_fin'"])
 ```
 
-**自实现协议**（`OrgDirectoryLike`）——生产环境对接自己的组织系统 / HR 数据，
+**自实现协议**（`CoreOrgDirectory`——2026-10-21 拆分后 EngineConfig.org 的
+类型即此窄协议；`OrgDirectoryLike` 保留为丰富面 `RichOrgDirectory` 的别名）——
+生产环境对接自己的组织系统 / HR 数据，
 挂 `EngineConfig.org` 即可。**引擎内核消费四个方法**：`is_member`（候选组归属
 判定）、`snapshot`（办理人身份定格）、`delegation_of`（取人期委托替换）、
 `admins`（无人兜底的管理员名单）；`subjects_in` / `manager_of` 由第 5 章的
 组织词汇函数消费。协议上还有一批丰富面方法（部门族查询、`user_exists` 等），
-实现方可按需退化——内核四方法缺一会在对应路径直接失败。
+实现方只需实现四方法即可挂上（类型与运行时双通过）；丰富面（部门族/
+users_with_role 等）按需退化——内核四方法缺一会在对应路径直接失败。
 
 目录不配置时：候选组任务认不了（提示配目录）、`to_admins` 兜底没人接、
 组织词汇调不了——引擎照常跑，只是「按组织找人」的能力缺数据源。

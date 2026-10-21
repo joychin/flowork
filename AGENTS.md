@@ -850,3 +850,27 @@ readonly 隐藏场景写面（保留运行）、变量 JSON 改对后解除禁�
    「amount > 5000 → false 选中 route->notify」。
 **自检判定**：无新增缺陷（一处误判后核实为设计行为——发布成功页需点「完成」关闭）。
 清理：停 dev/uvicorn、删 /tmp/ui_check.db。
+
+**内核 review 修复批（2026-10-21，依据 docs_research/内核review-2026-10-21.md；1 P0+15 P1+约 40 P2，12 提交 78b5129→本轮）**：
+四维度 review（bug/代码/API/集成）六切面并行深读+主会话逐条复核后的修复——
+① P0：故障单 skip 只砍故障节点令牌（incident.activity_code 落列迁移 0008；修前对
+全部未完令牌生效，并行分支人工审批被静默放行）；② 校验放行对：空串条件设计期
+拦截、wait 映射上下文补 initiator/instance、subject 仅 MI 子流程可用、节点结构错
+归一 DefinitionError（三传输面同步 422）；③ 内核组：撤票回退带时限 carry、
+anticipate 认 wait、撤回 person_key 互认、work_kinds 行为化 counts_as_progress、
+users_with_role 实现 within；④ 消息/事件组：IdempotentSink 先投递后记已见（至少
+一次不退化为丢消息）、remove_instance 保留 message_id 防重集、终态实例消息拦截、
+并发 deploy 归一 DefinitionConflictError、resume 定时器 ceil；⑤ 模拟/场景组：虚拟
+时钟推迟不空转（咨询待办可达）、ScenarioReport.stopped+CLI 按 ok 退出（修前停步
+假绿）、parse_scenario 拒绝 simulate 专属控制键、run_scenario 清桩、排序钉死；
+⑥ 孤儿表 wf_designer_scenario 删 ORM+迁移 0009；⑦ API 面扩到 96 符号：错误族
+（EngineExecutionError/LockConflictError=可重试信号/InputContractError 等）与
+返回模型（VersionVerdict/Page/TraceEntry 等）上面、API_VERSION 1→1.1（minor 位
+首次落地；排练符号未发布不升 major 注记）、OrgDirectoryLike 拆 Core/Rich、
+L4 探测回落 user_exists、task_created 载荷增厚、list_tasks 排序+limit、
+pool_pre_ping；⑧ 传输面：demo 页 XSS 转义、CORS 缺省不挂（FLOWORK_CORS_ORIGINS
+显式开）、MCP 错误通道保险层+resolve_incident 必填 actor+create_engine 走
+assembly、REST state 白名单、jobs/activate async、%00/文件权限/会话态杂项。
+挂账 backlog：串行会签加签排队语义、list_instances 双 API 合并、CLI 面扩容、
+start_on_message 声明解析缓存、history created_at 时钟统一（冻结钟平局次键）、
+_binary_op_count 护栏口径、trace 200 条截断参数化。

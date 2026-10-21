@@ -17,7 +17,7 @@ uv run flowork walkthrough examples/04_expense_claim.json --script examples/04_e
                                          # 缺省内存库跑完即弃，--script 给剧本自动走，不给则交互扮演）
 ```
 
-嵌入使用：`pip install -e .` 后 `from flowork.engine.engine import ProcessEngine`。
+嵌入使用：`pip install -e .` 后 `from flowork.api import ProcessEngine`（唯一公开门面——直接 import 内部深路径不受稳定契约保护）。
 
 ## 表结构（SQLite，可平迁 PostgreSQL）
 
@@ -195,6 +195,23 @@ FLOWORK_TEST_PG_URL=postgresql+psycopg://... uv run pytest -m needs_postgres   #
   同实例并发写在提交时串行化；冲突自动重试 `lock_retries`（默认 3）次。
 - 时间戳统一 naive UTC（`flowork.clock.utc_now`）：多副本时钟可比，
   各机器以 NTP 对齐；注入测试时钟走 `EngineConfig.now`。
+
+### 墙钟逃逸清单（FakeClock 管不到的三处）
+
+引擎命令与 Job 调度全走 `EngineConfig.now`，但宿主直调以下路径仍是墙钟
+（2026-10-21 盘点成文）：
+
+- `OutboxConsumer.poll` 的 `delivered_at` 与 `purge_delivered` 截止时刻
+  （`flowork/events/consumer.py`）；
+- `DirectoryStore` 的委托窗口/撤销读取（`flowork/directory/delegation.py`——
+  引擎内 `delegation_of` 已穿 `config.now`，仅宿主绕过引擎直调分叉）；
+- 全部 ORM 列级 `default=_now`（created_at 等行内时间戳——审计展示用，
+  不参与语义判定；已办行 `archive_task` 的 cost_seconds 除外，其用 config.now）。
+
+设计器/独立进程环境变量：`FLOWORK_SETUP`（宿主三钩子 nodes/vocabulary/
+handlers，web/rest/mcp 三面统一经 `contrib.assembly`）、`FLOWORK_VOCABULARY`
+（仅函数子集）、`FLOWORK_CORS_ORIGINS`（web 跨域白名单，缺省不挂 CORS）、
+`FLOWORK_DEFINITIONS_DIR`（文件事实源目录）。
 - 历史分级 `history_level`：`none`（不落事件）/ `activity`（仅流程与节点）/
   `full`（默认；`audit` 为保留档，当前实现同 full 全记）。
 - 完结实例归档：`history.archive_instance(id)` 导出 JSON 冷存。

@@ -65,6 +65,9 @@ FLOWORK_SETUP=myapp.designer_setup FLOWORK_ORG=./examples/org.yaml \
 ```
 
 词汇优先级:显式参数 > `setup.vocabulary` > `FLOWORK_VOCABULARY`(便捷子集,仅函数)
+
+跨域（默认不挂 CORS——开发走 vite 代理、lib 嵌入同源；需要跨域的宿主显式给
+`FLOWORK_CORS_ORIGINS=逗号清单`，'*' 恢复旧行为但注意文件写面暴露）
 > 配了组织目录时 `contrib.cel_vocabulary`。REST 独立进程(`contrib/rest`)同走
 同一装配——`FLOWORK_SETUP` 对 /v2 面同样生效。
 
