@@ -15,6 +15,7 @@ from flowork.definitions.validator_positions import (
 from flowork.definitions.validator_positions import (
     iter_expression_positions,
     lookup_kind,
+    mi_config,
 )
 from flowork.expr.catalog import (
     engine_functions,
@@ -125,6 +126,19 @@ def check_variable_references(
                 continue
             if name in RESERVED_IDENTIFIERS:
                 if vocabulary_kind in RESERVED_POSITIONS[name]:
+                    if name == "subject" and kind == "mapping_input":
+                        # subject 只在多实例子流程注入（每子一 subject）；
+                        # 非 MI 调用映射裸 subject 静默成 None、复合式直接故障
+                        # （2026-10-21 内核 review P1-2b：目录按位放行掩盖了
+                        # 非 MI 形态的运行期坑）
+                        node = definition.node(_node_code)
+                        if node is not None and mi_config(node) is None:
+                            error(
+                                f"{rule}.subject_without_mi",
+                                "subject 仅多实例（multi_instance）子流程的输入映射可用"
+                                "——普通子流程不注入；按子主体展开请改用 multi_instance",
+                                flow=where,
+                            )
                     continue  # 该位点可用（task 窄位点方言 / prev_task 条件+取人位 / 全位点词）
                 error(
                     f"{rule}.{name}_unavailable",

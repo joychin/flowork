@@ -717,3 +717,59 @@ def test_empty_string_condition_is_design_time_error(registry):
     )
     rules = error_rules(definition, registry)
     assert "condition.empty" in rules
+
+
+def test_subject_only_in_mi_call_input_mapping(registry):
+    """subject 仅多实例子流程输入映射可用（2026-10-21 内核 review P1-2b）。
+
+    修前目录按 mapping_input 位放行 subject：非 MI 调用映射裸 subject
+    运行期静默成 None、复合式直接故障——设计期拦下。
+    """
+    from flowork.definitions.builder import FlowBuilder
+
+    plain = (
+        FlowBuilder("t")
+        .start()
+        .call_activity("child", "子流程", process_code="sub_def", input_mappings={"who": "subject"})
+        .end()
+        .connect("start", "child")
+        .connect("child", "end")
+        .build(registry)
+    )
+    assert "expression.subject_without_mi" in error_rules(plain, registry)
+
+    mi = (
+        FlowBuilder("t")
+        .start()
+        .call_activity(
+            "child",
+            "子流程",
+            process_code="sub_def",
+            input_mappings={"who": "subject"},
+            multi_instance={"subjects": ["'a'"]},
+        )
+        .end()
+        .connect("start", "child")
+        .connect("child", "end")
+        .build(registry)
+    )
+    assert "expression.subject_without_mi" not in error_rules(mi, registry)
+
+
+def test_non_dict_node_and_typed_field_error_are_definition_error(registry):
+    """节点结构错归一 InvalidDefinitionData（2026-10-21 内核 review P2 回归）。
+
+    修前非 dict 节点裸抛 AttributeError、字段类型错裸抛 pydantic
+    ValidationError——REST/MCP 传输面变 500。
+    """
+    from flowork.errors import DefinitionError
+    from flowork.definitions.definition import load_definition
+    from flowork.definitions.builder import FlowBuilder
+
+    spec = FlowBuilder("t").start().end().connect("start", "end").build(registry)
+    data = spec.model_dump(mode="json")
+    with pytest.raises(DefinitionError, match="节点必须是 JSON 对象"):
+        load_definition({**data, "nodes": ["oops"]}, registry)
+    bad = {**data, "nodes": [data["nodes"][0], {"kind": "end", "code": "e2", "name": 42}]}
+    with pytest.raises(DefinitionError, match="节点结构不合法"):
+        load_definition(bad, registry)

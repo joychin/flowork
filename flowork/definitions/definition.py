@@ -157,10 +157,21 @@ def dump_definition(definition: ProcessDefinition) -> dict[str, Any]:
     return definition.model_dump(mode="json")
 
 
-def _resolve_node(raw: dict[str, Any], registry: NodeRegistry) -> FlowNode:
+def _resolve_node(raw: Any, registry: NodeRegistry) -> FlowNode:
+    """节点装载：非对象与字段类型错归一 InvalidDefinitionData。
+
+    pydantic ValidationError 是 ValueError 但不在 DefinitionError 族——裸抛
+    会让 web/REST/MCP 三个传输面把「定义写错了」当 500（2026-10-21 内核
+    review P2：web 面单独兜过，REST/MCP 漏）。
+    """
+    if not isinstance(raw, dict):
+        raise InvalidDefinitionData(f"节点必须是 JSON 对象，收到：{raw!r}")
     kind = str(raw.get("kind", ""))
     spec_cls = registry.spec_cls(kind)
-    return spec_cls.model_validate(raw)
+    try:
+        return spec_cls.model_validate(raw)
+    except ValidationError as exc:
+        raise InvalidDefinitionData(f"节点结构不合法（kind={kind}）：{exc}") from exc
 
 
 def load_definition(data: dict[str, Any] | str, registry: NodeRegistry) -> ProcessDefinition:
