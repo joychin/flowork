@@ -27,7 +27,6 @@ __all__ = [
     "SimulationControls",
     "applied_stubs",
     "clear_simulation_state",
-    "fire_one_due_job",
     "instance_started_at",
     "parse_controls",
     "register_simulation_stubs",
@@ -168,57 +167,6 @@ def step_virtual_clock(
     virtual_now = virtual_now + timedelta(minutes=minutes)
     notes.append(f"推钟 {minutes} 分钟 → 虚拟时刻 {virtual_now.isoformat()}")
     return virtual_now, advanced_minutes + minutes
-
-
-def fire_one_due_job(
-    engine: ProcessEngine, instance_id: str, virtual_now: datetime, notes: list[str]
-) -> bool:
-    """兑现一个到期的 virtual Job（run_at 最早优先，策略与真实执行同源）。
-
-    证据进 notes（事件面对模拟静默——推钟兑现的可发现性走这里与已办行）。
-    到期判定带 5 秒容差：run_at 与虚拟基线是同命令内两次 config.now()，
-    真实墙钟下有毫秒级偏移（推钟粒度是分钟，容差诚实无害）。
-    """
-    from datetime import timedelta
-
-    from sqlalchemy import select
-
-    def _collect(ctx: Any) -> str | None:
-        from flowork.engine.simulation_runner import tree_instance_ids
-        from flowork.persistence.orm import JobRow
-
-        job_id: str | None = ctx.session.scalars(
-            select(JobRow.id)
-            .where(
-                JobRow.state == "virtual",
-                JobRow.run_at <= virtual_now + timedelta(seconds=5),
-                JobRow.instance_id.in_(tree_instance_ids(ctx, instance_id)),
-            )
-            .order_by(JobRow.run_at, JobRow.id)
-        ).first()
-        return job_id
-
-    job_id = engine.execute(_collect)
-    if job_id is None:
-        return False
-    engine.jobs.run_virtual(job_id, virtual_now)
-
-    def _read(ctx: Any) -> Any:
-        from flowork.persistence.orm import JobRow
-
-        return ctx.session.get(JobRow, job_id)
-
-    job = engine.execute(_read)
-    payload = job.payload if job else {}
-    line = (
-        f"虚拟时钟兑现 {payload.get('kind', 'task_deadline')}"
-        f"@{payload.get('activity_code', '-')} strategy={payload.get('strategy', '-')}"
-    )
-    skipped = (job.result_payload or {}).get("skipped") if job else None
-    if skipped:
-        line += f"（跳过：{skipped}）"
-    notes.append(line)
-    return True
 
 
 # —— 桩注册表（引擎级、按实例）——

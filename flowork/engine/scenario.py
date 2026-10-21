@@ -39,6 +39,9 @@ class ScenarioReport:
     instance_id: str
     final_state: str
     ok: bool = False
+    # 脚本是否停在失败步（2026-10-21 内核 review P1-7：修前是局部变量，
+    # 只折进 ok——CLI 只看 failed，断言恰巧成立时停住的脚本退出码 0 假绿）
+    stopped: bool = False
     steps: list[dict[str, Any]] = field(default_factory=list)  # 逐步执行事实
     assertions: list[dict[str, Any]] = field(default_factory=list)  # 每条断言的判定
     coverage: dict[str, Any] = field(default_factory=dict)  # 节点/边覆盖（照明）
@@ -66,6 +69,15 @@ def parse_scenario(raw: Any) -> dict[str, Any]:
     controls = raw.get("controls")
     if controls is not None and not isinstance(controls, dict):
         raise FloworkError("场景 controls 必须是对象")
+    # simulate 专属控制键在场景里不生效（2026-10-21 内核 review P2：修前解析后
+    # 静默忽略——从 simulate 迁移 controls 的用户得到无声 no-op）。场景的表达
+    # 方式就是 steps：任务步即决策、clock 步即推钟、wait 步即等待假设。
+    for unsupported in ("decisions", "clock"):
+        if controls and unsupported in controls:
+            raise FloworkError(
+                f"场景 controls.{unsupported} 不生效——场景用 steps 表达"
+                f"（{'任务步=决策' if unsupported == 'decisions' else 'clock 步=推钟'}）"
+            )
     assertions = raw.get("assertions")
     if assertions is not None:
         if not isinstance(assertions, list):
@@ -109,20 +121,24 @@ def run_scenario(
     virtual_now = _started_at(engine, instance_id)
     advance = _Advance(engine, instance_id, virtual_now, report.notes)
 
-    stopped = False
     try:
         _run_steps(engine, instance_id, scenario.get("steps") or [], advance, report, _parsed)
         advance.drain(report)
     except FloworkError as exc:
         report.notes.append(f"脚本停在失败步：{exc}")
-        stopped = True
+        report.stopped = True
     report.final_state = _final_state(engine, instance_id)
     report.advanced_minutes = advance.advanced
     from flowork.engine.scenario_checks import compute_coverage, evaluate_assertions
 
     evaluate_assertions(engine, instance_id, scenario.get("assertions") or [], report)
     report.coverage = compute_coverage(engine, instance_id)
-    report.ok = not stopped and not report.failed and report.final_state not in ("failed",)
+    report.ok = not report.stopped and not report.failed and report.final_state not in ("failed",)
+    # 模拟结束清理（2026-10-21 内核 review P2：修前只有 RuntimeService.simulate
+    # 清桩注册表——宿主挂载的长驻引擎每跑一个场景泄漏一条实例键）
+    from flowork.engine.simulation_controls import clear_simulation_state
+
+    clear_simulation_state(engine, instance_id)
     return report
 
 
@@ -175,7 +191,7 @@ class _Advance:
         self.drain(None)
 
     def drain(self, report: ScenarioReport | None) -> None:
-        from flowork.engine.simulation_controls import fire_one_due_job
+        from flowork.engine.simulation_clock import fire_one_due_job
 
         for _ in range(_MAX_STEPS):
             if not fire_one_due_job(self.engine, self.instance_id, self.virtual_now, self.notes):
@@ -237,6 +253,12 @@ def _run_steps(
             }
         )
         advance.drain(report)
+    # 末步进入的等待节点也要兑现预置假设（2026-10-21 内核 review P2：修前
+    # 只在步边界解析——最后一步走进 wait 后循环结束，预置 matched 永不生效）
+    if preset_waits and resolve_wait(engine, instance_id, preset_waits):
+        report.steps.append(
+            {"index": len(steps), "kind": "wait", "detail": "controls.waits（收尾）"}
+        )
 
 
 def _locate_in_tree(engine: ProcessEngine, instance_id: str, node: str, by: Any) -> Any:

@@ -157,3 +157,48 @@ def test_task_claimable_rejects_bad_org_file(tmp_path):
         app, ["task", "claimable", "u_x", "--db", str(tmp_path / "x.db"), "--org", "/nope.yaml"]
     )
     assert result.exit_code == 1
+
+
+def test_scenario_run_stopped_script_exits_nonzero(tmp_path):
+    """场景脚本停在失败步 → CLI 退出码 1（2026-10-21 内核 review P1-7 回归）。
+
+    修前 CLI 只看 report.failed：坏步停住后断言在部分状态上恰巧成立时
+    退出码 0 且打印「✓ 全绿」——坏掉的回归脚本在 CI 里是绿的。
+    """
+    import json
+
+    from typer.testing import CliRunner
+
+    from flowork.cli.app import app as cli_app
+
+    definition = {
+        "code": "cli_stop",
+        "name": "停步场景",
+        "nodes": [
+            {"kind": "start", "code": "s", "name": "开始"},
+            {"kind": "user_task", "code": "a", "name": "审批", "assignee": "'u1'"},
+            {"kind": "end", "code": "e", "name": "结束"},
+        ],
+        "flows": [
+            {"source": "s", "target": "a"},
+            {"source": "a", "target": "e"},
+        ],
+    }
+    scenario = {
+        "name": "坏步",
+        "steps": [{"node": "ghost_node", "action": "complete"}],
+        # 部分状态上恰巧成立的断言——修前它让退出码变 0
+        "assertions": [{"type": "final_state", "expected": "running"}],
+    }
+    dpath = tmp_path / "cli_stop.json"
+    spath = tmp_path / "cli_stop.scenario.json"
+    dpath.write_text(json.dumps(definition, ensure_ascii=False), encoding="utf-8")
+    spath.write_text(json.dumps(scenario, ensure_ascii=False), encoding="utf-8")
+
+    db = tmp_path / "cli_stop.db"
+    result = CliRunner().invoke(
+        cli_app, ["scenario", "run", str(dpath), str(spath), "--db", str(db), "--deploy"]
+    )
+    assert result.exit_code == 1, f"退出码应为 1（停住≠全绿），输出：{result.output}"
+    assert "停在失败步" in result.output
+    assert "全绿" not in result.output

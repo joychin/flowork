@@ -13,9 +13,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from flowork.engine.simulation_clock import fire_one_due_job
 from flowork.engine.simulation_controls import (
     SimulationControls,
-    fire_one_due_job,
     instance_started_at,
     step_virtual_clock,
 )
@@ -131,7 +131,11 @@ def _pending_tasks(engine: ProcessEngine, instance_id: str) -> list[tuple[str, s
 
         tree = tree_instance_ids(ctx, instance_id)
         rows = ctx.session.scalars(
-            select(TaskRow).where(TaskRow.instance_id.in_(tree), TaskRow.state == "ready")
+            select(TaskRow)
+            .where(TaskRow.instance_id.in_(tree), TaskRow.state == "ready")
+            # 排序钉死（2026-10-21 内核 review P2）：PG 下无 ORDER BY 的返回
+            # 顺序不定——报告 visited/机器人动作序要 CI 级确定
+            .order_by(TaskRow.created_at, TaskRow.id)
         )
         return [(row.id, row.task_type, row.assignee) for row in rows]
 
@@ -149,7 +153,9 @@ def tree_instance_ids(ctx: Any, instance_id: str) -> list[str]:
     while frontier:
         frontier = list(
             ctx.session.scalars(
-                select(ProcessInstanceRow.id).where(ProcessInstanceRow.parent_id.in_(frontier))
+                select(ProcessInstanceRow.id)
+                .where(ProcessInstanceRow.parent_id.in_(frontier))
+                .order_by(ProcessInstanceRow.id)  # PG 下兄弟序确定（同上）
             )
         )
         ids.extend(frontier)
@@ -163,11 +169,17 @@ def _locate(engine: ProcessEngine, instance_id: str, node: str, by: Any) -> Task
     def _read(ctx: Any) -> list[str]:
         return tree_instance_ids(ctx, instance_id)
 
+    ambiguous = ""
     for candidate_id in engine.execute(_read):
         try:
             return find_pending_task(engine, candidate_id, node=node, by=by)
-        except TaskNotAvailableError:
-            continue
+        except TaskNotAvailableError as exc:
+            # 多条待办需 by 指定的歧义不是「暂无」（2026-10-21 review P2：
+            # 修前吞成「暂无对应待办」诊断跑偏）——向上透传原话
+            if "条待办" in str(exc):
+                ambiguous = str(exc)
+    if ambiguous:
+        raise TaskNotAvailableError(ambiguous)
     return None
 
 

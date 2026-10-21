@@ -55,7 +55,10 @@ def run(
         engine.close()
 
     _print_report(report, verbose)
-    if report.failed:
+    if not report.ok:
+        # 停在失败步/断言失败/终态 failed 一律非绿（2026-10-21 内核 review
+        # P1-7：修前只看 failed——脚本中途停住而断言在部分状态上恰巧成立时
+        # 退出码 0，坏掉的回归脚本在 CI 里是绿的）
         raise typer.Exit(code=1)
 
 
@@ -134,9 +137,10 @@ def _print_report(report: Any, verbose: bool) -> None:
     if report.notes:
         for note in report.notes:
             console.print(f"[yellow]⚠[/yellow] {note}")
-    verdict = (
-        "[green]✓ 全绿[/green]"
-        if not report.failed
-        else f"[red]✗ {len(report.failed)} 条失败[/red]"
-    )
+    if report.stopped:
+        verdict = "[red]✗ 脚本停在失败步（部分状态上的断言不作数）[/red]"
+    elif report.failed:
+        verdict = f"[red]✗ {len(report.failed)} 条失败[/red]"
+    else:
+        verdict = "[green]✓ 全绿[/green]"
     console.print(f"{verdict}（终态 {report.final_state}，实例 {report.instance_id[:8]}…）")

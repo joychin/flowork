@@ -138,9 +138,23 @@ class JobScheduler(DeadlineStrategiesMixin):
                     self._apply_strategy(ctx, job)
             except Exception as exc:
                 # 模拟域：策略异常不得穿出驱动循环（整次模拟会丢报告）——
-                # Job 结案留痕，错误归一 FloworkError 由驱动器记 notes
-                job.state = "done"
-                job.result_payload = {**(job.result_payload or {}), "skipped": str(exc)}
+                # Job 结案留痕（**独立事务**持久化：本命令随后上抛 FloworkError
+                # 会整体回滚，同事务写 done 会被一起滚掉——2026-10-21 内核
+                # review P1-6 副刀：修前「留痕」实际不落库，Job 永远留在
+                # virtual 且无任何失败证据），错误归一由驱动器记 notes
+                with self._engine.session_factory() as close_session, close_session.begin():
+                    close_session.execute(
+                        update(JobRow)
+                        .where(JobRow.id == job_id)
+                        .values(
+                            state="done",
+                            last_error=str(exc),
+                            result_payload={
+                                **(job.result_payload or {}),
+                                "skipped": str(exc),
+                            },
+                        )
+                    )
                 from flowork.errors import FloworkError
 
                 raise FloworkError(f"虚拟时钟策略执行失败（job={job.id}）：{exc}") from exc

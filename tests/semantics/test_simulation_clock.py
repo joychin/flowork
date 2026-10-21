@@ -269,3 +269,46 @@ def test_clock_parse_rejects_junk():
         parse_controls({"clock": [{"advance_minutes": -5}]})
     with pytest.raises(FloworkError, match="时钟步骤"):
         parse_controls({"clock": [{"warp": True}]})
+
+
+def test_clock_consult_deferral_does_not_spin():
+    """咨询推迟不烧步数（2026-10-21 内核 review P1-6 回归）。
+
+    修前推迟的 Job 对驱动循环仍是「已兑现」→ continue → 同一 Job 反复入选
+    直到 500 步上限，咨询待办永远排不上、notes 里 500 条同样的兑现记录。
+    现推迟返回 False：决策/机器人先推进，咨询交回后推钟再兑。
+    """
+    engine = ProcessEngine()
+    engine.repository.deploy(
+        FlowBuilder("clk_consult")
+        .start()
+        .user_task(
+            "m",
+            assignee="'u1'",
+            deadlines=[TaskDeadline(after_minutes=30, action="auto_approve")],
+        )
+        .end()
+        .connect("start", "m")
+        .connect("m", "end")
+        .build()
+    )
+    from flowork.engine.simulation_runner import drive_simulation
+    from flowork.engine.simulation_start import start_simulation
+
+    iid, controls = start_simulation(
+        engine,
+        "clk_consult",
+        # decisions=[] 禁用机器人：咨询保持未交回，推钟才会撞上「咨询期推迟」
+        controls={"decisions": [], "clock": [{"advance_minutes": 60}]},
+    )
+    task = engine.task.list_tasks(instance_id=iid)[0]
+    engine.task.consult(task.id, ["u2"], actor="u1")  # 咨询未交回＝deadline 推迟
+
+    notes, _advanced = drive_simulation(engine, iid, controls)
+
+    defer_notes = [n for n in notes if "推迟" in n]
+    assert defer_notes, "推迟事实应留痕（修前谎称已兑现）"
+    assert len(notes) < 10, f"步数被烧穿：{len(notes)} 条"
+    # 咨询待办不被烧掉的步数吞掉——仍是待决策点（诚实停点而非假循环）
+    pending = [t.activity_code for t in engine.task.list_tasks(instance_id=iid)]
+    assert "m" in pending or len(pending) >= 1, pending

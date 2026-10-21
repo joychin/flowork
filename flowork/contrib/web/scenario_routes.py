@@ -10,7 +10,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
@@ -93,7 +93,6 @@ def register_scenario_routes(
 
 def _run(engine: Any, code: str, script: dict[str, Any], spec: dict[str, Any] | None) -> Any:
     """跑场景（草稿校验门槛与 simulate 同口径）。"""
-    from dataclasses import asdict
 
     from flowork.api import run_scenario
 
@@ -107,31 +106,3 @@ def _run(engine: Any, code: str, script: dict[str, Any], spec: dict[str, Any] | 
             )
         return asdict(run_scenario(engine, code, script, spec=spec))
     return asdict(run_scenario(engine, code, script))
-
-
-@dataclass
-class ScenarioFailure:
-    """一侧跑不起来（校验/引擎错）：ScenarioReport 形状兼容的失败占位（asdict 可用）。"""
-
-    scenario: str = ""
-    instance_id: str = ""
-    final_state: str = "failed"
-    ok: bool = False
-    steps: list[Any] = field(default_factory=list)
-    assertions: list[Any] = field(default_factory=list)
-    coverage: dict[str, Any] = field(default_factory=dict)
-    notes: list[str] = field(default_factory=list)
-    advanced_minutes: int = 0
-
-    @classmethod
-    def of(cls, message: str) -> ScenarioFailure:
-        return cls(
-            assertions=[
-                {"type": "run", "ok": False, "actual": message, "expected": {}, "message": message}
-            ],
-            notes=[message],
-        )
-
-    @property
-    def failed(self) -> list[Any]:
-        return self.assertions
