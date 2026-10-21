@@ -17,6 +17,9 @@ from flowork.contrib.rest._common import (
 
 __all__ = ["register_task_routes"]
 
+# list_tasks 的 state 词表（None=全部）：拼错即 422，不静默空列表
+_TASK_STATES = ("ready", "completed", "cancelled")
+
 
 def register_task_routes(app: FastAPI, engine: ProcessEngine) -> None:
     task = engine.task
@@ -24,11 +27,17 @@ def register_task_routes(app: FastAPI, engine: ProcessEngine) -> None:
     @app.post("/v2/tasks/search")
     def tasks_search(body: dict[str, Any]) -> dict[str, Any]:
         flt = body.get("filter") or {}
+        state = flt.get("state", "ready")
+        if state is not None and state not in _TASK_STATES:
+            # 修前拼错静默空列表（AI 误判「无待办」——MCP 面修过同类，REST 补齐）
+            raise RestRequestError(
+                f"filter.state 不合法：{state!r}（可选 {', '.join(_TASK_STATES)} 或 null）"
+            )
         rows = task.list_tasks(
             instance_id=flt.get("instance_id"),
             assignee=flt.get("assignee"),
             candidate=flt.get("candidate"),
-            state=flt.get("state", "ready"),
+            state=state,
         )
         offset, limit = page_request(body.get("page"))
         return page_payload([dump(row) for row in rows], offset, limit)

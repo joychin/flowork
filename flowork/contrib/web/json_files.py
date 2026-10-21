@@ -40,6 +40,7 @@ def resolve_json_path(root: Path, file_name: str) -> Path:
         or file_name.startswith(".")
         or "/" in file_name
         or "\\" in file_name
+        or "\0" in file_name  # NUL：resolve() 前拦下，否则 ValueError 变 500
     ):
         raise HTTPException(status_code=400, detail=f"非法文件名：{file_name!r}")
     if not file_name.endswith(FILE_SUFFIX):
@@ -58,12 +59,20 @@ def read_json(path: Path) -> Any:
 
 
 def write_json_atomic(path: Path, content: Any) -> None:
-    """同目录临时文件 + rename：读者永远看到完整文件，不会读到半个 JSON。"""
+    """同目录临时文件 + rename：读者永远看到完整文件，不会读到半个 JSON。
+
+    落盘前把临时文件权限对齐既有文件（缺省 0666&~umask）——mkstemp 产物
+    是 0600，直接 replace 会把工作区 0644 的定义文件改成仅属主可读
+    （2026-10-21 内核 review P2）。
+    """
     text = json.dumps(content, ensure_ascii=False, indent=2) + "\n"
     handle, tmp_name = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
     try:
         with os.fdopen(handle, "w", encoding="utf-8") as stream:
             stream.write(text)
+        mask = os.umask(0)
+        os.umask(mask)
+        os.chmod(tmp_name, path.stat().st_mode & 0o777 if path.exists() else (0o666 & ~mask))
         os.replace(tmp_name, path)
     except BaseException:
         Path(tmp_name).unlink(missing_ok=True)

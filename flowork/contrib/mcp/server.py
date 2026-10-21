@@ -16,7 +16,7 @@ from mcp.server.lowlevel import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import CallToolResult, TextContent, Tool
 
-from flowork.api import EngineConfig, FloworkError, ProcessEngine, StaticOrgDirectory
+from flowork.api import FloworkError, ProcessEngine
 from flowork.contrib.mcp.catalog import (
     UnknownToolError,
     build_tools,
@@ -27,12 +27,14 @@ __all__ = ["build_server", "call_tool_result", "create_engine"]
 
 
 def create_engine() -> ProcessEngine:
+    """按环境约定装配引擎（与 REST 同源经 contrib.assembly——FLOWORK_SETUP
+    三钩子/词汇四级优先对 MCP 进程同样生效；修前只读 db/org，自定义
+    kind/函数/handler 在 MCP 面静默失效）。"""
+    from flowork.contrib.assembly import assemble_engine
+
     db_path = os.environ.get("FLOWORK_DB", "flowork.db")
-    config_kwargs: dict[str, Any] = {"db_file": db_path}
-    org_path = os.environ.get("FLOWORK_ORG")
-    if org_path:
-        config_kwargs["org"] = StaticOrgDirectory.from_yaml(org_path)
-    return ProcessEngine(EngineConfig(**config_kwargs))
+    engine, _source = assemble_engine(db_path)
+    return engine
 
 
 def _text_of(payload: dict[str, Any]) -> TextContent:

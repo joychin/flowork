@@ -18,8 +18,15 @@ __all__ = ["definition_tools"]
 
 def _load(engine: ProcessEngine, spec: Any) -> Any:
     if not isinstance(spec, dict):
-        raise InvalidDefinitionData("spec 必须是流程定义 JSON 对象")
-    return load_definition(spec, engine.config.node_registry)
+        raise McpToolError("spec 必须是流程定义 JSON 对象")
+    try:
+        return load_definition(spec, engine.config.node_registry)
+    except InvalidDefinitionData:
+        raise
+    except ValueError as exc:
+        # pydantic ValidationError 兜底（内核 _resolve_node 已归一，此处拦
+        # 其余逃逸的 ValueError 族——修前穿出成 JSON-RPC 协议错 code=0）
+        raise McpToolError(f"流程定义结构不合法：{exc}") from exc
 
 
 def _plain(value: Any) -> Any:

@@ -84,3 +84,34 @@ def test_flowork_error_still_recognized():
     engine = _engine()
     with pytest.raises(FloworkError):
         dispatch(engine, "start_instance", {})
+
+
+def test_typed_spec_error_is_tool_error_not_protocol_error():
+    """节点字段类型错走统一错误通道（2026-10-21 内核 review P1-13 回归）。
+
+    修前 _load 不接 pydantic ValidationError：裸异常穿出 call_tool_result
+    → mcp lowlevel 转 JSON-RPC 协议错 code=0 + 数 KB pydantic 转储。
+    """
+
+    engine = _engine()
+    from flowork.api import DefinitionError
+    from flowork.definitions.definition import dump_definition
+
+    data = dump_definition(engine.repository.get_definition("mcperr"))
+    data["nodes"][1]["assignee"] = 123  # 类型错
+    # 内核归一为 DefinitionError 族 → call_tool_result 的 FloworkError 通道
+    # （isError=True + error.code），不再是裸 pydantic 协议错
+    with pytest.raises(DefinitionError, match="节点结构不合法"):
+        dispatch(engine, "validate_spec", {"spec": data})
+
+
+def test_resolve_incident_requires_actor():
+    """resolve_incident 缺 actor 拒绝（2026-10-21 内核 review P1-14 回归）。
+
+    修前缺省 "mcp"——唯一没走 require_actor 的写工具，审计归因退化为常量。
+    """
+    from flowork.contrib.mcp.catalog import McpToolError
+
+    engine = _engine()
+    with pytest.raises(McpToolError, match="actor 必填"):
+        dispatch(engine, "resolve_incident", {"incident_id": "ghost", "action": "resume"})

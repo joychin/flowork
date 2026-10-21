@@ -135,7 +135,9 @@ def register_runtime_routes(
     一眼看出「这台设计器认不认我的函数」。
     """
     root = root_of(definitions_dir) if definitions_dir else None
-    ephemeral = session_db in (":memory:", "sqlite:///:memory:")
+    ephemeral = session_db in (":memory:", "sqlite:///:memory:") or (
+        session_db.startswith("sqlite") and "mode=memory" in session_db
+    )
     names = list(vocabulary_functions or [])
 
     @app.get("/api/runtime")

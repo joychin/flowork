@@ -19,6 +19,17 @@ from flowork.contrib.rest._common import (
 
 __all__ = ["register_instance_routes", "signal_waiting_instance"]
 
+# 实例状态词表（InstanceState 值集）：拼错即 422，不静默空列表
+_INSTANCE_STATES = (
+    "running",
+    "paused",
+    "suspended",
+    "completed",
+    "cancelled",
+    "terminated",
+    "failed",
+)
+
 
 def register_instance_routes(app: FastAPI, engine: ProcessEngine) -> None:
     runtime = engine.runtime
@@ -47,8 +58,13 @@ def register_instance_routes(app: FastAPI, engine: ProcessEngine) -> None:
         offset, limit = page_request(body.get("page"))
         # limit+1 余量探测：修前取数窗口恰好 offset+limit，
         # has_more 恒 False——next_cursor 恒 None，第二页数据不可达
+        state = flt.get("state")
+        if state is not None and state not in _INSTANCE_STATES:
+            raise RestRequestError(
+                f"filter.state 不合法：{state!r}（可选 {', '.join(_INSTANCE_STATES)} 或 null）"
+            )
         rows = history.instances(
-            state=flt.get("state"),
+            state=state,
             definition_code=flt.get("definition_code"),
             offset=offset,
             limit=limit + 1,

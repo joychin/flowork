@@ -85,7 +85,7 @@ def register_designer_routes(
         "宿主引擎自带" if port is not None else "未装配（自定义函数不可用）"
     )
     app.state.vocabulary_functions = vocabulary_functions(port)
-    session_db = str(engine.config.db_file or "")
+    session_db = str(engine.config.db_file or engine.config.db_url or "")
     app.state.db_url = session_db
 
     register_definition_routes(app, engine)
@@ -154,12 +154,22 @@ def create_app(
         app, engine, definitions_dir=files_dir, vocabulary_source=vocabulary_source
     )
 
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+    # CORS 显式开（2026-10-21 内核 review P1-12）：缺省不挂——开发流走 vite
+    # 代理（5173→8901 同源）、lib 嵌入同源，都不需要跨域；通配 * 挂在能写
+    # git 工作区的文件面上＝任意网页可 PUT 覆盖定义。FLOWORK_CORS_ORIGINS
+    # 逗号清单（显式给 '*' 可恢复旧行为）。
+    origins = [
+        origin.strip()
+        for origin in os.environ.get("FLOWORK_CORS_ORIGINS", "").split(",")
+        if origin.strip()
+    ]
+    if origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=origins,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
 
     # 插件库托管（单进程 demo 模式）：designer/dist-lib 存在时挂载——
     # 先 `npm run build:lib`，再起服务即得 /designer-demo 只读嵌入示例页
@@ -172,21 +182,15 @@ def create_app(
         @app.get("/designer-demo", response_class=HTMLResponse)
         def designer_demo(code: str | None = None) -> str:
             """三行代码嵌入的只读审计示例（?code=xxx 深链到指定定义）。"""
-            deep = f", definitionCode: '{code}'" if code else ""
-            return (
-                '<!doctype html><html lang="zh"><head><meta charset="utf-8">'
-                "<title>flowork 设计器插件嵌入示例</title>"
-                '<link rel="stylesheet" href="/designer-lib/flowork-designer.css">'
-                "<style>body{margin:0}#audit{height:100vh}</style></body><body>"
-                '<div id="audit"></div>'
-                '<script type="module">'
-                "import { mountFloworkDesigner } from '/designer-lib/flowork-designer.es.js';"
-                f"mountFloworkDesigner('#audit', {{ apiBase: '', mode: 'readonly'{deep} }});"
-                "</script></body></html>"
-            )
+            return _demo_page(code)
 
     jobs_enabled = os.environ.get("FLOWORK_JOBS", "off").lower() not in ("off", "0", "false")
-    job_interval = int(os.environ.get("FLOWORK_JOB_INTERVAL", "30"))
+    try:
+        job_interval = int(os.environ.get("FLOWORK_JOB_INTERVAL", "30"))
+    except ValueError as exc:
+        raise FloworkError(
+            f"FLOWORK_JOB_INTERVAL 须为整数秒数，收到：{os.environ['FLOWORK_JOB_INTERVAL']!r}"
+        ) from exc
     if jobs_enabled:
 
         @app.on_event("startup")
@@ -199,6 +203,25 @@ def create_app(
         engine.close()
 
     return app
+
+
+def _demo_page(code: str | None) -> str:
+    """示例页 HTML。code 经 json.dumps 注入为 JS 字符串字面量——
+    原样 f-string 拼接是反射 XSS（2026-10-21 内核 review P1-11）。"""
+    import json as _json
+
+    deep = f", definitionCode: {_json.dumps(code)}" if code else ""
+    return (
+        '<!doctype html><html lang="zh"><head><meta charset="utf-8">'
+        "<title>flowork 设计器插件嵌入示例</title>"
+        '<link rel="stylesheet" href="/designer-lib/flowork-designer.css">'
+        "<style>body{margin:0}#audit{height:100vh}</style></head><body>"
+        '<div id="audit"></div>'
+        '<script type="module">'
+        "import { mountFloworkDesigner } from '/designer-lib/flowork-designer.es.js';"
+        f"mountFloworkDesigner('#audit', {{ apiBase: '', mode: 'readonly'{deep} }});"
+        "</script></body></html>"
+    )
 
 
 def __getattr__(name: str) -> Any:

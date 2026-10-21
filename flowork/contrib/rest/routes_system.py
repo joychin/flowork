@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import math
 import time
 from typing import Any
@@ -90,7 +91,7 @@ def register_system_routes(app: FastAPI, engine: ProcessEngine) -> None:
         }
 
     @app.post("/v2/jobs/activate")
-    def activate(body: dict[str, Any]) -> dict[str, Any]:
+    async def activate(body: dict[str, Any]) -> dict[str, Any]:
         """长轮询领活：request_timeout 秒内无活则轮询等待（上限 30s，0=立即返回）。"""
         job_types = body.get("job_types")
         if not isinstance(job_types, list) or not job_types:
@@ -120,7 +121,7 @@ def register_system_routes(app: FastAPI, engine: ProcessEngine) -> None:
             )
             if claims or time.monotonic() >= deadline:
                 return {"jobs": [_claim_json(claim) for claim in claims]}
-            time.sleep(0.5)
+            await asyncio.sleep(0.5)  # async 等待：修前同步 sleep 占死线程池
 
     @app.post("/v2/jobs/{job_id}/complete")
     def complete_job(job_id: str, body: dict[str, Any]) -> dict[str, Any]:

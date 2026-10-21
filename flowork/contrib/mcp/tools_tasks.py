@@ -79,7 +79,7 @@ def task_tools(engine: ProcessEngine) -> list[ToolSpec]:
                     "assignee": {"type": "string"},
                     "state": {
                         "type": "string",
-                        "enum": ["ready", "completed", "cancelled"],
+                        "enum": ["ready", "completed", "cancelled", ""],
                         "description": "省略=ready；空串=全部",
                     },
                     "candidate": {"type": "string"},

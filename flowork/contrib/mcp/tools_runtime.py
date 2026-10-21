@@ -54,7 +54,7 @@ def runtime_tools(engine: ProcessEngine) -> list[ToolSpec]:
             raise McpToolError("code 必填（流程定义编码）")
         reuse = str(args.get("reuse") or "reject")
         if reuse not in ("reject", "return_existing", "allow_duplicate"):
-            raise NotFoundError(f"reuse 不合法：{reuse!r}")
+            raise McpToolError(f"reuse 不合法：{reuse!r}（参数错误非不存在）")
         actor = require_actor(args)
         return {
             "instance_id": runtime.start_process(
@@ -134,7 +134,7 @@ def runtime_tools(engine: ProcessEngine) -> list[ToolSpec]:
         runtime.resolve_incident(
             incident_id,
             action=str(args.get("action") or "resume"),
-            actor=str(args.get("actor") or "mcp"),
+            actor=require_actor(args),  # 修前缺省 "mcp"——唯一没走必填的写工具
         )
         return {"incident_id": incident_id, "resolved": True}
 
