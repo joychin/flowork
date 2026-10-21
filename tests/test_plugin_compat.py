@@ -22,8 +22,14 @@ def test_all_plugin_slots_declare_compatible_api_version() -> None:
         "contrib（词汇包 cel_vocabulary）": contrib.REQUIRES_FLOWORK_API,
         "contrib.numeric_vocabulary": numeric_plugin.REQUIRES_FLOWORK_API,
     }
+
+    def _version_tuple(text: str) -> tuple[int, ...]:
+        # 整数元组比较（2026-10-21 内核 review P2：修前字符串字典序，
+        # "10" <= "9" 为 True——major 到两位数即误判）
+        return tuple(int(part) for part in text.split("."))
+
     for name, required in slots.items():
-        assert required <= flowork.api.API_VERSION, (
+        assert _version_tuple(required) <= _version_tuple(flowork.api.API_VERSION), (
             f"{name} 声明 REQUIRES_FLOWORK_API={required} > "
             f"API_VERSION={flowork.api.API_VERSION}——门面升 major 后须同步升级声明"
         )

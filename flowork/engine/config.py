@@ -9,7 +9,7 @@ from pathlib import Path
 
 from flowork.clock import utc_now
 from flowork.events.domain import DomainEvent
-from flowork.participants.org_directory import OrgDirectoryLike
+from flowork.participants.org_directory import CoreOrgDirectory
 from flowork.persistence.db import url_from_value
 from flowork.runtime.registry import NodeRegistry, create_registry
 from flowork.spi.ports import ExpressionFunctions
@@ -47,7 +47,7 @@ class EngineConfig:
     lock_retries: int = 3
     now: Callable[[], datetime] = _system_now
     db_file: str | Path | None = None  # CLI 便利字段：设置后覆盖 db_url（路径或完整 URL）
-    org: OrgDirectoryLike | None = None  # 组织目录（委托替换/to_admins 兜底/取人词汇数据源）
+    org: CoreOrgDirectory | None = None  # 组织目录：内核只消费四方法（Core 协议）；丰富面按需
     expression_functions: ExpressionFunctions | None = None  # CEL 词汇（全表达式位）
 
 

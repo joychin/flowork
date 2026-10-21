@@ -24,7 +24,7 @@ from flowork.expr.context import expression_context
 if TYPE_CHECKING:
     from flowork.definitions.builtin import UserTaskSpec
     from flowork.engine.context import RuntimeNodeContext
-    from flowork.participants.org_directory import OrgDirectoryLike
+    from flowork.participants.org_directory import CoreOrgDirectory
 
 __all__ = [
     "ParticipantResolution",
@@ -206,7 +206,7 @@ def _apply_strategies(
 
 
 def _delegation_replace(
-    todo: list[str], org: OrgDirectoryLike, *, now: datetime | None
+    todo: list[str], org: CoreOrgDirectory, *, now: datetime | None
 ) -> tuple[list[str], dict[str, str]]:
     """委托替换：返回（替换后待办人, 委托人→受托人映射）。
 
@@ -228,7 +228,7 @@ def _delegation_replace(
 def resolve_with_delegation(
     ctx: RuntimeNodeContext,
     spec: UserTaskSpec,
-    org: OrgDirectoryLike,
+    org: CoreOrgDirectory,
     functions: Functions | None = None,
 ) -> tuple[ParticipantResolution, dict[str, str]]:
     """解析 + 委托替换（供行为层使用）。"""
@@ -238,7 +238,7 @@ def resolve_with_delegation(
 
 
 def fallback_when_empty(
-    ctx: RuntimeNodeContext, spec: UserTaskSpec, org: OrgDirectoryLike
+    ctx: RuntimeNodeContext, spec: UserTaskSpec, org: CoreOrgDirectory
 ) -> ParticipantResolution:
     """无参与者兜底：to_admins / raise。"""
     if spec.no_participant_policy == "to_admins" and org.admins:

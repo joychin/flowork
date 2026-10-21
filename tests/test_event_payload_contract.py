@@ -400,3 +400,34 @@ def test_suspension_emits_process_suspended_and_resumed():
     assert resumed[0]["actor"] == "boss"
     assert engine.runtime.get_instance(iid).state == "running"  # a 回到可办
     engine.close()
+
+
+def test_task_created_payload_carries_notification_facts():
+    """task_created 载荷够通知集成立即消费（2026-10-21 内核 review P2 回归）。
+
+    修前只有 task_id/activity_code/assignee/task_type/actor——订阅方发一条
+    「你有新待办」须再回查任务与实例各一次。现补 name/due_at/definition_code/
+    business_key/start_user，主路径与克隆路径同形。
+    """
+    from flowork.engine.engine import ProcessEngine
+
+    local = ProcessEngine()
+    local.repository.deploy(
+        FlowBuilder("notify_payload")
+        .start()
+        .user_task("a", assignee="'u1'")
+        .end()
+        .connect("start", "a")
+        .connect("a", "end")
+        .build()
+    )
+    iid = local.runtime.start_process("notify_payload", start_user="u_s", business_key="BK-1")
+    task = local.task.list_tasks(instance_id=iid)[0]
+    created = _events_of(local, iid, "task_created")
+    assert created, "应有 task_created 事件"
+    payload = created[0]
+    assert payload["name"] == task.name
+    assert payload["due_at"] is None
+    assert payload["definition_code"] == "notify_payload"
+    assert payload["business_key"] == "BK-1"
+    assert payload["start_user"] == "u_s"

@@ -12,6 +12,7 @@ import pytest
 
 from flowork.api import (
     AnticipateResult,
+    CoreOrgDirectory,
     DefinitionConflictError,
     EngineExecutionError,
     FloworkError,
@@ -24,6 +25,7 @@ from flowork.api import (
     ParticipantCountMismatchError,
     ParticipantLimitError,
     ProcessEngine,
+    RichOrgDirectory,
     RouteDecisionInfo,
     TaskInfo,
     TokenInfo,
@@ -46,6 +48,23 @@ def _engine_with_flow() -> ProcessEngine:
         .build()
     )
     return engine
+
+
+def test_org_directory_protocol_split():
+    """Core 四方法即内核全部直接消费；Rich 是丰富面（OrgDirectoryLike 别名）。"""
+
+    # Protocol 非运行时可检——按类体成员断言拆分事实
+    def _members(cls) -> set[str]:
+        return {
+            name
+            for name in vars(cls)
+            if not name.startswith("_") and callable(getattr(cls, name, None)) is not False
+        }
+
+    core = {name for name in vars(CoreOrgDirectory) if not name.startswith("_")}
+    rich = {name for name in vars(RichOrgDirectory) if not name.startswith("_")}
+    assert core == {"is_member", "snapshot", "delegation_of", "admins"}
+    assert {"subjects_in", "manager_of", "users_with_role"} <= rich
 
 
 def test_escaping_error_family_is_flowork_error_subclass():

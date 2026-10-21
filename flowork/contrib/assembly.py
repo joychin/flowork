@@ -52,6 +52,11 @@ def assemble_engine(
     ``vocabulary`` 显式参数优先级最高（宿主嵌入形态直接传代码对象）；
     来源说明进 ``/api/runtime``——前端据此显示当前进程认识哪些函数。
     """
+    if db_file is not None and not str(db_file).strip():
+        # 空串是误配置（如 FLOWORK_DB= 置空）——静默落 :memory: 会让生产
+        # 进程重启丢库（2026-10-21 内核 review P2）
+        raise FloworkError("db_file 不能为空串（FLOWORK_DB 置空＝误配置，不落内存库）")
+
     org: Any = None
     org_path = os.environ.get("FLOWORK_ORG")
     if org_path:

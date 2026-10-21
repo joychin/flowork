@@ -243,7 +243,10 @@ class TaskOpsMixin:
         此前该面只有 task_id/assignee/actor——消费者定位节点须反查历史表，
         且转办克隆的 task_created 与主路径形状不一致；统一后同名事件同形。
         """
+        from flowork.persistence.orm import ProcessInstanceRow
+
         kernel = self._engine.kernel_for(ctx)
+        instance = ctx.session.get(ProcessInstanceRow, task.instance_id)
         kernel.record_event(
             event,
             {
@@ -252,6 +255,13 @@ class TaskOpsMixin:
                 "task_type": task.task_type,
                 "assignee": task.assignee,
                 "actor": actor,
+                # 与主路径 create_task 载荷同形（通知集成够用面，2026-10-21
+                # review P2）
+                "name": task.name,
+                "due_at": task.due_at.isoformat() if task.due_at else None,
+                "definition_code": instance.definition_code if instance else None,
+                "business_key": instance.business_key if instance else None,
+                "start_user": instance.start_user if instance else None,
             },
             task.instance_id,
         )

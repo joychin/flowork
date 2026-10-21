@@ -10,8 +10,10 @@
 - 删除或改名符号为破坏性变更，走 major 版本。
 
 API_VERSION：门面契约版本。增符号=minor（同步
-快照即可）；删/改名=major。插件以 REQUIRES_FLOWORK_API 声明依赖的门面版本，
-兼容性测试断言插件要求 ≤ 当前值。
+快照即可，当前 1.1——2026-10-21 review 批首次落地 minor 位）；删/改名=major。
+插件以 REQUIRES_FLOWORK_API 声明依赖的门面版本，兼容性测试按整数元组比较。
+历史注记：排练三符号（start_rehearsal 等）与 ScenarioStore 于 2026-10-16 加入、
+2026-10-18 文件化批移除，同处预发布窗口、从未对外发布，故该删除不升 major。
 """
 
 from typing import Final
@@ -19,6 +21,12 @@ from typing import Final
 from flowork.clock import utc_now
 from flowork.definitions.builder import FlowBuilder
 from flowork.definitions.builtin import RouteMode
+
+# 会从公开方法逃逸的错误族（2026-10-21 内核 review P1-8：宿主按纪律只能
+# from flowork.api import——修前 EngineExecutionError/InputContractError/
+# LockConflictError（唯一「可重试」信号）等不在门面，宿主只能捕基类再解析
+# 消息文本；REST 插件自己靠类名字符串表绕）。
+from flowork.definitions.contract import InputContractError
 from flowork.definitions.definition import (
     InvalidDefinitionData,
     ProcessDefinition,
@@ -36,14 +44,26 @@ from flowork.definitions.validator import (
     validate_definition,
 )
 
+# 公开方法的返回模型（同 P1-8：宿主标注返回类型不再需要深路径 import——
+# 投影纪律声明深路径不稳定）。
+from flowork.definitions.versioning import VersionVerdict
+
 # 目录持久化实现：DB 版目录此前仓内仅 tests 可达，宿主
 # 走门面无路——DirectoryStore(engine.session_factory) 构造后挂 EngineConfig.org。
 from flowork.directory import DirectoryError, DirectoryStore
 from flowork.engine.config import EngineConfig
 from flowork.engine.engine import ProcessEngine
-from flowork.engine.history_service import HistoryService
+from flowork.engine.errors import (
+    EngineExecutionError,
+    NoParticipantError,
+    ParticipantCountMismatchError,
+    ParticipantLimitError,
+)
+from flowork.engine.history_service import HistoryService, Page
+from flowork.engine.history_trace import TraceEntry
 from flowork.engine.job_service import JobClaim, JobService, JobStateError
 from flowork.engine.message_service import MessageService
+from flowork.engine.ops import LockConflictError
 from flowork.engine.repository_service import RepositoryService
 from flowork.engine.runtime_service import RuntimeService
 
@@ -53,19 +73,7 @@ from flowork.engine.simulation import SimulationReport
 from flowork.engine.simulation_controls import SimulationControls, parse_controls
 from flowork.engine.simulation_runner import drive_simulation
 from flowork.engine.task_service import TaskService
-
-# 会从公开方法逃逸的错误族（2026-10-21 内核 review P1-8：宿主按纪律只能
-# from flowork.api import——修前 EngineExecutionError/InputContractError/
-# LockConflictError（唯一「可重试」信号）等不在门面，宿主只能捕基类再解析
-# 消息文本；REST 插件自己靠类名字符串表绕）。
-from flowork.definitions.contract import InputContractError
-from flowork.engine.errors import (
-    EngineExecutionError,
-    NoParticipantError,
-    ParticipantCountMismatchError,
-    ParticipantLimitError,
-)
-from flowork.engine.ops import LockConflictError
+from flowork.engine.variable_actions import VariableChangeInfo
 from flowork.errors import (
     ConditionError,
     DefinitionConflictError,
@@ -80,7 +88,6 @@ from flowork.errors import (
     UnknownHandler,
     UnknownNodeKind,
 )
-from flowork.participants.org_directory import OrgConfigError
 
 # 事件消费帮手与事件名枚举：outbox
 # 只写不消费的现状下，宿主消费侧的至少一次分发 + 按 id 幂等去重参考实现；
@@ -98,13 +105,19 @@ from flowork.expr.catalog import (
 from flowork.expr.cel import FormulaError, evaluate_formula_value
 from flowork.expr.conditions import evaluate_condition
 from flowork.expr.context import expression_functions_of
+from flowork.participants.org_directory import (
+    CoreOrgDirectory,
+    OrgConfigError,
+    OrgDirectoryLike,
+    RichOrgDirectory,
+)
 
-# 目录协议与实现：OrgDirectoryLike＝引擎消费的目录协议（EngineConfig.org 类型，
-# 四方法最小面）；StaticOrgDirectory＝participants 的 yaml 静态实现类。
+# 目录协议与实现：CoreOrgDirectory＝EngineConfig.org 的类型（内核四方法
+# 最小面）；RichOrgDirectory＝丰富面（词汇函数消费）；OrgDirectoryLike＝
+# Rich 的兼容别名。StaticOrgDirectory＝yaml 静态实现类。
 # spi.ports 的同名四方法死协议已删除（与 OrgDirectoryLike 重复且零消费）
 # ——公开面不再有同名歧义。
 from flowork.participants.org_directory import OrgDirectory as StaticOrgDirectory
-from flowork.participants.org_directory import OrgDirectoryLike
 from flowork.runtime.behavior import InMemoryNodeContext, NodeBehavior, NodeContext
 from flowork.runtime.lifecycle import InstanceState, TokenState
 from flowork.runtime.registry import NodeRegistry, create_registry
@@ -121,13 +134,6 @@ from flowork.tasks.action_steps import (
     dispatch_task_action,
     find_pending_task,
 )
-
-# 公开方法的返回模型（同 P1-8：宿主标注返回类型不再需要深路径 import——
-# 投影纪律声明深路径不稳定）。
-from flowork.definitions.versioning import VersionVerdict
-from flowork.engine.history_service import Page
-from flowork.engine.history_trace import TraceEntry
-from flowork.engine.variable_actions import VariableChangeInfo
 from flowork.tasks.models import (
     AnticipateResult,
     EventInfo,
@@ -139,12 +145,14 @@ from flowork.tasks.models import (
     TokenInfo,
 )
 
-API_VERSION: Final = "1"
+API_VERSION: Final = "1.1"
 
 __all__ = [
     "API_VERSION",
+    "KNOWN_TASK_ACTIONS",
     "AnticipateResult",
     "ConditionError",
+    "CoreOrgDirectory",
     "DefinitionConflictError",
     "DefinitionError",
     "DefinitionNotPublishedError",
@@ -177,7 +185,6 @@ __all__ = [
     "JobClaim",
     "JobService",
     "JobStateError",
-    "KNOWN_TASK_ACTIONS",
     "LockConflictError",
     "MessageService",
     "MultiInstance",
@@ -196,6 +203,7 @@ __all__ = [
     "ProcessEngine",
     "ProcessVariable",
     "RepositoryService",
+    "RichOrgDirectory",
     "RouteDecisionInfo",
     "RouteMode",
     "RuntimeService",

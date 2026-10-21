@@ -24,7 +24,9 @@ def create_db_engine(url: str) -> Engine:
             url, future=True, poolclass=StaticPool, connect_args={"check_same_thread": False}
         )
     else:
-        engine = create_engine(url, future=True)
+        # 非内存库（PG 等）：pre_ping 防防火墙掐断的陈旧连接在下次借出时炸
+        # （2026-10-21 内核 review P2）
+        engine = create_engine(url, future=True, pool_pre_ping=True)
     if url.startswith("sqlite"):
 
         @event.listens_for(engine, "connect")

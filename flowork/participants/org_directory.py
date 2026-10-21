@@ -22,32 +22,53 @@ import yaml
 
 from flowork.errors import FloworkError
 
-__all__ = ["OrgConfigError", "OrgDirectory", "OrgDirectoryLike", "split_group"]
+__all__ = [
+    "CoreOrgDirectory",
+    "OrgConfigError",
+    "OrgDirectory",
+    "OrgDirectoryLike",
+    "RichOrgDirectory",
+    "split_group",
+]
 
 
-class OrgDirectoryLike(Protocol):
-    """引擎消费的目录查询面：静态 OrgDirectory 与持久化 DirectoryStore 均满足。
+class CoreOrgDirectory(Protocol):
+    """内核消费的目录最小面（2026-10-21 内核 review P1-9 拆分）。
 
-    引擎内核直接消费四个方法：is_member（候选组归属判定）/ snapshot（办理人
-    身份定格）/ delegation_of（取人期委托替换）/ admins（无人兜底的管理员名单）。
-    subjects_in 与 manager_of 由宿主词汇函数（flowork.contrib）消费；其余丰富面
-    （部门族/user_exists/users_with_role）实现方可按需退化，内核四方法缺一会在
-    对应路径直接失败。
+    四方法即引擎内核的全部直接消费：is_member（候选组归属判定）/ snapshot
+    （办理人身份定格）/ delegation_of（取人期委托替换）/ admins（无人兜底的
+    管理员名单）。实现这四个方法即可接入 EngineConfig.org（类型与运行时双
+    通过——修前 OrgDirectoryLike 声明 12 方法，文档说四方法够而 mypy 拒）。
+    丰富面按需实现（见 RichOrgDirectory），内核经 duck-typing 探测。
     """
 
     def is_member(self, user: str, group: str) -> bool: ...
+    def snapshot(self, subject: str) -> dict[str, Any]: ...
+    def delegation_of(self, user_id: str, when: datetime | None = None) -> str | None: ...
+    @property
+    def admins(self) -> list[str]: ...
+
+
+class RichOrgDirectory(CoreOrgDirectory, Protocol):
+    """丰富面：宿主词汇函数（flowork.contrib 的取人词汇）与目录工具消费。
+
+    subjects_in/manager_of 是词汇函数的数据源；部门族/user_exists/
+    users_with_role 供取人展开与管理查询。实现方可按需退化（未实现的方法
+    只影响对应词汇，不影响内核四路径）。
+    """
+
     def subjects_in(self, group: str) -> list[str]: ...
     def manager_of(self, user_id: str) -> str | None: ...
-    def snapshot(self, subject: str) -> dict[str, Any]: ...
     def user_exists(self, user_id: str) -> bool: ...
     def department_of(self, user_id: str) -> str | None: ...
     def department_head(self, department: str) -> str | None: ...
     def parent_department(self, department: str) -> str | None: ...
     def users_with_role(self, role: str, *, within: str | None = None) -> list[str]: ...
     def users_in_department(self, department: str, *, recursive: bool = False) -> list[str]: ...
-    def delegation_of(self, user_id: str, when: datetime | None = None) -> str | None: ...
-    @property
-    def admins(self) -> list[str]: ...
+
+
+# 兼容别名：既有宿主类型标注与文档继续可用（丰富面协议）
+OrgDirectoryLike = RichOrgDirectory
 
 
 class OrgConfigError(FloworkError):

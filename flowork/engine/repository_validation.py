@@ -41,7 +41,9 @@ class RepositoryValidationMixin:
         def _command(ctx: Any) -> list[ValidateIssue]:
             from flowork.definitions.validator_deploy import check_deploy_references
 
-            hook = getattr(self._engine.config.org, "subject_exists", None)
+            hook = getattr(self._engine.config.org, "subject_exists", None) or getattr(
+                self._engine.config.org, "user_exists", None
+            )
             issues = check_deploy_references(
                 definition,
                 session=ctx.session,
