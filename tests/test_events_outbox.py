@@ -130,3 +130,28 @@ def test_idempotent_sink_bounded_memory():
     for event_id in ("e1", "e2", "e3", "e2", "e3"):
         bounded({"id": event_id})
     assert [env["id"] for env in counts] == ["e1", "e2", "e3"]  # 窗口内重发去重
+
+
+def test_idempotent_sink_emit_failure_keeps_at_least_once():
+    """sink 瞬时失败不丢消息（2026-10-21 内核 review P1-5 回归）。
+
+    修前先记已见再投递：sink 抖一下 → 事务回滚 → 下轮重投同 id 被吞——
+    「至少一次」变「丢消息」。现先投递后记，失败的重投会再次到达 sink。
+    """
+    delivered: list[dict] = []
+    state = {"fail": True}
+
+    def flaky(envelope: dict) -> None:
+        if state["fail"]:
+            state["fail"] = False
+            raise RuntimeError("下游 500")
+        delivered.append(envelope)
+
+    sink = IdempotentSink(flaky)
+    envelope = {"id": "evt-1", "type": "example.test", "data": {}}
+    with pytest.raises(RuntimeError):
+        sink(envelope)  # 首投失败：不得记已见
+    sink(envelope)  # 重投：至少一次语义要求再次到达
+    assert len(delivered) == 1
+    sink(envelope)  # 成功后的同 id 重发：幂等丢弃
+    assert len(delivered) == 1

@@ -175,9 +175,7 @@ class OrgDirectory:
     def users_with_role(self, role: str, *, within: str | None = None) -> list[str]:
         """按角色取人；within＝部门子树过滤（2026-10-21 内核 review P2：
         修前静默忽略 within——按部门取人拿到全组织名单）。"""
-        scope = (
-            {within, *self._descendant_departments(within)} if within is not None else None
-        )
+        scope = {within, *self._descendant_departments(within)} if within is not None else None
         return [
             user_id
             for user_id, info in self.users.items()

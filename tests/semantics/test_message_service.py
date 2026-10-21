@@ -182,3 +182,38 @@ def test_consumed_message_id_replay_is_ignored(engine: ProcessEngine):
     )
     with engine.session_factory() as session:
         assert session.scalars(select(MessageBufferRow)).all() == []
+
+
+def test_remove_instance_keeps_message_id_dedupe_memory():
+    """remove_instance 保留已消费订阅行＝message_id 防重集（2026-10-21 内核 review P2）。
+
+    修前整删订阅行：remove 后同 id 重发被重新入缓冲，下一个等待者
+    二次消费同一逻辑消息（违背「message_id 全局唯一防重」注释承诺）。
+    """
+    engine = ProcessEngine()
+    engine.repository.deploy(
+        FlowBuilder("rmv_dedupe")
+        .start()
+        .wait("w", message={"name": "evt"})
+        .user_task("after", assignee="'u1'")
+        .end()
+        .connect("start", "w")
+        .connect("w", "after")
+        .connect("after", "end")
+        .build()
+    )
+    iid = engine.runtime.start_process("rmv_dedupe", start_user="u_s")
+    assert engine.messages.publish_message("evt", payload={}, message_id="m-dedupe-1") is True
+    task = engine.task.list_tasks(instance_id=iid)[0]
+    engine.task.complete(task.id, actor="u1")
+    assert engine.runtime.get_instance(iid).state == "completed"
+    engine.task.remove_instance(iid, actor="ops")
+    # 同 id 重发：matched 订阅行仍在（防重集随实例删除被蒸发是修前缺陷），
+    # 不得再次入缓冲给下一个等待者二次消费
+    engine.messages.publish_message("evt", payload={}, message_id="m-dedupe-1")
+    rebuffed = [
+        m
+        for m in engine.messages.list_messages(name="evt")
+        if m.get("kind") == "buffer" and m.get("message_id") == "m-dedupe-1"
+    ]
+    assert not rebuffed, f"同 id 消息被重新入缓冲：{rebuffed}"

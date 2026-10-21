@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any
 from sqlalchemy import select
 
 from flowork.persistence.orm import MessageBufferRow, MessageSubscriptionRow, ProcessInstanceRow
-from flowork.runtime.lifecycle import FROZEN_INSTANCE_STATES
+from flowork.runtime.lifecycle import FROZEN_INSTANCE_STATES, TERMINAL_INSTANCE_STATES
 
 if TYPE_CHECKING:
     from flowork.engine.engine import ProcessEngine
@@ -46,7 +46,8 @@ def first_open_subscription(
     rows = ctx.session.scalars(stmt.order_by(MessageSubscriptionRow.created_at)).all()
     for row in rows:
         instance = ctx.session.get(ProcessInstanceRow, row.instance_id)
-        if instance is None or instance.state in FROZEN_INSTANCE_STATES:
+        # 终态实例不再消费（同 hit_subscription 拦截面——遗留 open 订阅不写终态）
+        if instance is None or instance.state in FROZEN_INSTANCE_STATES | TERMINAL_INSTANCE_STATES:
             continue
         return row
     return None

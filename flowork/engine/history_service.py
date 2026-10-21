@@ -218,48 +218,6 @@ class HistoryService(HistoryTokenMixin, ArchiveMixin, TraceMixin):
         result: Page = self._engine.execute(_command)
         return result
 
-    def trace_instance(self, instance_id: str) -> list[TraceEntry]:
-        """实例流转轨迹：令牌 + 已办 + 事件按时间合并（审批轨迹页数据源）。"""
-
-        def _command(ctx: CommandContext) -> Any:
-            entries: list[tuple[str, str, str, str]] = []
-            for token in self.tokens(instance_id):
-                entries.append(
-                    (
-                        str(token.created_at),
-                        "token",
-                        f"#{token.token_no} {token.activity_code} → {token.state}",
-                        f"同意 {token.approve_count}/{token.item_count}"
-                        + (f"，否决 {token.disapprove_count}" if token.disapprove_count else ""),
-                    )
-                )
-            for item in self.task_history(instance_id):
-                entries.append(
-                    (
-                        str(item.created_at),
-                        "task",
-                        f"{item.activity_code} · {item.assignee} · {item.outcome}",
-                        item.comment,
-                    )
-                )
-            for event in self.events(instance_id):
-                entries.append(
-                    (
-                        str(event.occurred_at),
-                        "event",
-                        event.event_name,
-                        str(event.payload),
-                    )
-                )
-            entries.sort(key=lambda e: e[0])
-            return [
-                TraceEntry(time=time, kind=kind, title=title, detail=detail)
-                for time, kind, title, detail in entries
-            ]
-
-        result: list[TraceEntry] = self._engine.execute(_command)
-        return result
-
 
 def _history(row: TaskHistoryRow) -> TaskHistoryInfo:
     return TaskHistoryInfo(

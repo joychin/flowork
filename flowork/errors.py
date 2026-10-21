@@ -53,6 +53,12 @@ class TaskNotAvailableError(FloworkError):
     """任务不存在、已完成或不属于当前状态。"""
 
 
+class DefinitionConflictError(FloworkError):
+    """并发部署撞 (code, major, revision) 唯一索引——重试即幂等（内容相同返回
+    identical_to verdict）。REST 映射 409。来源：2026-10-21 内核 review P2
+    （修前裸 IntegrityError → 未映射 500）。"""
+
+
 class DuplicateStartError(FloworkError):
     """启动幂等键冲突（reuse=reject 撞已有实例）。"""
 

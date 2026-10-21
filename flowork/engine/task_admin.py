@@ -216,9 +216,17 @@ class TaskAdminMixin:
                 VariableIndexRow,
                 VariableHistoryRow,
                 RouteDecisionRow,
-                MessageSubscriptionRow,
             ):
                 ctx.session.execute(delete(row_type).where(row_type.instance_id.in_(tree_ids)))
+            # 订阅行只删未消费的（message_id IS NULL）：已 match 的行就是
+            # message_id 全局防重集（2026-10-21 内核 review P2：修前整删＝
+            # remove 后同 id 重发被重新入缓冲，下一个等待者二次消费同一逻辑消息）
+            ctx.session.execute(
+                delete(MessageSubscriptionRow).where(
+                    MessageSubscriptionRow.instance_id.in_(tree_ids),
+                    MessageSubscriptionRow.message_id.is_(None),
+                )
+            )
             # outbox 只删已送达行：未投递行保留待消费——事件是跨实例
             # 的审计事实，整删会让订阅方永远收不到已发生的事
             ctx.session.execute(

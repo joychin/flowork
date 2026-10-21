@@ -83,7 +83,11 @@ class InstanceLifecycleMixin:
             now = self._engine.config.now()
             paused_minutes = 0
             if instance.paused_at is not None:
-                paused_minutes = int((now - instance.paused_at).total_seconds() // 60)
+                # 向上取整（2026-10-21 内核 review P2）：修前 //60 向下取整，
+                # 90 秒暂停只挪 60 秒——定时器提前烧
+                import math
+
+                paused_minutes = math.ceil((now - instance.paused_at).total_seconds() / 60)
             instance.state = InstanceState.RUNNING.value
             instance.paused_at = None
             for job in ctx.session.scalars(

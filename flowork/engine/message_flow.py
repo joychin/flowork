@@ -21,7 +21,7 @@ from sqlalchemy import select
 
 from flowork.events.domain import DomainEvent
 from flowork.persistence.orm import MessageBufferRow, MessageSubscriptionRow, ProcessInstanceRow
-from flowork.runtime.lifecycle import FROZEN_INSTANCE_STATES
+from flowork.runtime.lifecycle import FROZEN_INSTANCE_STATES, TERMINAL_INSTANCE_STATES
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
@@ -105,7 +105,9 @@ def hit_subscription(
     from flowork.persistence.orm import TokenRow
 
     instance = ctx.session.get(ProcessInstanceRow, subscription.instance_id)
-    if instance is None or instance.state in FROZEN_INSTANCE_STATES:
+    # 暂停/挂起拦截 + 终态拦截（2026-10-21 内核 review P2：修前终态实例漏拦，
+    # 遗留 open 订阅照写变量——正是 update_variables 拒绝的那种写入）
+    if instance is None or instance.state in FROZEN_INSTANCE_STATES | TERMINAL_INSTANCE_STATES:
         return False
     kernel = engine.kernel_for(ctx)
     node = kernel.definition_of(ctx.session, instance).node(subscription.node_id)

@@ -8,8 +8,9 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from flowork.definitions.definition import (
@@ -22,13 +23,13 @@ from flowork.definitions.versioning import VersionVerdict, compute_verdict, cont
 from flowork.engine.definition_lifecycle import DefinitionLifecycleMixin
 from flowork.engine.designer_drafts import DesignerDraftSupportMixin
 from flowork.engine.ops import CommandContext
+from flowork.engine.repository_read import RepositoryReadMixin
 from flowork.engine.repository_validation import RepositoryValidationMixin
-from flowork.errors import DefinitionNotPublishedError, FloworkError
+from flowork.errors import FloworkError
 from flowork.events.domain import DomainEvent
 
 if TYPE_CHECKING:
     from flowork.engine.engine import ProcessEngine
-    from flowork.persistence.orm import ProcessDefinitionRow
 
 __all__ = ["RepositoryService"]
 
@@ -40,7 +41,10 @@ def _new_id() -> str:
 
 
 class RepositoryService(
-    DesignerDraftSupportMixin, DefinitionLifecycleMixin, RepositoryValidationMixin
+    DesignerDraftSupportMixin,
+    DefinitionLifecycleMixin,
+    RepositoryValidationMixin,
+    RepositoryReadMixin,
 ):
     """定义仓库服务：deploy（校验＋版本判定＋落库＋事件）/ 查询。"""
 
@@ -179,36 +183,17 @@ class RepositoryService(
             ctx.session.flush()
             return verdict
 
-        result: VersionVerdict = self._engine.execute(_command)
-        return result
+        try:
+            result: VersionVerdict = self._engine.execute(_command)
+        except IntegrityError as exc:
+            # 并发撞 (code, major, revision) 唯一索引（两副本同刻 deploy）：
+            # 归一为可编程处理的冲突错误——内容相同的重试会命中幂等去重
+            # （identical_to verdict），不同内容则重判版本
+            from flowork.errors import DefinitionConflictError
 
-    def verdict(
-        self, definition: ProcessDefinition, *, target_major: int | None = None
-    ) -> VersionVerdict:
-        """版本判定预演（只判定不落库——AI/CI 先看后果再 deploy）。"""
-
-        def _command(ctx: CommandContext) -> VersionVerdict:
-            from sqlalchemy import select
-
-            from flowork.persistence.orm import ProcessDefinitionRow as _Row
-
-            content = dump_definition(
-                load_definition(dump_definition(definition), self._engine.config.node_registry)
-            )
-            published = {
-                (row.major, row.revision): row.content_hash
-                for row in ctx.session.scalars(
-                    select(_Row).where(_Row.code == definition.code, _Row.status == "published")
-                )
-            }
-            return compute_verdict(
-                self._baseline(ctx.session, definition.code, target_major),
-                definition,
-                content_hash_of(content),
-                published_hashes=published,
-            )
-
-        result: VersionVerdict = self._engine.execute(_command)
+            raise DefinitionConflictError(
+                f"并发部署冲突（{definition.code} 版本唯一索引撞车，请重试）：{exc.orig}"
+            ) from exc
         return result
 
     def _baseline(
@@ -236,62 +221,3 @@ class RepositoryService(
                 )
             return None
         return load_definition(json.loads(row.content), self._engine.config.node_registry)
-
-    # —— 查询（校验方法在 repository_validation.Mixin：validate / validate_deploy_preview）——
-
-    def get_definition(
-        self, code: str, major: int | None = None, revision: int | None = None
-    ) -> ProcessDefinition:
-        """取已发布定义（默认最高 published；可显式钉 major/revision）。"""
-
-        def _command(ctx: CommandContext) -> Any:
-            row = self._published_row(ctx.session, code, major, revision)
-            return load_definition(json.loads(row.content), self._engine.config.node_registry)
-
-        result: ProcessDefinition = self._engine.execute(_command)
-        return result
-
-    def get_definition_json(
-        self, code: str, major: int | None = None, revision: int | None = None
-    ) -> dict[str, Any]:
-        """取已发布定义的原始 JSON（快照用）。"""
-
-        def _command(ctx: CommandContext) -> Any:
-            row = self._published_row(ctx.session, code, major, revision)
-            return json.loads(row.content)
-
-        result: dict[str, Any] = self._engine.execute(_command)
-        return result
-
-    def _published_row(
-        self, session: Session, code: str, major: int | None, revision: int | None
-    ) -> ProcessDefinitionRow:
-        from sqlalchemy import select
-
-        from flowork.persistence.orm import ProcessDefinitionRow as _Row
-
-        stmt = select(_Row).where(_Row.code == code, _Row.status == "published")
-        if major is None and revision is None:
-            stmt = stmt.order_by(_Row.major.desc(), _Row.revision.desc()).limit(1)
-        else:
-            if major is not None:
-                stmt = stmt.where(_Row.major == major)
-            if revision is not None:
-                stmt = stmt.where(_Row.revision == revision)
-        found = session.scalars(stmt).first()
-        row: ProcessDefinitionRow | None = found
-        if row is None:
-            from flowork.errors import DefinitionRetiredError
-
-            retired = session.scalars(
-                select(_Row.id).where(_Row.code == code, _Row.status == "retired")
-            ).first()
-            if retired is not None:
-                raise DefinitionRetiredError(
-                    f"定义 {code} 已 retired，不接新实例（重新 deploy 可恢复）"
-                )
-            raise DefinitionNotPublishedError(
-                f"已发布定义 {code}（major={major}, revision={revision}）不存在"
-            )
-        assert row is not None
-        return row
