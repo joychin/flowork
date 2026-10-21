@@ -120,31 +120,10 @@ class IncidentMixin:
         run_fail_hooks(self._engine, ctx, real_ids, error)
 
     def list_incidents(self, instance_id: str | None = None) -> list[dict[str, Any]]:
-        """查询 Incident（open/resolved）。"""
+        """查询 Incident（open/resolved；实现拆至 incident_queries.py 守行数红线）。"""
+        from flowork.engine.incident_queries import list_incidents
 
-        def _command(ctx: CommandContext) -> Any:
-            from sqlalchemy import select
-
-            from flowork.persistence.orm import IncidentRow
-
-            stmt = select(IncidentRow).order_by(IncidentRow.created_at.desc())
-            if instance_id:
-                stmt = stmt.where(IncidentRow.instance_id == instance_id)
-            return [
-                {
-                    "id": row.id,
-                    "instance_id": row.instance_id,
-                    "message": row.message,
-                    "error_class": row.error_class,
-                    "activity_code": row.activity_code,
-                    "state": row.state,
-                    "resolution": row.resolution,
-                }
-                for row in ctx.session.scalars(stmt)
-            ]
-
-        incidents: list[dict[str, Any]] = self._engine.execute(_command)
-        return incidents
+        return list_incidents(self._engine, instance_id)
 
     def resolve_incident(
         self, incident_id: str, action: str = "resume", actor: str = "admin"
@@ -195,7 +174,7 @@ class IncidentMixin:
                 if instance is not None:
                     self._resume_from_suspension(ctx, instance, actor, "incident:retry")
             elif action == "skip":
-                self._skip_failed_nodes(ctx, incident.instance_id, actor)
+                self._skip_failed_nodes(ctx, incident.instance_id, actor, incident.activity_code)
             elif action == "fail":
                 self._terminate_in_ctx(
                     ctx,
@@ -231,11 +210,20 @@ class IncidentMixin:
 
         resume_from_suspension(self._engine, ctx, instance, actor, reason)
 
-    def _skip_failed_nodes(self, ctx: CommandContext, instance_id: str, actor: str) -> None:
+    def _skip_failed_nodes(
+        self, ctx: CommandContext, instance_id: str, actor: str, activity_code: str | None
+    ) -> None:
         """跳过故障节点（实现拆至 incident_skip.py 守行数红线；语义不变）。"""
         from flowork.engine.incident_skip import skip_failed_nodes
 
-        skip_failed_nodes(self._engine, self._engine.kernel_for(ctx), ctx, instance_id, actor)
+        skip_failed_nodes(
+            self._engine,
+            self._engine.kernel_for(ctx),
+            ctx,
+            instance_id,
+            actor,
+            activity_code=activity_code,
+        )
 
     def move_token(self, token_id: str, target_activity: str, actor: str = "admin") -> str:
         """管理员修复：把未完令牌直移到目标节点（返回新令牌 ID）。"""

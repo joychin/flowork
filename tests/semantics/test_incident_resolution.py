@@ -72,20 +72,22 @@ def test_retry_resumes_then_redo_succeeds():
 
 
 def test_skip_moves_token_past_current_node():
-    """技术故障路径②：skip——当前停住节点的未完令牌视为完成，路由推进后继。"""
+    """技术故障路径②：skip——故障节点视为完成，路由推进后继。
+
+    语义收口（2026-10-21 内核 review P0-1）：激活期整笔回滚后令牌停在前驱 a，
+    skip 砍前驱令牌并**直接激活故障节点的后继**——boom 绝不重新执行
+    （修前从 a 重路由会再次进入 boom：handler 已修复则代为执行、
+    仍坏则 resolve 自身失败该故障单永远解不开）。故本用例不修 handler。"""
     engine = _engine_with_failing_action()
     instance_id = _bring_to_boom(engine)
     incident_id = _open_incident(engine, instance_id)
 
-    def explode_fixed(ctx, params):
-        pass
-
-    engine.register_handler("explode", explode_fixed, replace=True)
     engine.runtime.resolve_incident(incident_id, action="skip", actor="ops")
     assert engine.runtime.get_instance(instance_id).state == "running"
-    # 失败回滚后令牌停在 a——skip 视 a 为完成：boom 执行（已修复）→ after
+    # skip 直接落到 boom 的后继；explode 未被执行（也未再抛错）
     tasks = [t.activity_code for t in engine.task.list_tasks(instance_id=instance_id)]
     assert tasks == ["after"]
+    assert "fixed" not in (engine.runtime.variables_of(instance_id) or {})
 
 
 def test_fail_terminates_instance():

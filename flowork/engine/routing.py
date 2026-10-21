@@ -78,7 +78,9 @@ def select_outgoing(
     if audit is not None:
         audit.source = outgoing[0].source if outgoing else ""
         audit.mode = mode
-        audit.selected = [flow.flow_code() for flow in selected]
+        # 累计而非覆盖：同令牌多段路由（如 incident skip 的两跳手术）
+        # 要在一行决策里呈现全部择道；单段调用位点行为不变
+        audit.selected.extend(flow.flow_code() for flow in selected)
         audit.snapshot = snapshot_of(variables, audit.node_calls)
     return selected
 
