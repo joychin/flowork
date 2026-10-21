@@ -580,3 +580,22 @@ def test_suspended_instance_subscription_not_consumed():
     tasks = [t.activity_code for t in engine.task.list_tasks(instance_id=instance_id)]
     assert "after" in tasks, "缓冲消息补消费，w 推进到 after"
     assert len(_open_subscriptions(engine, instance_id)) == 0
+
+
+def test_wait_output_mappings_can_read_instance_and_initiator():
+    """wait 映射上下文含全局词（2026-10-21 内核 review P1-2 回归）。
+
+    修前目录宣称 instance.*/initiator 全位点可用（校验放行），求值却只装
+    payload+now——用到即挂起。现与子流程映射同口径注入。
+    """
+    engine = ProcessEngine()
+    instance_id = _deploy_and_start(
+        engine,
+        _wait_flow(
+            message={"name": "m1"},
+            output_mappings={"who": "initiator", "doc": "instance.id"},
+        ),
+    )
+    engine.messages.publish_message("m1", payload={}, message_id="x9")
+    variables = engine.runtime.variables_of(instance_id)
+    assert variables == {"who": "u_start", "doc": instance_id}

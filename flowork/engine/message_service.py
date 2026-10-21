@@ -238,8 +238,10 @@ class MessageService:
         from flowork.engine.message_query import resolve_payload_write
         from flowork.persistence.orm import ProcessInstanceRow
 
-        write = resolve_payload_write(self._engine.config, payload, mappings, subscription.node_id)
         instance = ctx.session.get(ProcessInstanceRow, subscription.instance_id)
+        write = resolve_payload_write(
+            self._engine.config, payload, mappings, subscription.node_id, instance=instance
+        )
         if instance is not None:
             # touch 先于载荷合并：变量留痕 before 快照须在写入前留存
             ctx.touch(instance)

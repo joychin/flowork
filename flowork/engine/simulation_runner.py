@@ -242,7 +242,11 @@ def resolve_wait(engine: ProcessEngine, instance_id: str, waits: dict[str, dict[
             from flowork.definitions.contract import validate_input_contract
 
             write = resolve_payload_write(
-                engine.config, dict(control["payload"]), _wait_mappings_of(node), node_code
+                engine.config,
+                dict(control["payload"]),
+                _wait_mappings_of(node),
+                node_code,
+                instance=instance,
             )
             merged = dict(instance.variables)
             merged.update(write)

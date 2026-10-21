@@ -236,17 +236,34 @@ _BARE_PAYLOAD_FIELD = __import__("re").compile(r"^payload\.([A-Za-z_][A-Za-z0-9_
 
 
 def resolve_payload_write(
-    config: Any, payload: dict[str, Any], mappings: dict[str, str] | None, node_id: str
+    config: Any,
+    payload: dict[str, Any],
+    mappings: dict[str, str] | None,
+    node_id: str,
+    *,
+    instance: Any = None,
 ) -> dict[str, Any]:
     """载荷写入集（自 message_service 下沉守红线）：声明了 output_mappings 按
-    映射白名单求值，否则全量合并；裸投影缺键 None。"""
+    映射白名单求值，否则全量合并；裸投影缺键 None。
+
+    上下文＝消息域（payload.*）+ 全局词（initiator/instance/now）——与
+    expr.catalog 对 mapping_output 位的承诺对齐（2026-10-21 内核 review P1-2：
+    修前只装 payload+now，目录却宣称 instance.* 全位点可用，校验放行、
+    运行挂起）。instance 由调用方传入（两处调用点均已加载实例行）。
+    """
     if not mappings:
         return dict(payload)
     from flowork.engine.kernel import EngineExecutionError
     from flowork.expr.cel import FormulaError, evaluate_formula_value
     from flowork.expr.context import expression_context, expression_functions_of
+    from flowork.tasks.facts import instance_facts
 
-    context = expression_context({"payload": dict(payload)}, now=config.now())
+    context = expression_context(
+        {"payload": dict(payload)},
+        start_user=getattr(instance, "start_user", None),
+        instance=instance_facts(instance) if instance is not None else None,
+        now=config.now(),
+    )
     functions = expression_functions_of(config)
     write: dict[str, Any] = {}
     for target, expression in mappings.items():
