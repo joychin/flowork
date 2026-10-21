@@ -15,7 +15,7 @@ EXAMPLES = Path(__file__).parent.parent / "examples"
 
 @pytest.fixture()
 def client(tmp_path: Path) -> TestClient:
-    app = create_app(db_file=tmp_path / "api.db", seed=False)
+    app = create_app(db_file=tmp_path / "api.db")
     with TestClient(app) as test_client:
         yield test_client
 
@@ -53,6 +53,20 @@ def test_node_kinds_form_groups_cover_fields(client: TestClient) -> None:
         grouped = {f for g in item["ui"].get("form_groups", []) for f in g["fields"]}
         leftover = props - grouped - set(item["form_exclude"]) - {"advance_policy"}
         assert not leftover, f"节点 {kind} 有字段未入任何表单分组：{sorted(leftover)}"
+
+
+def test_node_kinds_singleton_metadata(client: TestClient) -> None:
+    """单例标记下发：start/end 置 singleton，其余 kind 不带。
+
+    设计器据此置灰添加入口与拦最后一枚删除（start 是校验硬约束
+    structure.start.count；end 是产品口径的默认一枚——引擎本身允许 ≥1 终点）。
+    回归来源：两个 start 互相锁死无法删除的设计器缺陷（2026-10-15）。
+    """
+    kinds = {item["kind"]: item for item in client.get("/api/node-kinds").json()}
+    assert kinds["start"]["ui"].get("singleton") is True
+    assert kinds["end"]["ui"].get("singleton") is True
+    for kind in ("branch", "user_task", "service_task", "cc_task", "wait", "call_activity"):
+        assert "singleton" not in kinds[kind]["ui"], f"{kind} 不应被标为单例"
 
 
 def test_node_kinds_designer_metadata_for_wait_and_call(client: TestClient) -> None:
@@ -211,14 +225,28 @@ def test_unknown_kind_rejected(client: TestClient) -> None:
     assert "nope" in resp.json()["detail"]
 
 
-def test_seed_examples(tmp_path: Path) -> None:
-    app = create_app(db_file=tmp_path / "seed.db", seed=True)
+def test_empty_database_is_not_seeded(tmp_path: Path) -> None:
+    """设计器不往任何库灌东西：空库启动后定义列表就是空的（示例卡片的来源已移除）。"""
+    app = create_app(db_file=tmp_path / "empty.db")
     with TestClient(app) as client:
-        listing = client.get("/api/definitions").json()
-        by_code = {item["code"]: item for item in listing}
-        assert {"simple_approval", "countersign_branch", "call_activity_demo"} <= set(by_code)
-        assert by_code["simple_approval"]["published_version"] == 1  # 首个示例自动发布
-        assert by_code["countersign_branch"]["draft_version"] == 1
+        assert client.get("/api/definitions").json() == []
+
+
+def test_designer_ignores_runtime_database(tmp_path: Path, monkeypatch) -> None:
+    """`FLOWORK_DB` 是用户运行时库——设计器有意忽略它，绝不读写。"""
+    runtime_db = tmp_path / "runtime.db"
+    monkeypatch.setenv("FLOWORK_DB", str(runtime_db))
+    app = create_app()
+    with TestClient(app) as client:
+        assert client.get("/api/runtime").json()["session_ephemeral"] is True
+        assert client.get("/api/definitions").json() == []
+    # 连文件都没被创建
+    assert not runtime_db.exists()
+
+
+def test_session_database_is_in_memory_by_default() -> None:
+    app = create_app()
+    assert app.state.db_url == ":memory:"
 
 
 # —— dry-run / 公式试算 / 语义 diff / 流程变量 ——

@@ -67,6 +67,31 @@ export type DefinitionSummary = {
   updated_at: string | null
 }
 
+/** 运行形态（GET /api/runtime）：files=定义来自目录；db=来自设计器自己的会话库 */
+export type RuntimeInfo = {
+  source: 'db' | 'files'
+  definitions_dir: string | null
+  /** 会话库是否是临时的（内存）——设计器不碰用户运行时库，痕迹关掉就没了 */
+  session_ephemeral: boolean
+  /** 表达式函数来源说明（宿主自定义取人函数靠它带进设计器进程） */
+  vocabulary_source: string
+  /** 当前进程认识哪些函数——空数组＝没装配，用了自定义函数的流程跑不起来 */
+  vocabulary_functions: string[]
+}
+
+/** 文件清单项（GET /api/files）：valid=false 时 error 说明为何装不进来 */
+export type DefinitionFile = {
+  file: string
+  code: string | null
+  name: string
+  valid: boolean
+  error: string
+  updated_at: string | null
+}
+
+/** 定义来源：db=数据库定义；file=目录里的 JSON；local=浏览器里打开的本地文件（未入库） */
+export type DefinitionSource = 'db' | 'file' | 'local'
+
 export type DefinitionDetail = {
   code: string
   name: string
@@ -86,6 +111,8 @@ export type NodeKindMeta = {
     shape?: 'rect' | 'circle'
     color?: string
     icon?: string
+    /** 单例标记:画布上已有该 kind 时添加入口置灰(校验要求恰好一个的类型,如 start) */
+    singleton?: boolean
     palette?: { label: string; defaults: Record<string, unknown> }[]
     form_groups?: FormGroup[]
     /** 路径标签(点路径 → 中文),供 schema 表单按「父对象感知」显示字段名 */
@@ -168,6 +195,17 @@ export type PublishResult = {
   status: string
 }
 
+/** 版本判定预演（POST .../verdict）：与 publish 同一份判定，但只读不落库 */
+export type VerdictPreview = {
+  next_major: number
+  next_revision: number
+  breaking: boolean
+  triggered_rules: { rule: string; detail: string }[]
+  content_hash: string
+  identical_to: [number, number] | null
+  override: Record<string, string> | null
+}
+
 /** /api/definitions/{code}/simulate 返回:整图模拟报告(引擎 SimulationReport) */
 export type SimulationReport = {
   instance_id: string
@@ -180,27 +218,6 @@ export type SimulationReport = {
 }
 
 /** /api/instances 返回:实例概要 */
-export type InstanceInfo = {
-  id: string
-  definition_code: string
-  definition_major: number
-  definition_revision: number
-  business_key: string | null
-  state: string
-  start_user: string
-  started_at: string | null
-  finished_at: string | null
-  parent_id: string | null
-  simulated: boolean
-}
-
-/** /api/instances/{id} 返回:实例 + 令牌 + 当前变量 */
-export type InstanceDetail = {
-  instance: InstanceInfo
-  tokens: TokenInfo[]
-  variables: Record<string, unknown>
-}
-
 export type TokenInfo = {
   id: string
   token_no: number
@@ -214,37 +231,6 @@ export type TokenInfo = {
   approval_exit: string | null
   created_at: string | null
   finished_at: string | null
-}
-
-/** /api/instances/{id}/timeline 返回:令牌+已办+事件按时间合并 */
-export type TimelineEntry = {
-  time: string
-  kind: string
-  title: string
-  detail: string
-}
-
-/** /api/instances/{id}/route-decisions 返回:路由决策审计(逐边公式结果+快照) */
-export type RouteDecision = {
-  id: string
-  instance_id: string
-  token_id: string | null
-  source_activity: string
-  mode: string
-  edges: { flow: string; formula: string | null; result: string }[]
-  selected: string[]
-  snapshot: Record<string, unknown>
-  created_at: string | null
-}
-
-/** /api/instances/{id}/variable-history 返回:变量血缘 */
-export type VariableChange = {
-  name: string
-  old_value: unknown
-  new_value: unknown
-  source: string
-  acted_by: string | null
-  created_at: string
 }
 
 /** /api/directory/summary 返回:组织目录只读摘要(批 D1;未配置=无目录降级) */

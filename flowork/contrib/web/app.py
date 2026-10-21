@@ -1,72 +1,159 @@
-"""FastAPI 应用工厂：定义 CRUD / 校验 / 发布 / 节点类型元数据。
+"""FastAPI 应用工厂：组装各面路由 + 运行形态选择（会话内临时库 / 文件事实源）。
 
-启动::
+设计器**不碰用户的运行时数据库**——它自己的引擎是一份进程内临时库（内存 SQLite），
+只承载本次会话的模拟/场景执行痕迹，进程退出即消失。定义的事实源是 JSON 文件
+（``FLOWORK_DEFINITIONS_DIR``）或浏览器里打开的本地文件。
 
-    uvicorn flowork.contrib.web.app:app --port 8901     # FLOWORK_DB 指定 SQLite 文件
+两种部署形态::
+
+    # 独立进程（开发者本机）：
+    uv run uvicorn flowork.contrib.web.app:app --port 8901
+    FLOWORK_DEFINITIONS_DIR=./examples FLOWORK_ORG=./examples/org.yaml \
+        uv run uvicorn flowork.contrib.web.app:app
+
+    # 宿主挂载（自己装配好引擎——扩展点全跟引擎走）：
+    from flowork.contrib.web.app import register_designer_routes
+    register_designer_routes(app, engine, definitions_dir=None)
 """
 
 from __future__ import annotations
 
-import json
-import sqlite3
+import os
+import sys
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from flowork.api import (
-    DefinitionError,
-    EngineConfig,
-    FloworkError,
-    InvalidDefinition,
-    IssueLevel,
-    ProcessEngine,
-    load_definition,
-    load_definition_file,
-    semantic_diff,
-)
-from flowork.contrib.web._helpers import issues_payload, parse_spec
+from flowork.api import ExpressionFunctions, FloworkError, ProcessEngine
 from flowork.contrib.web.audit_routes import register_audit_routes
+from flowork.contrib.web.definition_routes import FORM_EXCLUDE as FORM_EXCLUDE
+from flowork.contrib.web.definition_routes import register_definition_routes
+from flowork.contrib.web.file_routes import register_file_routes, register_runtime_routes
 from flowork.contrib.web.meta_routes import register_meta_routes
 from flowork.contrib.web.preview_routes import register_preview_routes
-from flowork.contrib.web.rehearsal_routes import register_rehearsal_routes
 from flowork.contrib.web.scenario_routes import register_scenario_routes
+from flowork.contrib.web.vocabulary import vocabulary_functions
 
 # "app" 为惰性属性(模块 __getattr__ 按需创建,import 无副作用),不在 __all__
-__all__ = ["create_app"]
+__all__ = ["create_app", "register_designer_routes"]
 
-# 属性面板不渲染的基础字段：code 由设计器生成、kind 固定、
-# hooks/properties 属于高级用法（Spec JSON Tab 直接编辑）
-FORM_EXCLUDE = ("code", "kind", "hooks", "properties")
+DEFAULT_DB = ":memory:"
 
-EXAMPLES_DIR = Path(__file__).parent.parent.parent.parent / "examples"
+_MEMORY_DB = (":memory:", "sqlite:///:memory:")
 
 
-def create_app(db_file: str | Path | None = None, *, seed: bool = True) -> FastAPI:
-    """创建应用。``db_file`` 缺省取 FLOWORK_DB 环境变量，再缺省 designer.db。
+def register_designer_routes(
+    app: FastAPI,
+    engine: ProcessEngine,
+    *,
+    definitions_dir: str | Path | None = None,
+    vocabulary_source: str | None = None,
+) -> None:
+    """把设计器 /api 面挂进宿主 FastAPI（与 REST 的 register_rest_routes 对称）。
 
-    ``FLOWORK_DB`` 可给 SQLite 文件路径，也可给完整数据库 URL（如
-    ``postgresql+psycopg://user:pw@host/db``）。超时 Job
-    调度默认随应用启动（多副本部署也安全：tick 内 CAS 认领，同一 Job 只会被
-    一个副本执行）。环境变量：``FLOWORK_JOBS=off`` 关闭内置调度（改用外部
-    定时器调 ``flowork tick``）；``FLOWORK_JOB_INTERVAL`` 轮询间隔秒数（默认 30）。
+    宿主把自己装配好的引擎递进来——自定义函数、handler、节点类型全跟引擎来，
+    不需要在本函数再配任何东西（「扩展跟着引擎走，不跟着面走」）。
+
+    三个边界，宿主须知：
+
+    - **模拟实例写宿主库**：设计器的模拟跑在传入引擎上，simulated 实例行落
+      该引擎的库（查询面默认隔离它们）。不想要这行为，就传一个内存引擎进来。
+    - **CORS / 鉴权 / 生命周期不归这里**：宿主应用自己加中间件、自己管理
+      ``engine`` 的关闭与 Job 调度。
+    - ``definitions_dir`` 给了才挂文件面（读写该目录里的 *.json）；不给则
+      定义面走引擎库（宿主库里有定义就能打开）。
     """
-    import os
 
-    db_path = db_file or os.environ.get("FLOWORK_DB", "designer.db")
-    config_kwargs: dict[str, Any] = {"db_file": db_path}
-    org_path = os.environ.get("FLOWORK_ORG")
-    if org_path:  # 目录只读下发面(FLOWORK_ORG=组织 yaml,同 org_directory 约定)
-        from flowork.api import StaticOrgDirectory
+    @app.exception_handler(FloworkError)
+    async def _flowork_error(_request: Any, exc: FloworkError) -> JSONResponse:
+        # NotFoundError 族 404：修前一律 422，与 REST /v2 面同错误
+        # 不同状态码——同库同引擎两面消费方要维护两套语义
+        from flowork.api import NotFoundError
 
-        config_kwargs["org"] = StaticOrgDirectory.from_yaml(org_path)
-    engine = ProcessEngine(EngineConfig(**config_kwargs))
-    app = FastAPI(title="flowork designer API", version="0.1.0")
+        status = 404 if isinstance(exc, NotFoundError) else 422
+        return JSONResponse(status_code=status, content={"detail": str(exc)})
+
     app.state.engine = engine
-    jobs_enabled = os.environ.get("FLOWORK_JOBS", "on").lower() not in ("off", "0", "false")
-    job_interval = int(os.environ.get("FLOWORK_JOB_INTERVAL", "30"))
+    root = str(Path(definitions_dir).expanduser().resolve()) if definitions_dir else None
+    app.state.definitions_dir = root
+    # 词汇可见性：装配了什么就报什么（宿主引擎自带 vs 各环境来源）
+    port = engine.config.expression_functions
+    app.state.vocabulary_source = vocabulary_source or (
+        "宿主引擎自带" if port is not None else "未装配（自定义函数不可用）"
+    )
+    app.state.vocabulary_functions = vocabulary_functions(port)
+    session_db = str(engine.config.db_file or "")
+    app.state.db_url = session_db
+
+    register_definition_routes(app, engine)
+    register_preview_routes(app, engine)
+    register_audit_routes(app, engine)
+    # 场景脚本随定义文件同住定义目录（<code>.scenario.json）；无目录＝无写面
+    register_scenario_routes(app, engine, root)
+    register_meta_routes(app, engine)
+    register_runtime_routes(
+        app,
+        root,
+        session_db,
+        vocabulary_source=app.state.vocabulary_source,
+        vocabulary_functions=app.state.vocabulary_functions,
+    )
+    if root:
+        register_file_routes(app, engine, root)
+
+    @app.get("/api/health")
+    def health() -> dict[str, str]:
+        return {"status": "ok"}
+
+
+def create_app(
+    db_file: str | Path | None = None,
+    *,
+    definitions_dir: str | Path | None = None,
+    vocabulary: ExpressionFunctions | None = None,
+) -> FastAPI:
+    """创建独立进程应用。
+
+    **库隔离（本设计器的硬约束）**：引擎缺省用进程内内存库，进程退出即丢；
+    ``FLOWORK_DB``（用户运行时库）在这里被**有意忽略**——设计器从不读写它。
+    需要持久化本次会话的模拟痕迹时，显式给 ``db_file`` 或 ``FLOWORK_DESIGNER_DB``
+    指向一个专用的临时库（与生产库物理分开）。
+
+    超时 Job 调度缺省关闭：临时库里没有需要推进的 Job，开着一个 worker 线程
+    只会空转。``FLOWORK_JOBS=on`` 可显式开启；``FLOWORK_JOB_INTERVAL`` 为轮询秒数。
+
+    ``definitions_dir``（或环境变量 ``FLOWORK_DEFINITIONS_DIR``）：文件事实源——
+    给了就以该目录为定义列表与保存目标（git 工作区里的 *.json）。
+
+    ``vocabulary``（或 ``FLOWORK_SETUP`` / ``FLOWORK_VOCABULARY``）：宿主的自定义
+    表达式函数、handler、节点类型经 :mod:`flowork.contrib.assembly` 统一带进本进程。
+    **不装配，任何用了自定义取人函数的流程在设计器里都跑不起来**（求值报未声明
+    函数）。配了组织目录时缺省装 ``contrib.cel_vocabulary``——与 contrib 文档里
+    给宿主的写法一致；其余情况要求显式给，不偷偷补一套。
+    """
+    # FLOWORK_DB 是宿主运行时的库；设计器有意不读它。设了就是误用——
+    # 明说一句，别让人以为自己的运行库被设计器碰了。
+    if os.environ.get("FLOWORK_DB"):
+        print(
+            "flowork designer: 忽略 FLOWORK_DB（设计器不读写宿主运行时数据库）——"
+            "会话痕迹用 FLOWORK_DESIGNER_DB 指定专用临时库，缺省为内存",
+            file=sys.stderr,
+        )
+    db_path = str(db_file or os.environ.get("FLOWORK_DESIGNER_DB") or DEFAULT_DB)
+    # 装配单源：org / FLOWORK_SETUP（nodes+vocabulary+handlers）/ 词汇四级优先
+    from flowork.contrib.assembly import assemble_engine
+
+    engine, vocabulary_source = assemble_engine(db_path, vocabulary=vocabulary)
+
+    app = FastAPI(title="flowork designer API", version="0.1.0")
+    files_dir = definitions_dir or os.environ.get("FLOWORK_DEFINITIONS_DIR") or None
+    register_designer_routes(
+        app, engine, definitions_dir=files_dir, vocabulary_source=vocabulary_source
+    )
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
@@ -90,7 +177,7 @@ def create_app(db_file: str | Path | None = None, *, seed: bool = True) -> FastA
                 '<!doctype html><html lang="zh"><head><meta charset="utf-8">'
                 "<title>flowork 设计器插件嵌入示例</title>"
                 '<link rel="stylesheet" href="/designer-lib/flowork-designer.css">'
-                "<style>body{margin:0}#audit{height:100vh}</style></head><body>"
+                "<style>body{margin:0}#audit{height:100vh}</style></body><body>"
                 '<div id="audit"></div>'
                 '<script type="module">'
                 "import { mountFloworkDesigner } from '/designer-lib/flowork-designer.es.js';"
@@ -98,153 +185,8 @@ def create_app(db_file: str | Path | None = None, *, seed: bool = True) -> FastA
                 "</script></body></html>"
             )
 
-    @app.exception_handler(FloworkError)
-    async def _flowork_error(_request: Any, exc: FloworkError) -> JSONResponse:
-        # NotFoundError 族 404：修前一律 422，与 REST /v2 面同错误
-        # 不同状态码——同库同引擎两面消费方要维护两套语义
-        from flowork.api import NotFoundError
-
-        status = 404 if isinstance(exc, NotFoundError) else 422
-        return JSONResponse(status_code=status, content={"detail": str(exc)})
-
-    # 预演/试算/词汇目录(dry-run / formula/preview / catalog)在 preview_routes
-    register_preview_routes(app, engine)
-    # 审计数据面（模拟 / 实例只读 / 版本）在 audit_routes
-    register_audit_routes(app, engine)
-    register_rehearsal_routes(app, engine)
-    register_scenario_routes(app, engine)
-    # 元数据下发面（handler 名录 / 目录摘要）在 meta_routes
-    register_meta_routes(app, engine)
-
-    @app.get("/api/health")
-    def health() -> dict[str, str]:
-        return {"status": "ok"}
-
-    @app.get("/api/node-kinds")
-    def node_kinds() -> list[dict[str, Any]]:
-        """节点类型元数据：registry ui + Spec 的 JSON Schema（表单由此自动生成）。"""
-        result: list[dict[str, Any]] = []
-        for kind in engine.config.node_registry.kinds():
-            registration = engine.config.node_registry.registration(kind)
-            result.append(
-                {
-                    "kind": kind,
-                    "ui": registration.ui,
-                    "form_exclude": list(FORM_EXCLUDE),
-                    "schema": registration.spec.model_json_schema(),
-                }
-            )
-        return result
-
-    @app.get("/api/definitions")
-    def list_definitions() -> list[dict[str, Any]]:
-        return engine.repository.list_summaries()
-
-    @app.get("/api/definitions/{code}")
-    def get_definition(code: str) -> dict[str, Any]:
-        latest = engine.repository.latest_row(code)
-        if latest is None:
-            raise HTTPException(status_code=404, detail=f"定义 {code} 不存在")
-        published_version = _latest_published_version(code)
-        if latest["status"] == "draft":
-            draft = engine.repository.designer_draft(code)
-            if draft is None:
-                # latest_row 与 designer_draft 是两次独立事务，中间
-                # 并发 publish 会把 draft 消费掉——回退取已发布内容（publish 竞态
-                # 窗口，修前 assert 炸 500）
-                draft = {"spec": engine.repository.get_definition_json(code), "layout": None}
-            # 布局分离：草稿存储层 layout 独立成列,响应时合回设计器期望的形状
-            spec = {**draft["spec"], "layout": draft.get("layout") or {}}
-            return {
-                "code": code,
-                "name": latest["name"],
-                "draft_version": latest["version"],
-                "published_version": published_version,
-                "spec": spec,
-            }
-        # 无草稿：返回已发布内容作为新草稿的基底
-        spec = engine.repository.get_definition_json(code)
-        return {
-            "code": code,
-            "name": latest["name"],
-            "draft_version": None,
-            "published_version": published_version,
-            "spec": spec,
-        }
-
-    def _latest_published_version(code: str) -> int | None:
-        try:
-            return engine.repository.get_definition(code).major
-        except FloworkError:
-            return None
-
-    @app.put("/api/definitions/{code}")
-    def save_draft(code: str, body: dict[str, Any]) -> dict[str, Any]:
-        """保存草稿（最新版本已是草稿则就地覆盖，否则新建草稿版本）。"""
-        body = {**body, "code": code}
-        definition = parse_spec(engine, body)
-        version = engine.repository.update_draft(definition)
-        return {"code": code, "version": version, "status": "draft"}
-
-    @app.post("/api/definitions/{code}/publish")
-    def publish(code: str) -> dict[str, Any]:
-        """发布设计器草稿（deploy：校验＋版本判定＋落库＋事件；422＝校验不过）。"""
-        try:
-            verdict = engine.repository.deploy_draft(code)
-        except InvalidDefinition as exc:
-            raise HTTPException(
-                status_code=422,
-                detail={"message": "校验未通过，禁止发布", "issues": issues_payload(exc.issues)},
-            ) from exc
-        except FloworkError as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
-        payload = verdict.as_event_payload()
-        return {
-            "code": code,
-            "version": verdict.next_major,
-            "revision": verdict.next_revision,
-            "breaking": verdict.breaking,
-            # 版本判定全貌：破坏性明细在 triggered_rules（breaking 只是布尔）；
-            # identical_to 非 None ＝ 内容与该已发布版本相同（幂等去重，未落库）
-            "triggered_rules": payload["triggered_rules"],
-            "identical_to": payload["identical_to"],
-            "status": "published",
-        }
-
-    @app.post("/api/validate")
-    def validate(body: dict[str, Any], deploy: bool = False) -> dict[str, Any]:
-        """设计时校验（不落库）。body 即模板 JSON。
-
-        ``?deploy=true`` 追加部署期校验预演（编辑期前移）：L3 引用完整性 +
-        L4 目录实体存在性，把「点发布才炸」提前到编辑期以 WARNING 呈现。
-        """
-        definition = parse_spec(engine, body)
-        issues = engine.repository.validate(definition)
-        if deploy:
-            issues = issues + engine.repository.validate_deploy_preview(definition)
-        errors = sum(1 for issue in issues if issue.level == IssueLevel.ERROR)
-        return {"ok": errors == 0, "issues": issues_payload(issues)}
-
-    @app.post("/api/definitions/{code}/diff")
-    def diff_with_published(code: str, body: dict[str, Any]) -> dict[str, Any]:
-        """把请求体里的 Spec 与最新已发布版本做语义 diff（layout/版本号忽略）。
-
-        无已发布版本时返回 first_publish=true（变更清单留空，前端按全量展示）。
-        """
-        definition = parse_spec(engine, body)
-        try:
-            base_json = engine.repository.get_definition_json(code)
-        except FloworkError:
-            return {"base_version": None, "first_publish": True, "has_changes": True, "changes": []}
-        base = load_definition(base_json, engine.config.node_registry)
-        changes = semantic_diff(base, definition)
-        return {
-            "base_version": base.major,
-            "first_publish": False,
-            "has_changes": bool(changes),
-            "changes": changes,
-        }
-
+    jobs_enabled = os.environ.get("FLOWORK_JOBS", "off").lower() not in ("off", "0", "false")
+    job_interval = int(os.environ.get("FLOWORK_JOB_INTERVAL", "30"))
     if jobs_enabled:
 
         @app.on_event("startup")
@@ -256,38 +198,14 @@ def create_app(db_file: str | Path | None = None, *, seed: bool = True) -> FastA
         engine.jobs.stop()
         engine.close()
 
-    if seed:
-        try:
-            _seed_examples(engine)
-        except sqlite3.OperationalError as exc:
-            # 旧 schema 库裸 OperationalError 无出路：__getattr__ 搬走
-            # 了炸点没给出路——启动失败须指路迁移
-            raise RuntimeError(f"库 schema 落后（{exc}）——请先运行 alembic upgrade head") from exc
-
     return app
-
-
-def _seed_examples(engine: ProcessEngine) -> None:
-    """空库时把 examples/*.json 灌为草稿（首个示例顺手发布，便于演示两种状态）。"""
-    if engine.repository.list_summaries():
-        return
-    if not EXAMPLES_DIR.is_dir():
-        return
-    for index, path in enumerate(sorted(EXAMPLES_DIR.glob("*.json"))):
-        try:
-            definition = load_definition_file(path, engine.config.node_registry)
-        except (DefinitionError, json.JSONDecodeError):
-            continue
-        engine.repository.update_draft(definition)
-        if index == 0:
-            engine.repository.deploy(definition, published_by="seed")
 
 
 def __getattr__(name: str) -> Any:
     """``uvicorn flowork.contrib.web.app:app`` 的惰性默认应用。
 
-    import 本模块不再有建引擎/触库的副作用（旧库缺新列时不再炸 import）；
-    首次取 ``app`` 属性才按 FLOWORK_DB（缺省 designer.db）创建。
+    import 本模块无建引擎/触库副作用；首次取 ``app`` 属性才创建——
+    缺省是进程内临时库（不读写 ``FLOWORK_DB``）。
     """
     if name == "app":
         application = create_app()

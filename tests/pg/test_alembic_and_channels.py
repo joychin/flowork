@@ -112,7 +112,7 @@ def test_web_app_accepts_pg_url(pg_clean: str) -> None:
     """create_app(db_file=<PG URL>)：web 装配通道建库成功。"""
     from flowork.contrib.web.app import create_app
 
-    app = create_app(db_file=pg_clean, seed=False)
+    app = create_app(db_file=pg_clean)
     try:
         assert set(Base.metadata.tables) <= _tables(pg_clean)
     finally:

@@ -7,6 +7,9 @@
 字段说明（与 registry.register 的 ui 契约一致）：
 - name 显示名 / category 调色板分组 / shape 画布形状 / color 主色 / icon 图标；
 - palette 调色板预设项（含创建节点时的字段默认值）；
+- singleton 单例标记：画布上这类节点只保留一枚——已有时添加入口置灰、最后一枚
+  不可删。start 是校验硬要求（structure.start.count＝恰好一个）；end 是产品口径
+  的默认一枚（引擎本身允许 ≥1 个终点，JSON/AI 写路径仍可表达多终点）；
 - form_groups 属性面板分组（title + fields，collapsed 默认折叠=渐进披露）；
 - field_labels 路径标签：设计器表单按点路径解析，用于同名字段在不同 kind 下
   含义不同的场景（如 multi_instance 在 user_task 是会签配置、在 call_activity
@@ -26,6 +29,7 @@ BUILTIN_UI: dict[str, dict[str, Any]] = {
         "shape": "circle",
         "color": "#16a34a",
         "icon": "play",
+        "singleton": True,
         "palette": [{"label": "开始", "defaults": {}}],
         "form_groups": [{"title": "基础", "fields": ["name"]}],
     },
@@ -35,6 +39,7 @@ BUILTIN_UI: dict[str, dict[str, Any]] = {
         "shape": "circle",
         "color": "#dc2626",
         "icon": "stop",
+        "singleton": True,
         "palette": [{"label": "结束", "defaults": {}}],
         "form_groups": [{"title": "基础", "fields": ["name"]}],
     },

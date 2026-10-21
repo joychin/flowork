@@ -87,14 +87,24 @@ def register_preview_routes(app: Any, engine: Any) -> None:
 
     @app.get("/api/catalog")
     def catalog() -> dict[str, Any]:
-        """表达式词汇目录：保留词 + 引擎注入函数。
+        """表达式词汇目录：保留词 + 引擎注入函数 + **宿主注册函数**。
 
         每条带类型/中文标签/可用位点/备注；前端公式编辑器按位点过滤后点选插入，
-        与 validator 静态检查同一份权威（expr/catalog）。宿主自定义函数（SPI 注册）
-        的签名下发随 REST /v2 批一并做——本端点只覆盖引擎侧权威目录。
+        与 validator 静态检查同一份权威（expr/catalog）。宿主经
+        ``EngineConfig.expression_functions`` 注册的函数由 ``port_function_entries``
+        从签名推导条目（位点按返回类型）——装配了什么就下发什么，编辑器
+        点选列表与校验器看同一个世界；同名时宿主覆盖引擎默认。
         """
-        from flowork.api import engine_functions, identifier_entries
+        from flowork.api import (
+            engine_functions,
+            identifier_entries,
+            port_function_entries,
+        )
 
+        functions = dict(engine_functions())
+        port = getattr(engine.config, "expression_functions", None)
+        if port is not None:
+            functions.update(port_function_entries(port))
         return {
             "identifiers": [
                 {**asdict(entry), "positions": sorted(entry.positions)}
@@ -102,6 +112,6 @@ def register_preview_routes(app: Any, engine: Any) -> None:
             ],
             "functions": [
                 {**asdict(entry), "positions": sorted(entry.positions)}
-                for entry in engine_functions().values()
+                for entry in functions.values()
             ],
         }

@@ -30,9 +30,9 @@ def evaluate_assertions(
     assertions: list[dict[str, Any]],
     report: ScenarioReport,
 ) -> None:
-    from flowork.engine.rehearsal import rehearsal_state
+    from flowork.engine.scenario_snapshot import scenario_state
 
-    state = rehearsal_state(engine, instance_id)
+    state = scenario_state(engine, instance_id)
     for item in assertions:
         kind = str(item.get("type"))
         ok, actual = check_assertion(kind, item, state, report)
@@ -140,13 +140,13 @@ def visited_nodes(state: dict[str, Any], report: Any = None) -> set[str]:
 
 def compute_coverage(engine: ProcessEngine, instance_id: str) -> dict[str, Any]:
     """节点/边覆盖（照明指标，非门禁）：场景走过 vs 图里全部。"""
-    from flowork.engine.rehearsal import rehearsal_state
+    from flowork.engine.scenario_snapshot import scenario_state
 
     try:
         definition = definition_of_instance(engine, instance_id)
     except FloworkError:
         return {}
-    state = rehearsal_state(engine, instance_id)
+    state = scenario_state(engine, instance_id)
     nodes_all = {node.code for node in definition.nodes}
     edges_all = {f"{flow.source}->{flow.target}" for flow in definition.flows}
     nodes_hit = visited_nodes(state, None)

@@ -21,7 +21,7 @@ EXAMPLES = Path(__file__).parent.parent / "examples"
 
 @pytest.fixture()
 def client(tmp_path: Path) -> TestClient:
-    app = create_app(db_file=tmp_path / "audit.db", seed=False)
+    app = create_app(db_file=tmp_path / "audit.db")
     with TestClient(app) as test_client:
         yield test_client
 
@@ -106,14 +106,6 @@ def test_simulate_published_version(client: TestClient, spec02: dict) -> None:
     assert resp.json()["definition_code"] == "demo"
 
 
-def test_simulate_isolated_from_instance_list(client: TestClient, spec02: dict) -> None:
-    """模拟实例不进实例列表（隔离语义钉子）；include_simulated=true 可见。"""
-    client.post("/api/definitions/demo/simulate", json=_simulate_body(spec02))
-    assert client.get("/api/instances").json() == []
-    included = client.get("/api/instances?include_simulated=true").json()
-    assert [i["definition_code"] for i in included] == ["demo"]
-
-
 def test_simulate_controls_passthrough(client: TestClient, spec02: dict) -> None:
     """控制面透传：决策清单驱动办理并回进报告（decisions/pending）；坏形状 422。"""
     controls = {
@@ -137,42 +129,6 @@ def test_simulate_controls_passthrough(client: TestClient, spec02: dict) -> None
 
 
 # —— A2 实例只读面 ——
-
-
-def test_instance_read_surface(client: TestClient, spec02: dict) -> None:
-    instance_id = _start_and_walk(client, "demo", spec02, _spec02_variables(spec02))
-    detail = client.get(f"/api/instances/{instance_id}").json()
-    assert detail["instance"]["id"] == instance_id
-    assert detail["instance"]["definition_code"] == "demo"
-    assert isinstance(detail["tokens"], list) and detail["tokens"]
-    assert isinstance(detail["variables"], dict)
-    # 时间线：令牌 + 已办按时间合并
-    timeline = client.get(f"/api/instances/{instance_id}/timeline").json()
-    kinds = {entry["kind"] for entry in timeline}
-    assert {"token", "task"} <= kinds
-    # 路由决策：每行有 source_activity 与 selected
-    decisions = client.get(f"/api/instances/{instance_id}/route-decisions").json()
-    assert all("selected" in row and "source_activity" in row for row in decisions)
-    # 已办任务（分页信封）
-    tasks = client.get(f"/api/instances/{instance_id}/tasks").json()
-    assert tasks["total"] >= 1 and tasks["items"]
-    # 变量历史：birth 行（发起变量记 old=None）
-    history = client.get(f"/api/instances/{instance_id}/variable-history").json()
-    assert any(row["old_value"] is None for row in history)
-    by_name = client.get(f"/api/instances/{instance_id}/variable-history?name=不存在的键").json()
-    assert by_name == []
-    # 查无实例 → 404
-    assert client.get("/api/instances/nope").status_code == 404
-
-
-def test_instance_list_filters(client: TestClient, spec02: dict) -> None:
-    _start_and_walk(client, "demo", spec02, _spec02_variables(spec02))
-    body = client.get("/api/instances?definition_code=demo").json()
-    assert [i["definition_code"] for i in body] == ["demo"]
-    running = client.get("/api/instances?state=running").json()
-    assert all(i["state"] == "running" for i in running)
-    other = client.get("/api/instances?definition_code=absent").json()
-    assert other == []
 
 
 # —— A3 publish 版本判定全貌 ——
@@ -220,11 +176,11 @@ def test_handlers_surface(client: TestClient) -> None:
 
 def test_directory_summary(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """目录摘要:FLOWORK_ORG 装配静态目录时下发用户/部门/角色;未配置时降级。"""
-    with TestClient(create_app(db_file=tmp_path / "meta.db", seed=False)) as bare:
+    with TestClient(create_app(db_file=tmp_path / "meta.db")) as bare:
         assert bare.get("/api/directory/summary").json()["configured"] is False
 
     monkeypatch.setenv("FLOWORK_ORG", str(EXAMPLES / "org.yaml"))
-    with TestClient(create_app(db_file=tmp_path / "meta.db", seed=False)) as configured:
+    with TestClient(create_app(db_file=tmp_path / "meta.db")) as configured:
         body = configured.get("/api/directory/summary").json()
     assert body["configured"] is True
     assert any(u["id"] == "u_zhang" for u in body["users"])

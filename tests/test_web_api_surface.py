@@ -22,38 +22,34 @@ EXPECTED: set[str] = {
     "POST /api/definitions/{code}/publish",
     "POST /api/validate",
     "POST /api/definitions/{code}/diff",
+    # 版本判定预演（只判定不落库）：编辑期把发布的后果前移
+    "POST /api/definitions/{code}/verdict",
+    # 运行形态下发：db（会话库） vs files（开发形态的文件事实源）
+    "GET /api/runtime",
+    # 文件事实源：仅配置 FLOWORK_DEFINITIONS_DIR 时注册
+    "GET /api/files",
+    "GET /api/files/{file_name}",
+    "PUT /api/files/{file_name}",
     "POST /api/dry-run",
     "POST /api/formula/preview",
     "GET /api/catalog",
     "POST /api/definitions/{code}/simulate",
-    "GET /api/instances",
-    "GET /api/instances/{instance_id}",
-    "GET /api/instances/{instance_id}/timeline",
-    "GET /api/instances/{instance_id}/route-decisions",
-    "GET /api/instances/{instance_id}/variable-history",
-    "GET /api/instances/{instance_id}/tasks",
     "GET /api/definitions/{code}/versions",
     "GET /api/definitions/{code}/versions/{major}",
     "GET /api/handlers",
     "GET /api/directory/summary",
-    # 排练（批 3）：simulated 实例的人点驱动
-    "POST /api/definitions/{code}/rehearsal",
-    "POST /api/rehearsals/{instance_id}/step",
-    "GET /api/rehearsals/{instance_id}",
-    # 场景回归（批 4）：脚本 CRUD + 运行（存与直跑两口）
-    "GET /api/definitions/{code}/scenarios",
-    "POST /api/definitions/{code}/scenarios",
+    # 场景回归：脚本随定义同住目录（<code>.scenario.json），与 CI 同一份文件
+    "GET /api/definitions/{code}/scenario",
+    "PUT /api/definitions/{code}/scenario",
+    "DELETE /api/definitions/{code}/scenario",
     "POST /api/definitions/{code}/scenarios/run",
-    "GET /api/scenarios/{scenario_id}",
-    "DELETE /api/scenarios/{scenario_id}",
-    "POST /api/scenarios/{scenario_id}/run",
-    "POST /api/scenarios/{scenario_id}/compare",
 }
 
 
 @pytest.fixture(scope="module")
-def route_set() -> set[str]:
-    app = create_app(db_file=":memory:", seed=False)
+def route_set(tmp_path_factory) -> set[str]:
+    # 文件面与场景文件面只在配置了定义目录时注册——契约快照取完整形态
+    app = create_app(db_file=":memory:", definitions_dir=tmp_path_factory.mktemp("defs"))
     out: set[str] = set()
     for route in app.routes:
         if isinstance(route, APIRoute) and route.path.startswith("/api"):

@@ -40,11 +40,16 @@ evaluate_formula_value(
 设计期 ERROR——同名会遮蔽引擎注入值）。完整目录可以用 API 枚举：
 
 ```python
-from flowork.api import identifier_entries, engine_functions
+from flowork.api import identifier_entries, engine_functions, port_function_entries
 
 for entry in identifier_entries():   # 10 个保留标识符
     print(entry.name, entry.label, entry.positions)
 list(engine_functions())             # 引擎注入函数：node
+# 宿主经 EngineConfig.expression_functions 注册的函数同样进目录——
+# 条目从签名推导（中文标签取 FunctionSignature.label，位点按返回类型：
+# 取人族→取人位、谓词→条件/出口位、值类型→任意位），设计器连线编辑器
+# 的点选列表与校验器看的就是同一份
+port_function_entries(engine.config.expression_functions)
 ```
 
 速查表（「位点」＝哪些表达式位可用）：

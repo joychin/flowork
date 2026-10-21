@@ -24,7 +24,7 @@ EXAMPLES = Path(__file__).parent.parent / "examples"
 
 @pytest.fixture()
 def client(tmp_path: Path) -> TestClient:
-    app = create_app(db_file=tmp_path / "audit_edge.db", seed=False)
+    app = create_app(db_file=tmp_path / "audit_edge.db")
     with TestClient(app) as test_client:
         yield test_client
 
@@ -44,17 +44,6 @@ def test_simulate_rejects_non_dict_spec(client: TestClient, spec02: dict) -> Non
         f"/api/definitions/{code}/simulate", json={"spec": ["a"], "variables": ["x"]}
     )
     assert body.status_code == 422
-
-
-def test_sub_resources_404_on_ghost_instance(client: TestClient) -> None:
-    for suffix in ("timeline", "route-decisions", "variable-history", "tasks"):
-        body = client.get(f"/api/instances/ghost-id/{suffix}")
-        assert body.status_code == 404, f"{suffix} 修前 200 空载荷"
-
-
-def test_limit_bounds(client: TestClient) -> None:
-    for url in ("/api/instances?limit=-1", "/api/instances?limit=9999"):
-        assert client.get(url).status_code == 422, f"{url} 修前负值/超大值直通"
 
 
 def test_flowork_error_not_found_maps_404(client: TestClient) -> None:

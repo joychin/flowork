@@ -44,17 +44,11 @@ from flowork.engine.engine import ProcessEngine
 from flowork.engine.history_service import HistoryService
 from flowork.engine.job_service import JobClaim, JobService, JobStateError
 from flowork.engine.message_service import MessageService
-
-# 模拟/排练/场景：控制面与运行器（设计器与 CLI 同源；投影面只准经本门面）
-from flowork.engine.rehearsal import (
-    perform_rehearsal_step,
-    rehearsal_state,
-    start_rehearsal,
-)
 from flowork.engine.repository_service import RepositoryService
 from flowork.engine.runtime_service import RuntimeService
+
+# 模拟/场景：控制面与运行器（设计器与 CLI 同源；投影面只准经本门面）
 from flowork.engine.scenario import ScenarioReport, parse_scenario, run_scenario
-from flowork.engine.scenario_store import ScenarioStore, scenario_store
 from flowork.engine.simulation import SimulationReport
 from flowork.engine.simulation_controls import SimulationControls, parse_controls
 from flowork.engine.simulation_runner import drive_simulation
@@ -83,6 +77,7 @@ from flowork.expr.catalog import (
     FunctionEntry,
     engine_functions,
     identifier_entries,
+    port_function_entries,
     reserved_identifiers,
 )
 from flowork.expr.cel import FormulaError, evaluate_formula_value
@@ -169,7 +164,6 @@ __all__ = [
     "RouteMode",
     "RuntimeService",
     "ScenarioReport",
-    "ScenarioStore",
     "SimulationControls",
     "SimulationReport",
     "StaticOrgDirectory",
@@ -195,14 +189,11 @@ __all__ = [
     "load_definition_file",
     "parse_controls",
     "parse_scenario",
-    "perform_rehearsal_step",
-    "rehearsal_state",
+    "port_function_entries",
     "reserved_identifiers",
     "run_scenario",
-    "scenario_store",
     "semantic_diff",
     "simulate_route",
-    "start_rehearsal",
     "utc_now",
     "validate_definition",
 ]

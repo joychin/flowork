@@ -102,28 +102,37 @@ input, select, textarea { font-family: inherit; }
 }
 .mini-btn:hover { color: var(--err); border-color: #fecaca; }
 
-/* ── 定义列表页 ───────────────────────── */
-.list-page { height: 100%; overflow-y: auto; padding: 34px 8vw 60px; }
-.list-header { display: flex; align-items: center; gap: 14px; margin-bottom: 26px; }
+/* ── 空态（未打开流程）＋ 打开对话框里的选择卡 ───────── */
+.empty-stage {
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  background: repeating-linear-gradient(45deg, #fbfcfe 0 10px, #f7f9fc 10px 20px);
+  min-height: 0; overflow: auto; padding: 40px;
+}
+.empty-card {
+  text-align: center; background: var(--panel); border: 1px solid var(--line); border-radius: 18px;
+  padding: 40px 48px; box-shadow: var(--shadow); max-width: 520px; transition: 0.16s;
+}
+.empty-card.ok { border-color: var(--brand); box-shadow: 0 10px 40px rgba(47, 107, 255, 0.16); }
+.empty-card .logo-lg { margin: 0 auto 16px; }
+.empty-card h2 { font-size: 17px; font-weight: 600; margin-bottom: 6px; }
+.empty-actions { margin-top: 20px; display: flex; gap: 10px; justify-content: center; }
+
 .logo-lg {
   width: 40px; height: 40px; border-radius: 12px; color: #fff; font-weight: 700; font-size: 20px;
   background: linear-gradient(135deg, #2f6bff, #7c3aed); display: flex; align-items: center; justify-content: center;
 }
-.list-header h1 { font-size: 20px; font-weight: 600; }
-.list-sub { color: var(--sub); font-size: 12.5px; margin-top: 3px; }
-.def-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+.def-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
 .def-card {
-  text-align: left; background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
-  padding: 16px 18px; transition: 0.16s; box-shadow: var(--shadow);
+  text-align: left; background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+  padding: 12px 14px; transition: 0.16s; box-shadow: var(--shadow);
 }
 .def-card:hover { border-color: var(--brand); transform: translateY(-2px); box-shadow: 0 10px 30px rgba(47, 107, 255, 0.12); }
 .def-card-head { display: flex; align-items: center; }
-.def-card-name { font-size: 14.5px; font-weight: 600; flex: 1; }
+.def-card-name { font-size: 13.5px; font-weight: 600; flex: 1; }
 .def-card-arrow { color: #b6c0cf; }
 .def-card:hover .def-card-arrow { color: var(--brand); }
-.def-card-code { font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: #94a3b8; margin: 4px 0 10px; }
+.def-card-code { font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: #94a3b8; margin: 4px 0 8px; overflow: hidden; text-overflow: ellipsis; }
 .def-card-chips { display: flex; gap: 6px; flex-wrap: wrap; }
-.def-card-time { color: #94a3b8; font-size: 11px; margin-top: 10px; }
 
 /* ── 设计器骨架 ───────────────────────── */
 .designer { height: 100%; display: flex; flex-direction: column; }
@@ -731,17 +740,6 @@ input, select, textarea { font-family: inherit; }
 .tl-detail { color: #64748b; font-size: 11px; }
 .tl-edge { color: #475569; font-family: ui-monospace, monospace; font-size: 11px; }
 
-/* —— 排练（批 3）：人扮演逐步驱动 —— */
-.rehearsal-actions { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; }
-.rehearsal-task {
-  border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;
-  background: #fff; display: flex; flex-direction: column; gap: 6px;
-}
-.rehearsal-task-head { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
-.rehearsal-comment {
-  border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; font-size: 12px;
-}
-.rehearsal-buttons { display: flex; flex-wrap: wrap; gap: 6px; }
 
 /* —— 场景回归（批 4）：脚本列表 + 编辑 + 断言表 —— */
 .scenario-modal { width: 900px; max-width: 96vw; }

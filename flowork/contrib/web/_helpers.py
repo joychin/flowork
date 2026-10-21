@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import HTTPException
+from pydantic import ValidationError
 
 from flowork.api import (
     DefinitionError,
@@ -33,12 +34,19 @@ def issues_payload(issues: list[ValidateIssue]) -> list[dict[str, Any]]:
 
 
 def parse_spec(engine: _ProcessEngine, data: Any) -> ProcessDefinition:
-    """把请求体解析为定义（未知 kind / 非法结构 → 422）。"""
+    """把请求体解析为定义（未知 kind / 非法结构 → 422）。
+
+    节点字段类型错会在 ``_resolve_node`` 里抛 pydantic ``ValidationError``
+    （它继承 ValueError，且不经 load_definition 的包装路径）——不接住就是 500，
+    客户端拿到「服务器内部错误」而非「你的定义哪里写错了」。
+    """
     try:
         return load_definition(data, engine.config.node_registry)
     except InvalidDefinitionData as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except UnknownNodeKind as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=f"定义结构不合法：{exc}") from exc
     except DefinitionError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc

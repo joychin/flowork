@@ -445,25 +445,27 @@ def test_default_clock_is_naive_utc():
 # —— 调度接线：web 与 CLI ——
 
 
-def test_web_app_starts_and_stops_scheduler(tmp_path: Path):
+def test_web_app_starts_and_stops_scheduler(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """设计器的会话库缺省不跑调度（临时库里没有要推进的 Job），显式 FLOWORK_JOBS=on 才开。"""
     from fastapi.testclient import TestClient
 
     from flowork.contrib.web.app import create_app
 
-    app = create_app(db_file=tmp_path / "web.db", seed=False)
+    monkeypatch.setenv("FLOWORK_JOBS", "on")
+    app = create_app(db_file=tmp_path / "web.db")
     with TestClient(app) as client:
         assert client.get("/api/health").status_code == 200
         assert app.state.engine.jobs._scheduler is not None
     assert app.state.engine.jobs._scheduler is None  # 随应用关闭
 
 
-def test_web_app_scheduler_can_be_disabled(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+def test_web_app_scheduler_off_by_default(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     from fastapi.testclient import TestClient
 
     from flowork.contrib.web.app import create_app
 
-    monkeypatch.setenv("FLOWORK_JOBS", "off")
-    app = create_app(db_file=tmp_path / "web_off.db", seed=False)
+    monkeypatch.delenv("FLOWORK_JOBS", raising=False)
+    app = create_app(db_file=tmp_path / "web_off.db")
     with TestClient(app) as client:
         assert client.get("/api/health").status_code == 200
         assert app.state.engine.jobs._scheduler is None

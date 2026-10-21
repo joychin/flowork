@@ -20,6 +20,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from typing import Any
 
 __all__ = [
     "ALL_POSITIONS",
@@ -27,6 +28,7 @@ __all__ = [
     "IdentifierEntry",
     "engine_functions",
     "identifier_entries",
+    "port_function_entries",
     "positions_of",
     "reserved_identifiers",
 ]
@@ -181,3 +183,45 @@ def positions_of(name: str) -> frozenset[str]:
 def engine_functions() -> Mapping[str, FunctionEntry]:
     """引擎注入函数目录（name → 条目）。"""
     return {entry.name: entry for entry in ENGINE_FUNCTION_CATALOG}
+
+
+# 宿主注册函数的位点推导（按 FunctionSignature.returns 的类型词汇）。
+# 这是**建议**不是门禁——真门禁在 validator 的 returns 白名单（按位点查返回类型）；
+# 目录条目驱动的是编辑器点选与提示，宁可在全部位点可见。
+_SUBJECT_RETURN_TYPES = frozenset({"one_user", "users", "groups", "mixed"})
+_PREDICATE_POSITIONS = frozenset({"condition", "exit"})
+_SUBJECT_POSITIONS = frozenset({"subjects", "reassign"})
+
+
+def _positions_for(returns: str) -> frozenset[str]:
+    if returns == "bool":
+        return _PREDICATE_POSITIONS
+    if returns in _SUBJECT_RETURN_TYPES:
+        return _SUBJECT_POSITIONS
+    # 值类型（string/number/list/map…）：作为子表达式可嵌套进任意位
+    return ALL_POSITIONS
+
+
+def port_function_entries(port: Any) -> Mapping[str, FunctionEntry]:
+    """宿主 ExpressionFunctions 端口 → 目录条目（签名自带，零第二份维护）。
+
+    条目的 ``note`` 拼签名（``("one_user",) → one_user``），前端 tooltip
+    原样展示即可带出参数提示。与 ``engine_functions()`` 同名时以端口为准
+    （宿主显式注册覆盖引擎默认），合并方式由消费方 ``{**engine_functions(),
+    **port_function_entries(port)}`` 表达。
+    """
+    entries: dict[str, FunctionEntry] = {}
+    for name, registered in port.functions().items():
+        signature = registered.signature
+        params = tuple(signature.params)
+        entries[name] = FunctionEntry(
+            name=name,
+            params=params,
+            returns=signature.returns,
+            label=signature.label or name,
+            positions=_positions_for(signature.returns),
+            note=f"宿主注册 · ({', '.join(params)}) → {signature.returns}"
+            if params
+            else f"宿主注册 · () → {signature.returns}",
+        )
+    return entries

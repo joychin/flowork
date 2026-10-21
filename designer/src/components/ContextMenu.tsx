@@ -2,7 +2,7 @@
  *  打开即挂窗口级关闭器(点击任意处 / Esc / 滚动画布),动作执行前先关菜单。 */
 
 import { useEffect } from 'react'
-import { useStore } from '../store'
+import { singletonKind, singletonLast, useStore } from '../store'
 
 export function ContextMenu() {
   const menu = useStore((s) => s.ctxMenu)
@@ -42,10 +42,13 @@ export function ContextMenu() {
 
   if (node) {
     const select = useStore.getState().select
-    const deletable = node.kind !== 'start'
-    // start 有且仅有一个(校验 structure.start.count),且删除守卫硬拦一切 start——
-    // 放行复制会产出一个删不掉的副本,流程从此带 ERROR
-    const duplicatable = node.kind !== 'start'
+    const { spec: liveSpec, metaByKind } = useStore.getState()
+    // 单例约束(引擎 ui.singleton,如 start/end)集中判据:最后一枚不可删(与删除
+    // 守卫同源),多余实例(手工 JSON 来的)可删;复制单例只会多出一枚,不给入口
+    const label = metaByKind[node.kind]?.ui.name ?? node.kind
+    const remainingSingleton = singletonLast(liveSpec, metaByKind, node.kind)
+    const deletable = !remainingSingleton
+    const duplicatable = !singletonKind(metaByKind, node.kind)
     items.push(
       {
         label: '从这里拉线',
@@ -58,7 +61,7 @@ export function ContextMenu() {
       },
       {
         label: '复制节点',
-        hint: duplicatable ? '连配置一起克隆' : 'start 有且仅有一个',
+        hint: duplicatable ? '连配置一起克隆' : `「${label}」只保留一个`,
         disabled: !duplicatable,
         run: () => useStore.getState().duplicateNode(node.code),
       },
@@ -67,7 +70,7 @@ export function ContextMenu() {
         label: '删除节点',
         danger: true,
         disabled: !deletable,
-        hint: deletable ? undefined : 'start 不可删除',
+        hint: !deletable ? `「${label}」必须保留一个` : undefined,
         run: () => {
           select({ type: 'node', id: node.code })
           useStore.getState().deleteSelection()

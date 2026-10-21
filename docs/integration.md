@@ -72,8 +72,18 @@ CLI `--db` / web `FLOWORK_DB` 三处共用）。引擎启动建表保持幂等 c
 ```bash
 FLOWORK_DB=postgresql+psycopg://user:pw@host:5432/flowork uv run alembic upgrade head
 FLOWORK_DB=postgresql+psycopg://user:pw@host:5432/flowork uv run flowork tick
-FLOWORK_DB=postgresql+psycopg://user:pw@host:5432/flowork uv run uvicorn flowork.contrib.web.app:app
+FLOWORK_DB=postgresql+psycopg://user:pw@host:5432/flowork uv run uvicorn flowork.contrib.rest.app:app
 ```
+
+> **设计器（`contrib.web`）不连运行时库**：它的引擎是一份进程内临时库，只装本次会话的
+> 模拟/场景执行痕迹（`FLOWORK_DB` 被有意忽略，设了会在启动时提示）。定义的事实源是
+> `FLOWORK_DEFINITIONS_DIR` 指向的 JSON 目录或浏览器里打开的本地文件。要留存会话痕迹，
+> 用 `FLOWORK_DESIGNER_DB` 指向一个**与生产库分开**的专用临时库。
+>
+> 宿主也可挂载设计器面到自己的 FastAPI（`register_designer_routes(app, engine)`，
+> 与 REST 对称）：扩展（函数/handler/自定义节点）全跟引擎走、零额外配置。注意
+> 模拟实例会写传入引擎的库（simulated 隔离）；自定义扩展走独立进程时用
+> `FLOWORK_SETUP=模块`（三钩子，见 designer/README）。
 
 PG 驱动 `psycopg[binary]` 在 dev 依赖组。冒烟套件（方言/并发/迁移链）：
 
@@ -148,6 +158,10 @@ FLOWORK_TEST_PG_URL=postgresql+psycopg://... uv run pytest -m needs_postgres   #
   FLOWORK_DB=/path/prod.db uv run uvicorn flowork.contrib.rest.app:app   # 独立进程
   # 或挂进宿主 FastAPI：from flowork.contrib.rest import register_rest_routes; register_rest_routes(app, engine)
   ```
+
+  独立进程的自定义扩展（取人函数/handler/节点类型）经 `FLOWORK_SETUP=模块` 带进
+  进程（三钩子 `nodes/vocabulary/handlers`，与设计器同一装配单源
+  `flowork/contrib/assembly.py`）；宿主挂载形态不需要——扩展跟着引擎走。
 
 - **AI（MCP，已落地）**：`flowork/contrib/mcp`——19 工具（清单=kernel-v2 spec §13），
   全 typed、幂等键、行动提示式返回；AI 与人共用同一待办/办理面（引擎不区分主体类型）。

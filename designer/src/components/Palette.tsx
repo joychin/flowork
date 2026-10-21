@@ -1,11 +1,15 @@
-/** 调色板:由 /api/node-kinds 的 ui.palette 生成,点击即添加节点 */
+/** 调色板:由 /api/node-kinds 的 ui.palette 生成,点击即添加节点。
+ *  单例类型(ui.singleton,如 start)画布上已有时整项置灰——校验要求恰好一个,
+ *  入口在源头就断掉,而不是放进来再靠校验报红。 */
 
 import { useMemo } from 'react'
-import { useStore } from '../store'
+import { singletonTaken, useStore } from '../store'
 import { Icon } from './FlowNodes'
 
 export function Palette() {
   const meta = useStore((s) => s.meta)
+  const spec = useStore((s) => s.spec)
+  const metaByKind = useStore((s) => s.metaByKind)
   const startPaletteDrag = useStore((s) => s.startPaletteDrag)
 
   const groups = useMemo(() => {
@@ -32,24 +36,34 @@ export function Palette() {
       {groups.map(([category, items]) => (
         <div key={category}>
           <div className="palette-group">{category}</div>
-          {items.map((item, i) => (
-            <button
-              key={`${item.kind}-${i}`}
-              className="palette-item"
-              onPointerDown={(e) => {
-                // 指针驱动拖拽:Canvas 挂窗口级 pointermove/up;原地松手 = 点击添加
-                if (e.button !== 0) return
-                e.preventDefault()
-                startPaletteDrag({ kind: item.kind, defaults: { ...item.defaults, name: item.label }, label: item.label })
-              }}
-              title={`拖到画布任意位置,或点击添加「${item.label}」`}
-            >
-              <span className="palette-ico" style={{ background: `${item.color}1a`, color: item.color }}>
-                <Icon name={item.icon} />
+          {items.map((item, i) => {
+            // 单例已在画布上:整项置灰不可拖不可点(spec 变化即时重算)。
+            // 提示挂在外层 span:disabled 按钮不触发鼠标事件,自身 title 不弹。
+            const taken = singletonTaken(spec, metaByKind, item.kind)
+            return (
+              <span
+                key={`${item.kind}-${i}`}
+                className={`palette-item-wrap${taken ? ' palette-item-wrap-taken' : ''}`}
+                title={taken ? `画布上已有「${item.label}」节点(只保留一个)` : `拖到画布任意位置,或点击添加「${item.label}」`}
+              >
+                <button
+                  className={`palette-item${taken ? ' palette-item-taken' : ''}`}
+                  disabled={taken}
+                  onPointerDown={(e) => {
+                    // 指针驱动拖拽:Canvas 挂窗口级 pointermove/up;原地松手 = 点击添加
+                    if (e.button !== 0 || taken) return
+                    e.preventDefault()
+                    startPaletteDrag({ kind: item.kind, defaults: { ...item.defaults, name: item.label }, label: item.label })
+                  }}
+                >
+                  <span className="palette-ico" style={{ background: `${item.color}1a`, color: item.color }}>
+                    <Icon name={item.icon} />
+                  </span>
+                  <span>{item.label}</span>
+                </button>
               </span>
-              <span>{item.label}</span>
-            </button>
-          ))}
+            )
+          })}
         </div>
       ))}
       <div className="palette-foot">

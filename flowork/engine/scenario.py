@@ -190,7 +190,7 @@ def _run_steps(
     report: ScenarioReport,
     controls: Any = None,
 ) -> None:
-    from flowork.engine.rehearsal import perform_rehearsal_step
+    from flowork.engine.scenario_steps import perform_step
     from flowork.engine.simulation_runner import resolve_wait
 
     preset_waits: dict[str, dict[str, Any]] = dict(getattr(controls, "waits", None) or {})
@@ -212,7 +212,7 @@ def _run_steps(
             report.steps.append({"index": index, "kind": "clock", "detail": step_clock})
             continue
         if "wait" in step:
-            perform_rehearsal_step(
+            perform_step(
                 engine,
                 instance_id,
                 {
@@ -226,7 +226,7 @@ def _run_steps(
             advance.drain(report)
             continue
         task = _locate_in_tree(engine, instance_id, str(step["node"]), step.get("by"))
-        perform_rehearsal_step(engine, instance_id, {"task_id": task.id, **step})
+        perform_step(engine, instance_id, {"task_id": task.id, **step})
         report.steps.append(
             {
                 "index": index,

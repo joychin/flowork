@@ -1,9 +1,9 @@
-/** 应用入口:定义列表 ⇄ 设计器 两态;全局键盘(撤销/重做/删除)与 toast */
+/** 应用入口:设计器常驻(未打开流程时画布区是空态);全局键盘(撤销/重做/删除)与 toast */
 
 import { useEffect } from 'react'
 import { useStore } from './store'
 import { designerConfig } from './config'
-import { DefinitionList } from './components/DefinitionList'
+import { EmptyState } from './components/EmptyState'
 import { Topbar } from './components/Topbar'
 import { Palette } from './components/Palette'
 import { Canvas } from './components/Canvas'
@@ -21,6 +21,7 @@ function Designer() {
   const deleteSelection = useStore((s) => s.deleteSelection)
   const undo = useStore((s) => s.undo)
   const redo = useStore((s) => s.redo)
+  const spec = useStore((s) => s.spec)
   const readonly = designerConfig.readonly()
 
   useEffect(() => {
@@ -70,9 +71,15 @@ function Designer() {
     <div className="designer">
       <Topbar />
       <div className="designer-main">
-        {!readonly && <Palette />}
-        <Canvas />
-        {!readonly && <RightPanel />}
+        {!spec ? (
+          <EmptyState />
+        ) : (
+          <>
+            {!readonly && <Palette />}
+            <Canvas />
+            {!readonly && <RightPanel />}
+          </>
+        )}
       </div>
       <PublishDialog />
       <DryRunDialog />
@@ -81,7 +88,6 @@ function Designer() {
 }
 
 export default function App() {
-  const spec = useStore((s) => s.spec)
   const bootstrap = useStore((s) => s.bootstrap)
   useEffect(() => {
     void bootstrap()
@@ -91,7 +97,7 @@ export default function App() {
   }, [bootstrap])
   return (
     <>
-      {spec ? <Designer /> : <DefinitionList />}
+      <Designer />
       <Toast />
     </>
   )

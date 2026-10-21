@@ -5,12 +5,16 @@ import { api } from './api'
 import { designerConfig } from './config'
 import {
   edgeId,
+  type DefinitionFile,
+  type DefinitionSource,
   type DefinitionSummary,
   type DiffResult,
   type DryRunResult,
   type NodeKindMeta,
+  type RuntimeInfo,
   type Spec,
   type ValidateIssue,
+  type VerdictPreview,
 } from './types'
 
 export type Selection = { type: 'node' | 'edge'; id: string } | null
@@ -29,7 +33,20 @@ type StoreState = {
   listingLoading: boolean
   /** 后端不可达等加载失败（review P1-4）：修前静默吞错呈现成业务空态还引导新建 */
   listingError: string | null
-  defInfo: { code: string; name: string; draftVersion: number | null; publishedVersion: number | null } | null
+  /** 运行形态：files=开发形态（列表/保存走目录里的 JSON）；db=托管/演示 */
+  runtime: RuntimeInfo
+  /** 文件模式的目录清单（db 模式下恒为空） */
+  files: DefinitionFile[]
+  defInfo: {
+    code: string
+    name: string
+    draftVersion: number | null
+    publishedVersion: number | null
+    /** 当前打开的来源：file=目录里的 JSON；db=数据库定义；local=浏览器本地文件 */
+    source: DefinitionSource
+    /** 文件名（source=file 时保存写回它） */
+    fileName: string | null
+  } | null
   spec: Spec | null
   selection: Selection
   issues: ValidateIssue[]
@@ -59,9 +76,19 @@ type StoreState = {
 type StoreActions = {
   bootstrap: () => Promise<void>
   refreshListing: () => Promise<void>
+  /** 打开目录里的定义文件（文件模式）；与 openDefinition 同一画布，只换数据源 */
+  openFile: (fileName: string) => Promise<void>
+  /** 打开浏览器里的本地 JSON（未入库会话：可编辑可模拟，不可对比线上版） */
+  openLocalSpec: (spec: Spec, fileName: string | null) => void
+  /** 新建文件模式定义：写一个只含 start→end 的新 JSON 到目录 */
+  createFile: (code: string, name: string) => Promise<void>
+  /** 导出当前图纸为 JSON 文件（下载）；默认剔除 layout */
+  exportSpec: (opts?: { source?: 'current' | 'published'; keepLayout?: boolean }) => Promise<void>
+  /** 版本判定预演（只读）：下一版号 / 破坏性规则 / 幂等去重 */
+  loadVerdict: () => Promise<VerdictPreview | null>
   openDefinition: (code: string) => Promise<void>
   createDefinition: (code: string, name: string) => Promise<void>
-  backToListing: () => void
+  closeDefinition: () => void
   mutate: (
     fn: (draft: Spec) => void,
     opts?: { history?: boolean; keepDryRun?: boolean },
@@ -114,6 +141,8 @@ export const useStore = create<Store>((set, get) => ({
   listing: [],
   listingLoading: true,
   listingError: null,
+  runtime: { source: 'db', definitions_dir: null, session_ephemeral: true, vocabulary_source: '', vocabulary_functions: [] },
+  files: [],
   defInfo: null,
   spec: null,
   selection: null,
@@ -136,9 +165,10 @@ export const useStore = create<Store>((set, get) => ({
 
   async bootstrap() {
     try {
-      const meta = await api.nodeKinds()
+      // 运行形态先于列表：列表页据它决定「列数据库定义」还是「列目录里的 JSON」
+      const [meta, runtime] = await Promise.all([api.nodeKinds(), api.runtime()])
       const metaByKind = Object.fromEntries(meta.map((m) => [m.kind, m]))
-      set({ meta, metaByKind })
+      set({ meta, metaByKind, runtime })
     } catch (error) {
       // nodeKinds 挂（后端不可达/CORS）修前是 unhandled rejection——列表页永久「加载中」
       set({ listingError: String(error) })
@@ -160,6 +190,8 @@ export const useStore = create<Store>((set, get) => ({
         name: detail.name || spec.name,
         draftVersion: detail.draft_version,
         publishedVersion: detail.published_version,
+        source: 'db',
+        fileName: null,
       },
       spec,
       selection: null,
@@ -171,6 +203,118 @@ export const useStore = create<Store>((set, get) => ({
       pendingConnect: null,
     })
     get().validateNow()
+  },
+
+  async openFile(fileName) {
+    const payload = await api.getFile(fileName)
+    const spec = ensureLayout(payload.spec)
+    // 文件模式下顺带查同一 code 的已发布版本：有基线才能做 diff 与版本判定预演
+    let publishedVersion: number | null = null
+    let draftVersion: number | null = null
+    try {
+      const detail = await api.getDefinition(payload.spec.code)
+      publishedVersion = detail.published_version
+      draftVersion = detail.draft_version
+    } catch {
+      // 未入库的新文件：比对能力缺失是正常状态，顶栏如实标注
+    }
+    set({
+      defInfo: {
+        code: payload.spec.code,
+        name: payload.spec.name || payload.spec.code,
+        draftVersion,
+        publishedVersion,
+        source: 'file',
+        fileName: payload.file,
+      },
+      spec,
+      selection: null,
+      issues: [],
+      past: [],
+      future: [],
+      saveState: 'idle',
+      dirty: false,
+      pendingConnect: null,
+    })
+    get().validateNow()
+  },
+
+  openLocalSpec(input, fileName) {
+    const spec = ensureLayout(structuredClone(input))
+    set({
+      defInfo: {
+        code: spec.code,
+        name: spec.name || spec.code,
+        draftVersion: null,
+        publishedVersion: null,
+        source: 'local',
+        fileName,
+      },
+      spec,
+      selection: null,
+      issues: [],
+      past: [],
+      future: [],
+      saveState: 'idle',
+      dirty: false,
+      pendingConnect: null,
+    })
+    get().validateNow()
+  },
+
+  async createFile(code, name) {
+    const spec: Spec = {
+      code,
+      name,
+      nodes: [
+        { code: 'start', name: '发起', kind: 'start' },
+        { code: 'end', name: '结束', kind: 'end' },
+      ],
+      flows: [{ source: 'start', target: 'end' }],
+      layout: {},
+    }
+    await api.saveFile(`${code}.json`, ensureLayout(spec))
+    await get().refreshListing()
+    await get().openFile(`${code}.json`)
+    get().showToast(`已创建 ${code}.json`)
+  },
+
+  async exportSpec(opts = {}) {
+    const { spec, defInfo } = get()
+    if (!defInfo) return
+    const { source = 'current', keepLayout = false } = opts
+    try {
+      // 已发布版才是 git 对账的正确来源（drift 按发布内容哈希比对）
+      const payload =
+        source === 'published'
+          ? await api.getDefinition(defInfo.code, 'published')
+          : { spec: spec ?? undefined }
+      if (!payload.spec) return
+      const out: Spec = structuredClone(payload.spec)
+      if (!keepLayout) delete (out as { layout?: unknown }).layout
+      const blob = new Blob([JSON.stringify(out, null, 2) + '\n'], {
+        type: 'application/json',
+      })
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = defInfo.fileName ?? `${defInfo.code}.json`
+      anchor.click()
+      URL.revokeObjectURL(url)
+      get().showToast(`已导出 ${anchor.download}`)
+    } catch (err) {
+      get().showToast(`导出失败:${err instanceof Error ? err.message : String(err)}`)
+    }
+  },
+
+  async loadVerdict() {
+    const { spec, defInfo } = get()
+    if (!spec || !defInfo) return null
+    try {
+      return await api.verdict(defInfo.code, spec)
+    } catch {
+      return null // 未入库的新定义没有基线，预演不适用
+    }
   },
 
   async createDefinition(code, name) {
@@ -190,8 +334,20 @@ export const useStore = create<Store>((set, get) => ({
     get().showToast(`已创建「${name || code}」草稿 v${saved.version}`)
   },
 
-  backToListing() {
-    set({ defInfo: null, spec: null, selection: null, pendingConnect: null })
+  closeDefinition() {
+    // 回到空态：清掉当前会话（未保存的内容由 dirty 提示拦，这里不强留）
+    set({
+      defInfo: null,
+      spec: null,
+      selection: null,
+      pendingConnect: null,
+      issues: [],
+      past: [],
+      future: [],
+      dirty: false,
+      saveState: 'idle',
+      dryRun: null,
+    })
   },
 
   /** 所有写路径的唯一入口:structuredClone 后应用变更,历史/脏标记/校验自动跟上。
@@ -217,8 +373,12 @@ export const useStore = create<Store>((set, get) => ({
   },
 
   addNode(kind, defaults, pos) {
-    const { spec, selection } = get()
+    const { spec, selection, metaByKind } = get()
     if (!spec) return
+    if (singletonTaken(spec, metaByKind, kind)) {
+      get().showToast(`「${singletonLabel(metaByKind, kind)}」只能有一个`)
+      return
+    }
     const code = nextNodeCode(spec, kind)
     // 放置位置:拖放落点 > 选中节点右侧 > 整体最右再往右一格
     let x: number, y: number
@@ -238,8 +398,12 @@ export const useStore = create<Store>((set, get) => ({
   },
 
   insertNodeOnFlow(kind, defaults, pos, source, target) {
-    const { spec } = get()
+    const { spec, metaByKind } = get()
     if (!spec) return
+    if (singletonTaken(spec, metaByKind, kind)) {
+      get().showToast(`「${singletonLabel(metaByKind, kind)}」只能有一个`)
+      return
+    }
     const flow = spec.flows.find((f) => f.source === source && f.target === target)
     if (!flow) return
     const code = nextNodeCode(spec, kind)
@@ -257,9 +421,13 @@ export const useStore = create<Store>((set, get) => ({
   },
 
   addNodeAndConnect(kind, defaults, pos, source) {
-    const { spec } = get()
+    const { spec, metaByKind } = get()
     if (!spec) return
     if (!spec.nodes.some((n) => n.code === source)) return
+    if (singletonTaken(spec, metaByKind, kind)) {
+      get().showToast(`「${singletonLabel(metaByKind, kind)}」只能有一个`)
+      return
+    }
     const code = nextNodeCode(spec, kind)
     get().mutate((draft) => {
       draft.nodes.push({ code, name: '', kind, ...defaults })
@@ -320,10 +488,14 @@ export const useStore = create<Store>((set, get) => ({
   },
 
   duplicateNode(code) {
-    const { spec } = get()
+    const { spec, metaByKind } = get()
     if (!spec) return
     const src = spec.nodes.find((n) => n.code === code)
     if (!src) return
+    if (singletonTaken(spec, metaByKind, src.kind)) {
+      get().showToast(`「${singletonLabel(metaByKind, src.kind)}」只能有一个`)
+      return
+    }
     const newCode = nextNodeCode(spec, src.kind)
     get().mutate((draft) => {
       const pos = draft.layout[code] ?? { x: 0, y: 0 }
@@ -391,12 +563,15 @@ export const useStore = create<Store>((set, get) => ({
   },
 
   deleteSelection() {
-    const { selection, spec } = get()
+    const { selection, spec, metaByKind } = get()
     if (!selection || !spec) return
     if (selection.type === 'node') {
       const node = spec.nodes.find((n) => n.code === selection.id)
-      if (node?.kind === 'start') {
-        get().showToast('start 节点不可删除(校验要求有且仅有一个)')
+      // 只拦「删掉最后一个单例节点」(如 start):流程必须有起点。多余实例
+      // (旧数据/手工 JSON)必须放行——硬拦一切 start 会让两个起点互相锁死,
+      // 校验报 ERROR 却在界面上无从修复。
+      if (node && singletonLast(spec, metaByKind, node.kind)) {
+        get().showToast(`「${singletonLabel(metaByKind, node.kind)}」必须保留一个`)
         return
       }
       get().mutate((draft) => {
@@ -461,8 +636,26 @@ export const useStore = create<Store>((set, get) => ({
     if (designerConfig.readonly()) return // 只读审计无保存路径（防快捷键绕过隐藏按钮）
     if (saveState === 'saving') return // 在途防重（review P1-2）：Ctrl+S 绕过按钮 disabled，
     // 两次并发保存各携不同 spec，旧响应后到会把 dirty:false 写回——新改动静默丢失
+    if (defInfo.source === 'local') {
+      // 浏览器本地会话没有落盘通道：导出是唯一出口，别给「已保存」的假象
+      await get().exportSpec()
+      set({ dirty: false })
+      return
+    }
     set({ saveState: 'saving' })
     try {
+      if (defInfo.source === 'file' && defInfo.fileName) {
+        // 文件事实源：写回 git 工作区里的那份 JSON（不是数据库草稿）
+        await api.saveFile(defInfo.fileName, spec)
+        set((s) => ({
+          saveState: 'saved',
+          dirty: false,
+          defInfo: s.defInfo ? { ...s.defInfo, name: spec.name || s.defInfo.name } : null,
+        }))
+        // 列表页的卡片读的是目录清单（名字/更新时间都在文件里）——不刷会停在旧名
+        await reloadListing(set)
+        return
+      }
       const saved = await api.saveDraft(defInfo.code, spec)
       set((s) => ({
         saveState: 'saved',
@@ -471,7 +664,13 @@ export const useStore = create<Store>((set, get) => ({
       }))
     } catch (err) {
       set({ saveState: 'error' })
-      get().showToast(`保存失败:${err instanceof Error ? err.message : String(err)}`)
+      const payload = (err as { payload?: { issues?: unknown } }).payload
+      if (payload && typeof payload === 'object' && Array.isArray(payload.issues)) {
+        set({ issues: payload.issues as ValidateIssue[], rightTab: 'issues' })
+        get().showToast('✕ 校验未通过，未写入文件 — 详见「校验」页')
+      } else {
+        get().showToast(`保存失败:${err instanceof Error ? err.message : String(err)}`)
+      }
     }
   },
 
@@ -583,6 +782,29 @@ function nextNodeCode(spec: Spec, kind: string): string {
   return code
 }
 
+/** 单例 kind(引擎 ui.singleton,如 start)已在画布上:禁止再加。
+ *  调色板/连线快捷菜单的置灰与各直写方法的兜底守卫共用同一判据——
+ *  与校验 structure.start.count(恰好一个)同源,界面在源头就断掉第二次添加。 */
+export function singletonTaken(spec: Spec | null, metaByKind: Record<string, NodeKindMeta>, kind: string): boolean {
+  if (!singletonKind(metaByKind, kind)) return false
+  return (spec?.nodes.filter((n) => n.kind === kind).length ?? 0) >= 1
+}
+
+/** 单例 kind 且画布上只剩一个:最后一个不可删(删完流程没有起点)。
+ *  多余实例(旧数据/手工 JSON)放行删除——硬拦会让非法状态无从修复。 */
+export function singletonLast(spec: Spec | null, metaByKind: Record<string, NodeKindMeta>, kind: string): boolean {
+  if (!singletonKind(metaByKind, kind)) return false
+  return (spec?.nodes.filter((n) => n.kind === kind).length ?? 0) <= 1
+}
+
+export function singletonKind(metaByKind: Record<string, NodeKindMeta>, kind: string): boolean {
+  return !!metaByKind[kind]?.ui.singleton
+}
+
+function singletonLabel(metaByKind: Record<string, NodeKindMeta>, kind: string): string {
+  return metaByKind[kind]?.ui.name ?? kind
+}
+
 /** 推进策略推断：≥2 入边且未显式设置的节点自动落字段（用户显式选择优先，只填空不覆盖）。
  *  入边全为无条件 → all（并行汇合，等齐）；含条件/默认边 → any（分支合并，任一到达即开始）。 */
 function inferAdvancePolicies(spec: Spec) {
@@ -664,7 +886,27 @@ function layoutSpec(spec: Spec, { force }: { force: boolean }) {
 async function reloadListing(set: (partial: Partial<StoreState>) => void) {
   set({ listingLoading: true, listingError: null })
   try {
-    set({ listing: await api.listDefinitions(), listingLoading: false })
+    // 文件形态下列的是目录里的 JSON——它才是开发态的事实源；
+    // 数据库定义列表在那种形态下已不是「开发者看见的流程集合」。
+    const runtime = useStore.getState().runtime
+    if (runtime.source === 'files') {
+      const payload = await api.listFiles()
+      set({
+        files: payload.files,
+        listing: payload.files
+          .filter((item) => item.code)
+          .map((item) => ({
+            code: item.code!,
+            name: item.name,
+            draft_version: null,
+            published_version: null,
+            updated_at: item.updated_at,
+          })),
+        listingLoading: false,
+      })
+      return
+    }
+    set({ files: [], listing: await api.listDefinitions(), listingLoading: false })
   } catch (error) {
     // 失败≠空态（review P1-4）：修前静默吞错、列表呈现「还没有流程定义」
     // 引导用户去新建——后端不可达被伪装成业务空态

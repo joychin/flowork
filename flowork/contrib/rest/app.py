@@ -17,7 +17,7 @@ from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from flowork.api import EngineConfig, FloworkError, ProcessEngine, StaticOrgDirectory
+from flowork.api import FloworkError, ProcessEngine
 from flowork.contrib.rest._common import error_payload, status_of
 from flowork.contrib.rest.routes_definitions import register_definition_routes
 from flowork.contrib.rest.routes_instances import register_instance_routes
@@ -28,13 +28,18 @@ __all__ = ["create_app", "create_engine", "register_rest_routes"]
 
 
 def create_engine(db_file: str | Path | None = None) -> ProcessEngine:
-    """按 web 同款环境约定装配引擎（db/org）。"""
+    """按环境约定装配引擎（db / org / FLOWORK_SETUP 全量扩展钩子）。
+
+    ``FLOWORK_SETUP=模块`` 可带三个可选钩子（nodes/vocabulary/handlers）——
+    独立部署的 /v2 进程与宿主同样能把自定义函数、handler、节点类型带进来
+    （装配单源见 :mod:`flowork.contrib.assembly`）。宿主嵌入形态不必走这里：
+    直接 ``register_rest_routes(app, 自己的引擎)``。
+    """
+    from flowork.contrib.assembly import assemble_engine
+
     db_path = db_file or os.environ.get("FLOWORK_DB", "flowork.db")
-    config_kwargs: dict[str, Any] = {"db_file": db_path}
-    org_path = os.environ.get("FLOWORK_ORG")
-    if org_path:
-        config_kwargs["org"] = StaticOrgDirectory.from_yaml(org_path)
-    return ProcessEngine(EngineConfig(**config_kwargs))
+    engine, _source = assemble_engine(str(db_path))
+    return engine
 
 
 def register_rest_routes(app: FastAPI, engine: ProcessEngine) -> None:

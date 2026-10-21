@@ -1,21 +1,19 @@
 import type {
   Catalog,
   DefinitionDetail,
+  DefinitionFile,
   DefinitionSummary,
   DiffResult,
   DirectorySummary,
   DryRunResult,
-  InstanceDetail,
-  InstanceInfo,
   NodeKindMeta,
   ProcessVariable,
   PublishResult,
-  RouteDecision,
+  RuntimeInfo,
   SimulationReport,
   Spec,
-  TimelineEntry,
   ValidateIssue,
-  VariableChange,
+  VerdictPreview,
 } from './types'
 import { designerConfig } from './config'
 
@@ -39,9 +37,38 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 export const api = {
   nodeKinds: () => request<NodeKindMeta[]>('/api/node-kinds'),
 
+  /** 运行形态：files=开发形态（列表/保存走目录里的 JSON）；db=托管/演示 */
+  runtime: () => request<RuntimeInfo>('/api/runtime'),
+
+  // —— 文件事实源（仅 --definitions-dir 形态注册；未配置时 404） ——
+
+  listFiles: () => request<{ dir: string; files: DefinitionFile[] }>('/api/files'),
+
+  getFile: (fileName: string) =>
+    request<{ file: string; spec: Spec; dir: string }>(
+      `/api/files/${encodeURIComponent(fileName)}`,
+    ),
+
+  saveFile: (fileName: string, spec: Spec) =>
+    request<{ file: string; code: string; issues: ValidateIssue[] }>(
+      `/api/files/${encodeURIComponent(fileName)}`,
+      { method: 'PUT', body: JSON.stringify(spec) },
+    ),
+
   listDefinitions: () => request<DefinitionSummary[]>('/api/definitions'),
 
-  getDefinition: (code: string) => request<DefinitionDetail>(`/api/definitions/${code}`),
+  /** 取定义内容。source='published' 取已发布版——导出给 git 的唯一正确来源 */
+  getDefinition: (code: string, source: 'auto' | 'published' = 'auto') =>
+    request<DefinitionDetail>(
+      `/api/definitions/${code}${source === 'published' ? '?source=published' : ''}`,
+    ),
+
+  /** 版本判定预演（只判定不落库）：下一版号 / 破坏性规则 / 幂等去重 */
+  verdict: (code: string, spec: Spec) =>
+    request<VerdictPreview>(`/api/definitions/${code}/verdict`, {
+      method: 'POST',
+      body: JSON.stringify(spec),
+    }),
 
   saveDraft: (code: string, spec: Spec) =>
     request<{ code: string; version: number; status: string }>(`/api/definitions/${code}`, {
@@ -90,28 +117,17 @@ export const api = {
     spec: Spec,
     variables: Record<string, unknown>,
     controls?: Record<string, unknown>,
+    startUser?: string,
   ) =>
     request<SimulationReport>(`/api/definitions/${code}/simulate`, {
       method: 'POST',
-      body: JSON.stringify(controls ? { spec, variables, controls } : { spec, variables }),
+      body: JSON.stringify({
+        spec,
+        variables,
+        ...(controls ? { controls } : {}),
+        ...(startUser ? { start_user: startUser } : {}),
+      }),
     }),
-
-  instances: (params: { state?: string; definition_code?: string; include_simulated?: boolean }) => {
-    const qs = new URLSearchParams()
-    if (params.state) qs.set('state', params.state)
-    if (params.definition_code) qs.set('definition_code', params.definition_code)
-    if (params.include_simulated) qs.set('include_simulated', 'true')
-    const query = qs.toString()
-    return request<InstanceInfo[]>(`/api/instances${query ? `?${query}` : ''}`)
-  },
-
-  instanceDetail: (id: string) => request<InstanceDetail>(`/api/instances/${id}`),
-
-  timeline: (id: string) => request<TimelineEntry[]>(`/api/instances/${id}/timeline`),
-
-  routeDecisions: (id: string) => request<RouteDecision[]>(`/api/instances/${id}/route-decisions`),
-
-  variableHistory: (id: string) => request<VariableChange[]>(`/api/instances/${id}/variable-history`),
 
   // —— 元数据下发(批 D:下拉辅助数据源) ——
 
@@ -120,116 +136,22 @@ export const api = {
   directorySummary: () =>
     request<DirectorySummary>('/api/directory/summary'),
 
-  // —— 排练(批 3):simulated 实例的人点驱动 ——
+  // —— 场景回归:脚本随定义同住目录(<code>.scenario.json),CI 跑同一份文件 ——
+  // 设计器只读运行;编辑与断言在 IDE/git 里做（见 ScenarioDialog 头注释）
 
-  startRehearsal: (
-    code: string,
-    spec: Spec,
-    variables: Record<string, unknown>,
-    startUser: string,
-  ) =>
-    request<RehearsalState>(`/api/definitions/${code}/rehearsal`, {
+  getScenario: (code: string) =>
+    request<{ file: string; name: string; script: Record<string, unknown> }>(
+      `/api/definitions/${encodeURIComponent(code)}/scenario`,
+    ),
+
+  runScenario: (code: string, script: Record<string, unknown>, spec?: Spec) =>
+    request<ScenarioReport>(`/api/definitions/${encodeURIComponent(code)}/scenarios/run`, {
       method: 'POST',
-      body: JSON.stringify({ spec, variables, start_user: startUser }),
-    }),
-
-  rehearsalStep: (instanceId: string, step: Record<string, unknown>) =>
-    request<RehearsalState>(`/api/rehearsals/${instanceId}/step`, {
-      method: 'POST',
-      body: JSON.stringify(step),
-    }),
-
-  rehearsalState: (instanceId: string) =>
-    request<RehearsalState>(`/api/rehearsals/${instanceId}`),
-
-  // —— 场景回归(批 4):脚本 CRUD + 运行 ——
-
-  listScenarios: (code: string) =>
-    request<ScenarioSummary[]>(`/api/definitions/${code}/scenarios`),
-
-  saveScenario: (code: string, body: Record<string, unknown>) =>
-    request<ScenarioSummary>(`/api/definitions/${code}/scenarios`, {
-      method: 'POST',
-      body: JSON.stringify(body),
-    }),
-
-  getScenario: (id: string) => request<ScenarioDetail>(`/api/scenarios/${id}`),
-
-  deleteScenario: (id: string) =>
-    request<{ deleted: string }>(`/api/scenarios/${id}`, { method: 'DELETE' }),
-
-  runScenario: (id: string, spec?: Spec) =>
-    request<ScenarioReport>(`/api/scenarios/${id}/run`, {
-      method: 'POST',
-      body: JSON.stringify(spec ? { spec } : {}),
-    }),
-
-  compareScenario: (id: string, spec?: Spec) =>
-    request<ScenarioCompare>(`/api/scenarios/${id}/compare`, {
-      method: 'POST',
-      body: JSON.stringify(spec ? { spec } : {}),
+      body: JSON.stringify(spec ? { script, spec } : { script }),
     }),
 }
 
-/** 排练步单(与后端 rehearsal_state 同构;报告/任务行字段按需读) */
-export type RehearsalTask = {
-  id: string
-  instance_id: string
-  activity_code: string
-  name: string
-  assignee: string
-  task_type: string
-  state: string
-  available_actions: string[]
-}
-
-export type RehearsalState = {
-  instance_id: string
-  instance: { id: string; state: string; definition_code: string; simulated?: boolean }
-  tasks: RehearsalTask[]
-  task_history: {
-    node: string
-    assignee: string
-    acted_by: string
-    outcome: string
-    comment: string
-    created_at: string
-  }[]
-  routes: { node: string; selected: string[]; edges: unknown[]; snapshot: unknown }[]
-  variables: Record<string, unknown>
-  variable_history: {
-    name: string
-    old: unknown
-    new: unknown
-    source: string
-    acted_by: string | null
-    changed_at: string
-  }[]
-  waiting: { node: string; instance_id: string }[]
-}
-
-export type ScenarioSummary = {
-  id: string
-  definition_code: string
-  name: string
-  description: string
-  step_count: number
-  assertion_count: number
-  last_ok: boolean | null
-  last_run_at: string | null
-  last_summary: string
-  updated_at: string
-}
-
-export type ScenarioDetail = ScenarioSummary & { script: Record<string, unknown> }
-
-/** 两版对比（草稿 vs 最新发布版）：任一侧失败为 null 或失败占位 */
-export type ScenarioCompare = {
-  draft: ScenarioReport | null
-  published: ScenarioReport | null
-  published_version: string | null
-}
-
+/** 场景运行报告（engine ScenarioReport 同构） */
 export type ScenarioReport = {
   scenario: string
   instance_id: string

@@ -1,9 +1,7 @@
-"""排练与场景回归（批 3/批 4）：交互驱动、步单快照、脚本运行、断言、覆盖。
+"""场景回归：脚本运行、断言、覆盖、快照。
 
-排练＝simulated 实例的人点驱动（真实任务行 + 真实动作面，隔离全同）；
-场景＝同一基座上的线性脚本（与演练剧本同构）——一份格式三个消费者
-（设计器面板 / CLI scenario run / 测试代码），Camunda「设计器用例=CI 用例」
-同款范式。
+场景＝simulated 实例上的线性脚本（与演练剧本同构）——一份格式两个消费者
+（CLI scenario run / 测试代码）。设计器只提供只读运行，编辑主场在 IDE 与 git。
 """
 
 from __future__ import annotations
@@ -12,7 +10,7 @@ import pytest
 
 from flowork.definitions.builder import FlowBuilder
 from flowork.definitions.definition import ProcessVariable
-from flowork.engine import rehearsal
+from flowork.engine import scenario_snapshot, scenario_steps
 from flowork.engine.config import EngineConfig
 from flowork.engine.engine import ProcessEngine
 from flowork.engine.scenario import parse_scenario, run_scenario
@@ -36,96 +34,6 @@ def _approval(engine: ProcessEngine, code: str = "reh") -> None:
         .connect("manager", "end")
     )
     engine.repository.deploy(flow.build())
-
-
-# —— 排练（批 3） ——
-
-
-def test_rehearsal_step_and_state(engine: ProcessEngine):
-    """步单快照四面板 + 人点一步：待办换了、已办记上、路由落行。"""
-    _approval(engine)
-    iid = rehearsal.start_rehearsal(engine, "reh", start_user="u_zhang")
-    state = rehearsal.rehearsal_state(engine, iid)
-    assert [t["activity_code"] for t in state["tasks"]] == ["submit"]
-    assert "complete" in state["tasks"][0]["available_actions"]
-    task_id = state["tasks"][0]["id"]
-    rehearsal.perform_rehearsal_step(
-        engine, iid, {"task_id": task_id, "action": "complete", "comment": "提交"}
-    )
-    state = rehearsal.rehearsal_state(engine, iid)
-    assert [t["activity_code"] for t in state["tasks"]] == ["manager"]
-    assert [(h["node"], h["outcome"], h["acted_by"]) for h in state["task_history"]] == [
-        ("submit", "agree", "u_zhang")
-    ]
-    assert any(row["node"] == "submit" and row["selected"] for row in state["routes"])
-
-
-def test_rehearsal_isolated_from_business_surfaces(engine: ProcessEngine):
-    """排练实例的任务不进业务待办（与模拟同款隔离）。"""
-    _approval(engine)
-    iid = rehearsal.start_rehearsal(engine, "reh", start_user="u_zhang")
-    assert engine.task.list_tasks() == []
-    assert [t["activity_code"] for t in rehearsal.rehearsal_state(engine, iid)["tasks"]] == [
-        "submit"
-    ]
-    assert engine.history.events(iid) == []
-
-
-def test_rehearsal_auto_claims_candidate_pool(engine: ProcessEngine):
-    """候选池任务（未认领）：排练者直接办理（认领是流程细节不是演练关卡）。"""
-    engine.repository.deploy(
-        FlowBuilder("rehcand")
-        .start()
-        .user_task("pick", candidate_users=["'u_x'"])
-        .end()
-        .connect("start", "pick")
-        .connect("pick", "end")
-        .build()
-    )
-    iid = rehearsal.start_rehearsal(engine, "rehcand")
-    task = rehearsal.rehearsal_state(engine, iid)["tasks"][0]
-    assert task["assignee"] == ""
-    rehearsal.perform_rehearsal_step(
-        engine, iid, {"task_id": task["id"], "action": "complete", "by": "u_x"}
-    )
-    assert engine.runtime.get_instance(iid).state == "completed"
-
-
-def test_rehearsal_wait_step(engine: ProcessEngine):
-    """等待步：按假设兑现冻结的等待节点（workbench 的等待不是死路）。"""
-    engine.repository.deploy(
-        FlowBuilder("rehwait")
-        .start()
-        .wait("w", message={"name": "paid", "correlation_key": "'K'"})
-        .user_task("after", assignee="'u_a'")
-        .end()
-        .connect("start", "w")
-        .connect("w", "after")
-        .connect("after", "end")
-        .build()
-    )
-    iid = rehearsal.start_rehearsal(engine, "rehwait")
-    state = rehearsal.rehearsal_state(engine, iid)
-    assert state["waiting"] == [{"node": "w", "instance_id": iid}]
-    rehearsal.perform_rehearsal_step(
-        engine, iid, {"kind": "wait", "node": "w", "result": "matched"}
-    )
-    assert [t["activity_code"] for t in rehearsal.rehearsal_state(engine, iid)["tasks"]] == [
-        "after"
-    ]
-
-
-def test_rehearsal_rejects_foreign_task(engine: ProcessEngine):
-    """跨实例任务拒绝（树校验）：排练者不能操作别的实例。"""
-    _approval(engine, "reh_a")
-    _approval(engine, "reh_b")
-    iid_a = rehearsal.start_rehearsal(engine, "reh_a")
-    iid_b = rehearsal.start_rehearsal(engine, "reh_b")
-    task_b = rehearsal.rehearsal_state(engine, iid_b)["tasks"][0]
-    with pytest.raises(FloworkError, match="不属于该排练实例"):
-        rehearsal.perform_rehearsal_step(
-            engine, iid_a, {"task_id": task_b["id"], "action": "complete"}
-        )
 
 
 # —— 场景回归（批 4） ——
@@ -314,40 +222,19 @@ def test_review_complete_consult_signature(engine: ProcessEngine):
         .connect("main", "end")
     )
     engine.repository.deploy(flow.build())
-    iid = rehearsal.start_rehearsal(engine, "rev_consult")
-    main = rehearsal.rehearsal_state(engine, iid)["tasks"][0]
-    rehearsal.perform_rehearsal_step(
+    iid = scenario_steps.start_run(engine, "rev_consult")
+    main = scenario_snapshot.scenario_state(engine, iid)["tasks"][0]
+    scenario_steps.perform_step(
         engine, iid, {"task_id": main["id"], "action": "consult", "users": ["u_c"], "by": "u_a"}
     )
-    consult = next(
-        t for t in rehearsal.rehearsal_state(engine, iid)["tasks"] if t["task_type"] == "consult"
-    )
+    tasks = scenario_snapshot.scenario_state(engine, iid)["tasks"]
+    consult = next(t for t in tasks if t["task_type"] == "consult")
     # 修复前：comment 被当 opinion 传 → 「只接受 agree/reject」拒绝
-    rehearsal.perform_rehearsal_step(
+    scenario_steps.perform_step(
         engine, iid, {"task_id": consult["id"], "action": "complete_consult", "by": "u_c"}
     )
-    rows = rehearsal.rehearsal_state(engine, iid)["task_history"]
+    rows = scenario_snapshot.scenario_state(engine, iid)["task_history"]
     assert any(r["outcome"] == "agree" and r["acted_by"] == "u_c" for r in rows)
-
-
-def test_review_rehearsal_rejects_real_instance(engine: ProcessEngine):
-    """P1：排练端点不得驱动真实实例（越权面）。"""
-    flow = (
-        FlowBuilder("rev_real")
-        .start()
-        .user_task("a", assignee="'u_a'")
-        .end()
-        .connect("start", "a")
-        .connect("a", "end")
-    )
-    engine.repository.deploy(flow.build())
-    real_id = engine.runtime.start_process("rev_real", start_user="u_real")
-    task = engine.task.list_tasks(instance_id=real_id)[0]
-    with pytest.raises(FloworkError, match="不是模拟实例"):
-        rehearsal.perform_rehearsal_step(
-            engine, real_id, {"task_id": task.id, "action": "complete"}
-        )
-    assert engine.task.list_tasks(instance_id=real_id)  # 真实待办未被动过
 
 
 def test_review_scenario_step_failure_not_green(engine: ProcessEngine):

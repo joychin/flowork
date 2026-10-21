@@ -17,18 +17,6 @@ const SIM_WAIT_OPTIONS: [string, string][] = [
   ['elapsed', '假设超时'],
 ]
 
-const ACTION_WORDS = [
-  'complete', 'reject', 'transfer', 'assist', 'consult', 'claim', 'unclaim',
-  'add_countersigner', 'complete_assist', 'complete_consult',
-]
-
-const DECISIONS_PLACEHOLDER = `[
-  {"node": "manager", "by": "u_manager", "action": "reject", "comment": "退回补充"},
-  {"node": "submit", "by": "u_zhang", "action": "complete", "variables": {"amount": 18000}}
-]`
-
-const STUBS_PLACEHOLDER = `{"score": {"score_val": 99}}`
-
 const OUTCOME_BADGES: Record<string, string> = {
   agree: '✓', reject: '✕', transfer: '⇄', auto_pass: '↷', withdrawn: '↩', assist_cancel: '−',
 }
@@ -41,8 +29,6 @@ type SimReport = SimulationReport & {
   stubs_applied?: string[]
   advanced_minutes?: number
 }
-
-const CLOCK_PLACEHOLDER = `[{"advance_minutes": 2880}]`
 
 const STATE_LABELS: Record<string, string> = {
   completed: '✓ 全图跑通,正常完结',
@@ -59,15 +45,17 @@ export function DryRunDialog() {
   const showToast = useStore((s) => s.showToast)
   const [tab, setTab] = useState<'route' | 'sim'>('route')
   const [varsText, setVarsText] = useState('{}')
+  // 发起人：initiator 是取人公式最常用的输入（manager_of(initiator) 是标准写法）；
+  // 缺省 simulator 不在组织目录里，取人解析会空——想验自定义取人函数必须能指定
+  const [startUser, setStartUser] = useState('')
   const [running, setRunning] = useState(false)
   const [parseError, setParseError] = useState<string | null>(null)
   // 等待节点预演假设(逐节点;缺省 auto=两面都试,reason 会标注假设)
   const [assumptions, setAssumptions] = useState<Record<string, string>>({})
-  // 完整模拟控制面:等待假设(逐节点 none/matched/elapsed) + 决策/桩/时钟(JSON)
+  // 完整模拟只保留等待假设(逐节点 none/matched/elapsed)。决策/桩/时钟属于
+  // 「写脚本」的活,主场是场景文件与 pytest——留在这里会让同一份 decisions
+  // JSON 有两处可写,其中一处关窗即丢。
   const [simWaits, setSimWaits] = useState<Record<string, string>>({})
-  const [decisionsText, setDecisionsText] = useState('')
-  const [stubsText, setStubsText] = useState('')
-  const [clockText, setClockText] = useState('')
   // 完整模拟(本地状态,不入全局——报告只属于本次试跑)
   const [sim, setSim] = useState<SimReport | null>(null)
   const waitNodes = (spec?.nodes ?? []).filter((n) => n.kind === 'wait')
@@ -108,49 +96,24 @@ export function DryRunDialog() {
     setRunning(false)
   }
 
-  const appendClock = (stepObj: Record<string, unknown>) => {
-    try {
-      const arr = clockText.trim() ? JSON.parse(clockText) : []
-      if (!Array.isArray(arr)) {
-        showToast('时钟推进必须是 JSON 数组')
-        return
-      }
-      setClockText(JSON.stringify([...arr, stepObj]))
-    } catch (err) {
-      showToast(`时钟推进 JSON 无效:${err instanceof Error ? err.message : String(err)}`)
-    }
-  }
-
   const runSim = async () => {
     const variables = parseVars()
     if (!variables) return
-    // 控制面四件(全可选):决策清单/桩/时钟=JSON 文本,等待假设=逐节点下拉
-    let decisions: unknown
-    let stubs: unknown
-    let clock: unknown
-    try {
-      decisions = decisionsText.trim() ? JSON.parse(decisionsText) : undefined
-      stubs = stubsText.trim() ? JSON.parse(stubsText) : undefined
-      clock = clockText.trim() ? JSON.parse(clockText) : undefined
-    } catch (err) {
-      showToast(`控制面 JSON 无效:${err instanceof Error ? err.message : String(err)}`)
-      return
-    }
     const waits: Record<string, string> = {}
     for (const [node, value] of Object.entries(simWaits)) {
       if (value === 'matched' || value === 'elapsed') waits[node] = value
     }
-    const parts: Record<string, unknown>[] = []
-    if (decisions !== undefined) parts.push({ decisions })
-    if (stubs !== undefined) parts.push({ stubs })
-    if (clock !== undefined) parts.push({ clock })
-    if (Object.keys(waits).length > 0) parts.push({ waits })
-    const controls = parts.length > 0 ? Object.assign({}, ...parts) : undefined
     setRunning(true)
     setSim(null)
     try {
       // 主场景=当前草稿(含未保存编辑):证据先于发布,无需先保存
-      const report = await api.simulate(defInfo.code, spec, variables, controls)
+      const report = await api.simulate(
+        defInfo.code,
+        spec,
+        variables,
+        Object.keys(waits).length > 0 ? { waits } : undefined,
+        startUser.trim() || undefined,
+      )
       setSim(report)
     } catch (err) {
       showToast(`模拟失败:${err instanceof Error ? err.message : String(err)}`)
@@ -179,10 +142,22 @@ export function DryRunDialog() {
         )}
         {tab === 'sim' && (
           <p className="modal-sub">
-            引擎真跑整图:待办由<b>机器人全通过</b>(或按下方决策清单扮演办理人)、service_task 以桩替代、
-            等待节点可按假设兑现 — <b>零副作用</b>(不发事件、不进实例列表)。条件按样例值<b>真求值</b>,
-            当前草稿即跑,<b>无需先发布</b>。
+            引擎真跑整图:待办由<b>机器人全通过</b>、service_task 以桩替代、等待节点可按假设兑现 —
+            <b>零副作用</b>。条件按样例值<b>真求值</b>,当前草稿即跑,<b>无需先发布</b>。
+            需要指定每一步谁怎么办(驳回/转办/推钟),请写场景脚本——那是唯一去处。
           </p>
+        )}
+
+        {tab === 'sim' && (
+          <div className="var-row">
+            <span className="dryrun-node">发起人</span>
+            <input
+              value={startUser}
+              placeholder="留空＝simulator（不在组织目录里，取人公式可能解析空）"
+              onChange={(e) => setStartUser(e.target.value)}
+              title="initiator 保留标识符的取值：取人公式 manager_of(initiator) 等依赖它"
+            />
+          </div>
         )}
 
         {declared.length > 0 && (
@@ -226,7 +201,7 @@ export function DryRunDialog() {
 
         {tab === 'sim' && (
           <div className="dryrun-assumptions">
-            <div className="dryrun-assumptions-title">模拟控制(可选):给了决策清单即禁用机器人,未覆盖的待办停在「待决策点」</div>
+            <div className="dryrun-assumptions-title">等待假设(可选,不设=冻结为卡点)</div>
             {waitNodes.length > 0 && (
               <div className="dryrun-assumptions-title" style={{ fontWeight: 400 }}>
                 等待节点假设(不设=冻结为卡点)
@@ -245,44 +220,6 @@ export function DryRunDialog() {
                 </select>
               </div>
             ))}
-            <div className="var-row" style={{ alignItems: 'flex-start', flexDirection: 'column', gap: 4 }}>
-              <span className="dryrun-node">决策清单(JSON,按序扮演;动作词表:{ACTION_WORDS.join('/')} )</span>
-              <textarea
-                className="json-area"
-                rows={4}
-                spellCheck={false}
-                placeholder={DECISIONS_PLACEHOLDER}
-                value={decisionsText}
-                onChange={(e) => setDecisionsText(e.target.value)}
-              />
-            </div>
-            <div className="var-row" style={{ alignItems: 'flex-start', flexDirection: 'column', gap: 4 }}>
-              <span className="dryrun-node">
-                虚拟时钟(JSON 数组,按序推钟;到期定时用真实策略兑现 — 超时改派/自动通过/实例时限)
-                <button className="btn" style={{ marginLeft: 8, padding: '0 6px' }} onClick={() => appendClock({ advance_minutes: 60 })}>+1小时</button>
-                <button className="btn" style={{ marginLeft: 4, padding: '0 6px' }} onClick={() => appendClock({ advance_minutes: 1440 })}>+1天</button>
-                <button className="btn" style={{ marginLeft: 4, padding: '0 6px' }} onClick={() => appendClock({ advance_to_next_event: true })}>下一事件</button>
-              </span>
-              <textarea
-                className="json-area"
-                rows={2}
-                spellCheck={false}
-                placeholder={CLOCK_PLACEHOLDER}
-                value={clockText}
-                onChange={(e) => setClockText(e.target.value)}
-              />
-            </div>
-            <div className="var-row" style={{ alignItems: 'flex-start', flexDirection: 'column', gap: 4 }}>
-              <span className="dryrun-node">桩返回值(JSON:{"{节点: 变量对象}"},注入后下游条件真求值)</span>
-              <textarea
-                className="json-area"
-                rows={3}
-                spellCheck={false}
-                placeholder={STUBS_PLACEHOLDER}
-                value={stubsText}
-                onChange={(e) => setStubsText(e.target.value)}
-              />
-            </div>
           </div>
         )}
 
