@@ -148,3 +148,31 @@ def test_anticipate_rejects_unavailable_task(engine: ProcessEngine):
         engine.task.anticipate(
             engine.task.list_tasks(instance_id=instance_id)[0].id, outcome="transfer"
         )
+
+
+def test_anticipate_treats_wait_as_blocking():
+    """wait 是硬阻塞（2026-10-21 内核 review P1-4 回归）。
+
+    修前 waiting_specs 漏 WaitSpec：下游有等待节点时误报
+    node_exit/instance_complete 均为 True。
+    """
+    from flowork.definitions.builder import FlowBuilder
+    from flowork.engine.engine import ProcessEngine
+
+    local = ProcessEngine()
+    local.repository.deploy(
+        FlowBuilder("ant_wait")
+        .start()
+        .user_task("a", assignee="'u1'")
+        .wait("w", timeout={"after_minutes": 60})
+        .end()
+        .connect("start", "a")
+        .connect("a", "w")
+        .connect("w", "end")
+        .build()
+    )
+    iid = local.runtime.start_process("ant_wait", start_user="u1")
+    task = local.task.list_tasks(instance_id=iid)[0]
+    result = local.task.anticipate(task.id, "agree")
+    assert result.node_exit is True  # a 本身可完结
+    assert result.instance_complete is False  # 但 w 还要等 60 分钟

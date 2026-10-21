@@ -71,7 +71,13 @@ class TaskReworkMixin:
         history = ctx.session.scalars(
             select(TaskHistoryRow).where(TaskHistoryRow.task_id == task_id)
         ).first()
-        if history is None or history.outcome != "agree" or history.acted_by != actor:
+        from flowork.tasks.candidates import person_key
+
+        if (
+            history is None
+            or history.outcome != "agree"
+            or person_key(history.acted_by) != person_key(actor)
+        ):
             raise TaskNotAvailableError(f"任务不可撤回（未办理/非本人/非同意）：{task_id}")
         instance = self._instance(ctx, history.instance_id)
         if instance.state != InstanceState.RUNNING.value:
@@ -85,13 +91,20 @@ class TaskReworkMixin:
         # 不拦合法撤票。
         from flowork.persistence.orm import TaskRow
 
-        own_live = ctx.session.scalars(
-            select(TaskRow).where(
-                TaskRow.instance_id == instance.id,
-                TaskRow.activity_code == history.activity_code,
-                TaskRow.assignee == history.assignee,
-            )
-        ).first()
+        own_live = next(
+            (
+                row
+                for row in ctx.session.scalars(
+                    select(TaskRow).where(
+                        TaskRow.instance_id == instance.id,
+                        TaskRow.activity_code == history.activity_code,
+                    )
+                )
+                # person_key 互认：user: 前缀与裸 id 是同一人（claim/候选同口径）
+                if person_key(row.assignee) == person_key(history.assignee)
+            ),
+            None,
+        )
         if own_live is not None:
             raise TaskNotAvailableError(
                 f"节点 {history.activity_code} 已有你的在办待办（上次撤回已生效），"
@@ -149,7 +162,7 @@ class TaskReworkMixin:
                     "串行会签节点的已办暂不支持撤回（轮次已交棒）：请使用驳回"
                 )
             original_token.approve_count = max(0, original_token.approve_count - 1)
-            kernel.create_task(
+            new_task = kernel.create_task(
                 ctx.session,
                 instance,
                 original_token,
@@ -158,6 +171,12 @@ class TaskReworkMixin:
                 name=history.name,
             )
             ctx.session.flush()
+            # 时限随票回来（2026-10-21 内核 review P1-3）：原任务归档不删 Job，
+            # 按旧任务 id 寻 Job 重绑到重建待办（串行换棒同款）——修前重建待办
+            # due_at 为 None、旧 Job 到期指向已归档任务被静默 skipped，SLA 消失
+            from flowork.tasks.deadlines import carry_deadline_jobs_of
+
+            carry_deadline_jobs_of(ctx.session, task_id, instance.id, new_task)
             kernel.record_event(
                 DomainEvent.TASK_WITHDRAWN,
                 {
@@ -206,11 +225,7 @@ class TaskReworkMixin:
         否则撤回等于一次没有驳回留痕的隐式整体驳回。进展判据两条：
         ① 下游存在表决行（表决行口径——协办/咨询/自动
         通过不算进展；branch/cc/service 不产生任务历史天然只统计人工办理）；
-        ② 下游**工作节点**（user_task/call_activity）存在已完结令牌——穿透节点
-        （branch/cc_task/start/end）的即时完结**不拦**，对齐穿透型节点不拦的行业口径（pilot
-        leave 实证：branch 即刻完结曾误拦）；判据②同时覆盖「节点整体完成
-        （含出口自动通过）」的进展。判据保守方向：不评条件，未命中分支上的
-        人工进展同样拦截。行业零实现，flowork 首创。
+        ② 下游**工作节点**（行为契约 counts_as_progress）存在已完结令牌。
         """
         from sqlalchemy import select
 
@@ -236,12 +251,20 @@ class TaskReworkMixin:
         ):
             progressed.append(f"节点 {row.activity_code} 由 {row.assignee} 办理（{row.outcome}）")
         if not progressed:
-            work_kinds = {"user_task", "call_activity"}
+            # 判据②：下游**工作节点**（行为契约 counts_as_progress——
+            # user_task/call_activity）存在已完结令牌——穿透节点（branch/cc_task/
+            # start/end）的即时完结**不拦**，对齐穿透型节点不拦的行业口径（pilot
+            # leave 实证：branch 即刻完结曾误拦）；判据②同时覆盖「节点整体完成
+            # （含出口自动通过）」的进展。判据保守方向：不评条件，未命中分支上的
+            # 人工进展同样拦截。行业零实现，flowork 首创。
             for token in kernel.tokens(ctx.session, instance.id):
                 if token.state != _State.FINISHED.value or token.activity_code not in codes:
                     continue
                 node = definition.node(token.activity_code)
-                if node is not None and node.kind in work_kinds:
+                if node is None:
+                    continue
+                behavior_cls = kernel.registry.behavior_cls(node.kind)
+                if getattr(behavior_cls, "counts_as_progress", False):
                     progressed.append(f"节点 {token.activity_code} 已完结（令牌）")
         if progressed:
             raise TaskNotAvailableError(

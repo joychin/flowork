@@ -23,6 +23,7 @@ class UserTaskBehavior(NodeBehavior):
     """人工审批节点：进入时解析参与者并生成待办；完成判定走会签计数。"""
 
     owns_pending_tasks = True  # 名下有待办域（D4 出口不可达兜卫适用）
+    counts_as_progress = True  # 人工办理完结＝进展（撤回闸门判据②）
 
     def on_enter(self, ctx: NodeContext) -> None:
         assert isinstance(ctx, RuntimeNodeContext)

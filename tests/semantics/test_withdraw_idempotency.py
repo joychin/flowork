@@ -134,3 +134,19 @@ def test_withdraw_once_per_vote_even_if_rebuilt_task_moved():
     withdrawn = [e for e in engine.history.events(instance_id) if e.event_name == "task_withdrawn"]
     assert len(withdrawn) == 1, "同一票的 task_withdrawn 只可一次"
     assert token.approve_count == 0, "票数回退恰一次"
+
+
+def test_withdraw_actor_user_prefix_interop():
+    """撤回归因人 person_key 互认（2026-10-21 内核 review P2 回归）。
+
+    修前裸字符串比较：user:bob 办的票 bob 撤不掉（claim/候选早已互认）。
+    """
+    engine = _serial_engine()
+    iid = engine.runtime.start_process("wd_serial", start_user="u_s")
+    a = engine.task.list_tasks(instance_id=iid)[0]
+    engine.task.complete(a.id, actor="user:u1")
+    with pytest.raises(TaskNotAvailableError):
+        engine.task.withdraw(a.id, actor="u2")
+    # 裸 id 撤回 user: 前缀办理的票：同一人，应成功
+    revived = engine.task.withdraw(a.id, actor="u1")
+    assert revived.activity_code == "a"

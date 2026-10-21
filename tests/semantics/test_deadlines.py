@@ -763,3 +763,45 @@ def test_deadline_strategy_defers_on_frozen_instance_race_window():
     history = engine.history.task_history(instance_id)
     assert any(h.assignee == "u_p1" and h.acted_by == "system:timeout" for h in history)
     _ = task
+
+
+def test_withdraw_vote_revert_carries_deadline():
+    """撤票回退分支时限随票回来（2026-10-21 内核 review P1-3 回归）。
+
+    修前重建待办不 carry：due_at=None、旧 timer Job 仍指向已归档任务，
+    到期被策略静默 skipped——被撤回那一票的 SLA 消失（transfer/串行换棒
+    的同类修复漏了这条分支）。
+    """
+    from flowork.definitions.builtin import MultiInstance
+    from flowork.persistence.orm import JobRow
+
+    engine, _clock = build_engine()
+    deploy(
+        engine,
+        FlowBuilder("wd_carry")
+        .start()
+        .user_task(
+            "cs",
+            assignees=["'v1'", "'v2'"],
+            multi_instance=MultiInstance(mode="parallel"),
+            deadlines=[TaskDeadline(after_minutes=15, action="reassign", reassign_to="'v3'")],
+        )
+        .end()
+        .connect("start", "cs")
+        .connect("cs", "end")
+        .build(),
+    )
+    instance_id = engine.runtime.start_process("wd_carry", start_user="u_s")
+    v1 = next(t for t in engine.task.list_tasks(instance_id=instance_id) if t.assignee == "v1")
+    engine.task.complete(v1.id, actor="v1")
+
+    revived = engine.task.withdraw(v1.id, actor="v1")
+
+    assert revived.due_at is not None, "重建待办须带 due_at（carry 自旧任务 Job）"
+    with engine.session_factory() as session:
+        pending = session.scalars(
+            select(JobRow).where(JobRow.instance_id == instance_id, JobRow.state == "scheduled")
+        ).all()
+    rebound = [job for job in pending if job.payload.get("task_id") == revived.id]
+    assert rebound, f"timer Job 应重绑到重建待办：{[(j.payload, j.state) for j in pending]}"
+    assert all(job.payload.get("task_id") != v1.id for job in pending)

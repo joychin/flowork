@@ -41,7 +41,7 @@ class AnticipateMixin:
         return result
 
     def _anticipate(self, ctx: CommandContext, task_id: str, outcome: str) -> AnticipateResult:
-        from flowork.definitions.builtin import CallActivitySpec, EndSpec, UserTaskSpec
+        from flowork.definitions.builtin import CallActivitySpec, EndSpec, UserTaskSpec, WaitSpec
         from flowork.engine.routing import evaluation_variables, select_outgoing
         from flowork.expr.context import expression_functions_of
         from flowork.persistence.orm import TaskRow as _TaskRow
@@ -119,7 +119,9 @@ class AnticipateMixin:
                     functions=functions,
                 )
             ]
-        waiting_specs = (UserTaskSpec, CallActivitySpec)
+        # wait 与 user_task/call_activity 同级硬阻塞（2026-10-21 内核 review P1-4：
+        # 修前漏收——下游有等待节点时误报 instance_complete=True）
+        waiting_specs = (UserTaskSpec, CallActivitySpec, WaitSpec)
         complete = True
         seen: set[str] = set()
         frontier = list(targets)

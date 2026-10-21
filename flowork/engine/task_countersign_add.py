@@ -66,7 +66,9 @@ class TaskCountersignAddMixin:
     ) -> list[TaskInfo]:
         """加签：向当前令牌追加会签人（item_count 同步增加，新待办立即生成）。
 
-        前加签/后加签在并签池中语义等价（均需完成）；串行场景按剩余顺序排队。
+        前加签/后加签在并签池中语义等价（均需完成）。串行会签上同款**立即并行**
+        生成（2026-10-21 内核 review P2 改口：原「按剩余顺序排队」与实现不符；
+        顺序排队语义挂 backlog）。
         """
         result: list[TaskInfo] = self._engine.execute(
             lambda ctx: self._add_countersigner(ctx, task_id, users, actor, comment)
@@ -141,11 +143,14 @@ class TaskCountersignAddMixin:
 
         active = {
             person_key(assignee)
-            for assignee in ctx.session.scalars(
-                select(_TaskRow.assignee).where(
+            for assignee, task_type in ctx.session.execute(
+                select(_TaskRow.assignee, _TaskRow.task_type).where(
                     _TaskRow.token_id == task.token_id, _TaskRow.state == "ready"
                 )
             )
+            # 只数审批任务（2026-10-21 内核 review P2）：同人作为协办/咨询受理人
+            # 在办不算「已在会签名单」——同人不同角色被误拒
+            if task_type == "approval"
         }
         duplicates = sorted({user for user in users if person_key(user) in active})
         if duplicates:

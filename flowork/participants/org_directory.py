@@ -173,9 +173,28 @@ class OrgDirectory:
         return str(parent) if parent else None
 
     def users_with_role(self, role: str, *, within: str | None = None) -> list[str]:
+        """按角色取人；within＝部门子树过滤（2026-10-21 内核 review P2：
+        修前静默忽略 within——按部门取人拿到全组织名单）。"""
+        scope = (
+            {within, *self._descendant_departments(within)} if within is not None else None
+        )
         return [
-            user_id for user_id, info in self.users.items() if role in (info.get("roles") or [])
+            user_id
+            for user_id, info in self.users.items()
+            if role in (info.get("roles") or [])
+            and (scope is None or (info.get("department") or "") in scope)
         ]
+
+    def _descendant_departments(self, department: str) -> set[str]:
+        seen: set[str] = set()
+        frontier = [department]
+        while frontier:
+            current = frontier.pop()
+            for child in self._child_departments(current):
+                if child not in seen:
+                    seen.add(child)
+                    frontier.append(child)
+        return seen
 
     def users_in_department(self, department: str, *, recursive: bool = False) -> list[str]:
         result = [

@@ -9,6 +9,11 @@
 2. 继承 NodeBehavior 覆写需要的钩子；
 3. ``node_registry.register(kind, spec_cls, behavior_cls)`` —— 引擎核心零改动。
 
+注意（扩展盲区，2026-10-21 内核 review P2 成文）：设计期静态检查
+（validator 的表达式位点清单）只覆盖**内置 kind** 的表达式字段——自定义
+kind 上承载的 CEL 字段不做语法/引用/位点检查，公式问题只在运行期暴露。
+自定义节点的表达式请在行为内自行求值并处理错误（EngineExecutionError 归因）。
+
 上下文：钩子统一接收 ``NodeContext``；引擎实际传入 ``RuntimeNodeContext``
 （含内核服务）。需要内核服务（建任务/完成实例等）的行为在钩子内以
 ``assert isinstance(ctx, RuntimeNodeContext)`` 收窄类型（类型与运行时双保险）。
@@ -68,6 +73,11 @@ class NodeBehavior:
     # 本类节点在真实运行中执行外部副作用（handler/外部调用）——
     # 模拟试跑恒 stub（绝不执行），报告据此列 stub 清单。kind 知识住在行为里。
     performs_external_work: bool = False
+
+    # 本类节点完结＝人工/业务进展（撤回下游闸门判据②；user_task/call_activity）。
+    # 穿透型节点（branch/cc_task/start/end）即使即时完结也不算进展——
+    # kind 知识住在行为里，引擎核心不得出现 kind 集合分支。
+    counts_as_progress: bool = False
 
     def __init__(self, spec: FlowNode) -> None:
         self.spec = spec

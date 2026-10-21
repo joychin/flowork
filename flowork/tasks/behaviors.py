@@ -127,6 +127,8 @@ class ServiceTaskBehavior(NodeBehavior):
 class CallActivityBehavior(NodeBehavior):
     """子流程节点（完整数据映射在 M5；M1 占位：同步启动子实例并等待）。"""
 
+    counts_as_progress = True  # 子流程完结＝进展（撤回闸门判据②）
+
     def on_enter(self, ctx: NodeContext) -> None:
         from flowork.engine.subprocess_support import start_sub_process
 

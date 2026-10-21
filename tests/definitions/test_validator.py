@@ -762,9 +762,9 @@ def test_non_dict_node_and_typed_field_error_are_definition_error(registry):
     修前非 dict 节点裸抛 AttributeError、字段类型错裸抛 pydantic
     ValidationError——REST/MCP 传输面变 500。
     """
-    from flowork.errors import DefinitionError
-    from flowork.definitions.definition import load_definition
     from flowork.definitions.builder import FlowBuilder
+    from flowork.definitions.definition import load_definition
+    from flowork.errors import DefinitionError
 
     spec = FlowBuilder("t").start().end().connect("start", "end").build(registry)
     data = spec.model_dump(mode="json")

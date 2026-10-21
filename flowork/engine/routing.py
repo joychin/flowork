@@ -97,8 +97,9 @@ def _select(
     defaults = [flow for flow in outgoing if flow.is_default]
 
     if not conditional:
-        # 纯无条件出边（含 default 视同无条件）：全部激活（并行/直通）
-        return unconditional if not defaults else list(unconditional)
+        # 纯无条件出边（含 default 视同无条件）：全部激活（并行/直通）——
+        # default ⊆ unconditional，无需分支（2026-10-21 内核 review P2：死三元）
+        return list(unconditional)
 
     matched = _match_in_order(conditional, variables, functions, audit)
     if mode == "first_match":

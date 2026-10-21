@@ -149,7 +149,9 @@ def test_node_field_type_error_is_422_not_500(client: TestClient, workdir: Path)
     (workdir / "typed.json").write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
     response = client.get("/api/files/typed.json")
     assert response.status_code == 422
-    assert "定义结构不合法" in response.json()["detail"]
+    # 归一后由 _resolve_node 直接给出节点级定位（2026-10-21 review 批 2：
+    # ValidationError 包装下沉内核，三传输面同一消息形态）
+    assert "节点结构不合法（kind=user_task）" in response.json()["detail"]
 
 
 @pytest.mark.parametrize("name", ["../escape.json", "..", ".hidden.json", "a.txt"])
