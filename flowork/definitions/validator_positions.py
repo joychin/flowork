@@ -76,7 +76,10 @@ def iter_expression_positions(definition: ProcessDefinition) -> Iterator[tuple[s
     静态不可知其变量，跳过未声明变量检查）。task.* 在 reassign 与 exit 位可用。
     """
     for flow in definition.flows:
-        if flow.condition:
+        # is not None 而非真值：空串条件要进位让 condition.empty 规则拦下
+        # （2026-10-21 内核 review P1-1——修前 "" 既不是无条件也不是可求值条件，
+        # 校验零错误、首次路由即挂起实例）
+        if flow.condition is not None:
             yield "condition", flow.flow_code(), flow.condition, flow.source
     for node in definition.nodes:
         if node.kind == KIND_USER_TASK:

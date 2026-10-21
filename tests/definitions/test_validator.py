@@ -697,3 +697,23 @@ def test_parallel_duplicate_edge_rejected(registry):
         .build()
     )
     assert "structure.flow.duplicate" in error_rules(definition, registry)
+
+
+def test_empty_string_condition_is_design_time_error(registry):
+    """空串条件在校验期拦下（2026-10-21 内核 review P1-1 回归）。
+
+    修前 ``condition=""`` 是 falsy，condition.empty 规则对条件位不可达：
+    校验零错误、deploy 成功，首次路由即「公式为空」挂起实例。
+    """
+
+    definition = (
+        FlowBuilder("t")
+        .start()
+        .branch("g")
+        .end()
+        .connect("start", "g")
+        .flow("g", "end", condition="")
+        .build(registry)
+    )
+    rules = error_rules(definition, registry)
+    assert "condition.empty" in rules
