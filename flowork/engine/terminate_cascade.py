@@ -114,6 +114,7 @@ def cascade_terminate(
             resolution = f"instance_{end_status}"
             incident.state = "resolved"
             incident.resolution = resolution
+            incident.resolved_at = kernel.engine.config.now()
             kernel.record_event(
                 DomainEvent.INCIDENT_RESOLVED,
                 {"incident_id": incident.id, "action": resolution, "actor": actor},

@@ -270,6 +270,9 @@ class IncidentRow(Base):
     instance_id: Mapped[str] = mapped_column(String(36))
     message: Mapped[str] = mapped_column(Text)
     error_class: Mapped[str] = mapped_column(String(100), default="")
+    # 故障节点定位（错误归因帧标注；无节点作用域的故障为 NULL）——
+    # skip 处置只砍该节点的令牌，靠它圈定手术范围
+    activity_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
     state: Mapped[str] = mapped_column(String(16), default="open")  # open/resolved
     resolution: Mapped[str] = mapped_column(Text, default="")  # resume/cancel/retry/skip/fail
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)

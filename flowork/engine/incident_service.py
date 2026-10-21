@@ -88,6 +88,7 @@ class IncidentMixin:
                     instance_id=instance_id,
                     message=str(error),
                     error_class=type(error).__name__,
+                    activity_code=getattr(error, "activity_code", None),
                 )
             )
             if instance is not None and instance.state == InstanceState.RUNNING.value:
@@ -135,6 +136,7 @@ class IncidentMixin:
                     "instance_id": row.instance_id,
                     "message": row.message,
                     "error_class": row.error_class,
+                    "activity_code": row.activity_code,
                     "state": row.state,
                     "resolution": row.resolution,
                 }
@@ -206,6 +208,7 @@ class IncidentMixin:
                 raise ValueError(f"未知修复动作：{action}（支持 resume/cancel/retry/skip/fail）")
             incident.state = "resolved"
             incident.resolution = action
+            incident.resolved_at = self._engine.config.now()
             # 订阅方据此后撤告警/统计
             self._engine.kernel_for(ctx).record_event(
                 DomainEvent.INCIDENT_RESOLVED,
