@@ -104,6 +104,12 @@
 
 ### 批 4 · 场景回归（脚本 + 断言 + 存储 + CI）✅ 已落地（2026-10-16）
 
+
+> **存储形态已被取代（2026-10-21）**：场景不再落库（wf_designer_scenario 表
+> 已随 0009 迁移删除），文件事实源形态为 ``<code>.scenario.json`` 随定义同目录
+> （engine/scenario_store.py 退役）；本节 DB 存储设计仅存档。
+
+
 - **场景格式**：剧本 steps + controls + assertions；断言=业务效果口径（终态/到访/未到访/任务行存在/变量值/路由选中边），期望值支持字面量+CEL 表达式；`$schema` 版本化（如 flowork-scenario/1）。
 - **运行器**：`run_scenario(定义, 场景)` → 逐步结果+断言红绿（复用批 1/2 的执行器）；web `POST /api/definitions/{code}/scenarios/run`；CLI `flowork scenario run <定义> <场景文件>`（CI 口，退出码非零即失败）。
 - **存储**：`wf_designer_scenario` 表（迁移）；designer 场景面板（列表/存/跑/红绿/最近一次结果与时刻）。

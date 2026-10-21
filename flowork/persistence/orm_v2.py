@@ -135,27 +135,3 @@ class RouteDecisionRow(Base):
     selected: Mapped[list[Any]] = mapped_column(JSON, default=list)
     snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
-
-
-class DesignerScenarioRow(Base):
-    """设计器场景（可复跑脚本：steps + controls + assertions）。
-
-    设计器专属持久化（与 wf_designer_draft 同域）：场景是审阅资产不是引擎
-    定义。name 是展示名；script 为语义 JSON（不混布局坐标——场景没有画布）。
-    last_* 三列记最近一次运行的结论（红绿/时刻/失败摘要），供列表预览；
-    完整报告不落库（现查重跑即可，报告可能很大）。
-    """
-
-    __tablename__ = "wf_designer_scenario"
-    __table_args__ = (Index("ix_scenario_code", "definition_code", "name"),)
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    definition_code: Mapped[str] = mapped_column(String(100))
-    name: Mapped[str] = mapped_column(String(200), default="")
-    description: Mapped[str] = mapped_column(Text, default="")
-    script: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
-    last_ok: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
-    last_run_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    last_summary: Mapped[str] = mapped_column(Text, default="")
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now)

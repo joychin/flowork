@@ -284,9 +284,6 @@ from flowork.persistence.orm_v2 import (
     DesignerDraftRow as DesignerDraftRow,
 )
 from flowork.persistence.orm_v2 import (
-    DesignerScenarioRow as DesignerScenarioRow,
-)
-from flowork.persistence.orm_v2 import (
     MessageBufferRow as MessageBufferRow,
 )
 from flowork.persistence.orm_v2 import (
