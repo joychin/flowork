@@ -53,8 +53,22 @@ from flowork.engine.simulation import SimulationReport
 from flowork.engine.simulation_controls import SimulationControls, parse_controls
 from flowork.engine.simulation_runner import drive_simulation
 from flowork.engine.task_service import TaskService
+
+# 会从公开方法逃逸的错误族（2026-10-21 内核 review P1-8：宿主按纪律只能
+# from flowork.api import——修前 EngineExecutionError/InputContractError/
+# LockConflictError（唯一「可重试」信号）等不在门面，宿主只能捕基类再解析
+# 消息文本；REST 插件自己靠类名字符串表绕）。
+from flowork.definitions.contract import InputContractError
+from flowork.engine.errors import (
+    EngineExecutionError,
+    NoParticipantError,
+    ParticipantCountMismatchError,
+    ParticipantLimitError,
+)
+from flowork.engine.ops import LockConflictError
 from flowork.errors import (
     ConditionError,
+    DefinitionConflictError,
     DefinitionError,
     DefinitionNotPublishedError,
     DefinitionRetiredError,
@@ -66,6 +80,7 @@ from flowork.errors import (
     UnknownHandler,
     UnknownNodeKind,
 )
+from flowork.participants.org_directory import OrgConfigError
 
 # 事件消费帮手与事件名枚举：outbox
 # 只写不消费的现状下，宿主消费侧的至少一次分发 + 按 id 幂等去重参考实现；
@@ -106,20 +121,31 @@ from flowork.tasks.action_steps import (
     dispatch_task_action,
     find_pending_task,
 )
+
+# 公开方法的返回模型（同 P1-8：宿主标注返回类型不再需要深路径 import——
+# 投影纪律声明深路径不稳定）。
+from flowork.definitions.versioning import VersionVerdict
+from flowork.engine.history_service import Page
+from flowork.engine.history_trace import TraceEntry
+from flowork.engine.variable_actions import VariableChangeInfo
 from flowork.tasks.models import (
+    AnticipateResult,
     EventInfo,
     InstanceInfo,
+    RouteDecisionInfo,
     TaskCompleteResult,
     TaskHistoryInfo,
     TaskInfo,
+    TokenInfo,
 )
 
 API_VERSION: Final = "1"
 
 __all__ = [
     "API_VERSION",
-    "KNOWN_TASK_ACTIONS",
+    "AnticipateResult",
     "ConditionError",
+    "DefinitionConflictError",
     "DefinitionError",
     "DefinitionNotPublishedError",
     "DefinitionRetiredError",
@@ -128,6 +154,7 @@ __all__ = [
     "DomainEvent",
     "DuplicateStartError",
     "EngineConfig",
+    "EngineExecutionError",
     "EventInfo",
     "ExpressionFunction",
     "ExpressionFunctions",
@@ -140,6 +167,7 @@ __all__ = [
     "HistoryService",
     "IdempotentSink",
     "InMemoryNodeContext",
+    "InputContractError",
     "InstanceInfo",
     "InstanceNotFoundError",
     "InstanceState",
@@ -149,18 +177,26 @@ __all__ = [
     "JobClaim",
     "JobService",
     "JobStateError",
+    "KNOWN_TASK_ACTIONS",
+    "LockConflictError",
     "MessageService",
     "MultiInstance",
+    "NoParticipantError",
     "NodeBehavior",
     "NodeContext",
     "NodeRegistry",
     "NotFoundError",
+    "OrgConfigError",
     "OrgDirectoryLike",
     "OutboxConsumer",
+    "Page",
+    "ParticipantCountMismatchError",
+    "ParticipantLimitError",
     "ProcessDefinition",
     "ProcessEngine",
     "ProcessVariable",
     "RepositoryService",
+    "RouteDecisionInfo",
     "RouteMode",
     "RuntimeService",
     "ScenarioReport",
@@ -172,10 +208,14 @@ __all__ = [
     "TaskInfo",
     "TaskNotAvailableError",
     "TaskService",
+    "TokenInfo",
     "TokenState",
+    "TraceEntry",
     "UnknownHandler",
     "UnknownNodeKind",
     "ValidateIssue",
+    "VariableChangeInfo",
+    "VersionVerdict",
     "create_registry",
     "dispatch_task_action",
     "drive_simulation",
