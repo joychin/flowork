@@ -874,3 +874,19 @@ assembly、REST state 白名单、jobs/activate async、%00/文件权限/会话�
 挂账 backlog：串行会签加签排队语义、list_instances 双 API 合并、CLI 面扩容、
 start_on_message 声明解析缓存、history created_at 时钟统一（冻结钟平局次键）、
 _binary_op_count 护栏口径、trace 200 条截断参数化。
+
+**取人专项+subagent 对打批（2026-10-24，三提交 4195e77/a8b2e1f/a0843ac；1295 测试全绿五道门全过）**：
+无真实系统检验缺口的第一次实操——确定性取人探针（24 用例全过：四层组织/一人多角色/
+一角色多人/委托四态/空角色/候选池/变量驱动，脚本 out/persona/probe_run.py）+ 真实部署
+（uvicorn+SQLite+FLOWORK_ORG）上 subagent 角色对打（zhang_san/fin1/fin2 完整角色+被掐
+agent 部分操作，三笔报销全链走完账本干净）。产出 FINDINGS（out/persona/FINDINGS.md）：
+**P1 已修**——manager_of('org:部门') 三面矛盾（词汇/运行时支持 vs 设计期拦死），
+string_literals 增 outside_calls（AST 函数参数位豁免）、展开型词汇防呆保留；
+**REST 三面同构欠账已修**——consult 族四动作（spec §11 全集对齐）+tasks/history/search
+（state=completed 恒空死档：终态行即删入历史表）+GET instances/{id}；state 词表收窄
+ready|null（422 指路）；**宿主警示升格**——任意 actor 可办任何人的任务（三次实证，
+归因诚实但不拦截），integration.md 写成部署前置条件。**语义观察未动**（记 FINDINGS）：
+会签单人驳回≠否决（缺省 disapprove=全票）/委托替换覆盖 initiator 直派（发起人待办凭空
+消失无提示）/父部门取人不递归/候选池无限期躺平/收口剩余票 auto_pass 代投。正面验证：
+排障性通过（不知委托的申请人纯靠 REST 审计面正确推理委托替换）。产物 out/persona/
+（org.yaml/expense_org.json/probe_run.py/persona.db/logs/*/FINDINGS.md）。
