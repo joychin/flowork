@@ -153,6 +153,16 @@ FLOWORK_TEST_PG_URL=postgresql+psycopg://... uv run pytest -m needs_postgres   #
   spec §12 全量（七搜索面游标分页/实例与任务动作/变量三端点/anticipate/messages/jobs 长轮询）
   + 发起端点 `POST /v2/instances`（spec 缺口补齐）。四服务方法即路由一一映射；错误体
   `{"error":{code,message,details}}`；actor 走 `X-Flowork-Actor` 头（鉴权归宿主）。
+  任务动作含全集 `claim/unclaim/complete/reject/transfer/assist/complete_assist/
+  consult/complete_consult/add_countersigner/withdraw`；已办查询 `POST /v2/tasks/
+  history/search`（待办面 state 词表仅 `ready|null`——任务终态行即删入历史表）；
+  实例详情 `GET /v2/instances/{id}`（2026-10-24 对打修复批补齐）。
+
+  > **部署前置条件（对打实证，2026-10-24）**：/v2 任务动作**不校验 actor 与
+  > assignee 的对应关系**——任意 actor 头可办理/驳回任何人的任务（会签可被
+  > 单人冒名操纵，历史行如实记 `assignee`+`acted_by` 但不拦截）。鉴权归宿主
+  > 是既定裁定，裸面直接对外＝全员互办；**上生产前必须由宿主网关（或
+  > `register_rest_routes` 前的中间件）完成 actor 身份认证与人岗校验**。
 
   ```bash
   FLOWORK_DB=/path/prod.db uv run uvicorn flowork.contrib.rest.app:app   # 独立进程

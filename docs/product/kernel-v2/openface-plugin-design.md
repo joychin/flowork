@@ -49,8 +49,10 @@ flowork/contrib/mcp/
 | `POST /v2/instances/{id}/{pause\|resume\|cancel\|terminate}` | `runtime.*` |
 | `POST /v2/instances/{id}/signal` | 见 §2.4（关联回执核验式映射） |
 | `GET/PATCH /v2/instances/{id}/variables`、`GET .../variables/history` | runtime 变量面（三门槛语义在内核，REST 只透传） |
-| `POST /v2/tasks/search` | `task.list_tasks(state, assignee, candidate, instance_id)` |
-| `POST /v2/tasks/{id}/{claim\|unclaim\|complete\|reject\|transfer\|assist\|complete_assist}` | `task.*` |
+| `POST /v2/tasks/search` | `task.list_tasks(state, assignee, candidate, instance_id)`——state 词表 `ready\|null`（终态行即删入历史表，`completed/cancelled` 曾是恒空死档，已办走 history/search；2026-10-24 对打修复批） |
+| `POST /v2/tasks/history/search` | `history.task_history(instance_id, assignee)`（已办查询，同上批补齐） |
+| `GET /v2/instances/{id}` | `runtime.get_instance`（实例详情，同上批——对齐 §11，此前 404） |
+| `POST /v2/tasks/{id}/{claim\|unclaim\|complete\|reject\|transfer\|assist\|complete_assist\|consult\|complete_consult\|add_countersigner\|withdraw}` | `task.*`（后四动作 2026-10-24 补齐三面同构欠账） |
 | `POST /v2/tasks/{id}/anticipate` | `task.anticipate(outcome)` |
 | `POST /v2/messages/publish` | `messages.publish_message` |
 | `POST /v2/jobs/activate`（长轮询 request_timeout） | `worker_jobs.activate_jobs` |

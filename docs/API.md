@@ -126,10 +126,14 @@ Worker 面（service_task mode=worker，`engine.worker_jobs`）：
 
 内核四服务之上的两个官方传输插件（进驻 `flowork/contrib/`，全经本公开门面）：
 
-- **REST /v2**（`flowork/contrib/rest`）：spec §12 对外集成面——七搜索面（offset 游标）、
-  实例/任务动作、变量三端点、anticipate、messages、jobs（长轮询 activate）。独立进程
-  `uvicorn flowork.contrib.rest.app:app` 或 `register_rest_routes(app, engine)` 挂载。
-  快照守卫 `tests/test_rest_api_surface.py`。
+- **REST /v2**（`flowork/contrib/rest`）：spec §12 对外集成面——七搜索面（offset 游标）
+  ＋已办查询 `POST /v2/tasks/history/search`、实例详情 `GET /v2/instances/{id}`、任务动作
+  全集（claim/unclaim/complete/reject/transfer/assist/complete_assist/consult/
+  complete_consult/add_countersigner/withdraw；后四动作与已办/详情端点为 2026-10-24
+  取人对打修复批补齐——对打实证 REST 缺 consult、已办查询恒空死档）、变量三端点、
+  anticipate、messages、jobs（长轮询 activate）。待办面 state 词表 `ready|null`。
+  独立进程 `uvicorn flowork.contrib.rest.app:app` 或 `register_rest_routes(app, engine)`
+  挂载。快照守卫 `tests/test_rest_api_surface.py`。
 - **MCP**（`flowork/contrib/mcp`）：spec §13 的 19 工具（validate/deploy/dry_run/
   definition_drift/list_definitions/start/query/signal/pause/resume/update_variables/
   publish_message/list_my_tasks/claim/complete/reject/anticipate/list_incidents/
