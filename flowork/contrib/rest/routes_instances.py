@@ -76,6 +76,10 @@ def register_instance_routes(app: FastAPI, engine: ProcessEngine) -> None:
             "next_cursor": encode_offset(offset + limit) if has_more else None,
         }
 
+    @app.get("/v2/instances/{instance_id}")
+    def instance_detail(instance_id: str) -> Any:
+        return dump(runtime.get_instance(instance_id))
+
     def _state_action(action: str) -> None:
         method = getattr(runtime, f"{action}_process")
 

@@ -296,3 +296,82 @@ def test_messages_search_covers_buffer_and_subscription(
         json={"filter": {"kind": "subscription", "state": "matched"}},
     ).json()["items"]
     assert matched and matched[0]["state"] == "matched"
+
+
+# —— 2026-10-24 取人对打修复批回归：三面同构欠账 ——
+# 来源：subagent 对打 FINDINGS（tests 之外证据在 out/persona/FINDINGS.md）——
+# 已办查询死档（state=completed 恒空）、无实例详情、REST 缺 consult 族动作。
+
+
+def test_tasks_history_search_returns_archived_rows(env: tuple[TestClient, ProcessEngine]) -> None:
+    """已办查询：终态行从待办表删除入 wf_task_history，「我办过的单」从这里查。"""
+    client, _ = env
+    _deploy(client, _simple_spec())
+    iid = _start(client, "rest_simple")
+    task_id = client.post("/v2/tasks/search", json={"filter": {"instance_id": iid}}).json()[
+        "items"
+    ][0]["id"]
+    client.post(f"/v2/tasks/{task_id}/complete", json={"actor": "u_manager"})
+
+    # 待办面：办结行消失（终态行即删）；state=completed 已收窄为 422 指路历史端点
+    ready = client.post("/v2/tasks/search", json={"filter": {"instance_id": iid}}).json()
+    assert ready["items"] == []
+    legacy = client.post("/v2/tasks/search", json={"filter": {"state": "completed"}})
+    assert legacy.status_code == 422
+    assert "history" in legacy.json()["error"]["message"]
+
+    history = client.post(
+        "/v2/tasks/history/search", json={"filter": {"assignee": "u_manager"}}
+    ).json()
+    assert [row["activity_code"] for row in history["items"]] == ["manager"]
+    assert history["items"][0]["outcome"] == "agree"
+
+
+def test_instance_detail_endpoint(env: tuple[TestClient, ProcessEngine]) -> None:
+    """GET /v2/instances/{id}：详情端点（此前 404，fin2 对打撞上）。"""
+    client, _ = env
+    _deploy(client, _simple_spec())
+    iid = _start(client, "rest_simple")
+    detail = client.get(f"/v2/instances/{iid}")
+    assert detail.status_code == 200
+    assert detail.json()["id"] == iid
+    assert client.get("/v2/instances/none-such").status_code == 404
+
+
+def test_consult_actions_roundtrip(env: tuple[TestClient, ProcessEngine]) -> None:
+    """consult/complete_consult/add_countersigner/withdraw 四动作（三面同构补齐）。"""
+    client, _ = env
+    spec = _simple_spec()
+    spec["nodes"][1]["assignees"] = ["'u_manager'"]
+    _deploy(client, spec)
+    iid = _start(client, "rest_simple")
+    task_id = client.post("/v2/tasks/search", json={"filter": {"instance_id": iid}}).json()[
+        "items"
+    ][0]["id"]
+
+    created = client.post(
+        f"/v2/tasks/{task_id}/consult",
+        json={"actor": "u_manager", "users": ["u_advisor"], "comment": "问一下"},
+    )
+    assert created.status_code == 200
+    opinion_id = created.json()[0]["id"]
+
+    done = client.post(
+        f"/v2/tasks/{opinion_id}/complete_consult",
+        json={"actor": "u_advisor", "opinion": "agree"},
+    )
+    assert done.status_code == 200 and done.json()["completed"] is True
+
+    added = client.post(
+        f"/v2/tasks/{task_id}/add_countersigner",
+        json={"actor": "u_manager", "users": ["u_extra"]},
+    )
+    assert added.status_code == 200
+
+    # withdraw 作用于已办——只 complete 主任务（u_extra 的票未投，实例仍在运行态，
+    # 终态实例拒绝撤回是既有语义），随后 u_manager 撤回自己的已办
+    client.post(f"/v2/tasks/{task_id}/complete", json={"actor": "u_manager"})
+    withdrawn = client.post(
+        f"/v2/tasks/{task_id}/withdraw", json={"actor": "u_manager", "comment": "改主意"}
+    )
+    assert withdrawn.status_code == 200, withdrawn.text

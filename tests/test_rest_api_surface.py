@@ -23,6 +23,7 @@ EXPECTED: set[str] = {
     # instances（POST /v2/instances = spec §12 缺口补齐：对外集成面必须有发起端点）
     "POST /v2/instances",
     "POST /v2/instances/search",
+    "GET /v2/instances/{instance_id}",
     "POST /v2/instances/{instance_id}/pause",
     "POST /v2/instances/{instance_id}/resume",
     "POST /v2/instances/{instance_id}/cancel",
@@ -31,8 +32,10 @@ EXPECTED: set[str] = {
     "GET /v2/instances/{instance_id}/variables",
     "PATCH /v2/instances/{instance_id}/variables",
     "GET /v2/instances/{instance_id}/variables/history",
-    # tasks
+    # tasks（consult/complete_consult/add_countersigner/withdraw + history/search
+    # ＝ 2026-10-24 对打修复批：三面同构欠账——spec §11 动作全集与「已办查询死档」）
     "POST /v2/tasks/search",
+    "POST /v2/tasks/history/search",
     "POST /v2/tasks/{task_id}/claim",
     "POST /v2/tasks/{task_id}/unclaim",
     "POST /v2/tasks/{task_id}/complete",
@@ -41,6 +44,10 @@ EXPECTED: set[str] = {
     "POST /v2/tasks/{task_id}/assist",
     "POST /v2/tasks/{task_id}/complete_assist",
     "POST /v2/tasks/{task_id}/anticipate",
+    "POST /v2/tasks/{task_id}/consult",
+    "POST /v2/tasks/{task_id}/complete_consult",
+    "POST /v2/tasks/{task_id}/add_countersigner",
+    "POST /v2/tasks/{task_id}/withdraw",
     # system
     "POST /v2/messages/publish",
     "POST /v2/messages/search",
