@@ -78,7 +78,13 @@ def check_variables_and_org(
     for kind, where, expression, node_code in iter_expression_positions(definition):
         if kind not in ("subjects", "reassign"):
             continue  # candidates 位组引用合法；条件/映射/出口位不是人员语义
-        refs = [lit for lit in string_literals(expression) if lit.startswith(("role:", "org:"))]
+        # manager_of 的参数位放行：词汇契约明文「吃 org: 返回部门负责人」
+        # （人员位按部门负责人取人唯一写法）；展开型词汇参数带前缀仍是错写，照拦。
+        refs = [
+            lit
+            for lit in string_literals(expression, outside_calls=("manager_of",))
+            if lit.startswith(("role:", "org:"))
+        ]
         if refs:
             error(
                 "participant.group_in_subjects",

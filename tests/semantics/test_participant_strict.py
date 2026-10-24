@@ -182,6 +182,74 @@ def test_group_reference_in_candidate_slot_stays_legal():
     assert "participant.group_in_subjects" not in error_rules(flow.build())
 
 
+# 来源：2026-10-24 subagent 对打批——manager_of('org:部门') 曾被本规则拦死，
+# 与词汇契约（吃 org: 返回部门负责人）和运行时实现三方矛盾。修法＝参数位放行。
+
+
+def test_manager_of_org_argument_passes_and_runs():
+    """manager_of 参数位组引用＝部门负责人语义：设计期放行，运行时落到部门 head。
+
+    回归来源：2026-10-24 取人对打 FINDINGS P1——「找部门负责人审批」在人员位
+    曾无合法写法（词汇 docstring/运行时支持 vs 设计期 ERROR 拦死）。
+    """
+    org = OrgDirectory.from_dict(
+        {
+            "users": {
+                "u_emp": {"department": "d_eng"},
+                "u_head": {"department": "d_eng"},
+            },
+            "departments": {"d_eng": {"head": "u_head"}},
+        }
+    )
+    engine = ProcessEngine(
+        EngineConfig(
+            org=org,
+            expression_functions=contrib.cel_vocabulary(org),
+            node_registry=create_registry(),
+        )
+    )
+    flow = (
+        FlowBuilder("gvm1")
+        .start()
+        .user_task("a", assignee="manager_of('org:d_eng')")
+        .end()
+        .connect("start", "a")
+        .connect("a", "end")
+    )
+    assert "participant.group_in_subjects" not in error_rules(flow.build())
+    engine.repository.deploy(flow.build())
+    instance_id = engine.runtime.start_process("gvm1", start_user="u_emp")
+    rows = engine.task.list_tasks(instance_id=instance_id)
+    assert [r.assignee for r in rows] == ["u_head"]
+
+
+def test_expansion_vocab_group_prefix_argument_still_flagged():
+    """展开型词汇参数带前缀＝写错（users_with_role 拼 role: 前缀、users_in_org 拼 org:），
+    防呆保留：manager_of 放行不外溢到其他词汇。"""
+    flow = (
+        FlowBuilder("gv5")
+        .start()
+        .user_task("a", assignee="users_with_role('role:finance')")
+        .end()
+        .connect("start", "a")
+        .connect("a", "end")
+    )
+    flow2 = (
+        FlowBuilder("gv6")
+        .start()
+        .user_task(
+            "a",
+            assignees=["users_in_org('org:d_eng')"],
+            multi_instance=MultiInstance(mode="parallel"),
+        )
+        .end()
+        .connect("start", "a")
+        .connect("a", "end")
+    )
+    assert "participant.group_in_subjects" in error_rules(flow.build())
+    assert "participant.group_in_subjects" in error_rules(flow2.build())
+
+
 def test_user_prefix_and_bare_id_stay_legal():
     """user: 前缀互认（spec §5.4）与裸 id 都不是组引用，不拦。"""
     flow = (

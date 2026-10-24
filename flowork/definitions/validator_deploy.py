@@ -46,24 +46,34 @@ __all__ = ["check_deploy_references", "string_literals"]
 SubjectExists = Callable[[str], bool | None]
 
 
-def string_literals(formula: str) -> list[str]:
-    """取 CEL 表达式里的全部字符串字面量（去引号；编译错返回空——语法层另有 L2 拦）。"""
+def string_literals(formula: str, *, outside_calls: tuple[str, ...] = ()) -> list[str]:
+    """取 CEL 表达式里的全部字符串字面量（去引号；编译错返回空——语法层另有 L2 拦）。
+
+    ``outside_calls``：指定**全局函数调用参数位**的字面量不返回——
+    ``manager_of('org:d_eng')`` 的组引用参数是词汇契约明文的合法形态
+    （吃 ``org:`` 返回部门负责人），不进「人员位组引用」检查；展开型词汇
+    （users_with_role/users_in_org）参数带前缀仍是错写，照常返回。
+    """
     try:
         tree = _parse(formula)
     except FormulaError:
         return []
     found: list[str] = []
 
-    def visit(node: Any) -> None:
+    def visit(node: Any, exempt: bool) -> None:
         data = getattr(node, "data", None)
         if data is None:
-            if getattr(node, "type", None) == "STRING_LIT":
+            if not exempt and getattr(node, "type", None) == "STRING_LIT":
                 found.append(str(node)[1:-1])
             return
+        if data == "ident_arg" and str(node.children[0]) in outside_calls:
+            for child in node.children:
+                visit(child, exempt=True)
+            return
         for child in node.children:
-            visit(child)
+            visit(child, exempt)
 
-    visit(tree)
+    visit(tree, exempt=False)
     return found
 
 
