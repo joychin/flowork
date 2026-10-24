@@ -890,3 +890,18 @@ ready|null（422 指路）；**宿主警示升格**——任意 actor 可办任�
 消失无提示）/父部门取人不递归/候选池无限期躺平/收口剩余票 auto_pass 代投。正面验证：
 排障性通过（不知委托的申请人纯靠 REST 审计面正确推理委托替换）。产物 out/persona/
 （org.yaml/expense_org.json/probe_run.py/persona.db/logs/*/FINDINGS.md）。
+
+**浸泡+混沌演练批（2026-10-24，三级台阶·第一级落地；产物 out/soak/，报告 SOAK_REPORT.md）**：
+四项混沌全过零内核缺陷。① 浸泡对打——storm 驱动+tick/outbox worker+REST 三真实进程对
+同一 SQLite 文件库，真实墙钟下 922 实例（storm 全动作含暂停/终止/非法探针）账本 922/922
+全自洽，worker 真实兑现 deadline Job、outbox 9152→0 收敛，曲线 RSS 稳定无 WAL 失控；
+storm._advance 对墙钟鸭子兼容零改造（测试推钟/部署 tick 职责分离成立）。② 崩溃演练——
+kill -9×4 轮（5-10s 随机时点）重启后全库核对全过；核对口径=树闭合+逐实例三件
+（assert_no_dangling 的"悬空"=非终态面向清场场景不适用浸泡）；修掉 history.instances()
+默认 limit=100 的核对盲区（翻页拉全）。③ NTP 回拨三形态（可拨时钟钉语义）：不提前触发/
+停机窗口延迟到点不丢失/done 不复活——run_at<=moment 单边比较语义成立。④ PG 真断连：
+docker kill→fail loud→start 后同进程同 URL pool_pre_ping 自动恢复，账本自洽。
+形态要点：--rm 容器不可 stop 后 start/随机端口 start 后重排（固定端口形态）/org 目录与
+引擎同库共存。知识点：DB 版目录进独立进程走 FLOWORK_SETUP（FLOWORK_ORG 只认 YAML，
+误传 .db 报 UnicodeDecodeError 响亮但离因远，提示改进登记观察）。72 小时长跑 harness
+就绪（--duration 0 + worker 循环），第三级（不讲理客户端+十万行压库）待启动。
