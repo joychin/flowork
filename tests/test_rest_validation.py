@@ -137,3 +137,51 @@ def test_update_variables_terminal_409_not_404(env):
     # 真 404 语义仍在：不存在的实例
     ghost = client.patch("/v2/instances/ghost/variables", json={"updates": {"amount": 1}})
     assert ghost.status_code == 404
+
+
+# —— 2026-10-24 不讲理客户端批回归（来源：out/soak/nasty_client.py 实测三例裸 500）——
+
+
+def test_nasty_search_filter_shape(env: tuple[TestClient, ProcessEngine]) -> None:
+    """filter 传字符串/数组曾穿透内核裸 500（AttributeError/SQL 绑定错）——路由层 422。"""
+    client, _ = env
+    for bad in ("not-a-dict", ["a"], 42):
+        response = client.post("/v2/tasks/search", json={"filter": bad})
+        assert response.status_code == 422, response.text
+        assert "error" in response.json()
+    response = client.post("/v2/tasks/search", json={"filter": {"instance_id": ["a", "b"]}})
+    assert response.status_code == 422
+    assert "instance_id" in response.json()["error"]["message"]
+
+
+def test_nasty_start_variables_shape(env: tuple[TestClient, ProcessEngine]) -> None:
+    """variables 传数组曾裸 500（内核对非 dict variables 报错）——422 收敛。"""
+    client, _ = env
+    definition = (
+        FlowBuilder("nasty_shape")
+        .start()
+        .user_task("a", assignee="'u1'")
+        .end()
+        .connect("start", "a")
+        .connect("a", "end")
+        .build()
+    )
+    client.post("/v2/definitions/deploy", json={"spec": dump_definition(definition)})
+    response = client.post(
+        "/v2/instances",
+        json={"code": "nasty_shape", "start_user": "u1", "variables": ["not", "a", "dict"]},
+    )
+    assert response.status_code == 422
+    assert "variables" in response.json()["error"]["message"]
+    assert (
+        client.post("/v2/instances", json={"code": "nasty_shape", "start_user": "u1"}).status_code
+        == 200
+    )
+
+
+def test_nasty_page_shape(env: tuple[TestClient, ProcessEngine]) -> None:
+    """page 传字符串曾 AttributeError 裸 500——dict_of 收敛。"""
+    client, _ = env
+    response = client.post("/v2/tasks/search", json={"filter": {}, "page": "1"})
+    assert response.status_code == 422
+    assert "page" in response.json()["error"]["message"]

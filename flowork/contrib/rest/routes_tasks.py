@@ -10,9 +10,11 @@ from flowork.api import ProcessEngine
 from flowork.contrib.rest._common import (
     RestRequestError,
     actor_of,
+    dict_of,
     dump,
     page_payload,
     page_request,
+    str_or_none,
 )
 
 __all__ = ["register_task_routes"]
@@ -29,7 +31,10 @@ def register_task_routes(app: FastAPI, engine: ProcessEngine) -> None:
 
     @app.post("/v2/tasks/search")
     def tasks_search(body: dict[str, Any]) -> dict[str, Any]:
-        flt = body.get("filter") or {}
+        flt = dict_of(body.get("filter"), "filter")
+        instance_id = str_or_none(flt.get("instance_id"), "filter.instance_id")
+        assignee = str_or_none(flt.get("assignee"), "filter.assignee")
+        candidate = str_or_none(flt.get("candidate"), "filter.candidate")
         state = flt.get("state", "ready")
         if state is not None and state not in _TASK_STATES:
             # 修前拼错静默空列表（AI 误判「无待办」——MCP 面修过同类，REST 补齐）
@@ -38,9 +43,9 @@ def register_task_routes(app: FastAPI, engine: ProcessEngine) -> None:
                 "已办查询走 POST /v2/tasks/history/search）"
             )
         rows = task.list_tasks(
-            instance_id=flt.get("instance_id"),
-            assignee=flt.get("assignee"),
-            candidate=flt.get("candidate"),
+            instance_id=instance_id,
+            assignee=assignee,
+            candidate=candidate,
             state=state,
         )
         offset, limit = page_request(body.get("page"))
@@ -52,10 +57,10 @@ def register_task_routes(app: FastAPI, engine: ProcessEngine) -> None:
 
         待办表只放活任务（终态行即删入历史），「我办过的单」从这里查。
         """
-        flt = body.get("filter") or {}
+        flt = dict_of(body.get("filter"), "filter")
         rows = engine.history.task_history(
-            instance_id=flt.get("instance_id"),
-            assignee=flt.get("assignee"),
+            instance_id=str_or_none(flt.get("instance_id"), "filter.instance_id"),
+            assignee=str_or_none(flt.get("assignee"), "filter.assignee"),
         )
         offset, limit = page_request(body.get("page"))
         return page_payload([dump(row) for row in rows], offset, limit)

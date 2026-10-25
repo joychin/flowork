@@ -12,6 +12,7 @@ from fastapi import FastAPI
 from flowork.api import JobClaim, ProcessEngine
 from flowork.contrib.rest._common import (
     RestRequestError,
+    dict_of,
     dump,
     encode_offset,
     page_payload,
@@ -74,7 +75,7 @@ def register_system_routes(app: FastAPI, engine: ProcessEngine) -> None:
     def messages_search(body: dict[str, Any]) -> dict[str, Any]:
         """消息检索：filter={name?,
         correlation_key?（前缀）, kind: buffer|subscription?, state?（订阅源）}。"""
-        flt = body.get("filter") or {}
+        flt = dict_of(body.get("filter"), "filter")
         offset, limit = page_request(body.get("page"))
         rows = messages.list_messages(
             name=flt.get("name"),
@@ -157,7 +158,7 @@ def register_system_routes(app: FastAPI, engine: ProcessEngine) -> None:
 
     @app.post("/v2/jobs/search")
     def jobs_search(body: dict[str, Any]) -> dict[str, Any]:
-        flt = body.get("filter") or {}
+        flt = dict_of(body.get("filter"), "filter")
         offset, limit = page_request(body.get("page"))
         rows = engine.worker_jobs.list_jobs(
             state=flt.get("state"),
@@ -174,14 +175,14 @@ def register_system_routes(app: FastAPI, engine: ProcessEngine) -> None:
 
     @app.post("/v2/incidents/search")
     def incidents_search(body: dict[str, Any]) -> dict[str, Any]:
-        flt = body.get("filter") or {}
+        flt = dict_of(body.get("filter"), "filter")
         rows = runtime.list_incidents(flt.get("instance_id"))
         offset, limit = page_request(body.get("page"))
         return page_payload(rows, offset, limit)
 
     @app.post("/v2/events/search")
     def events_search(body: dict[str, Any]) -> dict[str, Any]:
-        flt = body.get("filter") or {}
+        flt = dict_of(body.get("filter"), "filter")
         offset, limit = page_request(body.get("page"))
         # limit+1 余量探测：修前 next_cursor 恒 None（同 instances）
         rows = history.events(flt.get("instance_id"), limit=limit + 1, offset=offset)

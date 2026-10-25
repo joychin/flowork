@@ -11,6 +11,7 @@ from flowork.contrib.rest._common import (
     RestConflictError,
     RestRequestError,
     actor_of,
+    dict_of,
     dump,
     encode_offset,
     page_request,
@@ -40,10 +41,15 @@ def register_instance_routes(app: FastAPI, engine: ProcessEngine) -> None:
         code = body.get("code")
         if not code:
             raise RestRequestError("body.code 必填（流程定义编码）")
+        variables = body.get("variables")
+        if variables is not None and not isinstance(variables, dict):
+            raise RestRequestError(
+                f"variables 须为对象（{{name: value}}），收到 {type(variables).__name__}"
+            )
         instance_id = runtime.start_process(
             str(code),
             start_user=str(body.get("start_user") or actor_of(request, body)),
-            variables=body.get("variables"),
+            variables=variables,
             business_key=body.get("business_key"),
             major=body.get("major"),
             revision=body.get("revision"),
@@ -54,7 +60,7 @@ def register_instance_routes(app: FastAPI, engine: ProcessEngine) -> None:
 
     @app.post("/v2/instances/search")
     def instances_search(body: dict[str, Any]) -> dict[str, Any]:
-        flt = body.get("filter") or {}
+        flt = dict_of(body.get("filter"), "filter")
         offset, limit = page_request(body.get("page"))
         # limit+1 余量探测：修前取数窗口恰好 offset+limit，
         # has_more 恒 False——next_cursor 恒 None，第二页数据不可达

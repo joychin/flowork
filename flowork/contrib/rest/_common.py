@@ -26,6 +26,7 @@ __all__ = [
     "RestConflictError",
     "RestRequestError",
     "actor_of",
+    "dict_of",
     "dump",
     "encode_offset",
     "error_payload",
@@ -34,6 +35,7 @@ __all__ = [
     "page_request",
     "reuse_of",
     "status_of",
+    "str_or_none",
 ]
 
 ACTOR_HEADER = "X-Flowork-Actor"
@@ -64,6 +66,25 @@ def actor_of(request: Request, body: dict[str, Any] | None = None) -> str:
     return request.headers.get(ACTOR_HEADER) or DEFAULT_ACTOR
 
 
+def dict_of(value: Any, name: str) -> dict[str, Any]:
+    """入参形状守卫：非 dict 即 422（不讲理客户端实测——filter/variables
+    传字符串或数组会穿透到内核裸 500，输入形状在路由层收敛）。"""
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise RestRequestError(f"{name} 须为对象（JSON object），收到 {type(value).__name__}")
+    return value
+
+
+def str_or_none(value: Any, name: str) -> str | None:
+    """入参形状守卫：字符串或 null；其余 422（数组当 id 绑定 SQL 即裸 500）。"""
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, str):
+        raise RestRequestError(f"{name} 须为字符串或 null，收到 {type(value).__name__}")
+    return value
+
+
 def _decode_after(after: str) -> int:
     try:
         raw = base64.b64decode(after, validate=True).decode("utf-8")
@@ -79,7 +100,7 @@ def _decode_after(after: str) -> int:
 
 def page_request(page: dict[str, Any] | None) -> tuple[int, int]:
     """解析 page：返回 (offset, limit)。before 一律 422（offset 游标，不装游标语义）。"""
-    page = page or {}
+    page = dict_of(page, "page")
     if page.get("before"):
         raise RestRequestError("page.before 不支持：/v2 分页为 offset 游标，仅 page.after")
     offset = _decode_after(str(page.get("after"))) if page.get("after") else 0
