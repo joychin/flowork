@@ -905,3 +905,16 @@ docker kill→fail loud→start 后同进程同 URL pool_pre_ping 自动恢复�
 引擎同库共存。知识点：DB 版目录进独立进程走 FLOWORK_SETUP（FLOWORK_ORG 只认 YAML，
 误传 .db 报 UnicodeDecodeError 响亮但离因远，提示改进登记观察）。72 小时长跑 harness
 就绪（--duration 0 + worker 循环），第三级（不讲理客户端+十万行压库）待启动。
+
+**第三级混沌批（2026-10-24 同日续，MCP 对打+不讲理客户端+十万行压库；1 提交）**：
+① MCP 对打——subagent 只拿 19 工具描述经 mcp_call.py（真实 stdio JSON-RPC）55 次调用
+从需求写到办结（spec→deploy v1.1→两笔报销走完→失败路径），掉坑 7 条记 SOAK_REPORT
+（P0：MCP 无 terminate=三面不同构实锤/variables 声明≠input 契约未点破；P1：字面量取人
+人数运行时才暴露/命名 code vs name 不统一；P2：CEL 引号双层转义/角色多人缺部署期警告）。
+**装配缺口**：FLOWORK_SETUP 无 org 钩子，DB 版目录进不了独立进程（YAML 绕过，待拍板）。
+② 不讲理客户端 26 例恶意矩阵——首轮抓到 3 例真 500（数组当 instance_id 绑 SQL/variables
+传数组/filter 传字符串），已修：_common.dict_of/str_or_none 形状守卫全路由接入，
+26 例零 500，回归三例（1 提交）。③ 十万行压库——102,234 事件行下全部查询毫秒级
+（深翻页 offset=99000 也 3.8ms），查询面可堪用。产物 out/soak/{mcp_call,nasty_client,
+bulk_fill}.py + logs/mcp_agent.md + SOAK_REPORT 第三级补记。待拍板三项：MCP 补 terminate/
+FLOWORK_SETUP 补 org 钩子/纯字面量取人部署期人数预演。
