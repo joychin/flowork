@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | 状态 | **已实施（v2.3 第十三轮）**——契约三件套+失败语义+validator 全落地，见 spec 附录 B 第十三轮 |
-| 依据 | [对标明细详设.md A9](./对标明细详设.md)（Zeebe 契约定稿）+ [delta-industry-benchmark.md §9](./delta-industry-benchmark.md) |
+| 依据 | [delta-industry-benchmark.md §9](./delta-industry-benchmark.md)（Zeebe 契约定稿） |
 
 ## 字段与语义（Zeebe inputCollection/outputCollection 契约）
 

@@ -60,8 +60,8 @@ designer/          流程设计器前端（React Flow + zustand + Vite；详见 
 
 ## 硬约束（违反即打回）
 
-1. **命名**：禁用对标产品遗留命名模式
-   （Biz*/分词命名/错拼Service/*Impl 等）；标识符一律英文；类禁 Impl/Factory/Manager/Util 后缀。
+1. **命名**：禁用遗留系统命名反例
+   （Biz*/Do* 前缀、错拼 Service、*Impl 后缀等）；标识符一律英文；类禁 Impl/Factory/Manager/Util 后缀。
 2. **引擎核心不得出现节点 kind 的 if/else 分支**——节点语义只经 NodeRegistry → NodeBehavior。
 3. **钩子/行为只观察与写变量，不得改变路由**；路由决策只属于引擎 + 条件求值。
 4. **TaskHistory（已办）只追加**，驳回复活 = 新任务 + cause_token_id。
@@ -75,7 +75,7 @@ designer/          流程设计器前端（React Flow + zustand + Vite；详见 
   `docs/API.md`（四服务 API 参考）、`docs/integration.md`（集成部署：表结构/超时调度/运维）。
 - 仓库外（同级目录，**不在本仓库内**）：边界（范围权威）→ 实施规划 → 命名规范 →
   节点抽象与扩展设计 → AI友好设计 → 主流流程引擎借鉴分析；
-  语义参考为行为基准基准源码 基准材料/（clean-room：只对齐行为，不搬代码/命名）。
+  语义基准来自闭源产品的行为对拍（clean-room：只对齐行为，不搬代码/命名；出处材料仅本地留档）。
 
 ## 当前里程碑
 
@@ -280,8 +280,8 @@ autouse，exclude 豁免有意留运行态的实例），接入场景随机两�
 矩阵自此覆盖 tests/suite 与 tests/pilot 全部走查（678 测试全绿）。
 
 **行业对标两轮+第一批落地（2026-10-09，spec v2.3 第八轮）**：
-① 对标三篇入 docs/product/kernel-v2/：对标明细.md（A/B/C 三档速览+四拍板项，行业列
-✅⚠❌）、对标明细详设.md（A1–A11 逐项详设，行业修正版）、delta-industry-benchmark.md
+① 对标三篇入 docs/product/kernel-v2/：对标明细两篇（A/B/C 三档速览与 A1–A11 逐项详设，行业列
+✅⚠❌；已移出仓库、仅本地留档）+ delta-industry-benchmark.md
 （Camunda 7.23/8、Flowable 7、jBPM 7.74、Temporal、SpiffWorkflow、Conductor 源码级对拍）。
 **行业对拍撤销 A7 前视跳过**（全行业零实现+语义不可判定+失效=审批链空洞，列 spec 非目标）、
 **推翻 A5 双日历**（全行业历史耗时一律墙钟、零引擎按人算）、修正 A1（state×task_type 动作表

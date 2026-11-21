@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | 状态 | **第二层已实施（v2.3 第十二轮）**——simulated 实例/五行为分支（performs_external_work 行为契约替代 kind 分支）/outbox 静默/查询隔离/SimulationReport（路由审计数据源）；第一层令牌模拟仍属 dry_run 域（显式选路，未实施） |
-| 依据 | [对标明细详设.md A10](./对标明细详设.md) + [delta-industry-benchmark.md §10](./delta-industry-benchmark.md)（三物种分层是行业对拍结论） |
+| 依据 | [delta-industry-benchmark.md §10](./delta-industry-benchmark.md)（三物种分层是行业对拍结论） |
 
 ## 两种模拟，两个层
 

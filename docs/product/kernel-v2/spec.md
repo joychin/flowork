@@ -48,7 +48,7 @@
 
 **范围**：流程内核 v2 的完整规格——图纸怎么写（定义）、怎么跑（实例）、任务怎么分派与完成、什么情况停、对外开什么口子。
 
-**非目标**：表单/权限/通知等插件规格（另文）；多副本部署细则；webhook 出站与链路追踪（P2 占位）；BPMN XML 导入导出；提交时自选下一节点（BPMN 系引擎均无此路由模式，人的选择用输出变量＋条件边表达，见 2.4 注）；催办/提醒类动作（UrgeTask 形态，归宿主或通知插件）；**前视式自动跳过参与者【v2.3】**（「他后面还会审、这关免审」的 participateLater 形态——主流引擎零实现，且需用未来变量做决策、失效模式是审批链空洞且审计不可见；「同一人别重复审批」由 auto_pass_participated/previous 向后看覆盖，前视信息只做 anticipate 只读提示，依据见 对标明细.md A7）。
+**非目标**：表单/权限/通知等插件规格（另文）；多副本部署细则；webhook 出站与链路追踪（P2 占位）；BPMN XML 导入导出；提交时自选下一节点（BPMN 系引擎均无此路由模式，人的选择用输出变量＋条件边表达，见 2.4 注）；催办/提醒类动作（UrgeTask 形态，归宿主或通知插件）；**前视式自动跳过参与者【v2.3】**（「他后面还会审、这关免审」的 participateLater 形态——主流引擎零实现，且需用未来变量做决策、失效模式是审批链空洞且审计不可见；「同一人别重复审批」由 auto_pass_participated/previous 向后看覆盖，前视信息只做 anticipate 只读提示，主流引擎零实现的行业结论见 delta-industry-benchmark.md）。
 
 ## 2. 流程图纸的三要素：节点、连线、推进策略
 
@@ -374,7 +374,7 @@ git 里的 YAML/JSON 文件      ← 编辑态事实来源：人和 AI 只改这
 
 **表决行（名单类查询的统一口径）【v2.3 第十九轮，2026-10-10 拍板】**：任务历史行记录的是「任务行的终结」而非「人的表态」——转办、协办、咨询、会签出口自动通过都会落行，但都不是一票。「**表决行**」＝审批类任务（task_type=approval）＋真实表态（outcome ∈ agree/reject；超时代投经 complete 落 agree，acted_by=system:timeout 留归因）。五个名单类查询位统以此口径（单一谓词 `tasks/vote.py`）：① 驳回复活名单；② 判断面 prev_task / node() 的「最近任务/最近轮人物」；③ auto_pass_participated；④ auto_pass_previous；⑤ 撤回下游进展判据①。**两处裁定**：auto_pass（机器代投）不算表决——复活不拉、参与不算，一次代投不得滚成终身代投；转办人不算「已参与」——票由被转办人代为行使（上文 transfer 条款），多问一次人优于替人投一票。串行会签下一棒另用「**轮次消耗行**」口径（审批类且已终结：transfer/auto_pass 也算消耗、不重派；协办/咨询不算——否则吞掉下一棒致无声死锁）。走查背景：此前六处消费方各自 `outcome != "cancelled"`，转办/协办/咨询行渗入名单——单人节点挂起、会签应办数膨胀、prev_task 读到协办收口行改变路由、跳过策略静默代投、串行会签无声死锁、撤回误拦（六例实测，回归 `tests/semantics/test_outcome_semantics.py`）。
 
-**超时【v2.2 定稿：deadline 列表形态，对齐 WS-HumanTask】**：任务可挂一组有序动作 `deadlines: [{after_minutes, action}]`（自进入节点起算，after_minutes 必须为正整数，同一节点上限 8 条；**自然分钟直算到期时刻**（`now + after_minutes`；【v2.3 第二批定稿】after_minutes 恒为自然分钟——历史耗时全行业一律墙钟、零引擎按人算日历，双日历口径不做，WorkCalendar 死端口已删除（见 §9）；将来若需工作日口径，按 Flowable 形态重立：节点级具名日历+引擎级注册表+发布期校验名字，见 对标明细.md A5）。动作枚举五种：
+**超时【v2.2 定稿：deadline 列表形态，对齐 WS-HumanTask】**：任务可挂一组有序动作 `deadlines: [{after_minutes, action}]`（自进入节点起算，after_minutes 必须为正整数，同一节点上限 8 条；**自然分钟直算到期时刻**（`now + after_minutes`；【v2.3 第二批定稿】after_minutes 恒为自然分钟——历史耗时全行业一律墙钟、零引擎按人算日历，双日历口径不做，WorkCalendar 死端口已删除（见 §9）；将来若需工作日口径，按 Flowable 形态重立：节点级具名日历+引擎级注册表+发布期校验名字）。动作枚举五种：
 
 | action | 行为 |
 |---|---|
@@ -773,7 +773,7 @@ flowork/
 
 见 [kernel-v2-plan.md](./kernel-v2-plan.md)（Temporal / Zeebe-Camunda 8 / Flowable / LittleHorse / CloudEvents 官方文档，核实于 2026-10-07）。
 
-v2.2 增补对标的直接来源（核实于 2026-10-07）：对标产品行为基准源码（out/基准材料，逐文件对拍）；Flowable `InclusiveGatewayActivityBehavior` 源码（静态可达性＋活跃执行扫描）；Zeebe 汇聚包容网关 issue camunda/camunda#10031（8.1 仅分叉 / 8.6 补齐汇聚，激活三条件）；WS-HumanTask 1.0（OASIS，jBPM 实现——多 deadline 挂 escalation）；Temporal Workflow Execution Timeout（原生实例级超时）；OR-Join 语义对比论文（Global vs. Local Semantics of the BPMN 2.0 OR-Join——jBPM OR-join 死锁/死循环双漏检）。
+v2.2 增补对标的直接来源（核实于 2026-10-07）：对标产品行为逐文件对拍（clean-room，出处材料仅本地留档）；Flowable `InclusiveGatewayActivityBehavior` 源码（静态可达性＋活跃执行扫描）；Zeebe 汇聚包容网关 issue camunda/camunda#10031（8.1 仅分叉 / 8.6 补齐汇聚，激活三条件）；WS-HumanTask 1.0（OASIS，jBPM 实现——多 deadline 挂 escalation）；Temporal Workflow Execution Timeout（原生实例级超时）；OR-Join 语义对比论文（Global vs. Local Semantics of the BPMN 2.0 OR-Join——jBPM OR-join 死锁/死循环双漏检）。
 
 ## 附录 B：评审记录
 
@@ -826,9 +826,9 @@ v2.2 增补对标的直接来源（核实于 2026-10-07）：对标产品行为�
 3. **身份快照 actor_context**（§5.6 新增、§3.4/§14/§16-P1-7 联动）：任务完成事务内调 snapshot(subject) 把操作者当时的岗位/角色/部门原样定格进 wf_task_history（JSON 袋 4KB 上限，内核不解析）。动机：审计要回答「他当时是谁」，不能只记 id。§6.6 落「审计四件套」公式。可选加强（解析依据快照「为什么是他」）记下不做。
 4. **类型词汇统一＋硬伤修复**：返回类型枚举 subject/subjects/groups/participants/bool → **one_user/users/groups/mixed/bool**（参数与返回共用，消 org 缺口）；超时示例 `manager_of(assignee)` → `manager_of(task.assignee)`（C.4 task.* 可用范围扩「超时策略求值」）；候选槽接受 mixed 自动拆槽（消「混合 ParticipantSet 用不到候选」）；补 None/空传播三规则、组展开「直接成员不含子部门」、Subject=string 检查强度诚实声明；§3.3/§4.2 示例裸 originator 统一为 initiator（与 C.4 命名空间一致）。
 
-### 第七轮（2026-10-07，v2.1→v2.2，行为基准语义对标＋开源引擎对标）
+### 第七轮（2026-10-07，v2.1→v2.2，语义基准对拍＋开源引擎对标）
 
-背景：以 对标产品行为基准代码逐文件对拍内核设计，再对标 jBPM / Activiti 血统（Flowable、Camunda 7）/ Zeebe 8 / Temporal / WS-HumanTask，落七项修改：
+背景：以 对标产品行为逐文件对拍内核设计，再对标 jBPM / Activiti 血统（Flowable、Camunda 7）/ Zeebe 8 / Temporal / WS-HumanTask，落七项修改：
 
 1. **§2.3 all 汇聚放行判定定稿**（本轮最重要，正确性修复）：现状「等全部直接入边 settled」在上游条件分支未命中时永久死锁。改为可达性语义（除已停靠令牌外无未完令牌可达即放行；只看未完令牌，旧 settled 令牌不算数），与 Flowable（静态可达性＋活跃执行扫描）、Zeebe 8.6（#10031）同族；对标产品「来源无令牌＝满足」为同步建令牌模型下的简化特例，因 v2 消息节点引入异步到达不可沿用，故一步到位。§2.4 映射表两行联动（并行/包容汇聚都指回 2.3）。
 2. **§5.1 超时改 deadline 列表形态**（对齐 WS-HumanTask「多 deadline 各挂 escalation」）：`deadlines: [{after_minutes, action}]` 五动作（notify/reassign/escalate/auto_approve/auto_reject）；多 notify＝多级预警（个别 SaaS 写死五个预警水位字段的标准替代形态）；escalate＝**图纸给目标**（`escalate_to` CEL 表达式，必填；v2.3 第十四轮起引擎不再调 OrgDirectory.manager_of）→查无转故障单；现状 TimeoutPolicy 为退化形态，validate 兼容、semantic diff 等价。§2.5/§4.2/§3.3/C.3/C.5 联动。
@@ -843,7 +843,7 @@ v2.2 增补对标的直接来源（核实于 2026-10-07）：对标产品行为�
 
 ### 第八轮（2026-10-09，v2.2→v2.3，行业对标两轮定稿）
 
-背景：先以 对标产品行为基准源码逐文件对拍内核现状（产出 [对标明细.md](./对标明细.md) + [对标明细详设.md](./对标明细详设.md)，A 档 11 项候选），再以主流开源引擎源码级对拍校准（[delta-industry-benchmark.md](./delta-industry-benchmark.md)：Camunda 7.23/8、Flowable 7、jBPM 7.74、Temporal、SpiffWorkflow、Conductor）。用户拍板采纳综合建议。本轮落 spec 四项：
+背景：先以 对标产品行为逐文件对拍内核现状（A 档 11 项候选；对标明细两篇已移出仓库、仅本地留档），再以主流开源引擎源码级对拍校准（[delta-industry-benchmark.md](./delta-industry-benchmark.md)：Camunda 7.23/8、Flowable 7、jBPM 7.74、Temporal、SpiffWorkflow、Conductor）。用户拍板采纳综合建议。本轮落 spec 四项：
 
 1. **动作票数语义定稿（§5.1 新增块）**：transfer＝票随人走（转办不增减应办总数、被转办人完成计一票）；add_countersigner＝加签人各占一票（item_count 随名单同步增加）；assist 不计票。「不占票的加签」用 assist/consult 表达，两路分流——对标产品按加签组归并算一票的归并形态不采纳（主流引擎无票数概念无从对齐，且归并破坏 item_count 与任务行数对应）。
 2. **驳回复活圈定「最近一轮」（§5.1 驳回条款）**：复活名单＝目标节点最近一个已完结令牌（token_no 最大）名下办理人，多轮驳回名单不膨胀；无完结令牌才回退全量历史。同时声明与主流的**刻意差异**：BPMN 系引擎重入时按定义重新解析办理人，flowork 复活原办理人（国内审批语义），原名单为空时兜底走表达式解析。
@@ -854,7 +854,7 @@ v2.2 增补对标的直接来源（核实于 2026-10-07）：对标产品行为�
 
 ### 第九轮（2026-10-09，v2.3 续，对标第二批实施）
 
-第八轮拍板后的第二批落地（依据 对标明细详设.md A1/A2/A5 修正版），落 spec 三项：
+第八轮拍板后的第二批落地（依据 A1/A2/A5 的行业修正版），落 spec 三项：
 
 1. **撤回语义定稿（§5.1 新增块，拍板④落地）**：撤回＝取消当前全部未完令牌+原节点新建（"取消当前+新建上游"，不改写历史，对齐全行业"完成不可变"铁律）；**下游闸门**＝正向可达下游（图遍历不评条件）存在人工进展（非取消已办，或 user_task/call_activity 的已完结令牌）即拒绝并提示改用驳回，错误携带进展明细；穿透节点（branch/cc_task/start/end）的即时完结不拦（对齐行业穿透节点不拦口径；pilot leave 实证 branch 即刻完结曾误拦，首版实现即踩此坑后修正）。闸门生效后取消范围不再需要精细算法（拍板④由本闸门自然覆盖）。撤回归类**实例修改类**动作，授权归宿主开放面。行业零实现，flowork 首创。
 2. **动作表与 available_actions（§5.1 新增块，A1 修正版落地）**：动作可用性＝引擎声明表按 (state × task_type × 认领态) 判定（tasks/actions.py），**不是**节点级配置；`TaskInfo.available_actions` 服务端算完下发——主流引擎均无此面（三引擎任务响应逐字段核实），AI/前端拿到任务即知能做什么。分组：work（complete/reject）/dispatch（transfer/assist/add_countersigner/claim/unclaim）。
@@ -898,7 +898,7 @@ Zeebe inputCollection/outputCollection 契约实装（multi-instance-call-design
 4. **validator/catalog**：subjects 空/merge+MI/completion 空三规则（ERROR）；`subject`、三计数入目录（目录即版本承诺：加词=小版本）；completion 位接入 iter_expression_positions（表驱动静态检查）。
 5. **工程**：subprocess_mi.py 拆分（行数红线）；builder extra 袋 dict→CallInstanceConfig 归一（`_mi_config`，同第十一轮 getattr 惯例）；迁移幂等化（基线 create_all 新库已含列则跳过——alembic 幂等测试实证 batch 多列追加的伪循环依赖，改 `op.add_column`+存在性守卫）。
 
-**对标四批（A 档 8 项 + 修复 + 竞态窗）就此全部完结**：第一批修正确性、第二批立守卫、第三批上能力面、第四批 Zeebe 契约。行业修正版清单与拍板记录见 对标明细.md 三篇。
+**对标四批（A 档 8 项 + 修复 + 竞态窗）就此全部完结**：第一批修正确性、第二批立守卫、第三批上能力面、第四批 Zeebe 契约。行业修正版清单与拍板记录见 delta-industry-benchmark.md（对标明细两篇已移出仓库）。
 
 ### 第十五轮（2026-10-09，v2.3 续，收口批：时钟统一＋终止级联）
 

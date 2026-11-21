@@ -1,6 +1,6 @@
 """行业对标第二批语义测试：A2 撤回下游闸门 / A1 动作表与 available_actions / A5 端口收口。
 
-依据 spec v2.3 第九轮（docs/product/kernel-v2/对标明细详设.md）：
+依据 spec v2.3 第九轮：
 - A2：撤回＝取消当前+新建上游；下游（正向可达、不含自身）存在已完结令牌或非取消
   已办 → 拒绝并提示改用驳回（错误带进展明细）；并行兄弟不拦（非下游）。
 - A1：动作表按 (state × task_type × 认领态) 声明，TaskInfo.available_actions 服务端

@@ -28,7 +28,7 @@
 4. 节点抽象与扩展设计.md：Spec/Behavior 分离、注册表、生命周期钩子
 5. AI友好设计.md：AI 参与流程 / MCP 操作引擎 / AGENTS.md 代码库友好
 6. 主流流程引擎借鉴分析.md：jBPM/Flowable/Camunda/Temporal 借鉴与不抄清单
-7. 流程引擎行为基准分析报告.md：行为基准语义基准（clean-room 参考）
+7. 行为语义基准分析（clean-room 参考，本地材料）
 
 ## 关键入口
 

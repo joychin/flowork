@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "A headless, extensible approval workflow engine (token-based, BPMN-aligned vocabulary)."
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "Apache-2.0" }
+license = { text = "MIT" }
 authors = [{ name = "flowork" }]
 dependencies = [
     "pyyaml>=6.0",

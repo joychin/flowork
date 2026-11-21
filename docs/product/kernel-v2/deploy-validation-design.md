@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | 状态 | **已实施（v2.3 第十一轮）**——实施修订一处：service_task handler 未注册默认 WARNING（先 deploy 后 register 是既有合法模式，tests/semantics/test_incident_resolution 即此），strict 升 ERROR；call_activity 引入 `binding` 字段（latest 缺省=WARNING / deployment=ERROR，Zeebe bindingType 同义） |
-| 依据 | [对标明细详设.md A11](./对标明细详设.md) + [delta-industry-benchmark.md §11](./delta-industry-benchmark.md)（组织实体引用全行业不校验＝部署期；Zeebe 部署期编译 FEEL＋校验同单元引用＝两条可抄的硬规则） |
+| 依据 | [delta-industry-benchmark.md §11](./delta-industry-benchmark.md)（组织实体引用全行业不校验＝部署期；Zeebe 部署期编译 FEEL＋校验同单元引用＝两条可抄的硬规则） |
 
 ## 四层与严重级别
 

@@ -5,7 +5,7 @@
 | 日期 | 2026-10-09 |
 | 对象 | Camunda 7（7.23/7.21）、Camunda 8（含 Zeebe ≥8.2）、Flowable 7、Activiti、jBPM 7.74、Temporal、SpiffWorkflow、Netflix Conductor/Orkes，以及 BPMN 2.0 XSD、WS-HumanTask 1.1、BPSim |
 | 方法 | 官方文档 + **引擎源码逐行核对**（沙箱内 `docs.camunda.org` 不可达，Camunda 7 结论均以 `camunda-engine-7.23.0-sources.jar` 与 GitHub 源码为准，权威性高于手册）+ 官方论坛工单 |
-| 定位 | [对标明细.md](./对标明细.md) / [对标明细详设.md](./对标明细详设.md) 的行业依据篇。**含三处对前两篇建议的推翻/修正**（见第 0 节标 ⚠ 的行） |
+| 定位 | 对标明细（已移出仓库、本地留档）的行业依据篇。**含三处对其建议的推翻/修正**（见第 0 节标 ⚠ 的行） |
 | 与既有调研的分工 | 仓库已有《主流流程引擎借鉴分析》（架构层：Command 管线、Identity Link、历史分级等）与《内核能力基准调研》（七维评分卡）。本篇只回答一个问题：**A1–A11 这些具体机制，主流引擎到底怎么做**——不重复架构层结论 |
 
 ---
