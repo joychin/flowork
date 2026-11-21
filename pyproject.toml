@@ -1,7 +1,7 @@
 [project]
 name = "flowork"
 version = "0.1.0"
-description = "A headless, extensible approval workflow engine (token-based, BPMN-aligned vocabulary)."
+description = "An embeddable BPM workflow engine for Python — token-based kernel, standalone deployment, pluggable REST/MCP surfaces and expression functions."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
