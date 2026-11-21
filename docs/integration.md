@@ -227,6 +227,68 @@ handlers，web/rest/mcp 三面统一经 `contrib.assembly`）、`FLOWORK_VOCABUL
 - 完结实例归档：`history.archive_instance(id)` 导出 JSON 冷存。
 
 
+## 接入你的日志体系
+
+内核日志只有一个发声通道：标准库 logging 的层级命名空间。每个 logger 名
+等于所在模块的全路径（`flowork.engine.ops`、`flowork.jobs.scheduler`、
+`flowork.engine.job_service`、`flowork.definitions.validator_deploy`），
+包根已挂 `NullHandler`——宿主不配置日志时引擎完全静默、不产生警告。
+内核不做 `basicConfig`、不内置任何日志后端：「要不要出声、用什么后端」
+是宿主的决定。
+
+接管方式二选一：
+
+```python
+import logging
+
+# 方式一：只接管 flowork（粒度最细，不影响宿主其余日志）
+logging.getLogger("flowork").addHandler(my_handler)
+logging.getLogger("flowork").setLevel(logging.DEBUG)
+
+# 方式二：什么都不做——引擎日志随记录自然冒泡到 root logger，
+# 与宿主应用其余日志走同一套格式与目的地
+```
+
+按子系统细粒度调级（logger 名即模块路径，无需任何开关字段）：
+
+```python
+logging.getLogger("flowork.jobs").setLevel(logging.DEBUG)      # 只看 Job 调度
+logging.getLogger("flowork.engine").setLevel(logging.WARNING)  # 引擎主体静默
+```
+
+引擎输出的等级纪律（将来往内核加日志时照此办理）：
+
+| 等级 | 语义 | 发声点 |
+| --- | --- | --- |
+| DEBUG | 命令追踪（成功命令耗时） | `flowork.engine.ops` |
+| WARNING | 需运维看见、但流程继续：乐观锁重试、部署校验告警、Job 失败退避重试、Job 进入 dead-letter | `flowork.engine.ops` / `flowork.definitions.validator_deploy` / `flowork.jobs.scheduler` / `flowork.engine.job_service` |
+| ERROR（带堆栈） | 已落库但执行的环节失败：on_fail 钩子执行失败、故障单记录失败（故障单本身照常落库，日志不吞账） | `flowork.engine.fail_hooks` / `flowork.engine.ops` |
+
+两条边界（架构约定，不是风格建议）：
+
+- **该是事件的走事件，该是日志的走日志。** 宿主程序要消费的事实
+  （任务创建、路由决策、取消信号、死信）永远是领域事件＋留痕表，
+  绝不降级成日志行——`job_dead_lettered` 事件与 dead-letter 日志并存
+  就是这个分工：事件给程序，日志给运维的人。
+- **日志只写引擎内部排障信息**，不携带业务载荷（变量值等）。业务
+  可观测性走事件面与查询面（实例 / 已办 / 路由决策 / 变量历史），
+  它们是可查询的结构化数据，与日志无关。
+
+### 与 structlog / loguru 互通
+
+内核经标准库 logging 发声，主流日志框架都能接管（各自官方文档有现成
+配方）：
+
+- **structlog**：`ProcessorFormatter` 桥接——structlog 渲染进 stdlib
+  logging 的 handler，引擎日志与应用日志进同一结构化管线。
+- **loguru**：`InterceptHandler` 拦截——把 stdlib logging 的记录转投
+  loguru，引擎日志进 loguru 的 sink 体系。
+
+不选 loguru/structlog 作为内核直发通道的原因：嵌入方会被迫背依赖、
+再花力气桥回自己的体系；stdlib logging 是 Python 生态的通用适配器，
+两种框架都能从它反向接管（引擎经它发声＝把选择权留给宿主）。
+
+
 ## 消息用法四模式（spec §7 等待与唤醒的应用手册）
 
 以「外部系统与流程交互」视角组织，引擎侧原语只有两个：`publish_message`（发后不管，可缓冲）与 `correlate_message`（同步要回执，不缓冲）。

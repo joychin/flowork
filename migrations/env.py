@@ -20,7 +20,11 @@ from flowork.persistence.orm import Base
 
 config = context.config
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # disable_existing_loggers=False：fileConfig 缺省为 True，会把迁移前已存在
+    # 的 logger（嵌入方进程内先 import flowork 再跑升级时＝整个 flowork 命名
+    # 空间）静默禁用——引擎日志在宿主进程里无声消失。alembic.ini 只配 alembic
+    # 自己的 logger，不碍着既有 logger。
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = Base.metadata
 

@@ -34,7 +34,7 @@ if TYPE_CHECKING:
 
 __all__ = ["run_fail_hooks"]
 
-logger = logging.getLogger("flowork")
+logger = logging.getLogger(__name__)
 
 
 def run_fail_hooks(

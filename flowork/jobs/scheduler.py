@@ -34,7 +34,7 @@ if TYPE_CHECKING:
 
 __all__ = ["JobScheduler"]
 
-logger = logging.getLogger("flowork.jobs")
+logger = logging.getLogger(__name__)
 
 _BACKOFF_BASE_SECONDS = 30
 
@@ -186,10 +186,25 @@ class JobScheduler(DeadlineStrategiesMixin):
                 {"job_id": job.id, "error": str(exc)},
                 job.instance_id,
             )
+            logger.warning(
+                "Job 进入 dead-letter（job=%s instance=%s 重试 %d 次）：%s",
+                job.id,
+                job.instance_id,
+                job.retry_count,
+                exc,
+            )
         else:
             backoff = _BACKOFF_BASE_SECONDS * (2 ** (job.retry_count - 1))
             job.state = "scheduled"
             job.run_at = moment + timedelta(seconds=backoff)
+            logger.warning(
+                "Job 执行失败，%.0f 秒后重试（job=%s 第 %d/%d 次）：%s",
+                backoff,
+                job.id,
+                job.retry_count,
+                job.max_retries,
+                exc,
+            )
 
     def requeue(self, job_id: str) -> None:
         """人工重派 dead-letter Job（重置为 scheduled，清零重试计数）。"""

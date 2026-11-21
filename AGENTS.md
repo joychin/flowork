@@ -918,3 +918,25 @@ docker kill→fail loud→start 后同进程同 URL pool_pre_ping 自动恢复�
 （深翻页 offset=99000 也 3.8ms），查询面可堪用。产物 out/soak/{mcp_call,nasty_client,
 bulk_fill}.py + logs/mcp_agent.md + SOAK_REPORT 第三级补记。待拍板三项：MCP 补 terminate/
 FLOWORK_SETUP 补 org 钩子/纯字面量取人部署期人数预演。
+
+**宿主日志接入批（2026-11-21，内核日志面收口——「开发者自由引入自己的日志体系」落地；1 提交）**：
+裁定=内核不设日志端口（死端口先例四批在前，日志端口无理由成为第五个），Python 生态标准答案是
+stdlib logging 层级命名空间本身就是扩展点。① 统一命名纪律——全仓 logger 一律
+`logging.getLogger(__name__)`（层级名＝模块全路径；修前 ops/fail_hooks 硬编码 "flowork"、
+scheduler 硬编码 "flowork.jobs"、validator_deploy 用 __name__ 三处不一致）；包根 NullHandler
+（`flowork/__init__`，logging HOWTO 库礼仪——宿主未配置时静默不警告；内核永不 basicConfig，
+「要不要出声」的决定权留给宿主）。② Job 失败面接声——内部 timer（jobs/scheduler
+._mark_failure）与 worker 汇报（engine/job_service.fail_job）两路径对称补 WARNING
+（退避重试＋进入 dead-letter）；事件照发不变——「事件给程序、日志给运维的人」与
+「日志只写排障信息不带业务载荷」两条边界明文化进 integration.md。③ **守卫测试在全量
+套件下抓到真缺陷**：migrations/env.py 的 `fileConfig` 缺省 disable_existing_loggers=True
+——同进程先 import flowork 再跑 Alembic 升级（CLI 编程式升级路径）会把整个 flowork
+logger 命名空间静默禁用、引擎日志无声消失（全量顺序 test_alembic 先跑→日志测试收空；
+单跑不触发，二分按退出码定位）；改显式 `disable_existing_loggers=False`＋静态回归钉子。
+④ 守卫 `tests/test_logging_surface.py` 五例：NullHandler 存在 / env.py 钉子 / AST 扫描
+getLogger 只准 `__name__` 字面量 / 宿主 handler 挂 "flowork" 收得到部署告警且
+record.name＝模块全路径 / worker dead-letter 发声。⑤ integration.md 新节「接入你的
+日志体系」：接管两方式（挂 flowork 命名空间 handler / 冒泡到 root）、按子系统调级、
+等级纪律表（DEBUG 命令追踪 / WARNING 可恢复（锁重试·部署告警·Job 失败） /
+ERROR 带堆栈（钩子失败·故障单记录失败））、structlog（ProcessorFormatter）与
+loguru（InterceptHandler）互通配方及不直发的原因。**1303 测试全绿，五道门全过。**

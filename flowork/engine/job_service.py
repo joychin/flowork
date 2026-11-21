@@ -8,6 +8,7 @@ lease_until）；干完 ``complete_job``；失败 ``fail_job``（剩余重试次
 
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any
@@ -25,6 +26,8 @@ if TYPE_CHECKING:
     from flowork.engine.engine import ProcessEngine
 
 __all__ = ["JobClaim", "JobService", "JobStateError"]
+
+logger = logging.getLogger(__name__)
 
 _INITIAL_BACKOFF_SECONDS = 1.0
 _MAX_BACKOFF_MULTIPLIER = 100.0
@@ -186,6 +189,13 @@ class JobService:
                     {"job_id": job_id, "error": error, "worker": True},
                     job.instance_id,
                 )
+                logger.warning(
+                    "worker Job 进入 dead-letter（job=%s instance=%s 重试 %d 次）：%s",
+                    job_id,
+                    job.instance_id,
+                    job.retry_count,
+                    error,
+                )
                 ctx.session.flush()
                 return "dead_letter"
             delay = (
@@ -202,6 +212,13 @@ class JobService:
             job.worker_id = None
             job.lease_until = None
             ctx.session.flush()
+            logger.warning(
+                "worker Job 执行失败，%.0f 秒后重试（job=%s 第 %d 次失败）：%s",
+                delay,
+                job_id,
+                job.retry_count,
+                error,
+            )
             return "scheduled"
 
         return self._engine.execute(_command)

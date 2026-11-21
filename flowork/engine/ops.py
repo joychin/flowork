@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 
 __all__ = ["CommandContext", "LockConflictError", "execute_command"]
 
-logger = logging.getLogger("flowork")
+logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
 
