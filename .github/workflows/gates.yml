@@ -1,0 +1,85 @@
+name: gates
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  gates:
+    # 五道门 + 随机结构套件（Python 3.11 是声明的下限，3.12 是开发态版本）
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12"]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ matrix.python }}
+          enable-cache: true
+
+      - name: Install
+        run: uv sync --frozen
+
+      - name: Lint & types (ruff check / ruff format --check / mypy / lint-imports)
+        run: |
+          uv run ruff check flowork tests examples migrations
+          uv run ruff format --check flowork tests examples migrations
+          uv run mypy flowork
+          uv run lint-imports
+
+      - name: Tests (default suite)
+        run: uv run pytest
+
+      - name: Tests (randomized, 30 iterations)
+        run: uv run pytest -m randomized
+
+  postgres:
+    # PG 冒烟：dialect/流程/并发/迁移通道（needs_postgres 默认排除，CI 显式开门）
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: flowork
+          POSTGRES_DB: flowork_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      FLOWORK_TEST_PG_URL: postgresql+psycopg://postgres:flowork@127.0.0.1:5432/flowork_test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install
+        run: uv sync --frozen
+
+      - name: Tests (needs_postgres)
+        run: uv run pytest -m needs_postgres
+
+  audit:
+    # 锁定依赖已知漏洞（运行时集 + 开发组一起审，有洞即红）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Export locked set
+        run: uv export --format requirements-txt --no-hashes --no-emit-project --all-groups --no-editable -o locked.txt
+
+      - name: pip-audit
+        run: uvx pip-audit -r locked.txt --no-deps --disable-pip --progress-spinner off
