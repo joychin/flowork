@@ -25,6 +25,7 @@ from sqlalchemy import select, update
 
 from flowork.engine.kernel import EngineExecutionError
 from flowork.engine.ops import CommandContext
+from flowork.errors import FloworkError
 from flowork.events.domain import DomainEvent
 from flowork.jobs.strategies import DeadlineStrategiesMixin
 from flowork.persistence.orm import JobRow, ProcessInstanceRow
@@ -120,7 +121,6 @@ class JobScheduler(DeadlineStrategiesMixin):
         调度器不可见）；冻结/咨询推迟被策略回置 scheduled 后**拉回 virtual**
         （不落真实域）；策略失败上抛给模拟驱动器（诚实停点，不重试不死信）。
         """
-        from sqlalchemy import update
 
         def _command(ctx: CommandContext) -> bool:
             claimed_id = ctx.session.execute(
@@ -137,29 +137,12 @@ class JobScheduler(DeadlineStrategiesMixin):
                 with ctx.session.begin_nested():
                     self._apply_strategy(ctx, job)
             except Exception as exc:
-                # 模拟域：策略异常不得穿出驱动循环（整次模拟会丢报告）——
-                # Job 结案留痕（**独立事务**持久化：本命令随后上抛 FloworkError
-                # 会整体回滚，同事务写 done 会被一起滚掉——2026-10-21 内核
-                # review P1-6 副刀：修前「留痕」实际不落库，Job 永远留在
-                # virtual 且无任何失败证据），错误归一由驱动器记 notes
-                with self._engine.session_factory() as close_session, close_session.begin():
-                    close_session.execute(
-                        update(JobRow)
-                        .where(JobRow.id == job_id)
-                        .values(
-                            state="done",
-                            last_error=str(exc),
-                            result_payload={
-                                **(job.result_payload or {}),
-                                "skipped": str(exc),
-                            },
-                        )
-                    )
-                from flowork.errors import FloworkError
-
+                # 模拟域：策略异常不得穿出驱动循环（整次模拟会丢报告）。
+                # 结案留痕由 _trace_virtual_failure 在本命令回滚后补写
+                # （此处不再另开会话——见该方法 docstring 的自锁教训）。
                 raise FloworkError(f"虚拟时钟策略执行失败（job={job.id}）：{exc}") from exc
             if job.state == "scheduled":
-                # 策略显式回置 scheduled＝冻结/咨询推迟不消费——留在虚拟域，
+                # 策略显式回置 scheduled＝冻结期/咨询期推迟不消费——留在虚拟域，
                 # 由后续推钟再次兑现
                 job.state = "virtual"
                 return True
@@ -170,7 +153,34 @@ class JobScheduler(DeadlineStrategiesMixin):
             }
             return True
 
-        return bool(self._engine.execute(_command))
+        try:
+            return bool(self._engine.execute(_command))
+        except FloworkError as exc:
+            self._trace_virtual_failure(job_id, str(exc))
+            raise
+
+    def _trace_virtual_failure(self, job_id: str, message: str) -> None:
+        """失败 virtual Job 的结案留痕：在失败命令**回滚之后**另起短命令写。
+
+        CAS 认领与失败同事务，随回滚一起消失（Job 回到 virtual、行锁已
+        释放），此刻补写 done + last_error 不会与任何在途事务争锁。此前
+        的写法是在命令事务**内**另开会话更新同一行：文件库忙等 16 秒耗尽
+        重试、PostgreSQL 同线程自锁永久挂死（外层事务持有行锁且不再前进，
+        死锁检测器看不见同线程自锁）。留痕失败只记日志，不掩蔽原始错误。
+        """
+
+        def _trace(ctx: CommandContext) -> None:
+            job = ctx.session.get(JobRow, job_id)
+            if job is None or job.state != "virtual":
+                return  # 已被并发结案/回收——留痕幂等跳过
+            job.state = "done"
+            job.last_error = message
+            job.result_payload = {**(job.result_payload or {}), "skipped": message}
+
+        try:
+            self._engine.execute(_trace)
+        except Exception:
+            logger.exception("虚拟 Job 失败留痕未落（job=%s）", job_id)
 
     def _mark_failure(
         self, ctx: CommandContext, job: JobRow, exc: Exception, moment: datetime

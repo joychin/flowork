@@ -12,7 +12,7 @@ import pytest
 from sqlalchemy import select
 
 from flowork.definitions.builder import FlowBuilder
-from flowork.definitions.definition import InstanceDeadline
+from flowork.definitions.definition import InstanceDeadline, ProcessVariable
 from flowork.definitions.node import MultiInstance, TaskDeadline
 from flowork.engine.engine import ProcessEngine
 from flowork.errors import FloworkError
@@ -312,3 +312,67 @@ def test_clock_consult_deferral_does_not_spin():
     # 咨询待办不被烧掉的步数吞掉——仍是待决策点（诚实停点而非假循环）
     pending = [t.activity_code for t in engine.task.list_tasks(instance_id=iid)]
     assert "m" in pending or len(pending) >= 1, pending
+
+
+# —— 策略失败的结案留痕（全仓review-2026-11-23 P1：留痕曾与在途事务自锁） ——
+
+
+def _deploy_failing_reassign(engine: ProcessEngine) -> None:
+    """15 分钟改派到「已声明但未赋值」的变量——推钟兑现时公式求值必失败。"""
+    engine.repository.deploy(
+        FlowBuilder("clk_vfail")
+        .start()
+        .user_task(
+            "a",
+            assignee="'u_a'",
+            deadlines=[TaskDeadline(after_minutes=15, action="reassign", reassign_to="nosuchvar")],
+        )
+        .end()
+        .connect("start", "a")
+        .connect("a", "end")
+        .build(variables=[ProcessVariable(name="nosuchvar", type="number")])
+    )
+
+
+def _simulate_bounded(engine: ProcessEngine, timeout_s: float) -> dict:
+    """看门狗线程里跑 simulate：修前文件库忙等 16 秒、PostgreSQL 永久挂死。"""
+    import threading
+
+    outcome: dict = {}
+
+    def _run() -> None:
+        try:
+            report = engine.runtime.simulate(
+                "clk_vfail", controls={"decisions": [], "clock": [{"advance_minutes": 30}]}
+            )
+            outcome["report"] = report
+        except Exception as exc:
+            outcome["error"] = exc
+
+    worker = threading.Thread(target=_run)
+    worker.start()
+    worker.join(timeout_s)
+    assert not worker.is_alive(), f"simulate 挂死（>{timeout_s:.0f}s）——自锁回归"
+    return outcome
+
+
+def test_virtual_strategy_failure_traced_without_selflock(tmp_path):
+    """文件库：策略失败 → simulate 限时返回、Job 落 done+last_error（不再忙等）。"""
+    from flowork.engine.config import EngineConfig
+
+    engine = ProcessEngine(EngineConfig(db_file=tmp_path / "vfail.db"))
+    _deploy_failing_reassign(engine)
+
+    outcome = _simulate_bounded(engine, timeout_s=30)
+
+    report = outcome.get("report")
+    assert report is not None, f"simulate 不应抛错：{outcome.get('error')!r}"
+    assert any("虚拟时钟兑现失败" in n and "超时reassign" in n for n in report.notes)
+    session = engine.session_factory()
+    try:
+        job = session.scalars(select(JobRow)).first()
+        assert job is not None and job.state == "done"
+        assert "虚拟时钟策略执行失败" in (job.last_error or "")
+        assert "skipped" in (job.result_payload or {})
+    finally:
+        session.close()
