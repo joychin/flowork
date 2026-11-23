@@ -44,7 +44,11 @@ class ProcessEngine:
         self.config = config or EngineConfig()
         register_builtin_behaviors(self.config.node_registry)
         self.handlers = HandlerRegistry()
-        self._db_engine = create_db_engine(resolve_db_url(self.config))
+        self._db_engine = create_db_engine(
+            resolve_db_url(self.config),
+            pool_size=self.config.pool_size,
+            max_overflow=self.config.max_overflow,
+        )
         create_schema(self._db_engine)
         self.session_factory = session_factory(self._db_engine)
         self.repository = RepositoryService(self)

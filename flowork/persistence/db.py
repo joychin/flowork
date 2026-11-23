@@ -63,7 +63,7 @@ def _serialize_memory_engine(engine: Engine) -> None:
         guard.release()
 
 
-def create_db_engine(url: str) -> Engine:
+def create_db_engine(url: str, *, pool_size: int = 5, max_overflow: int = 10) -> Engine:
     """创建数据库引擎（SQLite 默认开启外键与 WAL）。
 
     内存 SQLite 用 StaticPool：所有连接共享同一个内存库（否则每连接各一份
@@ -77,8 +77,16 @@ def create_db_engine(url: str) -> Engine:
         )
         _serialize_memory_engine(engine)
     else:
-        # 非内存库（PG 等）：pre_ping 防防火墙掐断的陈旧连接在下次借出时炸
-        engine = create_engine(url, future=True, pool_pre_ping=True)
+        # 非内存库（PG 等）：pre_ping 防防火墙掐断的陈旧连接在下次借出时炸；
+        # 池参数经 EngineConfig.pool_size/max_overflow 透传（REST 同步处理器
+        # 跑在线程池里，缺省 5+10 对高并发偏小，宿主可调）
+        engine = create_engine(
+            url,
+            future=True,
+            pool_pre_ping=True,
+            pool_size=pool_size,
+            max_overflow=max_overflow,
+        )
     if url.startswith("sqlite"):
 
         @event.listens_for(engine, "connect")

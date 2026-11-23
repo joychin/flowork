@@ -8,6 +8,7 @@ from datetime import datetime
 from pathlib import Path
 
 from flowork.clock import utc_now
+from flowork.errors import FloworkError
 from flowork.events.domain import DomainEvent
 from flowork.participants.org_directory import CoreOrgDirectory
 from flowork.persistence.db import url_from_value
@@ -26,14 +27,17 @@ class EngineConfig:
     """引擎配置（全部有默认值，内核可裸跑）。
 
     Attributes:
-        db_url: SQLAlchemy 连接串，默认内存 SQLite（测试友好）。
+        db_url: SQLAlchemy 连接串，默认内存 SQLite。
         node_registry: 节点注册表；默认内置类型，可传入自定义注册表。
-        history_level: 历史事件写入粒度。
+        history_level: 历史事件写入粒度（none / activity / audit / full）。
         max_node_loops: 单节点最大完成次数（死循环守卫）。
         max_participants: 单节点参与者规模上限（会签名单/传阅接收人；加签后名单同守）。
             缺省 None＝不设防（内核不替宿主选数值）；显式配置后超限＝拒绝
             （解析位挂起+故障单，调用方位请求拒绝），绝不静默截断。
         lock_retries: 乐观锁冲突重试次数。
+        pool_size / max_overflow: 连接池参数（仅非内存库生效；内存库恒单连接）。
+        now: 时钟。契约＝返回 naive UTC datetime（多副本部署以 NTP 对齐）；
+            传入带 tzinfo 的时钟首条命令即报错——落库列与事件 id 全按 naive UTC 算。
     """
 
     db_url: str = "sqlite:///:memory:"
@@ -45,10 +49,26 @@ class EngineConfig:
     # True 时升 ERROR 拦发布（fail-fast 部署）。
     strict_deploy_validation: bool = False
     lock_retries: int = 3
+    pool_size: int = 5
+    max_overflow: int = 10
     now: Callable[[], datetime] = _system_now
     db_file: str | Path | None = None  # CLI 便利字段：设置后覆盖 db_url（路径或完整 URL）
     org: CoreOrgDirectory | None = None  # 组织目录：内核只消费四方法（Core 协议）；丰富面按需
     expression_functions: ExpressionFunctions | None = None  # CEL 词汇（全表达式位）
+
+    def __post_init__(self) -> None:
+        # 拼错的 history_level 曾被静默按全量记录——配置错必须在构造时响
+        valid_levels = ("none", "activity", "audit", "full")
+        if self.history_level not in valid_levels:
+            raise FloworkError(
+                f"history_level 须为 {'/'.join(valid_levels)} 之一，收到：{self.history_level!r}"
+            )
+        probe = self.now()
+        if getattr(probe, "tzinfo", None) is not None:
+            raise FloworkError(
+                "now() 须返回 naive UTC datetime（不带 tzinfo）——全库时间戳与"
+                f"事件 id 都按 naive UTC 计算，收到：{probe!r}"
+            )
 
 
 def resolve_db_url(config: EngineConfig) -> str:

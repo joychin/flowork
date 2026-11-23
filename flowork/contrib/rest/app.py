@@ -43,6 +43,9 @@ def create_engine(db_file: str | Path | None = None) -> ProcessEngine:
     from flowork.contrib.assembly import assemble_engine
 
     db_path = db_file or os.environ.get("FLOWORK_DB", "flowork.db")
+    if db_file is None and "FLOWORK_DB" not in os.environ:
+        # 缺省路径落进程工作目录——没有这条提示，数据文件的存在感为零
+        logger.warning("未设 FLOWORK_DB，REST 进程使用当前目录下的 flowork.db")
     engine, _source = assemble_engine(str(db_path))
     return engine
 
