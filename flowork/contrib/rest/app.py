@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import logging
 import os
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
@@ -121,24 +123,32 @@ def create_app(db_file: str | Path | None = None) -> FastAPI:
     register_rest_routes(app, engine)
 
     jobs_enabled = os.environ.get("FLOWORK_JOBS", "on").lower() not in ("off", "0", "false")
-    job_interval = int(os.environ.get("FLOWORK_JOB_INTERVAL", "30"))
+    try:
+        job_interval = int(os.environ.get("FLOWORK_JOB_INTERVAL", "30"))
+    except ValueError as exc:
+        raise FloworkError(
+            f"FLOWORK_JOB_INTERVAL 须为整数秒数，收到：{os.environ['FLOWORK_JOB_INTERVAL']!r}"
+        ) from exc
 
-    if jobs_enabled:
-
-        @app.on_event("startup")
-        def _start_jobs() -> None:
+    @asynccontextmanager
+    async def _lifespan(application: FastAPI) -> AsyncIterator[None]:
+        if jobs_enabled:
             engine.jobs.start(interval_seconds=job_interval)
-
-    @app.on_event("shutdown")
-    def _shutdown() -> None:
+        yield
         engine.jobs.stop()
         engine.close()
 
+    app.router.lifespan_context = _lifespan
     return app
 
 
 def __getattr__(name: str) -> Any:
-    """``uvicorn flowork.contrib.rest.app:app`` 的惰性默认应用（import 无副作用）。"""
+    """``uvicorn flowork.contrib.rest.app:app`` 的惰性默认应用（import 无副作用）。
+
+    首次取属性创建后写入模块 globals 缓存——同进程重复访问返回同一应用
+    （不缓存会每次访问新建引擎，实测属性自比不等）。"""
     if name == "app":
-        return create_app()
+        application = create_app()
+        globals()["app"] = application
+        return application
     raise AttributeError(f"模块属性不存在：{name}")

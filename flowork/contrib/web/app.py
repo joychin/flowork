@@ -20,6 +20,8 @@ from __future__ import annotations
 
 import os
 import sys
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
@@ -191,17 +193,16 @@ def create_app(
         raise FloworkError(
             f"FLOWORK_JOB_INTERVAL 须为整数秒数，收到：{os.environ['FLOWORK_JOB_INTERVAL']!r}"
         ) from exc
-    if jobs_enabled:
 
-        @app.on_event("startup")
-        def _start_jobs() -> None:
+    @asynccontextmanager
+    async def _lifespan(application: FastAPI) -> AsyncIterator[None]:
+        if jobs_enabled:
             engine.jobs.start(interval_seconds=job_interval)
-
-    @app.on_event("shutdown")
-    def _shutdown() -> None:
+        yield
         engine.jobs.stop()
         engine.close()
 
+    app.router.lifespan_context = _lifespan
     return app
 
 
