@@ -138,6 +138,7 @@ def page_payload(items: list[Any], offset: int, limit: int) -> dict[str, Any]:
 # 不为错误映射扩公开面）。
 _STATUS_BY_NAME: dict[str, int] = {
     "InputContractError": 422,  # 变量写入校验拒绝（修前漏网全 500）
+    "DefinitionConflictError": 409,  # 并发部署撞 (code, major, revision)——重试即幂等
     "LockConflictError": 409,
     "ParticipantCountMismatchError": 422,
     "ParticipantLimitError": 422,
