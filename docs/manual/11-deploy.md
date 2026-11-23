@@ -98,7 +98,7 @@ python -m flowork.contrib.mcp.server    # stdio 形态；FLOWORK_DB 同约定
 
 ## 本章小结
 
-- 三库形态一句话：内存试验、文件单机、PostgreSQL 生产；`FLOWORK_DB` 是
+- 三库形态一句话：内存试验、文件单机、PostgreSQL 生产（内存库为单连接，引擎在连接层串行化并发命令——多线程重负载请选文件/PG）；`FLOWORK_DB` 是
   服务形态（REST / MCP / web）与 Alembic 的约定，CLI 显式 `--db`；
   嵌入式形态不用管迁移。
 - 并发模型一句话：乐观锁串行化同实例、跨实例天然并行、Job CAS 恰一次——

@@ -279,7 +279,7 @@ cd designer && npm install && npm run dev    # http://localhost:5173
 
 | 形态 | 说明 |
 |---|---|
-| 内存 SQLite | 零配置，试验/测试/设计器模拟用，进程结束即消失 |
+| 内存 SQLite | 零配置，试验/测试/设计器模拟用，进程结束即消失（单连接，并发命令在连接层串行化） |
 | 文件 SQLite | 单文件即生产可用（WAL 模式），`FLOWORK_DB=/path/db.sqlite3` |
 | PostgreSQL | 同一 URL 通道切换；多副本部署建议 PG |
 
