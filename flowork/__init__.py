@@ -5,7 +5,7 @@
 
 import logging
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 # 库礼仪（logging HOWTO）：未配置 handler 时静默且不警告——「要不要出声、
 # 用什么日志后端」的决定权留给宿主（经 logging.getLogger("flowork") 挂
