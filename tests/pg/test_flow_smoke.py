@@ -8,13 +8,23 @@ from __future__ import annotations
 
 import pytest
 
-from flowork.api import FlowBuilder, MultiInstance, ProcessEngine, RouteMode
+from flowork.api import (
+    FlowBuilder,
+    MultiInstance,
+    ProcessEngine,
+    ProcessVariable,
+    RouteMode,
+)
 
 pytestmark = pytest.mark.needs_postgres
 
 
 def _deploy_countersign_with_branch(engine: ProcessEngine) -> None:
-    """起点 → 会签（满 2 票即过）→ 分支（金额）→ 财务/结束。"""
+    """起点 → 会签（满 2 票即过）→ 分支（金额）→ 财务/结束。
+
+    amount 须声明：条件位引用未声明变量自设计期收紧后即 ERROR
+    （本夹具漏声明使两条用例自那时起在 PG 上红——全仓review-2026-11-23）。
+    """
     flow = (
         FlowBuilder("pg_countersign", "会签分流")
         .start()
@@ -32,7 +42,7 @@ def _deploy_countersign_with_branch(engine: ProcessEngine) -> None:
         .flow("gate", "finance", condition="amount >= 1000")
         .flow("gate", "end", condition="amount < 1000")
         .connect("finance", "end")
-        .build()
+        .build(variables=[ProcessVariable(name="amount", type="number")])
     )
     engine.repository.deploy(flow)
 
