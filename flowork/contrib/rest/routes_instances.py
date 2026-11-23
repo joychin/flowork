@@ -11,11 +11,14 @@ from flowork.contrib.rest._common import (
     RestConflictError,
     RestRequestError,
     actor_of,
+    bool_or,
     dict_of,
     dump,
     encode_offset,
+    int_or_none,
     page_request,
     reuse_of,
+    str_or_none,
 )
 
 __all__ = ["register_instance_routes", "signal_waiting_instance"]
@@ -38,7 +41,7 @@ def register_instance_routes(app: FastAPI, engine: ProcessEngine) -> None:
 
     @app.post("/v2/instances")
     def start_instance(request: Request, body: dict[str, Any]) -> dict[str, Any]:
-        code = body.get("code")
+        code = str_or_none(body.get("code"), "code")
         if not code:
             raise RestRequestError("body.code 必填（流程定义编码）")
         variables = body.get("variables")
@@ -47,13 +50,13 @@ def register_instance_routes(app: FastAPI, engine: ProcessEngine) -> None:
                 f"variables 须为对象（{{name: value}}），收到 {type(variables).__name__}"
             )
         instance_id = runtime.start_process(
-            str(code),
-            start_user=str(body.get("start_user") or actor_of(request, body)),
+            code,
+            start_user=str_or_none(body.get("start_user"), "start_user") or actor_of(request, body),
             variables=variables,
-            business_key=body.get("business_key"),
-            major=body.get("major"),
-            revision=body.get("revision"),
-            idempotency_key=body.get("idempotency_key"),
+            business_key=str_or_none(body.get("business_key"), "business_key"),
+            major=int_or_none(body.get("major"), "major"),
+            revision=int_or_none(body.get("revision"), "revision"),
+            idempotency_key=str_or_none(body.get("idempotency_key"), "idempotency_key"),
             reuse=reuse_of(body.get("reuse")),
         )
         return {"instance_id": instance_id}
@@ -74,7 +77,9 @@ def register_instance_routes(app: FastAPI, engine: ProcessEngine) -> None:
             definition_code=flt.get("definition_code"),
             offset=offset,
             limit=limit + 1,
-            include_simulated=bool(flt.get("include_simulated", False)),
+            include_simulated=bool_or(
+                flt.get("include_simulated"), "filter.include_simulated", False
+            ),
         )
         has_more = len(rows) > limit
         return {

@@ -185,3 +185,87 @@ def test_nasty_page_shape(env: tuple[TestClient, ProcessEngine]) -> None:
     response = client.post("/v2/tasks/search", json={"filter": {}, "page": "1"})
     assert response.status_code == 422
     assert "page" in response.json()["error"]["message"]
+
+
+# —— 形状守卫扩展 + 统一错误体（全仓review-2026-11-23 §2.7/§2.8） ——
+
+
+def test_nasty_identity_field_shapes(env: tuple[TestClient, ProcessEngine]) -> None:
+    """start_user/business_key/major 传对象或数组曾静默字符串化或裸 500——422 收敛。"""
+    client, _ = env
+    definition = (
+        FlowBuilder("nasty_identity")
+        .start()
+        .user_task("a", assignee="'u1'")
+        .end()
+        .connect("start", "a")
+        .connect("a", "end")
+        .build()
+    )
+    client.post("/v2/definitions/deploy", json={"spec": dump_definition(definition)})
+    cases = [
+        ({"code": "nasty_identity", "start_user": {"x": 1}}, "start_user"),
+        ({"code": "nasty_identity", "start_user": "u1", "business_key": {"x": 1}}, "business_key"),
+        ({"code": "nasty_identity", "start_user": "u1", "business_key": ["a"]}, "business_key"),
+        ({"code": "nasty_identity", "start_user": "u1", "idempotency_key": 12}, "idempotency_key"),
+        ({"code": "nasty_identity", "start_user": "u1", "major": "1"}, "major"),
+        ({"code": "nasty_identity", "start_user": "u1", "major": 10**30}, "major"),
+        ({"code": ["nasty_identity"], "start_user": "u1"}, "code"),
+    ]
+    for payload, field in cases:
+        response = client.post("/v2/instances", json=payload)
+        assert response.status_code == 422, f"{field}: {response.status_code} {response.text[:120]}"
+        assert field in response.json()["error"]["message"], response.text[:200]
+    ok = client.post("/v2/instances", json={"code": "nasty_identity", "start_user": "u1"})
+    assert ok.status_code == 200
+
+
+def test_loose_bool_filter_strings_rejected(env: tuple[TestClient, ProcessEngine]) -> None:
+    """布尔过滤传字符串曾 bool('false')=True 静默翻转语义——422 收敛。"""
+    client, _ = env
+    for body in (
+        {"filter": {"include_simulated": "false"}},
+        {"filter": {"include_simulated": 0}},
+        {"filter": {"latest_only": "true"}},
+    ):
+        has_sim = "include_simulated" in body["filter"]
+        path = "/v2/instances/search" if has_sim else "/v2/definitions/search"
+        response = client.post(path, json=body)
+        assert response.status_code == 422, f"{body}: {response.status_code} {response.text[:120]}"
+        assert "须为布尔" in response.json()["error"]["message"]
+    ok_sim = client.post("/v2/instances/search", json={"filter": {"include_simulated": True}})
+    assert ok_sim.status_code == 200
+    ok_latest = client.post("/v2/definitions/search", json={"filter": {"latest_only": False}})
+    assert ok_latest.status_code == 200
+
+
+def test_route_level_404_405_use_unified_error_body(env: tuple[TestClient, ProcessEngine]) -> None:
+    """路由级 404/405 曾返回 FastAPI 原生 {"detail": ...}——统一为 {"error": {...}}。"""
+    client, _ = env
+    missing = client.get("/v2/nope")
+    assert missing.status_code == 404
+    assert set(missing.json()) == {"error"}
+
+    method = client.request("DELETE", "/v2/instances/x")
+    assert method.status_code == 405
+    assert set(method.json()) == {"error"}
+    assert set(method.json()["error"]) == {"code", "message", "details"}
+
+
+def test_unhandled_exception_returns_json_500(
+    env: tuple[TestClient, ProcessEngine], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """未处理异常曾返回纯文本 Internal Server Error——统一 JSON 错误体，不泄漏内部细节。"""
+    client, engine = env
+
+    def boom(*_a, **_k):
+        raise RuntimeError("secret internal detail /tmp/path sql text")
+
+    monkeypatch.setattr(engine.repository, "list_definitions", boom)
+    raw = TestClient(client.app, raise_server_exceptions=False)
+    response = raw.post("/v2/definitions/search", json={"filter": {}})
+    assert response.status_code == 500
+    body = response.json()
+    assert set(body) == {"error"}
+    assert body["error"]["code"] == "InternalServerError"
+    assert "secret internal detail" not in response.text

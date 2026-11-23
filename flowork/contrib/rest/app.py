@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 from typing import Any
@@ -25,6 +26,8 @@ from flowork.contrib.rest.routes_system import register_system_routes
 from flowork.contrib.rest.routes_tasks import register_task_routes
 
 __all__ = ["create_app", "create_engine", "register_rest_routes"]
+
+logger = logging.getLogger(__name__)
 
 
 def create_engine(db_file: str | Path | None = None) -> ProcessEngine:
@@ -48,6 +51,40 @@ def register_rest_routes(app: FastAPI, engine: ProcessEngine) -> None:
     @app.exception_handler(FloworkError)
     async def _flowork_error(_request: Any, exc: FloworkError) -> JSONResponse:
         return JSONResponse(status_code=status_of(exc), content=error_payload(exc))
+
+    from starlette.exceptions import HTTPException as StarletteHTTPException
+
+    @app.exception_handler(StarletteHTTPException)
+    async def _http_exception(_request: Any, exc: Any) -> JSONResponse:
+        # 路由级 404/405 等原生 {"detail": ...} 形状破坏统一错误体契约——
+        # 同样包成 {"error": {...}}，状态码保持语义（不存在/方法不允许）。
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={
+                "error": {
+                    "code": type(exc).__name__,
+                    "message": str(exc.detail),
+                    "details": {},
+                }
+            },
+        )
+
+    @app.exception_handler(Exception)
+    async def _unhandled_exception(request: Any, exc: Exception) -> JSONResponse:
+        # 兜底 500：错误体不泄漏内部细节（栈/SQL/路径只进服务端日志）。
+        # 无此处理器时未捕获异常返回纯文本 Internal Server Error，
+        # 消费方拿不到可解析的错误体。
+        logger.exception("未处理异常（%s %s）", request.method, request.url.path)
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": {
+                    "code": "InternalServerError",
+                    "message": "服务器内部错误（详见服务端日志）",
+                    "details": {},
+                }
+            },
+        )
 
     @app.exception_handler(RequestValidationError)
     async def _request_validation_error(_request: Any, exc: Any) -> JSONResponse:

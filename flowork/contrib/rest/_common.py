@@ -85,6 +85,29 @@ def str_or_none(value: Any, name: str) -> str | None:
     return value
 
 
+def bool_or(value: Any, name: str, default: bool) -> bool:
+    """入参形状守卫：布尔或缺省；其余 422（``bool("false")`` 是 True——
+    字符串过滤值静默翻转语义）。"""
+    if value is None:
+        return default
+    if not isinstance(value, bool):
+        raise RestRequestError(f"{name} 须为布尔或 null，收到 {type(value).__name__}")
+    return value
+
+
+def int_or_none(value: Any, name: str) -> int | None:
+    """入参形状守卫：整数或 null；其余 422（大整数/字符串绑定 SQL 即裸 500）。
+
+    界取 2^63-1：SQLite INTEGER 与 PG int8 的公共上界，超出即绑定溢出。"""
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise RestRequestError(f"{name} 须为整数或 null，收到 {type(value).__name__}")
+    if abs(value) > 2**63 - 1:
+        raise RestRequestError(f"{name} 超出整数范围：{value}")
+    return value
+
+
 def _decode_after(after: str) -> int:
     try:
         raw = base64.b64decode(after, validate=True).decode("utf-8")

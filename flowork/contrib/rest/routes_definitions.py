@@ -10,6 +10,7 @@ from flowork.api import ProcessEngine, load_definition
 from flowork.contrib.rest._common import (
     RestRequestError,
     actor_of,
+    bool_or,
     dict_of,
     dump,
     page_payload,
@@ -27,7 +28,7 @@ def register_definition_routes(app: FastAPI, engine: ProcessEngine) -> None:
         flt = dict_of(body.get("filter"), "filter")
         rows = repository.list_definitions(
             code_prefix=str(flt.get("code_prefix") or ""),
-            latest_only=bool(flt.get("latest_only", True)),
+            latest_only=bool_or(flt.get("latest_only"), "filter.latest_only", True),
         )
         status = flt.get("status")
         if status:
