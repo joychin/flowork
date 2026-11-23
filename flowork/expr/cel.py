@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 from collections.abc import Callable, Mapping
 from typing import Any, cast
 
@@ -149,6 +150,13 @@ def _evaluate(
     }
     env = celpy.Environment()
     program = env.program(tree, functions=cast(Any, dict(functions)) if functions else None)
+    # 求值窗口内抬高递归预算：护栏承诺「链项 ≤256 放行」，而 celpy 在每次
+    # Environment() 构造时把进程递归上限**无条件**压回 2500——3.12 的帧深
+    # 在 2500 下余量尚可，3.11 更深、边界公式即触 RecursionError 被归一成
+    # FormulaError（护栏契约变成解释器彩票）。此处取 max(当前, 上限) 并在
+    # finally 恢复；3.11+ 纯 Python 帧递归走堆栈、6000 无段栈风险。
+    original_limit = sys.getrecursionlimit()
+    sys.setrecursionlimit(max(original_limit, 6000))
     try:
         return program.evaluate(activation)
     except FormulaError:
@@ -161,6 +169,8 @@ def _evaluate(
         if len(detail) > 300:
             detail = detail[:300] + "…（求值环境转储已截断）"
         raise FormulaError(f"公式求值错误：{formula!r}（{detail}）") from exc
+    finally:
+        sys.setrecursionlimit(original_limit)
 
 
 def evaluate_formula(

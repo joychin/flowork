@@ -128,7 +128,7 @@ def test_guard_binary_chain_256():
 
 
 def test_guard_binary_chain_boundary_ok():
-    """恰好 256 项（255 次运算）放行。"""
+    """恰好 256 项（255 次运算）放行（求值预算由 cel.py 统一保证）。"""
     terms = MAX_BINARY_OPS
     chain = " + ".join(["1"] * terms)
     assert evaluate_formula(chain, {}) is True
