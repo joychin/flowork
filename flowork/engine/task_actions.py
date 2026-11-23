@@ -255,8 +255,7 @@ class TaskOpsMixin:
                 "task_type": task.task_type,
                 "assignee": task.assignee,
                 "actor": actor,
-                # 与主路径 create_task 载荷同形（通知集成够用面，2026-10-21
-                # review P2）
+                # 与主路径 create_task 载荷同形（通知集成够用面）
                 "name": task.name,
                 "due_at": task.due_at.isoformat() if task.due_at else None,
                 "definition_code": instance.definition_code if instance else None,

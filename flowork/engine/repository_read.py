@@ -1,7 +1,7 @@
 """定义仓库只读查询面：verdict 预演与已发布定义读取。
 
 RepositoryService 经 mixin 组合（engine.repository 入口不变）；拆出守
-300 行红线（2026-10-21 内核 review 批 4 的 IntegrityError 归一让主文件过线）。
+300 行红线。
 """
 
 from __future__ import annotations

@@ -98,7 +98,7 @@ def _select(
 
     if not conditional:
         # 纯无条件出边（含 default 视同无条件）：全部激活（并行/直通）——
-        # default ⊆ unconditional，无需分支（2026-10-21 内核 review P2：死三元）
+        # default ⊆ unconditional，无需分支（死三元）
         return list(unconditional)
 
     matched = _match_in_order(conditional, variables, functions, audit)

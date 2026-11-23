@@ -13,7 +13,7 @@ __all__ = ["list_incidents"]
 
 
 def list_incidents(engine: Any, instance_id: str | None = None) -> list[dict[str, Any]]:
-    """查询 Incident（open/resolved；含节点定位列，2026-10-21 内核 review P0-1）。"""
+    """查询 Incident（open/resolved；含节点定位列）。"""
 
     def _command(ctx: CommandContext) -> Any:
         stmt = select(IncidentRow).order_by(IncidentRow.created_at.desc())

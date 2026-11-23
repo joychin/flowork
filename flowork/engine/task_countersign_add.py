@@ -67,7 +67,7 @@ class TaskCountersignAddMixin:
         """加签：向当前令牌追加会签人（item_count 同步增加，新待办立即生成）。
 
         前加签/后加签在并签池中语义等价（均需完成）。串行会签上同款**立即并行**
-        生成（2026-10-21 内核 review P2 改口：原「按剩余顺序排队」与实现不符；
+        生成（原「按剩余顺序排队」与实现不符；
         顺序排队语义挂 backlog）。
         """
         result: list[TaskInfo] = self._engine.execute(
@@ -148,7 +148,7 @@ class TaskCountersignAddMixin:
                     _TaskRow.token_id == task.token_id, _TaskRow.state == "ready"
                 )
             )
-            # 只数审批任务（2026-10-21 内核 review P2）：同人作为协办/咨询受理人
+            # 只数审批任务：同人作为协办/咨询受理人
             # 在办不算「已在会签名单」——同人不同角色被误拒
             if task_type == "approval"
         }

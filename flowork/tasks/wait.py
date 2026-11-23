@@ -229,7 +229,7 @@ def finish_wait(
     }
     ctx = RuntimeNodeContext(kernel, session, instance, node, token)
     try:  # 错误归因：等待收口失败定位到等待节点
-        # 与 Kernel._finish_and_route 同防线（2026-10-21 内核 review P2）：
+        # 与 Kernel._finish_and_route 同防线：
         # wait 自环合法（validator 放行）但受 max_node_loops 上限约束
         kernel.assert_not_dead_loop(session, instance, node)
         behavior.on_exit(ctx)

@@ -62,8 +62,7 @@ def write_json_atomic(path: Path, content: Any) -> None:
     """同目录临时文件 + rename：读者永远看到完整文件，不会读到半个 JSON。
 
     落盘前把临时文件权限对齐既有文件（缺省 0666&~umask）——mkstemp 产物
-    是 0600，直接 replace 会把工作区 0644 的定义文件改成仅属主可读
-    （2026-10-21 内核 review P2）。
+    是 0600，直接 replace 会把工作区 0644 的定义文件改成仅属主可读。
     """
     text = json.dumps(content, ensure_ascii=False, indent=2) + "\n"
     handle, tmp_name = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")

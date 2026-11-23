@@ -161,8 +161,8 @@ def _resolve_node(raw: Any, registry: NodeRegistry) -> FlowNode:
     """节点装载：非对象与字段类型错归一 InvalidDefinitionData。
 
     pydantic ValidationError 是 ValueError 但不在 DefinitionError 族——裸抛
-    会让 web/REST/MCP 三个传输面把「定义写错了」当 500（2026-10-21 内核
-    review P2：web 面单独兜过，REST/MCP 漏）。
+    会让 web/REST/MCP 三个传输面把「定义写错了」当 500（web 面单独兜过，
+    REST/MCP 漏）。
     """
     if not isinstance(raw, dict):
         raise InvalidDefinitionData(f"节点必须是 JSON 对象，收到：{raw!r}")

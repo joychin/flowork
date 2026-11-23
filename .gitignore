@@ -43,3 +43,6 @@ uv.lock.bak
 
 # 调研素材（本地资料，不入库；正式设计文档在 docs/product/）
 docs_research/
+
+# import-linter 本地缓存
+.import_linter_cache/

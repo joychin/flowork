@@ -53,7 +53,7 @@ class IdempotentSink:
         event_id = str(raw_id)
         if event_id in self._seen:
             return  # 至少一次交付下的重发，幂等丢弃
-        # 先投递后记已见（2026-10-21 内核 review P1-5）：sink 瞬时失败 →
+        # 先投递后记已见：sink 瞬时失败 →
         # 事务回滚（delivered_at 保持 NULL）→ 下轮重投——若已见先记，
         # 重投会被本帮手吞掉，「至少一次」退化为丢消息
         self._emit(envelope)

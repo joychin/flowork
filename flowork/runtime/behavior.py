@@ -9,7 +9,7 @@
 2. 继承 NodeBehavior 覆写需要的钩子；
 3. ``node_registry.register(kind, spec_cls, behavior_cls)`` —— 引擎核心零改动。
 
-注意（扩展盲区，2026-10-21 内核 review P2 成文）：设计期静态检查
+注意（扩展盲区）：设计期静态检查
 （validator 的表达式位点清单）只覆盖**内置 kind** 的表达式字段——自定义
 kind 上承载的 CEL 字段不做语法/引用/位点检查，公式问题只在运行期暴露。
 自定义节点的表达式请在行为内自行求值并处理错误（EngineExecutionError 归因）。

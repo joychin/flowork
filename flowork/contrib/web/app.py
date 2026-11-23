@@ -156,7 +156,7 @@ def create_app(
         app, engine, definitions_dir=files_dir, vocabulary_source=vocabulary_source
     )
 
-    # CORS 显式开（2026-10-21 内核 review P1-12）：缺省不挂——开发流走 vite
+    # CORS 显式开：缺省不挂——开发流走 vite
     # 代理（5173→8901 同源）、lib 嵌入同源，都不需要跨域；通配 * 挂在能写
     # git 工作区的文件面上＝任意网页可 PUT 覆盖定义。FLOWORK_CORS_ORIGINS
     # 逗号清单（显式给 '*' 可恢复旧行为）。
@@ -208,7 +208,7 @@ def create_app(
 
 def _demo_page(code: str | None) -> str:
     """示例页 HTML。code 经 json.dumps 注入为 JS 字符串字面量——
-    原样 f-string 拼接是反射 XSS（2026-10-21 内核 review P1-11）。"""
+    原样 f-string 拼接是反射 XSS。"""
     import json as _json
 
     deep = f", definitionCode: {_json.dumps(code)}" if code else ""

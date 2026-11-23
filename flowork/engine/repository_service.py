@@ -84,7 +84,7 @@ class RepositoryService(
             from flowork.definitions.validator_deploy import check_deploy_references
 
             # L4 钩子：优先 subject_exists（设计名），回落 user_exists
-            # （DirectoryStore 的实名——2026-10-21 review P2：修前只探前者，
+            # （DirectoryStore 的实名——修前只探前者，
             # 两个内置目录都没实现，L4 检查全程空转）
             hook = getattr(self._engine.config.org, "subject_exists", None) or getattr(
                 self._engine.config.org, "user_exists", None

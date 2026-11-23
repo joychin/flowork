@@ -248,9 +248,9 @@ def resolve_payload_write(
     映射白名单求值，否则全量合并；裸投影缺键 None。
 
     上下文＝消息域（payload.*）+ 全局词（initiator/instance/now）——与
-    expr.catalog 对 mapping_output 位的承诺对齐（2026-10-21 内核 review P1-2：
-    修前只装 payload+now，目录却宣称 instance.* 全位点可用，校验放行、
-    运行挂起）。instance 由调用方传入（两处调用点均已加载实例行）。
+    expr.catalog 对 mapping_output 位的承诺对齐（修前只装 payload+now，目录却
+    宣称 instance.* 全位点可用——校验放行、运行挂起）。instance 由调用方传入
+    （两处调用点均已加载实例行）。
     """
     if not mappings:
         return dict(payload)

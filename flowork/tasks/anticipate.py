@@ -119,8 +119,8 @@ class AnticipateMixin:
                     functions=functions,
                 )
             ]
-        # wait 与 user_task/call_activity 同级硬阻塞（2026-10-21 内核 review P1-4：
-        # 修前漏收——下游有等待节点时误报 instance_complete=True）
+        # wait 与 user_task/call_activity 同级硬阻塞——修前漏收：下游有等待节点时
+        # 误报 instance_complete=True
         waiting_specs = (UserTaskSpec, CallActivitySpec, WaitSpec)
         complete = True
         seen: set[str] = set()

@@ -33,7 +33,7 @@ __all__ = [
 
 
 class CoreOrgDirectory(Protocol):
-    """内核消费的目录最小面（2026-10-21 内核 review P1-9 拆分）。
+    """内核消费的目录最小面。
 
     四方法即引擎内核的全部直接消费：is_member（候选组归属判定）/ snapshot
     （办理人身份定格）/ delegation_of（取人期委托替换）/ admins（无人兜底的
@@ -194,8 +194,7 @@ class OrgDirectory:
         return str(parent) if parent else None
 
     def users_with_role(self, role: str, *, within: str | None = None) -> list[str]:
-        """按角色取人；within＝部门子树过滤（2026-10-21 内核 review P2：
-        修前静默忽略 within——按部门取人拿到全组织名单）。"""
+        """按角色取人；within＝部门子树过滤（修前静默忽略 within——按部门取人拿到全组织名单）。"""
         scope = {within, *self._descendant_departments(within)} if within is not None else None
         return [
             user_id

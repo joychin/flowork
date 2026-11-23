@@ -91,7 +91,7 @@ class TaskService(
                 stmt = stmt.where(TaskRow.assignee == assignee)
             if state:
                 stmt = stmt.where(TaskRow.state == state)
-            # 排序钉死 + 可选 limit（2026-10-21 内核 review P2：修前无排序无
+            # 排序钉死 + 可选 limit（修前无排序无
             # 上限全表扫——宿主热查询在大库上既慢又不可复现）
             stmt = stmt.order_by(TaskRow.created_at, TaskRow.id)
             if limit is not None:

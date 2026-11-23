@@ -10,7 +10,7 @@
 - 删除或改名符号为破坏性变更，走 major 版本。
 
 API_VERSION：门面契约版本。增符号=minor（同步
-快照即可，当前 1.1——2026-10-21 review 批首次落地 minor 位）；删/改名=major。
+快照即可，当前 1.1）；删/改名=major。
 插件以 REQUIRES_FLOWORK_API 声明依赖的门面版本，兼容性测试按整数元组比较。
 历史注记：排练三符号（start_rehearsal 等）与 ScenarioStore 于 2026-10-16 加入、
 2026-10-18 文件化批移除，同处预发布窗口、从未对外发布，故该删除不升 major。
@@ -22,10 +22,9 @@ from flowork.clock import utc_now
 from flowork.definitions.builder import FlowBuilder
 from flowork.definitions.builtin import RouteMode
 
-# 会从公开方法逃逸的错误族（2026-10-21 内核 review P1-8：宿主按纪律只能
-# from flowork.api import——修前 EngineExecutionError/InputContractError/
-# LockConflictError（唯一「可重试」信号）等不在门面，宿主只能捕基类再解析
-# 消息文本；REST 插件自己靠类名字符串表绕）。
+# 会从公开方法逃逸的错误族（宿主按纪律只能 from flowork.api import——修前
+# EngineExecutionError/InputContractError/LockConflictError（唯一「可重试」
+# 信号）等不在门面，宿主只能捕基类再解析消息文本；REST 插件自己靠类名字符串表绕）。
 from flowork.definitions.contract import InputContractError
 from flowork.definitions.definition import (
     InvalidDefinitionData,

@@ -56,9 +56,8 @@ def run(
 
     _print_report(report, verbose)
     if not report.ok:
-        # 停在失败步/断言失败/终态 failed 一律非绿（2026-10-21 内核 review
-        # P1-7：修前只看 failed——脚本中途停住而断言在部分状态上恰巧成立时
-        # 退出码 0，坏掉的回归脚本在 CI 里是绿的）
+        # 停在失败步/断言失败/终态 failed 一律非绿（修前只看 failed——脚本中途停住
+        # 而断言恰巧成立时退出码 0，坏掉的回归脚本在 CI 里是绿的）
         raise typer.Exit(code=1)
 
 

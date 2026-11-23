@@ -129,7 +129,7 @@ def check_variable_references(
                     if name == "subject" and kind == "mapping_input":
                         # subject 只在多实例子流程注入（每子一 subject）；
                         # 非 MI 调用映射裸 subject 静默成 None、复合式直接故障
-                        # （2026-10-21 内核 review P1-2b：目录按位放行掩盖了
+                        # （目录按位放行掩盖了
                         # 非 MI 形态的运行期坑）
                         node = definition.node(_node_code)
                         if node is not None and mi_config(node) is None:

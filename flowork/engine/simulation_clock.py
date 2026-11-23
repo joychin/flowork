@@ -55,7 +55,7 @@ def fire_one_due_job(
     deferred = result_payload.get("deferred")
     if job is not None and job.state == "virtual" and deferred:
         # 策略推迟（咨询未完/实例冻结）拉回 virtual 且 run_at 不变——
-        # 对驱动循环这不是「已兑现」（2026-10-21 内核 review P1-6：修前返回
+        # 对驱动循环这不是「已兑现」（修前返回
         # True 触发 continue，同一 Job 反复入选直到步数上限，咨询待办永远
         # 排不上）。返回 False 让决策/机器人处理继续推进、解除推迟。
         notes.append(

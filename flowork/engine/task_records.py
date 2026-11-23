@@ -81,7 +81,7 @@ class TaskRecordsMixin:
                     "task_type": task_type,
                     # 键集与克隆路径对齐（引擎解析无操作人→None；克隆路径为发起人）
                     "actor": None,
-                    "name": name,  # 通知集成够用面（review P2：修前发通知须回查两次）
+                    "name": name,  # 通知集成够用面（修前发通知须回查两次）
                     "due_at": task.due_at.isoformat() if task.due_at else None,
                     "definition_code": instance.definition_code,
                     "business_key": instance.business_key,

@@ -171,7 +171,7 @@ class TaskReworkMixin:
                 name=history.name,
             )
             ctx.session.flush()
-            # 时限随票回来（2026-10-21 内核 review P1-3）：原任务归档不删 Job，
+            # 时限随票回来：原任务归档不删 Job，
             # 按旧任务 id 寻 Job 重绑到重建待办（串行换棒同款）——修前重建待办
             # due_at 为 None、旧 Job 到期指向已归档任务被静默 skipped，SLA 消失
             from flowork.tasks.deadlines import carry_deadline_jobs_of

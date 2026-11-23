@@ -77,8 +77,7 @@ def iter_expression_positions(definition: ProcessDefinition) -> Iterator[tuple[s
     """
     for flow in definition.flows:
         # is not None 而非真值：空串条件要进位让 condition.empty 规则拦下
-        # （2026-10-21 内核 review P1-1——修前 "" 既不是无条件也不是可求值条件，
-        # 校验零错误、首次路由即挂起实例）
+        # （修前空串既非无条件也非可求值条件——校验零错误、首次路由即挂起实例）
         if flow.condition is not None:
             yield "condition", flow.flow_code(), flow.condition, flow.source
     for node in definition.nodes:
