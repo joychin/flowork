@@ -29,6 +29,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 
+import flowork
 from flowork.api import ExpressionFunctions, FloworkError, ProcessEngine
 from flowork.contrib.web.audit_routes import register_audit_routes
 from flowork.contrib.web.definition_routes import FORM_EXCLUDE as FORM_EXCLUDE
@@ -150,7 +151,8 @@ def create_app(
 
     engine, vocabulary_source = assemble_engine(db_path, vocabulary=vocabulary)
 
-    app = FastAPI(title="flowork designer API", version="0.1.0")
+    # 版本单源包根（OpenAPI info.version 随包走——硬编码曾在 0.2.0 升版时漏网）
+    app = FastAPI(title="flowork designer API", version=flowork.__version__)
     files_dir = definitions_dir or os.environ.get("FLOWORK_DEFINITIONS_DIR") or None
     register_designer_routes(
         app, engine, definitions_dir=files_dir, vocabulary_source=vocabulary_source

@@ -20,6 +20,7 @@ from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+import flowork
 from flowork.api import FloworkError, ProcessEngine
 from flowork.contrib.rest._common import error_payload, status_of
 from flowork.contrib.rest.routes_definitions import register_definition_routes
@@ -121,7 +122,8 @@ def register_rest_routes(app: FastAPI, engine: ProcessEngine) -> None:
 def create_app(db_file: str | Path | None = None) -> FastAPI:
     """独立进程应用：引擎 + /v2 路由 + 内置调度（FLOWORK_JOBS=off 可关）。"""
     engine = create_engine(db_file)
-    app = FastAPI(title="flowork REST API", version="0.1.0")
+    # 版本单源包根（OpenAPI info.version 随包走——硬编码曾在 0.2.0 升版时漏网）
+    app = FastAPI(title="flowork REST API", version=flowork.__version__)
     app.state.engine = engine
     register_rest_routes(app, engine)
 
